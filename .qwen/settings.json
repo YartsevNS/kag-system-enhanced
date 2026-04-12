@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/nick/.qwen/**)",
+      "Bash(python *)",
+      "Bash(curl *)",
+      "Bash(docker compose *)",
+      "Bash(rm *)"
+    ]
+  },
+  "$version": 3
+}

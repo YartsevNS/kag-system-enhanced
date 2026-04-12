@@ -1,0 +1,259 @@
+"""
+Document Service для KAG
+
+Отвечает за:
+- Загрузку документов
+- Парсинг и чанкинг
+- Векторизацию через Embeddings
+- Сохранение в Qdrant
+- Отслеживание статуса обработки
+"""
+
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import uuid
+import os
+import shutil
+from pathlib import Path
+from loguru import logger
+from pydantic import BaseModel, Field
+
+from src.indexing.parsers import document_parser, text_chunker
+from src.indexing.embeddings_service import embeddings_service
+from src.config import get_settings
+
+
+class DocumentRecord(BaseModel):
+    """Запись о документе"""
+    document_id: str = Field(..., description="ID документа")
+    filename: str = Field(..., description="Имя файла")
+    file_type: str = Field(..., description="Тип файла")
+    file_size: int = Field(default=0, description="Размер файла")
+    status: str = Field(default="pending", description="Статус: pending, processing, completed, failed")
+    progress: float = Field(default=0.0, description="Прогресс обработки (0-100)")
+    chunks_count: int = Field(default=0, description="Количество чанков")
+    error: Optional[str] = Field(default=None, description="Ошибка если есть")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DocumentService:
+    """
+    Сервис обработки документов.
+    
+    Полный pipeline:
+    1. Сохранение файла
+    2. Парсинг
+    3. Чанкинг
+    4. Векторизация
+    5. Сохранение в Qdrant
+    """
+
+    def __init__(self, upload_dir: Optional[str] = None):
+        """
+        Инициализация сервиса.
+        
+        Args:
+            upload_dir: Директория для загруженных файлов
+        """
+        settings = get_settings()
+        self._upload_dir = Path(upload_dir or "/app/data/uploads")
+        self._upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Хранилище метаданных документов
+        self._documents: Dict[str, DocumentRecord] = {}
+        
+        logger.info(f"DocumentService инициализирован: {self._upload_dir}")
+
+    async def upload_document(
+        self,
+        filename: str,
+        file_content: bytes,
+        file_type: Optional[str] = None
+    ) -> DocumentRecord:
+        """
+        Загрузить документ.
+
+        Args:
+            filename: Имя файла
+            file_content: Содержимое файла
+            file_type: MIME тип (опционально)
+
+        Returns:
+            Запись о документе
+        """
+        doc_id = str(uuid.uuid4())
+        
+        # Определяем тип файла
+        if not file_type:
+            ext = Path(filename).suffix.lower()
+            file_type = ext
+        
+        # Сохраняем файл
+        file_path = self._upload_dir / f"{doc_id}_{filename}"
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+        
+        # Создаём запись
+        record = DocumentRecord(
+            document_id=doc_id,
+            filename=filename,
+            file_type=file_type,
+            file_size=len(file_content),
+            status="pending"
+        )
+        
+        self._documents[doc_id] = record
+        logger.info(f"Документ загружен: {doc_id}, {filename}")
+        
+        return record
+
+    async def process_document(self, document_id: str) -> Dict[str, Any]:
+        """
+        Обработать документ: распарсить, разбить на чанки, векторизовать.
+
+        Args:
+            document_id: ID документа
+
+        Returns:
+            Результат обработки
+        """
+        record = self._documents.get(document_id)
+        if not record:
+            raise ValueError(f"Документ не найден: {document_id}")
+        
+        try:
+            # Обновляем статус
+            record.status = "processing"
+            record.progress = 10
+            record.updated_at = datetime.utcnow()
+            
+            # Находим файл
+            file_path = self._find_file(document_id, record.filename)
+            if not file_path:
+                raise FileNotFoundError(f"Файл не найден для документа {document_id}")
+            
+            # Шаг 1: Парсинг (30%)
+            logger.info(f"Парсинг документа: {document_id}")
+            record.progress = 30
+            parsed_doc = document_parser.parse(str(file_path), record.file_type)
+            
+            # Шаг 2: Чанкинг (50%)
+            logger.info(f"Чанкинг документа: {document_id}")
+            record.progress = 50
+            
+            # Загружаем настройки чанкинга из Redis (или используем default)
+            from src.api.services.config_store import config_store
+            chunking_config = config_store.get("chunking", "default", {
+                "chunk_size": 1000,
+                "chunk_overlap": 200
+            })
+            
+            # Создаём чанкер с настройками из Redis
+            from src.indexing.parsers import TextChunker
+            chunker = TextChunker(
+                chunk_size=chunking_config.get("chunk_size", 1000),
+                chunk_overlap=chunking_config.get("chunk_overlap", 200)
+            )
+            
+            logger.info(f"Чанкинг (из Redis): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
+            
+            segments = parsed_doc.get("segments", [])
+            chunks = chunker.chunk_document(segments)
+            
+            # Шаг 3: Векторизация и сохранение в Qdrant (90%)
+            logger.info(f"Векторизация документа: {document_id}")
+            record.progress = 90
+            
+            # Инициализируем embeddings сервис
+            await embeddings_service.initialize()
+            
+            vectors_count = await embeddings_service.embed_and_store(
+                document_id=document_id,
+                chunks=chunks,
+                metadata={
+                    "filename": record.filename,
+                    "file_type": record.file_type,
+                    "file_size": record.file_size,
+                    **parsed_doc.get("metadata", {})
+                }
+            )
+            
+            # Завершено (100%)
+            record.status = "completed"
+            record.progress = 100
+            record.chunks_count = len(chunks)
+            record.updated_at = datetime.utcnow()
+            
+            logger.info(
+                f"Документ обработан: {document_id}, "
+                f"чанков: {len(chunks)}, векторов: {vectors_count}"
+            )
+            
+            return {
+                "document_id": document_id,
+                "status": "completed",
+                "chunks_count": len(chunks),
+                "vectors_count": vectors_count,
+                "filename": record.filename
+            }
+            
+        except Exception as e:
+            logger.error(f"Ошибка обработки документа {document_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            record.status = "failed"
+            record.error = str(e)
+            record.progress = 0
+            record.updated_at = datetime.utcnow()
+            
+            raise
+
+    def get_document_status(self, document_id: str) -> Optional[DocumentRecord]:
+        """Получить статус обработки документа"""
+        return self._documents.get(document_id)
+
+    def list_documents(self, limit: int = 100) -> List[DocumentRecord]:
+        """Получить список всех документов"""
+        return list(self._documents.values())[-limit:]
+
+    async def delete_document(self, document_id: str) -> bool:
+        """
+        Удалить документ и его векторы.
+        
+        Args:
+            document_id: ID документа
+            
+        Returns:
+            True если успешно
+        """
+        record = self._documents.get(document_id)
+        if not record:
+            return False
+        
+        # Удаляем файл
+        file_path = self._find_file(document_id, record.filename)
+        if file_path and file_path.exists():
+            file_path.unlink()
+        
+        # Удаляем из Qdrant
+        await embeddings_service.delete_document(document_id)
+        
+        # Удаляем запись
+        del self._documents[document_id]
+        
+        logger.info(f"Документ удален: {document_id}")
+        return True
+
+    def _find_file(self, document_id: str, filename: str) -> Optional[Path]:
+        """Найти файл документа в директории uploads"""
+        # Ищем по шаблону: {doc_id}_{filename}
+        for f in self._upload_dir.iterdir():
+            if f.name.startswith(document_id):
+                return f
+        return None
+
+
+# Глобальный экземпляр
+document_service = DocumentService()

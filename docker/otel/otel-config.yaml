@@ -1,0 +1,92 @@
+# Конфигурация OpenTelemetry Collector
+# Собирает метрики, логи и трейсы со всех сервисов
+
+receivers:
+  # Приём метрик от Prometheus exporter
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "kag-api"
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["api:8000"]
+
+  # Приём логов от приложений
+  filelog:
+    include:
+      - /var/log/kag/*.log
+    start_at: beginning
+
+  # Приём трейсов от приложений через OTLP
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Пакетная обработка
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+
+  # Ограничение частоты
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1000
+    spike_limit_mib: 200
+
+  # Добавление метаданных
+  resource:
+    attributes:
+      - key: service.name
+        value: "kag"
+        action: upsert
+      - key: deployment.environment
+        value: "production"
+        action: upsert
+
+exporters:
+  # Экспорт в Prometheus
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: "kag"
+
+  # Экспорт в Loki
+  loki:
+    endpoint: "http://loki:3100/loki/api/v1/push"
+    default_labels_enabled:
+      job: true
+      service: true
+
+  # Экспорт трейсов в Jaeger (опционально)
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
+
+  # Логирование (для отладки)
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus, otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]
+
+    logs:
+      receivers: [filelog, otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki, logging]
+
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/jaeger, logging]
+
+  telemetry:
+    metrics:
+      address: "0.0.0.0:8888"

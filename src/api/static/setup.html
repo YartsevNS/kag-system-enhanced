@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Первоначальная настройка</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .setup-container {
+            max-width: 800px;
+            width: 100%;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.125rem;
+        }
+        .step {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .step-header {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .step-number {
+            background: #3b82f6;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        input, select {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .hint {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+        .test-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+        .test-btn:hover { background: #64748b; }
+        .save-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+        .save-btn:hover { opacity: 0.9; }
+        .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-message {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            display: none;
+        }
+        .status-success {
+            background: #064e3b;
+            color: #6ee7b7;
+            border: 1px solid #059669;
+        }
+        .status-error {
+            background: #7f1d1d;
+            color: #fca5a5;
+            border: 1px solid #dc2626;
+        }
+        .test-result {
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="header">
+            <div class="logo">🎯 KAG System</div>
+            <div class="subtitle">Первоначальная настройка системы</div>
+        </div>
+
+        <!-- Шаг 1: База данных -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-number">1</span>
+                Настройка базы данных
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Хост базы данных</label>
+                    <input type="text" id="db-host" value="kag-keycloak-db" placeholder="kag-keycloak-db">
+                    <div class="hint">Имя контейнера или IP адрес</div>
+                </div>
+                <div class="form-group">
+                    <label>Порт</label>
+                    <input type="number" id="db-port" value="5432" placeholder="5432">
+                </div>
+                <div class="form-group">
+                    <label>Имя базы данных</label>
+                    <input type="text" id="db-name" value="keycloak" placeholder="keycloak">
+                </div>
+                <div class="form-group">
+                    <label>Пользователь</label>
+                    <input type="text" id="db-user" value="keycloak" placeholder="keycloak">
+                </div>
+                <div class="form-group full-width">
+                    <label>Пароль пользователя БД</label>
+                    <input type="password" id="db-password" value="keycloak_password" placeholder="keycloak_password">
+                </div>
+            </div>
+            <button class="test-btn" onclick="testDatabase()">🔍 Тест подключения к БД</button>
+            <div class="test-result" id="db-test-result"></div>
+        </div>
+
+        <!-- Шаг 2: LLM Бэкенд -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-number">2</span>
+                Настройка LLM бэкенда
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Тип бэкенда</label>
+                    <select id="llm-type" onchange="toggleLlmFields()">
+                        <option value="ollama">Ollama</option>
+                        <option value="vllm">vLLM</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Адрес сервера</label>
+                    <input type="text" id="llm-host" value="192.168.50.41" placeholder="192.168.50.41">
+                </div>
+                <div class="form-group">
+                    <label>Порт</label>
+                    <input type="number" id="llm-port" value="11434" placeholder="11434">
+                </div>
+                <div class="form-group">
+                    <label>Название модели</label>
+                    <input type="text" id="llm-model" value="phi4-mini:latest" placeholder="phi4-mini:latest">
+                    <div class="hint">Модель должна быть загружена на сервере</div>
+                </div>
+            </div>
+            <button class="test-btn" onclick="testLlm()">🔍 Тест подключения к LLM</button>
+            <div class="test-result" id="llm-test-result"></div>
+        </div>
+
+        <!-- Шаг 3: Embedding модель -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-number">3</span>
+                Настройка Embedding модели
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Название embedding модели</label>
+                    <input type="text" id="embed-model" value="qwen3-embedding:4b" placeholder="qwen3-embedding:4b">
+                    <div class="hint">Обычно находится на том же сервере что и LLM</div>
+                </div>
+                <div class="form-group">
+                    <label>Размерность вектора</label>
+                    <input type="number" id="embed-dim" value="4096" placeholder="4096">
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 4: SSH доступ -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-number">4</span>
+                SSH доступ к серверу LLM
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>SSH пользователь</label>
+                    <input type="text" id="ssh-user" value="nick" placeholder="nick">
+                </div>
+                <div class="form-group">
+                    <label>SSH пароль</label>
+                    <input type="password" id="ssh-password" placeholder="Введите пароль">
+                </div>
+                <div class="form-group full-width">
+                    <label>Пароль для sudo (если отличается)</label>
+                    <input type="password" id="ssh-sudo-password" placeholder="Оставьте пустым, если такой же">
+                </div>
+            </div>
+            <button class="test-btn" onclick="testSsh()">🔍 Тест SSH подключения</button>
+            <div class="test-result" id="ssh-test-result"></div>
+        </div>
+
+        <button class="save-btn" onclick="saveSetup()">💾 Сохранить и продолжить</button>
+        <div class="status-message" id="status-message"></div>
+    </div>
+
+    <script>
+        const API_URL = '/api/v1/setup';
+
+        function toggleLlmFields() {
+            const type = document.getElementById('llm-type').value;
+            const portInput = document.getElementById('llm-port');
+            if (type === 'vllm') {
+                portInput.value = '8000';
+            } else {
+                portInput.value = '11434';
+            }
+        }
+
+        async function testDatabase() {
+            const resultDiv = document.getElementById('db-test-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Тестирование...';
+            resultDiv.style.background = '#1e293b';
+
+            const payload = {
+                host: document.getElementById('db-host').value,
+                port: parseInt(document.getElementById('db-port').value),
+                name: document.getElementById('db-name').value,
+                user: document.getElementById('db-user').value,
+                password: document.getElementById('db-password').value
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/test-db`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.textContent = '✅ ' + result.message;
+                    resultDiv.style.background = '#064e3b';
+                } else {
+                    resultDiv.textContent = '❌ ' + result.message;
+                    resultDiv.style.background = '#7f1d1d';
+                }
+            } catch (error) {
+                resultDiv.textContent = '❌ Ошибка: ' + error.message;
+                resultDiv.style.background = '#7f1d1d';
+            }
+        }
+
+        async function testLlm() {
+            const resultDiv = document.getElementById('llm-test-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Тестирование...';
+            resultDiv.style.background = '#1e293b';
+
+            const payload = {
+                type: document.getElementById('llm-type').value,
+                host: document.getElementById('llm-host').value,
+                port: parseInt(document.getElementById('llm-port').value),
+                model: document.getElementById('llm-model').value
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/test-llm`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.textContent = '✅ ' + result.message;
+                    resultDiv.style.background = '#064e3b';
+                } else {
+                    resultDiv.textContent = '❌ ' + result.message;
+                    resultDiv.style.background = '#7f1d1d';
+                }
+            } catch (error) {
+                resultDiv.textContent = '❌ Ошибка: ' + error.message;
+                resultDiv.style.background = '#7f1d1d';
+            }
+        }
+
+        async function testSsh() {
+            const resultDiv = document.getElementById('ssh-test-result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Тестирование...';
+            resultDiv.style.background = '#1e293b';
+
+            const payload = {
+                username: document.getElementById('ssh-user').value,
+                password: document.getElementById('ssh-password').value,
+                sudo_password: document.getElementById('ssh-sudo-password').value,
+                llm_host: document.getElementById('llm-host').value,
+                llm_port: parseInt(document.getElementById('llm-port').value)
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/test-ssh`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.textContent = '✅ ' + result.message;
+                    resultDiv.style.background = '#064e3b';
+                } else {
+                    resultDiv.textContent = '❌ ' + result.message;
+                    resultDiv.style.background = '#7f1d1d';
+                }
+            } catch (error) {
+                resultDiv.textContent = '❌ Ошибка: ' + error.message;
+                resultDiv.style.background = '#7f1d1d';
+            }
+        }
+
+        async function saveSetup() {
+            const btn = document.querySelector('.save-btn');
+            const statusDiv = document.getElementById('status-message');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Сохранение...';
+            statusDiv.style.display = 'block';
+            statusDiv.textContent = 'Сохранение настроек...';
+            statusDiv.className = 'status-message';
+
+            const payload = {
+                database: {
+                    host: document.getElementById('db-host').value,
+                    port: parseInt(document.getElementById('db-port').value),
+                    name: document.getElementById('db-name').value,
+                    user: document.getElementById('db-user').value,
+                    password: document.getElementById('db-password').value
+                },
+                llm: {
+                    type: document.getElementById('llm-type').value,
+                    host: document.getElementById('llm-host').value,
+                    port: parseInt(document.getElementById('llm-port').value),
+                    model: document.getElementById('llm-model').value
+                },
+                embedding: {
+                    model: document.getElementById('embed-model').value,
+                    dimensions: parseInt(document.getElementById('embed-dim').value)
+                },
+                ssh: {
+                    username: document.getElementById('ssh-user').value,
+                    password: document.getElementById('ssh-password').value,
+                    sudo_password: document.getElementById('ssh-sudo-password').value
+                }
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/save`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    statusDiv.textContent = '✅ Настройки сохранены! Перенаправление...';
+                    statusDiv.className = 'status-message status-success';
+                    
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                } else {
+                    statusDiv.textContent = '❌ ' + (result.message || 'Ошибка сохранения');
+                    statusDiv.className = 'status-message status-error';
+                    btn.disabled = false;
+                    btn.textContent = '💾 Сохранить и продолжить';
+                }
+            } catch (error) {
+                statusDiv.textContent = '❌ Ошибка: ' + error.message;
+                statusDiv.className = 'status-message status-error';
+                btn.disabled = false;
+                btn.textContent = '💾 Сохранить и продолжить';
+            }
+        }
+
+        // Проверяем, не настроена ли уже система
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/v1/setup/check');
+                const data = await response.json();
+                
+                if (data.configured) {
+                    // Система уже настроена, редиректим на главную
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                console.error('Ошибка проверки конфигурации:', error);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Политики RBAC для Casbin
+# Формат: роль, ресурс, действие
+
+# Администратор имеет полный доступ ко всем ресурсам
+p, admin, /api/v1/chat, *
+p, admin, /api/v1/upload, *
+p, admin, /api/v1/admin, *
+p, admin, /api/v1/admin/status, GET
+p, admin, /api/v1/admin/dependencies, GET
+p, admin, /api/v1/admin/metrics, GET
+p, admin, /api/v1/admin/cache/clear, POST
+p, admin, /api/v1/admin/users, GET
+p, admin, /api/v1/admin/audit-log, GET
+
+# Обычный пользователь имеет доступ к чату и загрузке
+p, user, /api/v1/chat, POST
+p, user, /api/v1/chat/sessions/*/reset, POST
+p, user, /api/v1/chat/sessions/*/history, GET
+p, user, /api/v1/upload, POST
+p, user, /api/v1/upload/batch, POST
+p, user, /api/v1/upload/*/status, GET
+
+# Аннотатор имеет доступ к чату и оценке качества
+p, annotator, /api/v1/chat, POST
+p, annotator, /api/v1/chat/sessions/*/reset, POST
+p, annotator, /api/v1/chat/sessions/*/history, GET
+p, annotator, /api/v1/upload, GET
+p, annotator, /api/v1/upload/*/status, GET
+
+# Наблюдатель имеет только чтение
+p, viewer, /api/v1/chat, POST
+p, viewer, /api/v1/chat/sessions/*/history, GET
+p, viewer, /api/v1/upload, GET
+p, viewer, /api/v1/upload/*/status, GET
+
+# Маппинг групп из Keycloak в роли
+# (эти правила добавляются динамически из Keycloak)
+# g, group_name, role

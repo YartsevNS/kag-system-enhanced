@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Docker Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .back-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #64748b; }
+        .container { max-width: 1600px; margin: 2rem auto; padding: 0 2rem; }
+        
+        /* System Info Cards */
+        .system-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .info-card {
+            background: #1e293b;
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        .info-label { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem; }
+        .info-value { font-size: 1.25rem; font-weight: 600; }
+        
+        /* Containers Table */
+        .section {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .refresh-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .refresh-btn:hover { background: #2563eb; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
+        td { font-size: 0.875rem; }
+        tr:hover { background: #334155; }
+        
+        /* Status Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-success { background: #064e3b; color: #6ee7b7; }
+        .badge-error { background: #7f1d1d; color: #fca5a5; }
+        .badge-warning { background: #78350f; color: #fcd34d; }
+        
+        /* Progress Bars */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #334155;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.25rem;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-green { background: #22c55e; }
+        .progress-yellow { background: #f59e0b; }
+        .progress-red { background: #ef4444; }
+        
+        /* Action Buttons */
+        .action-btn {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-right: 0.25rem;
+        }
+        .btn-restart { background: #3b82f6; color: white; }
+        .btn-stop { background: #ef4444; color: white; }
+        .btn-start { background: #22c55e; color: white; }
+        .btn-logs { background: #64748b; color: white; }
+        
+        /* Loading */
+        .loading { text-align: center; padding: 2rem; color: #94a3b8; }
+        .loading-dots { display: flex; gap: 0.25rem; justify-content: center; }
+        .loading-dots span {
+            width: 6px; height: 6px;
+            background: #3b82f6;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        
+        /* Logs Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 12px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .logs-output {
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            white-space: pre-wrap;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🐳 KAG - Docker Dashboard</div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="/admin" class="back-btn">← Назад к моделям</a>
+            <a href="/" class="back-btn">💬 К чату</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- System Info -->
+        <div class="system-info" id="system-info">
+            <div class="loading">
+                <div class="loading-dots"><span></span><span></span><span></span></div>
+                Загрузка...
+            </div>
+        </div>
+
+        <!-- Containers Table -->
+        <div class="section">
+            <div class="section-title">
+                <span>📦 Контейнеры</span>
+                <button class="refresh-btn" onclick="loadDockerStats()">🔄 Обновить</button>
+            </div>
+            <div id="containers-table">
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal" id="logs-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="logs-title">Логи контейнера</h2>
+                <button class="close-btn" onclick="closeLogs()">×</button>
+            </div>
+            <div class="logs-output" id="logs-output"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/v1/admin/models';
+
+        async function loadDockerStats() {
+            try {
+                const response = await fetch(`${API_URL}/docker/stats`);
+                const data = await response.json();
+
+                renderSystemInfo(data.system);
+                renderContainers(data.containers);
+            } catch (error) {
+                console.error('Ошибка загрузки статистики Docker:', error);
+            }
+        }
+
+        function renderSystemInfo(system) {
+            if (!system) return;
+
+            const memTotal = system.memory_total ? formatBytes(system.memory_total) : 'N/A';
+
+            document.getElementById('system-info').innerHTML = `
+                <div class="info-card">
+                    <div class="info-label">Docker версия</div>
+                    <div class="info-value">${system.docker_version || 'N/A'}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Контейнеры</div>
+                    <div class="info-value">
+                        <span class="badge badge-success">${system.containers_running || 0} running</span>
+                        <span class="badge badge-error">${system.containers_stopped || 0} stopped</span>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Образы</div>
+                    <div class="info-value">${system.images_count || 0}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Система</div>
+                    <div class="info-value">${system.os || 'N/A'}</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8;">${system.cpus || 0} CPUs • ${memTotal} RAM</div>
+                </div>
+            `;
+        }
+
+        function renderContainers(containers) {
+            if (!containers || containers.length === 0) {
+                document.getElementById('containers-table').innerHTML = '<div style="padding: 2rem; text-align: center; color: #94a3b8;">Нет контейнеров</div>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Контейнер</th>
+                            <th>Образ</th>
+                            <th>Статус</th>
+                            <th>CPU</th>
+                            <th>Память</th>
+                            <th>Сеть</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            containers.forEach(container => {
+                const stats = container.stats || {};
+                const cpuPercent = stats.cpu_percent || 0;
+                const memPercent = stats.mem_percent || 0;
+                const isRunning = container.state === 'running';
+
+                html += `
+                    <tr>
+                        <td><strong>${container.name}</strong></td>
+                        <td style="font-size: 0.75rem;">${container.image}</td>
+                        <td>
+                            <span class="badge ${isRunning ? 'badge-success' : 'badge-error'}">
+                                ${isRunning ? 'Running' : 'Stopped'}
+                            </span>
+                        </td>
+                        <td>
+                            ${cpuPercent.toFixed(1)}%
+                            <div class="progress-bar">
+                                <div class="progress-fill ${getProgressClass(cpuPercent, 50, 80)}" style="width: ${Math.min(cpuPercent, 100)}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            ${stats.mem_used ? formatBytes(stats.mem_used) : 'N/A'} / ${stats.mem_limit ? formatBytes(stats.mem_limit) : 'N/A'}
+                            <div class="progress-bar">
+                                <div class="progress-fill ${getProgressClass(memPercent, 70, 90)}" style="width: ${Math.min(memPercent, 100)}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            ↓ ${stats.net_in ? formatBytes(stats.net_in) : '0B'}<br>
+                            ↑ ${stats.net_out ? formatBytes(stats.net_out) : '0B'}
+                        </td>
+                        <td>
+                            <button class="action-btn btn-restart" onclick="restartContainer('${container.name}')">🔄</button>
+                            ${isRunning 
+                                ? `<button class="action-btn btn-stop" onclick="stopContainer('${container.name}')">⏹</button>`
+                                : `<button class="action-btn btn-start" onclick="startContainer('${container.name}')">▶</button>`
+                            }
+                            <button class="action-btn btn-logs" onclick="showLogs('${container.name}')">📋</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('containers-table').innerHTML = html;
+        }
+
+        function getProgressClass(value, warning, danger) {
+            if (value >= danger) return 'progress-red';
+            if (value >= warning) return 'progress-yellow';
+            return 'progress-green';
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + sizes[i];
+        }
+
+        async function restartContainer(name) {
+            if (!confirm(`Перезапустить контейнер ${name}?`)) return;
+
+            try {
+                const response = await fetch(`${API_URL}/docker/${name}/restart`, { method: 'POST' });
+                if (response.ok) {
+                    alert(`✅ Контейнер ${name} перезапущен`);
+                    setTimeout(loadDockerStats, 2000);
+                } else {
+                    alert('❌ Ошибка перезапуска');
+                }
+            } catch (error) {
+                alert(`❌ Ошибка: ${error.message}`);
+            }
+        }
+
+        async function stopContainer(name) {
+            if (!confirm(`Остановить контейнер ${name}?`)) return;
+
+            try {
+                const response = await fetch(`${API_URL}/docker/${name}/stop`, { method: 'POST' });
+                if (response.ok) {
+                    alert(`✅ Контейнер ${name} остановлен`);
+                    setTimeout(loadDockerStats, 2000);
+                } else {
+                    alert('❌ Ошибка остановки');
+                }
+            } catch (error) {
+                alert(`❌ Ошибка: ${error.message}`);
+            }
+        }
+
+        async function startContainer(name) {
+            try {
+                const response = await fetch(`${API_URL}/docker/${name}/start`, { method: 'POST' });
+                if (response.ok) {
+                    alert(`✅ Контейнер ${name} запущен`);
+                    setTimeout(loadDockerStats, 2000);
+                } else {
+                    alert('❌ Ошибка запуска');
+                }
+            } catch (error) {
+                alert(`❌ Ошибка: ${error.message}`);
+            }
+        }
+
+        async function showLogs(name) {
+            document.getElementById('logs-modal').classList.add('active');
+            document.getElementById('logs-title').textContent = `Логи: ${name}`;
+            document.getElementById('logs-output').textContent = 'Загрузка...';
+
+            try {
+                const response = await fetch(`${API_URL}/docker/${name}/logs?lines=200`);
+                const data = await response.json();
+                document.getElementById('logs-output').textContent = data.logs || 'Нет логов';
+            } catch (error) {
+                document.getElementById('logs-output').textContent = `Ошибка: ${error.message}`;
+            }
+        }
+
+        function closeLogs() {
+            document.getElementById('logs-modal').classList.remove('active');
+        }
+
+        // Автообновление каждые 10 секунд
+        loadDockerStats();
+        setInterval(loadDockerStats, 10000);
+    </script>
+</body>
+</html>

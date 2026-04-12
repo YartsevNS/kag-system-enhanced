@@ -1,0 +1,226 @@
+# GitLab CI/CD конфигурация для KAG
+# Этапы: lint, test, scan, build, push, deploy
+
+stages:
+  - lint
+  - test
+  - scan
+  - build
+  - push
+  - deploy
+
+# Переменные
+variables:
+  IMAGE_NAME: "kag-api"
+  IMAGE_TAG: $CI_COMMIT_SHA
+  DOCKER_REGISTRY: $CI_REGISTRY
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ===========================================
+# Линтинг
+# ===========================================
+
+lint:python:
+  stage: lint
+  image: python:3.11-slim
+  script:
+    - pip install black ruff mypy
+    - black --check src/
+    - ruff check src/
+    - mypy src/ --strict
+  rules:
+    - changes:
+        - src/**/*.py
+        - requirements.txt
+
+# ===========================================
+# Тесты
+# ===========================================
+
+test:unit:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - redis:7-alpine
+  script:
+    - pip install -r requirements.txt
+    - pip install pytest pytest-cov pytest-asyncio
+    - pytest tests/ -v --cov=src/ --cov-report=xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+  rules:
+    - changes:
+        - src/**/*.py
+        - tests/**/*.py
+        - requirements.txt
+
+test:integration:
+  stage: test
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - docker compose -f docker-compose.yml --profile dev up -d
+    - sleep 30
+    - docker compose -f docker-compose.yml --profile run tests
+    - docker compose -f docker-compose.yml --profile dev down
+  rules:
+    - when: manual
+      allow_failure: true
+
+# ===========================================
+# Сканирование уязвимостей
+# ===========================================
+
+scan:trivy:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --security-checks vuln --severity CRITICAL,HIGH --exit-code 1 .
+    - trivy image --security-checks vuln --severity CRITICAL,HIGH --exit-code 1 python:3.11-slim
+  rules:
+    - changes:
+        - requirements.txt
+        - Dockerfile*
+        - docker-compose.yml
+
+scan:sast:
+  stage: scan
+  image: python:3.11-slim
+  script:
+    - pip install bandit
+    - bandit -r src/ -f json -o bandit-report.json --severity-level high
+  artifacts:
+    paths:
+      - bandit-report.json
+    when: always
+  rules:
+    - changes:
+        - src/**/*.py
+
+# ===========================================
+# Генерация SBOM
+# ===========================================
+
+sbom:generate:
+  stage: build
+  image:
+    name: anchore/syft:latest
+    entrypoint: [""]
+  script:
+    - syft dir:. --output json > sbom.json
+  artifacts:
+    paths:
+      - sbom.json
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ===========================================
+# Сборка образов
+# ===========================================
+
+build:api:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
+    - docker save -o /tmp/kag-api.tar $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+  artifacts:
+    paths:
+      - /tmp/kag-api.tar
+    expire_in: 1 hour
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:worker:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -f Dockerfile.worker -t $DOCKER_REGISTRY/kag-worker:$IMAGE_TAG .
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:mcp:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -f Dockerfile.mcp -t $DOCKER_REGISTRY/kag-mcp:$IMAGE_TAG .
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ===========================================
+# Публикация в реестр
+# ===========================================
+
+push:images:
+  stage: push
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+    - docker push $DOCKER_REGISTRY/kag-worker:$IMAGE_TAG
+    - docker push $DOCKER_REGISTRY/kag-mcp:$IMAGE_TAG
+    # Тег latest для main
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        docker tag $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG $DOCKER_REGISTRY/$IMAGE_NAME:latest
+        docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ===========================================
+# Деплой
+# ===========================================
+
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - apk add openssh-client
+    - eval $(ssh-agent -s)
+    - ssh-add <(echo "$DEPLOY_SSH_KEY")
+    - ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "cd /opt/kag && docker compose pull && docker compose --profile prod up -d"
+  environment:
+    name: staging
+    url: http://kag-staging.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - apk add openssh-client
+    - eval $(ssh-agent -s)
+    - ssh-add <(echo "$DEPLOY_SSH_KEY")
+    - ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "cd /opt/kag && docker compose pull && docker compose --profile prod up -d"
+  environment:
+    name: production
+    url: https://kag.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  needs:
+    - job: push:images

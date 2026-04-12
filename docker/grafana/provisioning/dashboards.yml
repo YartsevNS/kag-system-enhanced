@@ -1,0 +1,37 @@
+# Конфигурация provisioning Grafana
+# Автоматическое добавление источников данных и дашбордов
+
+apiVersion: 1
+
+# Источники данных
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+
+# Дашборды
+providers:
+  - name: "KAG Dashboards"
+    orgId: 1
+    folder: "KAG"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

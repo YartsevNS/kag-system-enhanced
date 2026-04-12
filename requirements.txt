@@ -1,0 +1,49 @@
+# Основные зависимости
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+
+# Аутентификация и авторизация
+python-jose[cryptography]==3.3.0
+casbin==1.36.0
+# casbin-fastapi-adapter==0.0.4  # Пакет недоступен, используем напрямую
+
+# Очереди и планировщик
+celery==5.4.0
+redis==5.2.1
+apscheduler==3.10.4
+
+# Векторная БД
+qdrant-client==1.12.1
+
+# MCP
+fastapi-mcp==0.3.0
+
+# Мониторинг
+prometheus-client==0.21.1
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-exporter-prometheus==0.50b0
+
+# Безопасность
+cryptography==44.0.0
+
+# Утилиты
+python-dotenv==1.0.1
+httpx==0.28.1
+loguru==0.7.3
+docker==7.1.0
+
+# Работа с БД (конфиги)
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Парсеры документов
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+
+# Экспорт документов
+reportlab>=4.0.0

@@ -1,0 +1,55 @@
+# ===========================================
+# Stage 1: Build
+# ===========================================
+FROM python:3.11-slim as builder
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ===========================================
+# Stage 2: Production
+# ===========================================
+FROM python:3.11-slim as production
+
+LABEL maintainer="KAG Team"
+LABEL description="KAG Celery Worker"
+LABEL version="0.1.0"
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag
+
+WORKDIR /app
+
+COPY --chown=kag:kag src/ /app/src/
+
+# models опционально
+RUN mkdir -p /app/models && chown -R kag:kag /app/models || true
+
+RUN mkdir -p /app/data && chown -R kag:kag /app/data
+
+ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
+
+USER kag
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
+    CMD celery -A src.indexing.celery_app inspect ping || exit 1
+
+CMD ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--concurrency=4"]

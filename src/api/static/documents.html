@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Управление документами</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .back-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #64748b; }
+        .container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
+        
+        /* Upload Area */
+        .upload-section {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .upload-area {
+            border: 2px dashed #475569;
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover { border-color: #3b82f6; background: #334155; }
+        .upload-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .upload-text { font-size: 1.125rem; margin-bottom: 0.5rem; }
+        .upload-hint { font-size: 0.875rem; color: #94a3b8; }
+        .upload-form { display: none; }
+        
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 1rem;
+            display: none;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #334155;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s;
+        }
+        
+        /* Documents Table */
+        .section {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
+        td { font-size: 0.875rem; }
+        tr:hover { background: #334155; }
+        
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-success { background: #064e3b; color: #6ee7b7; }
+        .badge-error { background: #7f1d1d; color: #fca5a5; }
+        .badge-warning { background: #78350f; color: #fcd34d; }
+        .badge-info { background: #1e3a8a; color: #93c5fd; }
+        
+        .action-btn {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-right: 0.25rem;
+        }
+        .btn-delete { background: #ef4444; color: white; }
+        .btn-refresh { background: #3b82f6; color: white; }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background: #3b82f6;
+            color: white;
+            margin-top: 1rem;
+        }
+        .btn:hover { background: #2563eb; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .loading { text-align: center; padding: 2rem; color: #94a3b8; }
+        .notification {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            background: #22c55e;
+            color: white;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">📄 KAG - Управление документами</div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="/admin" class="back-btn">← Назад к настройкам</a>
+            <a href="/" class="back-btn">💬 К чату</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h2 style="margin-bottom: 1rem;">⬆️ Загрузка документов</h2>
+            
+            <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Перетащите файлы сюда или нажмите для выбора</div>
+                <div class="upload-hint">Поддерживаемые форматы: PDF, TXT, MD, DOCX, CSV</div>
+            </div>
+            
+            <input type="file" id="file-input" class="upload-form" multiple accept=".pdf,.txt,.md,.docx,.csv">
+            
+            <div class="progress-container" id="progress-container">
+                <div style="margin-bottom: 0.5rem;">Загрузка... <span id="progress-percent">0%</span></div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents List -->
+        <div class="section">
+            <div class="section-title">
+                <span>📋 Загруженные документы</span>
+                <button class="btn btn-refresh" onclick="loadDocuments()">🔄 Обновить</button>
+            </div>
+            <div id="documents-table">
+                <div class="loading">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        const API_URL = '/api/v1';
+        let uploadedFiles = [];
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDocuments();
+            setupDragAndDrop();
+            setupFileInput();
+        });
+
+        function setupDragAndDrop() {
+            const area = document.getElementById('upload-area');
+            
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.style.borderColor = '#3b82f6';
+            });
+            
+            area.addEventListener('dragleave', () => {
+                area.style.borderColor = '#475569';
+            });
+            
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.style.borderColor = '#475569';
+                const files = Array.from(e.dataTransfer.files);
+                uploadFiles(files);
+            });
+        }
+
+        function setupFileInput() {
+            const input = document.getElementById('file-input');
+            input.addEventListener('change', () => {
+                const files = Array.from(input.files);
+                uploadFiles(files);
+            });
+        }
+
+        async function uploadFiles(files) {
+            if (files.length === 0) return;
+
+            const progressContainer = document.getElementById('progress-container');
+            const progressFill = document.getElementById('progress-fill');
+            const progressPercent = document.getElementById('progress-percent');
+            
+            progressContainer.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressPercent.textContent = '0%';
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(`${API_URL}/upload/`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Ошибка загрузки ${file.name}`);
+                    }
+
+                    const data = await response.json();
+                    showNotification(`✅ ${file.name} загружен`);
+                    
+                    // Обновляем прогресс
+                    const percent = ((i + 1) / files.length) * 100;
+                    progressFill.style.width = percent + '%';
+                    progressPercent.textContent = Math.round(percent) + '%';
+                    
+                } catch (error) {
+                    showNotification(`❌ ${file.name}: ${error.message}`, true);
+                }
+            }
+
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+                loadDocuments();
+            }, 1000);
+        }
+
+        async function loadDocuments() {
+            try {
+                const response = await fetch(`${API_URL}/upload/list`);
+                const data = await response.json();
+
+                if (data.documents.length === 0) {
+                    document.getElementById('documents-table').innerHTML = 
+                        '<div style="padding: 2rem; text-align: center; color: #94a3b8;">Нет загруженных документов</div>';
+                    return;
+                }
+
+                document.getElementById('documents-table').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Имя файла</th>
+                                <th>Тип</th>
+                                <th>Размер</th>
+                                <th>Статус</th>
+                                <th>Прогресс</th>
+                                <th>Чанков</th>
+                                <th>Дата</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.documents.map(doc => `
+                                <tr>
+                                    <td><strong>${doc.filename}</strong></td>
+                                    <td>${doc.file_type}</td>
+                                    <td>${formatBytes(doc.file_size)}</td>
+                                    <td>
+                                        <span class="badge ${getStatusBadge(doc.status)}">
+                                            ${getStatusText(doc.status)}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="progress-bar" style="width: 100px;">
+                                            <div class="progress-fill" style="width: ${doc.progress}%"></div>
+                                        </div>
+                                        ${doc.progress}%
+                                    </td>
+                                    <td>${doc.chunks_count || '-'}</td>
+                                    <td>${new Date(doc.created_at).toLocaleString('ru-RU')}</td>
+                                    <td>
+                                        <button class="action-btn btn-delete" onclick="deleteDocument('${doc.document_id}')">🗑️</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Ошибка загрузки документов:', error);
+            }
+        }
+
+        async function deleteDocument(docId) {
+            if (!confirm('Удалить этот документ?')) return;
+
+            try {
+                const response = await fetch(`${API_URL}/upload/${docId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showNotification('✅ Документ удален');
+                    loadDocuments();
+                } else {
+                    showNotification('❌ Ошибка удаления', true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'pending': 'badge-info',
+                'processing': 'badge-warning',
+                'completed': 'badge-success',
+                'failed': 'badge-error'
+            };
+            return badges[status] || 'badge-info';
+        }
+
+        function getStatusText(status) {
+            const texts = {
+                'pending': '⏳ Ожидает',
+                'processing': '⚙️ Обработка',
+                'completed': '✅ Готово',
+                'failed': '❌ Ошибка'
+            };
+            return texts[status] || status;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.background = isError ? '#ef4444' : '#22c55e';
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        // Автообновление каждые 5 секунд
+        setInterval(loadDocuments, 5000);
+    </script>
+</body>
+</html>

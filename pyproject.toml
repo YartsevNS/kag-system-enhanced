@@ -1,0 +1,44 @@
+# Конфигурация Ruff
+# Линтер и форматтер для Python кода
+
+[lint]
+# Включаем правила
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "RUF",   # ruff-specific rules
+]
+
+# Игнорируем отдельные правила
+ignore = [
+    "E501",  # line too long (black handles this)
+    "B008",  # do not perform function call in argument defaults
+]
+
+# Настройки для автофикса
+fixable = ["ALL"]
+unfixable = []
+
+[lint.isort]
+known-first-party = ["src"]
+
+[lint.pyupgrade]
+# Сохранять типы Python 3.10+
+keep-runtime-typing = true
+
+[format]
+# Использовать двойные кавычки
+quote-style = "double"
+
+# Использовать 4 пробела
+indent-style = "space"
+
+# Перенос строк
+line-ending = "lf"

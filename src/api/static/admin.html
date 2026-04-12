@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Управление моделями</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .back-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover { background: #64748b; }
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .status-bar {
+            background: #1e293b;
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            margin-bottom: 2rem;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .status-item {
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .status-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+        }
+        .status-value {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-success { background: #064e3b; color: #6ee7b7; }
+        .badge-error { background: #7f1d1d; color: #fca5a5; }
+        .badge-warning { background: #78350f; color: #fcd34d; }
+        .section {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+        }
+        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
+        td { font-size: 0.875rem; }
+        tr:hover { background: #334155; }
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #475569; color: white; }
+        .btn-secondary:hover { background: #64748b; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-success:hover { background: #16a34a; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        input, select {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            width: 100%;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #334155;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #94a3b8;
+        }
+        .loading-dots { display: flex; gap: 0.25rem; }
+        .loading-dots span {
+            width: 6px; height: 6px;
+            background: #3b82f6;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        .notification {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            background: #22c55e;
+            color: white;
+            display: none;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🎯 KAG - Управление моделями</div>
+        <a href="/" class="back-btn">← Назад к чату</a>
+    </div>
+
+    <div class="container">
+        <!-- Статус системы -->
+        <div class="status-bar">
+            <h2 style="margin-bottom: 1rem;">📊 Статус системы</h2>
+            <div class="status-grid" id="system-status">
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка...
+                </div>
+            </div>
+            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="restartOllama()">🔄 Перезапустить Ollama</button>
+                <button class="btn btn-secondary" onclick="loadAll()">🔄 Обновить статус</button>
+                <a href="/docker" class="btn btn-secondary" style="text-decoration: none;">🐳 Docker</a>
+                <a href="/documents" class="btn btn-primary" style="text-decoration: none;">📄 Документы</a>
+            </div>
+            <div id="restart-status" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- Настройки SSH подключения -->
+        <div class="section">
+            <h2 class="section-title">🔐 Настройки SSH подключения к Ollama</h2>
+            <div id="ssh-config-form">
+                <div class="form-group">
+                    <label>IP адрес или хост сервера Ollama</label>
+                    <input type="text" id="ssh-host" placeholder="192.168.50.41">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>SSH порт</label>
+                        <input type="number" id="ssh-port" placeholder="22" value="22">
+                    </div>
+                    <div class="form-group">
+                        <label>Порт Ollama API</label>
+                        <input type="number" id="ollama-port" placeholder="11434" value="11434">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>SSH пользователь</label>
+                        <input type="text" id="ssh-username" placeholder="nick">
+                    </div>
+                    <div class="form-group">
+                        <label>Имя сервиса Ollama</label>
+                        <input type="text" id="ollama-service" placeholder="ollama" value="ollama">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>SSH пароль</label>
+                    <input type="password" id="ssh-password" placeholder="Введите SSH пароль">
+                </div>
+                <div class="form-group">
+                    <label>Пароль для sudo (если отличается)</label>
+                    <input type="password" id="ssh-sudo-password" placeholder="Введите пароль для sudo (опционально)">
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button class="btn btn-primary" onclick="saveSshConfig()">💾 Сохранить настройки</button>
+                    <button class="btn btn-secondary" onclick="testSshConnection()">🔍 Тест подключения</button>
+                </div>
+                <div id="ssh-test-result" style="margin-top: 1rem;"></div>
+            </div>
+        </div>
+
+        <!-- Настройки чанкинга -->
+        <div class="section">
+            <h2 class="section-title">✂️ Настройки чанкинга документов</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>Размер чанка (символы)</label>
+                    <input type="number" id="chunk-size" placeholder="1000" value="1000">
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        Рекомендуемо: 500-2000
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Перекрытие чанков (символы)</label>
+                    <input type="number" id="chunk-overlap" placeholder="200" value="200">
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        Рекомендуемо: 100-300
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button class="btn btn-primary" onclick="saveChunkingSettings()">💾 Сохранить настройки</button>
+            </div>
+            <div id="chunking-status" style="margin-top: 1rem;"></div>
+        </div>
+        
+        <!-- Активная LLM модель -->
+        <div class="section">
+            <h2 class="section-title">🤖 Активная LLM модель</h2>
+            <div id="active-llm">
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка...
+                </div>
+            </div>
+        </div>
+
+        <!-- Активная Embedding модель -->
+        <div class="section">
+            <h2 class="section-title">📐 Активная Embedding модель</h2>
+            <div id="active-embedding">
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка...
+                </div>
+            </div>
+        </div>
+
+        <!-- Все модели Ollama -->
+        <div class="section">
+            <h2 class="section-title">📦 Загруженные модели Ollama</h2>
+            <button class="btn btn-primary" onclick="loadModels()" style="margin-bottom: 1rem;">🔄 Обновить</button>
+            <div id="ollama-models">
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка...
+                </div>
+            </div>
+        </div>
+
+        <!-- Загрузить новую модель -->
+        <div class="section">
+            <h2 class="section-title">⬇️ Загрузить новую модель</h2>
+            <div class="form-group">
+                <label>Название модели (например, llama3:8b, mistral:latest, qwen2:7b)</label>
+                <input type="text" id="model-name-input" placeholder="Введите название модели...">
+            </div>
+            <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
+            <div id="pull-status" style="margin-top: 1rem;"></div>
+        </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        const API_URL = '/api/v1/admin/models';
+
+        async function loadStatus() {
+            try {
+                const response = await fetch(`${API_URL}/status`);
+                const data = await response.json();
+                
+                const llmStatus = data.llm_backends?.ollama || {};
+                const embedding = data.embedding || {};
+                const config = data.active_config || {};
+
+                document.getElementById('system-status').innerHTML = `
+                    <div class="status-item">
+                        <div class="status-label">Ollama сервер</div>
+                        <div class="status-value">
+                            ${llmStatus.healthy ? '✅ Подключен' : '❌ Недоступен'}
+                            ${llmStatus.response_time_ms ? `(${llmStatus.response_time_ms.toFixed(0)}ms)` : ''}
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Embedding модель</div>
+                        <div class="status-value">
+                            ${embedding.healthy ? '✅ Активна' : '❌ Неактивна'}
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">LLM модель</div>
+                        <div class="status-value">
+                            <span class="badge ${llmStatus.healthy ? 'badge-success' : 'badge-error'}">
+                                ${config.llm_model || 'N/A'}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Embedding</div>
+                        <div class="status-value">
+                            <span class="badge ${embedding.healthy ? 'badge-success' : 'badge-error'}">
+                                ${config.embedding_model || 'N/A'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Ошибка загрузки статуса:', error);
+            }
+        }
+
+        async function loadActiveModels() {
+            try {
+                const [llmModels, embModels] = await Promise.all([
+                    fetch(`${API_URL}/llm`).then(r => r.json()),
+                    fetch(`${API_URL}/embeddings`).then(r => r.json())
+                ]);
+
+                // Активная LLM модель
+                const activeLlm = llmModels.find(m => m.is_active);
+                document.getElementById('active-llm').innerHTML = activeLlm ? `
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
+                        <div style="font-size: 2rem;">🤖</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 1.125rem;">${activeLlm.name}</div>
+                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
+                        </div>
+                        <span class="badge badge-success">Активна</span>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить модель:</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="llm-select" style="flex: 1;">
+                                ${llmModels.map(m => `<option value="${m.backend}|${m.name}" ${m.is_active ? 'selected' : ''}>${m.name} (${m.backend})</option>`).join('')}
+                            </select>
+                            <button class="btn btn-primary" onclick="switchLlmModel()">Применить</button>
+                        </div>
+                    </div>
+                ` : '<div style="color: #94a3b8;">Нет доступных LLM моделей</div>';
+
+                // Активная Embedding модель
+                const activeEmb = embModels.find(m => m.is_active);
+                document.getElementById('active-embedding').innerHTML = activeEmb ? `
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
+                        <div style="font-size: 2rem;">📐</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 1.125rem;">${activeEmb.name}</div>
+                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
+                        </div>
+                        <span class="badge badge-success">Активна</span>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить embedding модель:</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="emb-select" style="flex: 1;">
+                                ${embModels.map(m => `<option value="${m.name}" ${m.is_active ? 'selected' : ''}>${m.name}</option>`).join('')}
+                            </select>
+                            <button class="btn btn-primary" onclick="switchEmbeddingModel()">Применить</button>
+                        </div>
+                    </div>
+                ` : '<div style="color: #94a3b8;">Нет доступных embedding моделей</div>';
+
+            } catch (error) {
+                console.error('Ошибка загрузки активных моделей:', error);
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
+                
+                if (models.length === 0) {
+                    document.getElementById('ollama-models').innerHTML = '<div style="color: #94a3b8; padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
+                    return;
+                }
+
+                document.getElementById('ollama-models').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Модель</th>
+                                <th>Размер</th>
+                                <th>Параметры</th>
+                                <th>Изменена</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${models.map(m => `
+                                <tr>
+                                    <td><strong>${m.name}</strong></td>
+                                    <td>${formatBytes(m.size)}</td>
+                                    <td>${m.details?.parameter_size || 'N/A'}</td>
+                                    <td>${new Date(m.modified_at).toLocaleString('ru-RU')}</td>
+                                    <td>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteModel('${m.name}')">Удалить</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Ошибка загрузки моделей:', error);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function switchLlmModel() {
+            const select = document.getElementById('llm-select');
+            const [backend, modelName] = select.value.split('|');
+            
+            showNotification(`Переключение на ${modelName}...`);
+            
+            try {
+                const response = await fetch(`${API_URL}/switch-llm`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ backend_type: backend, model_name: modelName })
+                });
+
+                if (response.ok) {
+                    showNotification(`✅ Модель переключена на ${modelName}`);
+                    setTimeout(loadAll, 1000);
+                } else {
+                    const error = await response.json();
+                    showNotification(`❌ Ошибка: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        async function switchEmbeddingModel() {
+            const select = document.getElementById('emb-select');
+            const modelName = select.value;
+            
+            showNotification(`Переключение embedding на ${modelName}...`);
+            
+            try {
+                const response = await fetch(`${API_URL}/switch-embedding`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ model_name: modelName })
+                });
+
+                if (response.ok) {
+                    showNotification(`✅ Embedding модель переключена на ${modelName}`);
+                    setTimeout(loadAll, 1000);
+                } else {
+                    const error = await response.json();
+                    showNotification(`❌ Ошибка: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        async function pullModel() {
+            const modelName = document.getElementById('model-name-input').value.trim();
+            if (!modelName) {
+                showNotification('Введите название модели', true);
+                return;
+            }
+
+            const statusDiv = document.getElementById('pull-status');
+            statusDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Загрузка ${modelName}...
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="pull-progress" style="width: 0%"></div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}/pull`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ model_name: modelName })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    statusDiv.innerHTML = `<div style="color: #22c55e;">✅ Модель ${modelName} загружена</div>`;
+                    document.getElementById('model-name-input').value = '';
+                    setTimeout(loadAll, 1000);
+                } else {
+                    statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message || result.error}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div style="color: #ef4444;">❌ Ошибка: ${error.message}</div>`;
+            }
+        }
+
+        async function deleteModel(modelName) {
+            if (!confirm(`Удалить модель ${modelName}?`)) return;
+
+            try {
+                const response = await fetch(`${API_URL}/delete/${modelName}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showNotification(`✅ Модель ${modelName} удалена`);
+                    setTimeout(loadAll, 1000);
+                } else {
+                    showNotification('❌ Ошибка удаления', true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.background = isError ? '#ef4444' : '#22c55e';
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        async function loadAll() {
+            await Promise.all([
+                loadStatus(),
+                loadActiveModels(),
+                loadModels(),
+                loadSshConfig(),
+                loadChunkingSettings()
+            ]);
+        }
+        
+        async function loadChunkingSettings() {
+            try {
+                const response = await fetch(`${API_URL}/admin/models/chunking-config`);
+                const config = await response.json();
+                
+                document.getElementById('chunk-size').value = config.chunk_size || 1000;
+                document.getElementById('chunk-overlap').value = config.chunk_overlap || 200;
+            } catch (error) {
+                console.error('Ошибка загрузки настроек чанкинга:', error);
+            }
+        }
+        
+        async function saveChunkingSettings() {
+            const chunkSize = parseInt(document.getElementById('chunk-size').value) || 1000;
+            const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/models/chunking-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        chunk_size: chunkSize,
+                        chunk_overlap: chunkOverlap
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const statusDiv = document.getElementById('chunking-status');
+                    statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>
+                        <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">
+                            Размер чанка: ${result.config.chunk_size} символов | Перекрытие: ${result.config.chunk_overlap} символов
+                        </div>`;
+                    
+                    showNotification('✅ Настройки чанкинга сохранены в Redis');
+                } else {
+                    showNotification('❌ Ошибка сохранения', true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        async function loadSshConfig() {
+            try {
+                const response = await fetch(`${API_URL}/ssh-config`);
+                const data = await response.json();
+                
+                document.getElementById('ssh-host').value = data.host || '';
+                document.getElementById('ssh-port').value = data.port || 22;
+                document.getElementById('ssh-username').value = data.username || '';
+                document.getElementById('ollama-port').value = data.ollama_port || 11434;
+                document.getElementById('ollama-service').value = data.ollama_service_name || 'ollama';
+                
+                // Не заполняем пароли - пользователь вводит их сам
+                if (data.has_password) {
+                    document.getElementById('ssh-password').placeholder = 'Пароль сохранён (введите новый для изменения)';
+                }
+                if (data.has_sudo_password) {
+                    document.getElementById('ssh-sudo-password').placeholder = 'Sudo пароль сохранён (введите новый для изменения)';
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки SSH конфигурации:', error);
+            }
+        }
+
+        async function saveSshConfig() {
+            const host = document.getElementById('ssh-host').value.trim();
+            const port = parseInt(document.getElementById('ssh-port').value) || 22;
+            const username = document.getElementById('ssh-username').value.trim();
+            const password = document.getElementById('ssh-password').value;
+            const sudoPassword = document.getElementById('ssh-sudo-password').value;
+            const ollamaPort = parseInt(document.getElementById('ollama-port').value) || 11434;
+            const ollamaService = document.getElementById('ollama-service').value.trim() || 'ollama';
+
+            if (!host || !username) {
+                showNotification('Заполните IP адрес и имя пользователя', true);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/ssh-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        host,
+                        port,
+                        username,
+                        password: password || undefined,
+                        sudo_password: sudoPassword || undefined,
+                        ollama_port: ollamaPort,
+                        ollama_service_name: ollamaService
+                    })
+                });
+
+                if (response.ok) {
+                    showNotification('✅ Настройки SSH сохранены');
+                    // Очищаем поля паролей
+                    document.getElementById('ssh-password').value = '';
+                    document.getElementById('ssh-sudo-password').value = '';
+                    document.getElementById('ssh-password').placeholder = 'Пароль сохранён';
+                    document.getElementById('ssh-sudo-password').placeholder = 'Sudo пароль сохранён';
+                } else {
+                    const error = await response.json();
+                    showNotification(`❌ Ошибка: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showNotification(`❌ Ошибка: ${error.message}`, true);
+            }
+        }
+
+        async function testSshConnection() {
+            const resultDiv = document.getElementById('ssh-test-result');
+            resultDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Тестирование подключения...
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}/ssh-test`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div style="color: #22c55e; padding: 1rem; background: #064e3b; border-radius: 6px;">
+                            ✅ ${result.message}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div style="color: #ef4444; padding: 1rem; background: #7f1d1d; border-radius: 6px;">
+                            ❌ ${result.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="color: #ef4444; padding: 1rem; background: #7f1d1d; border-radius: 6px;">
+                        ❌ Ошибка: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function restartOllama() {
+            const statusDiv = document.getElementById('restart-status');
+            statusDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-dots"><span></span><span></span><span></span></div>
+                    Перезапуск Ollama...
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}/restart-ollama`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>`;
+                    showNotification('Ollama перезапущен успешно!');
+                    setTimeout(loadAll, 3000);
+                } else if (result.status === 'warning') {
+                    statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message}</div>`;
+                    setTimeout(loadAll, 3000);
+                } else {
+                    statusDiv.innerHTML = `<div style="color: #ef4444;">❌ ${result.message}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div style="color: #ef4444;">❌ Ошибка: ${error.message}</div>`;
+            }
+        }
+
+        // Автообновление
+        loadAll();
+        setInterval(loadStatus, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "kag-api-performance",
+    "title": "KAG API Performance",
+    "tags": ["kag", "api"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "HTTP Запросов в секунду",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}} - {{status}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Запросов/с", "show": true},
+          {"show": true}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Время ответа (p95)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Время (с)", "unit": "s", "show": true},
+          {"show": true}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Ошибки по типам",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(http_errors_total[5m])",
+            "legendFormat": "{{error_type}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Запросы к LLM",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(llm_requests_total[5m])",
+            "legendFormat": "{{model}} - {{status}}"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}
