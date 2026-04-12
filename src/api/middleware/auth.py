@@ -40,7 +40,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         ]
 
         public_prefixes = [
-            "/api/v1/admin/models/",  # Все endpoints управления моделями
+            "/api/v1/admin/models/",  # Все endpoints управления моделями (без auth)
             "/api/v1/chat/",  # Чат (для веб-интерфейса)
             "/api/v1/upload/",  # Загрузка документов
             "/api/v1/setup/",  # Setup Wizard API
@@ -53,7 +53,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if any(request.url.path.startswith(prefix) for prefix in public_prefixes):
+            # Логируем для отладки
+            logger.debug(f"Auth middleware пропускает запрос: {request.url.path}")
             return await call_next(request)
+        
+        # Логируем заблокированные запросы
+        logger.warning(f"Auth middleware блокирует запрос: {request.url.path}")
         
         # Получаем токен из заголовка
         token = self._extract_token(request)

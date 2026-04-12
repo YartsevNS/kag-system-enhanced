@@ -685,24 +685,49 @@
 
         async function loadSshConfig() {
             try {
+                console.log('Загрузка SSH конфигурации из БД...');
                 const response = await fetch(`${API_URL}/ssh-config`);
-                const data = await response.json();
                 
+                if (!response.ok) {
+                    console.error('API вернул ошибку:', response.status);
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('Получены данные из БД:', data);
+
+                // Заполняем поля сохраненными данными
                 document.getElementById('ssh-host').value = data.host || '';
                 document.getElementById('ssh-port').value = data.port || 22;
                 document.getElementById('ssh-username').value = data.username || '';
                 document.getElementById('ollama-port').value = data.ollama_port || 11434;
                 document.getElementById('ollama-service').value = data.ollama_service_name || 'ollama';
+
+                // Показываем статус сохраненных паролей
+                const passwordField = document.getElementById('ssh-password');
+                const sudoField = document.getElementById('ssh-sudo-password');
                 
-                // Не заполняем пароли - пользователь вводит их сам
                 if (data.has_password) {
-                    document.getElementById('ssh-password').placeholder = 'Пароль сохранён (введите новый для изменения)';
+                    passwordField.value = '••••••••••••'; // Показываем что пароль сохранен
+                    passwordField.setAttribute('data-has-password', 'true');
+                    console.log('✅ SSH пароль сохранен в БД');
+                } else {
+                    passwordField.value = '';
+                    passwordField.setAttribute('data-has-password', 'false');
                 }
+                
                 if (data.has_sudo_password) {
-                    document.getElementById('ssh-sudo-password').placeholder = 'Sudo пароль сохранён (введите новый для изменения)';
+                    sudoField.value = '••••••••••••';
+                    sudoField.setAttribute('data-has-sudo', 'true');
+                    console.log('✅ Sudo пароль сохранен в БД');
+                } else {
+                    sudoField.value = '';
+                    sudoField.setAttribute('data-has-sudo', 'false');
                 }
+                
+                console.log('✅ SSH конфигурация загружена из БД');
             } catch (error) {
-                console.error('Ошибка загрузки SSH конфигурации:', error);
+                console.error('❌ Ошибка загрузки SSH конфигурации:', error);
             }
         }
 
@@ -710,10 +735,23 @@
             const host = document.getElementById('ssh-host').value.trim();
             const port = parseInt(document.getElementById('ssh-port').value) || 22;
             const username = document.getElementById('ssh-username').value.trim();
-            const password = document.getElementById('ssh-password').value;
-            const sudoPassword = document.getElementById('ssh-sudo-password').value;
+            let password = document.getElementById('ssh-password').value;
+            let sudoPassword = document.getElementById('ssh-sudo-password').value;
             const ollamaPort = parseInt(document.getElementById('ollama-port').value) || 11434;
             const ollamaService = document.getElementById('ollama-service').value.trim() || 'ollama';
+
+            // Если пароль не менялся (пользователь не вводил новый), не отправляем его
+            const hasPasswordSaved = document.getElementById('ssh-password').getAttribute('data-has-password') === 'true';
+            if (password === '••••••••••••' && hasPasswordSaved) {
+                password = undefined; // Не отправляем старый пароль
+            }
+            
+            const hasSudoSaved = document.getElementById('ssh-sudo-password').getAttribute('data-has-sudo') === 'true';
+            if (sudoPassword === '••••••••••••' && hasSudoSaved) {
+                sudoPassword = undefined; // Не отправляем старый sudo пароль
+            }
+
+            console.log('Сохранение SSH:', { host, port, username, ollamaPort });
 
             if (!host || !username) {
                 showNotification('Заполните IP адрес и имя пользователя', true);
@@ -721,33 +759,51 @@
             }
 
             try {
+                const payload = {
+                    host,
+                    port,
+                    username,
+                    ollama_port: ollamaPort,
+                    ollama_service_name: ollamaService
+                };
+                
+                if (password && password !== '••••••••••••') payload.password = password;
+                if (sudoPassword && sudoPassword !== '••••••••••••') payload.sudo_password = sudoPassword;
+
+                console.log('Отправка payload:', JSON.stringify(payload));
+
                 const response = await fetch(`${API_URL}/ssh-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        host,
-                        port,
-                        username,
-                        password: password || undefined,
-                        sudo_password: sudoPassword || undefined,
-                        ollama_port: ollamaPort,
-                        ollama_service_name: ollamaService
-                    })
+                    body: JSON.stringify(payload)
                 });
 
+                console.log('Ответ получен:', response.status);
+
                 if (response.ok) {
+                    const data = await response.json();
+                    console.log('Данные:', data);
                     showNotification('✅ Настройки SSH сохранены');
-                    // Очищаем поля паролей
-                    document.getElementById('ssh-password').value = '';
-                    document.getElementById('ssh-sudo-password').value = '';
-                    document.getElementById('ssh-password').placeholder = 'Пароль сохранён';
-                    document.getElementById('ssh-sudo-password').placeholder = 'Sudo пароль сохранён';
+                    
+                    // Обновляем статус полей паролей
+                    document.getElementById('ssh-password').value = '••••••••••••';
+                    document.getElementById('ssh-password').setAttribute('data-has-password', 'true');
+                    document.getElementById('ssh-sudo-password').value = '••••••••••••';
+                    document.getElementById('ssh-sudo-password').setAttribute('data-has-sudo', 'true');
                 } else {
-                    const error = await response.json();
-                    showNotification(`❌ Ошибка: ${error.detail}`, true);
+                    let errorMsg = 'Неизвестная ошибка';
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData);
+                    } catch (e) {
+                        errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                    }
+                    console.error('Ошибка сохранения:', errorMsg);
+                    showNotification(`❌ Ошибка: ${errorMsg}`, true);
                 }
             } catch (error) {
-                showNotification(`❌ Ошибка: ${error.message}`, true);
+                console.error('Исключение при сохранении:', error);
+                showNotification(`❌ Ошибка сети: ${error.message}`, true);
             }
         }
 

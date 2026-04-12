@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Первоначальная настройка</title>
+    <title>KAG - Setup Wizard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: #e2e8f0;
             min-height: 100vh;
@@ -16,15 +16,12 @@
             justify-content: center;
             padding: 2rem;
         }
-        .setup-container {
-            max-width: 800px;
+        .container {
+            max-width: 700px;
             width: 100%;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
         .logo {
+            text-align: center;
             font-size: 2.5rem;
             font-weight: 700;
             background: linear-gradient(135deg, #3b82f6, #8b5cf6);
@@ -33,8 +30,10 @@
             margin-bottom: 0.5rem;
         }
         .subtitle {
+            text-align: center;
             color: #94a3b8;
             font-size: 1.125rem;
+            margin-bottom: 2rem;
         }
         .step {
             background: #1e293b;
@@ -51,35 +50,32 @@
             align-items: center;
             gap: 0.5rem;
         }
-        .step-number {
+        .step-num {
             background: #3b82f6;
             color: white;
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-size: 0.875rem;
         }
-        .form-grid {
+        .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
         }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group.full-width {
-            grid-column: 1 / -1;
-        }
-        label {
+        .full { grid-column: 1 / -1; }
+        
+        .field { margin-bottom: 1rem; }
+        .field label {
             display: block;
             margin-bottom: 0.5rem;
             color: #94a3b8;
             font-size: 0.875rem;
         }
-        input, select {
+        .field input, .field select {
             width: 100%;
             background: #0f172a;
             border: 1px solid #475569;
@@ -88,7 +84,7 @@
             border-radius: 6px;
             font-size: 0.875rem;
         }
-        input:focus, select:focus {
+        .field input:focus, .field select:focus {
             outline: none;
             border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
@@ -98,7 +94,8 @@
             color: #64748b;
             margin-top: 0.25rem;
         }
-        .test-btn {
+        
+        .btn-test {
             background: #475569;
             color: white;
             border: none;
@@ -107,9 +104,21 @@
             cursor: pointer;
             font-size: 0.875rem;
             margin-top: 0.5rem;
+            transition: background 0.2s;
         }
-        .test-btn:hover { background: #64748b; }
-        .save-btn {
+        .btn-test:hover { background: #64748b; }
+        
+        .test-status {
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: none;
+        }
+        .test-status.success { background: #064e3b; color: #6ee7b7; display: block; }
+        .test-status.error { background: #7f1d1d; color: #fca5a5; display: block; }
+        
+        .btn-save {
             width: 100%;
             background: linear-gradient(135deg, #3b82f6, #8b5cf6);
             color: white;
@@ -120,207 +129,223 @@
             font-size: 1.125rem;
             font-weight: 600;
             margin-top: 1rem;
+            transition: opacity 0.2s;
         }
-        .save-btn:hover { opacity: 0.9; }
-        .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .status-message {
+        .btn-save:hover { opacity: 0.9; }
+        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .status-box {
             margin-top: 1rem;
             padding: 1rem;
             border-radius: 6px;
             display: none;
         }
-        .status-success {
+        .status-box.success {
             background: #064e3b;
             color: #6ee7b7;
             border: 1px solid #059669;
+            display: block;
         }
-        .status-error {
+        .status-box.error {
             background: #7f1d1d;
             color: #fca5a5;
             border: 1px solid #dc2626;
-        }
-        .test-result {
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            border-radius: 4px;
-            display: none;
+            display: block;
         }
     </style>
 </head>
 <body>
-    <div class="setup-container">
-        <div class="header">
-            <div class="logo">🎯 KAG System</div>
-            <div class="subtitle">Первоначальная настройка системы</div>
-        </div>
+    <div class="container">
+        <div class="logo">🎯 KAG System</div>
+        <div class="subtitle">Первоначальная настройка системы</div>
 
         <!-- Шаг 1: База данных -->
         <div class="step">
             <div class="step-header">
-                <span class="step-number">1</span>
+                <span class="step-num">1</span>
                 Настройка базы данных
             </div>
-            <div class="form-grid">
-                <div class="form-group">
+            <div class="grid">
+                <div class="field">
                     <label>Хост базы данных</label>
-                    <input type="text" id="db-host" value="kag-keycloak-db" placeholder="kag-keycloak-db">
-                    <div class="hint">Имя контейнера или IP адрес</div>
+                    <input type="text" id="db-host" value="kag-keycloak-db">
                 </div>
-                <div class="form-group">
+                <div class="field">
                     <label>Порт</label>
-                    <input type="number" id="db-port" value="5432" placeholder="5432">
+                    <input type="number" id="db-port" value="5432">
                 </div>
-                <div class="form-group">
+                <div class="field">
                     <label>Имя базы данных</label>
-                    <input type="text" id="db-name" value="keycloak" placeholder="keycloak">
+                    <input type="text" id="db-name" value="keycloak">
                 </div>
-                <div class="form-group">
+                <div class="field">
                     <label>Пользователь</label>
-                    <input type="text" id="db-user" value="keycloak" placeholder="keycloak">
+                    <input type="text" id="db-user" value="keycloak">
                 </div>
-                <div class="form-group full-width">
+                <div class="field full">
                     <label>Пароль пользователя БД</label>
-                    <input type="password" id="db-password" value="keycloak_password" placeholder="keycloak_password">
+                    <input type="password" id="db-pass" value="keycloak_password">
                 </div>
             </div>
-            <button class="test-btn" onclick="testDatabase()">🔍 Тест подключения к БД</button>
-            <div class="test-result" id="db-test-result"></div>
+            <button class="btn-test" onclick="testDb()">🔍 Тест подключения к БД</button>
+            <div class="test-status" id="db-status"></div>
         </div>
 
         <!-- Шаг 2: LLM Бэкенд -->
         <div class="step">
             <div class="step-header">
-                <span class="step-number">2</span>
+                <span class="step-num">2</span>
                 Настройка LLM бэкенда
             </div>
-            <div class="form-grid">
-                <div class="form-group">
+            <div class="grid">
+                <div class="field">
                     <label>Тип бэкенда</label>
-                    <select id="llm-type" onchange="toggleLlmFields()">
+                    <select id="llm-type" onchange="updateLlmDefaults()">
                         <option value="ollama">Ollama</option>
                         <option value="vllm">vLLM</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Адрес сервера</label>
-                    <input type="text" id="llm-host" value="192.168.50.41" placeholder="192.168.50.41">
-                </div>
-                <div class="form-group">
+                <div class="field">
                     <label>Порт</label>
-                    <input type="number" id="llm-port" value="11434" placeholder="11434">
+                    <input type="number" id="llm-port" value="11434">
                 </div>
-                <div class="form-group">
+                <div class="field full">
+                    <label>Адрес сервера</label>
+                    <input type="text" id="llm-host" value="192.168.50.41">
+                </div>
+                <div class="field full">
                     <label>Название модели</label>
-                    <input type="text" id="llm-model" value="phi4-mini:latest" placeholder="phi4-mini:latest">
+                    <input type="text" id="llm-model" value="phi4-mini:latest">
                     <div class="hint">Модель должна быть загружена на сервере</div>
                 </div>
             </div>
-            <button class="test-btn" onclick="testLlm()">🔍 Тест подключения к LLM</button>
-            <div class="test-result" id="llm-test-result"></div>
+            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
+            <div class="test-status" id="llm-status"></div>
         </div>
 
-        <!-- Шаг 3: Embedding модель -->
+        <!-- Шаг 3: Embedding -->
         <div class="step">
             <div class="step-header">
-                <span class="step-number">3</span>
+                <span class="step-num">3</span>
                 Настройка Embedding модели
             </div>
-            <div class="form-grid">
-                <div class="form-group">
+            <div class="grid">
+                <div class="field full">
                     <label>Название embedding модели</label>
-                    <input type="text" id="embed-model" value="qwen3-embedding:4b" placeholder="qwen3-embedding:4b">
-                    <div class="hint">Обычно находится на том же сервере что и LLM</div>
+                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
                 </div>
-                <div class="form-group">
+                <div class="field">
                     <label>Размерность вектора</label>
-                    <input type="number" id="embed-dim" value="4096" placeholder="4096">
+                    <input type="number" id="emb-dim" value="4096">
                 </div>
             </div>
         </div>
 
-        <!-- Шаг 4: SSH доступ -->
+        <!-- Шаг 4: SSH -->
         <div class="step">
             <div class="step-header">
-                <span class="step-number">4</span>
+                <span class="step-num">4</span>
                 SSH доступ к серверу LLM
             </div>
-            <div class="form-grid">
-                <div class="form-group">
+            <div class="grid">
+                <div class="field">
                     <label>SSH пользователь</label>
-                    <input type="text" id="ssh-user" value="nick" placeholder="nick">
+                    <input type="text" id="ssh-user" value="yartsevn">
                 </div>
-                <div class="form-group">
+                <div class="field">
                     <label>SSH пароль</label>
-                    <input type="password" id="ssh-password" placeholder="Введите пароль">
+                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
                 </div>
-                <div class="form-group full-width">
+                <div class="field full">
                     <label>Пароль для sudo (если отличается)</label>
-                    <input type="password" id="ssh-sudo-password" placeholder="Оставьте пустым, если такой же">
+                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
                 </div>
             </div>
-            <button class="test-btn" onclick="testSsh()">🔍 Тест SSH подключения</button>
-            <div class="test-result" id="ssh-test-result"></div>
+            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
+            <div class="test-status" id="ssh-status"></div>
         </div>
 
-        <button class="save-btn" onclick="saveSetup()">💾 Сохранить и продолжить</button>
-        <div class="status-message" id="status-message"></div>
+        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
+        <div class="status-box" id="final-status"></div>
     </div>
 
     <script>
-        const API_URL = '/api/v1/setup';
+        // ==========================================
+        // Глобальные переменные
+        // ==========================================
+        const API = '/api/v1/setup';
+        
+        // Состояние тестов (для UX)
+        const state = {
+            dbTested: false,
+            llmTested: false,
+            sshTested: false
+        };
 
-        function toggleLlmFields() {
-            const type = document.getElementById('llm-type').value;
-            const portInput = document.getElementById('llm-port');
-            if (type === 'vllm') {
-                portInput.value = '8000';
-            } else {
-                portInput.value = '11434';
-            }
+        // ==========================================
+        // Вспомогательные функции
+        // ==========================================
+        
+        /**
+         * Показывает статус теста
+         * @param {string} elementId - ID элемента статуса
+         * @param {boolean} success - Успех или ошибка
+         * @param {string} message - Текст сообщения
+         */
+        function showTestStatus(elementId, success, message) {
+            const el = document.getElementById(elementId);
+            el.textContent = (success ? '✅ ' : '❌ ') + message;
+            el.className = 'test-status ' + (success ? 'success' : 'error');
         }
 
-        async function testDatabase() {
-            const resultDiv = document.getElementById('db-test-result');
-            resultDiv.style.display = 'block';
-            resultDiv.textContent = 'Тестирование...';
-            resultDiv.style.background = '#1e293b';
+        /**
+         * Показывает финальный статус сохранения
+         * @param {boolean} success 
+         * @param {string} message 
+         */
+        function showFinalStatus(success, message) {
+            const el = document.getElementById('final-status');
+            el.textContent = message;
+            el.className = 'status-box ' + (success ? 'success' : 'error');
+        }
 
+        // ==========================================
+        // Тестирование подключений
+        // ==========================================
+
+        async function testDb() {
             const payload = {
                 host: document.getElementById('db-host').value,
                 port: parseInt(document.getElementById('db-port').value),
                 name: document.getElementById('db-name').value,
                 user: document.getElementById('db-user').value,
-                password: document.getElementById('db-password').value
+                password: document.getElementById('db-pass').value
             };
 
+            showTestStatus('db-status', false, 'Тестирование...');
+
             try {
-                const response = await fetch(`${API_URL}/test-db`, {
+                const res = await fetch(`${API}/test-db`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const result = await response.json();
 
-                if (result.success) {
-                    resultDiv.textContent = '✅ ' + result.message;
-                    resultDiv.style.background = '#064e3b';
-                } else {
-                    resultDiv.textContent = '❌ ' + result.message;
-                    resultDiv.style.background = '#7f1d1d';
-                }
-            } catch (error) {
-                resultDiv.textContent = '❌ Ошибка: ' + error.message;
-                resultDiv.style.background = '#7f1d1d';
+                const data = await res.json();
+                state.dbTested = data.success;
+                showTestStatus('db-status', data.success, data.message);
+            } catch (err) {
+                state.dbTested = false;
+                showTestStatus('db-status', false, 'Ошибка сети: ' + err.message);
             }
         }
 
-        async function testLlm() {
-            const resultDiv = document.getElementById('llm-test-result');
-            resultDiv.style.display = 'block';
-            resultDiv.textContent = 'Тестирование...';
-            resultDiv.style.background = '#1e293b';
+        function updateLlmDefaults() {
+            const type = document.getElementById('llm-type').value;
+            document.getElementById('llm-port').value = type === 'ollama' ? '11434' : '8000';
+        }
 
+        async function testLlm() {
             const payload = {
                 type: document.getElementById('llm-type').value,
                 host: document.getElementById('llm-host').value,
@@ -328,139 +353,161 @@
                 model: document.getElementById('llm-model').value
             };
 
+            showTestStatus('llm-status', false, 'Тестирование...');
+
             try {
-                const response = await fetch(`${API_URL}/test-llm`, {
+                const res = await fetch(`${API}/test-llm`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const result = await response.json();
 
-                if (result.success) {
-                    resultDiv.textContent = '✅ ' + result.message;
-                    resultDiv.style.background = '#064e3b';
-                } else {
-                    resultDiv.textContent = '❌ ' + result.message;
-                    resultDiv.style.background = '#7f1d1d';
-                }
-            } catch (error) {
-                resultDiv.textContent = '❌ Ошибка: ' + error.message;
-                resultDiv.style.background = '#7f1d1d';
+                const data = await res.json();
+                state.llmTested = data.success;
+                showTestStatus('llm-status', data.success, data.message);
+            } catch (err) {
+                state.llmTested = false;
+                showTestStatus('llm-status', false, 'Ошибка сети: ' + err.message);
             }
         }
 
         async function testSsh() {
-            const resultDiv = document.getElementById('ssh-test-result');
-            resultDiv.style.display = 'block';
-            resultDiv.textContent = 'Тестирование...';
-            resultDiv.style.background = '#1e293b';
-
             const payload = {
                 username: document.getElementById('ssh-user').value,
-                password: document.getElementById('ssh-password').value,
-                sudo_password: document.getElementById('ssh-sudo-password').value,
+                password: document.getElementById('ssh-pass').value,
+                sudo_password: document.getElementById('ssh-sudo').value || undefined,
                 llm_host: document.getElementById('llm-host').value,
                 llm_port: parseInt(document.getElementById('llm-port').value)
             };
 
+            showTestStatus('ssh-status', false, 'Тестирование...');
+
             try {
-                const response = await fetch(`${API_URL}/test-ssh`, {
+                const res = await fetch(`${API}/test-ssh`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const result = await response.json();
 
-                if (result.success) {
-                    resultDiv.textContent = '✅ ' + result.message;
-                    resultDiv.style.background = '#064e3b';
-                } else {
-                    resultDiv.textContent = '❌ ' + result.message;
-                    resultDiv.style.background = '#7f1d1d';
-                }
-            } catch (error) {
-                resultDiv.textContent = '❌ Ошибка: ' + error.message;
-                resultDiv.style.background = '#7f1d1d';
+                const data = await res.json();
+                state.sshTested = data.success;
+                showTestStatus('ssh-status', data.success, data.message);
+            } catch (err) {
+                state.sshTested = false;
+                showTestStatus('ssh-status', false, 'Ошибка сети: ' + err.message);
             }
         }
 
-        async function saveSetup() {
-            const btn = document.querySelector('.save-btn');
-            const statusDiv = document.getElementById('status-message');
-            
-            btn.disabled = true;
-            btn.textContent = '⏳ Сохранение...';
-            statusDiv.style.display = 'block';
-            statusDiv.textContent = 'Сохранение настроек...';
-            statusDiv.className = 'status-message';
+        // ==========================================
+        // Основная функция сохранения
+        // ==========================================
 
+        async function saveAll() {
+            const btn = document.getElementById('btn-save');
+            
+            // Валидация обязательных полей
+            const requiredFields = [
+                { id: 'db-host', label: 'Хост БД' },
+                { id: 'db-name', label: 'Имя БД' },
+                { id: 'db-user', label: 'Пользователь БД' },
+                { id: 'db-pass', label: 'Пароль БД' },
+                { id: 'llm-host', label: 'Адрес LLM' },
+                { id: 'llm-model', label: 'Модель LLM' },
+                { id: 'ssh-user', label: 'SSH пользователь' },
+                { id: 'ssh-pass', label: 'SSH пароль' }
+            ];
+
+            for (const field of requiredFields) {
+                const val = document.getElementById(field.id).value.trim();
+                if (!val) {
+                    showFinalStatus(false, `⚠️ Заполните поле: ${field.label}`);
+                    document.getElementById(field.id).focus();
+                    return;
+                }
+            }
+
+            // Формирование payload
             const payload = {
                 database: {
-                    host: document.getElementById('db-host').value,
-                    port: parseInt(document.getElementById('db-port').value),
-                    name: document.getElementById('db-name').value,
-                    user: document.getElementById('db-user').value,
-                    password: document.getElementById('db-password').value
+                    host: document.getElementById('db-host').value.trim(),
+                    port: parseInt(document.getElementById('db-port').value) || 5432,
+                    name: document.getElementById('db-name').value.trim(),
+                    user: document.getElementById('db-user').value.trim(),
+                    password: document.getElementById('db-pass').value
                 },
                 llm: {
                     type: document.getElementById('llm-type').value,
-                    host: document.getElementById('llm-host').value,
-                    port: parseInt(document.getElementById('llm-port').value),
-                    model: document.getElementById('llm-model').value
+                    host: document.getElementById('llm-host').value.trim(),
+                    port: parseInt(document.getElementById('llm-port').value) || 11434,
+                    model: document.getElementById('llm-model').value.trim()
                 },
                 embedding: {
-                    model: document.getElementById('embed-model').value,
-                    dimensions: parseInt(document.getElementById('embed-dim').value)
+                    model: document.getElementById('emb-model').value.trim(),
+                    dimensions: parseInt(document.getElementById('emb-dim').value) || 4096
                 },
                 ssh: {
-                    username: document.getElementById('ssh-user').value,
-                    password: document.getElementById('ssh-password').value,
-                    sudo_password: document.getElementById('ssh-sudo-password').value
+                    username: document.getElementById('ssh-user').value.trim(),
+                    password: document.getElementById('ssh-pass').value,
+                    sudo_password: document.getElementById('ssh-sudo').value || undefined
                 }
             };
 
+            // UI: Блокируем кнопку
+            btn.disabled = true;
+            btn.textContent = '⏳ Сохранение...';
+            showFinalStatus(false, 'Сохранение настроек...');
+
             try {
-                const response = await fetch(`${API_URL}/save`, {
+                console.log('Отправка данных:', payload);
+
+                const res = await fetch(`${API}/save`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                const result = await response.json();
+                console.log('Ответ сервера:', res.status);
 
-                if (result.success) {
-                    statusDiv.textContent = '✅ Настройки сохранены! Перенаправление...';
-                    statusDiv.className = 'status-message status-success';
+                const data = await res.json();
+                console.log('Данные:', data);
+
+                if (res.ok && data.success) {
+                    showFinalStatus(true, '✅ Настройки успешно сохранены! Перенаправление...');
                     
+                    // Ждем 2 секунды и редиректим на главную
                     setTimeout(() => {
                         window.location.href = '/';
                     }, 2000);
                 } else {
-                    statusDiv.textContent = '❌ ' + (result.message || 'Ошибка сохранения');
-                    statusDiv.className = 'status-message status-error';
+                    const errorMsg = data.detail || data.message || 'Неизвестная ошибка';
+                    showFinalStatus(false, `❌ Ошибка: ${errorMsg}`);
                     btn.disabled = false;
                     btn.textContent = '💾 Сохранить и продолжить';
                 }
-            } catch (error) {
-                statusDiv.textContent = '❌ Ошибка: ' + error.message;
-                statusDiv.className = 'status-message status-error';
+            } catch (err) {
+                console.error('Ошибка сохранения:', err);
+                showFinalStatus(false, `❌ Ошибка сети: ${err.message}`);
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить и продолжить';
             }
         }
 
-        // Проверяем, не настроена ли уже система
-        window.addEventListener('DOMContentLoaded', async () => {
+        // ==========================================
+        // Проверка при загрузке страницы
+        // ==========================================
+        
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
-                const response = await fetch('/api/v1/setup/check');
-                const data = await response.json();
+                // Проверяем, не настроена ли уже система
+                const res = await fetch(`${API}/check`);
+                const data = await res.json();
                 
                 if (data.configured) {
-                    // Система уже настроена, редиректим на главную
+                    // Система уже настроена, идем на главную
                     window.location.href = '/';
                 }
-            } catch (error) {
-                console.error('Ошибка проверки конфигурации:', error);
+            } catch (err) {
+                console.warn('Не удалось проверить статус настройки:', err);
             }
         });
     </script>

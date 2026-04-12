@@ -1,8 +1,8 @@
 """
 Middleware Setup Checker для KAG
 
-Проверяет при каждом запросе, настроена ли система.
-Если нет - редиректит на /setup
+Если система не настроена, все запросы (кроме setup и статики) 
+перенаправляются на /setup.
 """
 
 from fastapi import Request
@@ -14,45 +14,44 @@ from loguru import logger
 class SetupCheckMiddleware(BaseHTTPMiddleware):
     """
     Middleware для проверки первоначальной настройки.
-    
-    Если система не настроена, все запросы кроме /setup и статики
-    будут перенаправляться на /setup.
     """
+    
+    # Пути, которые ВСЕГДА доступны (даже если система не настроена)
+    PUBLIC_PATHS = [
+        "/setup",
+        "/api/v1/setup",          # Все эндпоинты Setup Wizard
+        "/api/v1/health",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/favicon.ico",
+    ]
 
     async def dispatch(self, request: Request, call_next):
-        """Проверка настройки при каждом запросе"""
+        path = request.url.path
         
-        # Пути которые не требуют настройки
-        public_paths = [
-            "/setup",
-            "/api/v1/setup",
-            "/api/v1/health",
-            "/static/setup.html",
-            "/docs",
-            "/openapi.json",
-            "/redoc",
-            "/favicon.ico",
-        ]
-        
-        # Проверяем если это публичный путь
-        if any(request.url.path.startswith(path) for path in public_paths):
+        # 1. Проверяем если это публичный путь - пропускаем
+        if any(path.startswith(p) for p in self.PUBLIC_PATHS):
             return await call_next(request)
         
-        # Проверяем если это статический файл
-        if request.url.path.startswith("/static/"):
+        # 2. Проверяем если это статический файл
+        if path.startswith("/static/"):
             return await call_next(request)
         
-        # Проверяем статус настройки
+        # 3. Проверяем статус настройки
         try:
             from src.api.services.config_store import config_store
-            setup_status = config_store.get("setup", "status", {})
             
-            if not setup_status.get("configured", False):
-                # Система не настроена - редиректим на setup
-                logger.info(f"Система не настроена, редирект на /setup: {request.url.path}")
-                return RedirectResponse(url="/setup", status_code=302)
+            # Проверяем только если БД доступна
+            if config_store._engine:
+                setup_status = config_store.get("setup", "status", {})
+                
+                if not setup_status.get("configured", False):
+                    # Система не настроена - редирект
+                    return RedirectResponse(url="/setup", status_code=302)
         except Exception as e:
-            logger.warning(f"Ошибка проверки статуса настройки: {e}")
-            # В случае ошибки БД - пропускаем запрос
+            # Если БД недоступна - считаем что система не настроена
+            if not path.startswith("/setup"):
+                return RedirectResponse(url="/setup", status_code=302)
         
         return await call_next(request)

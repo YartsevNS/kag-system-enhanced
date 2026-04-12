@@ -1,17 +1,15 @@
 """
 Setup Wizard API для KAG
 
-Обрабатывает первоначальную настройку системы:
-- Тест подключения к БД
-- Тест подключения к LLM
-- Тест SSH
-- Сохранение всех настроек в PostgreSQL
+Обрабатывает первоначальную настройку системы.
+Все данные сохраняются в PostgreSQL через config_store.
 """
 
-from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
+from datetime import datetime
+from typing import Optional
 import httpx
 import asyncio
 import subprocess
@@ -22,262 +20,223 @@ from src.security.gost_crypto import GOSTCrypto
 router = APIRouter(prefix="/setup", tags=["setup"])
 
 
-# ===========================================
-# Модели запросов
-# ===========================================
+# ==========================================
+# Pydantic модели
+# ==========================================
 
-class DatabaseConfig(BaseModel):
-    host: str = Field(..., description="Хост базы данных")
-    port: int = Field(default=5432, description="Порт")
-    name: str = Field(..., description="Имя базы данных")
-    user: str = Field(..., description="Пользователь")
-    password: str = Field(..., description="Пароль")
-
-
-class LlmConfig(BaseModel):
-    type: str = Field(default="ollama", description="Тип бэкенда (ollama/vllm)")
-    host: str = Field(..., description="Адрес сервера")
-    port: int = Field(default=11434, description="Порт")
-    model: str = Field(..., description="Название модели")
+class DatabaseSetup(BaseModel):
+    host: str
+    port: int = 5432
+    name: str
+    user: str
+    password: str
 
 
-class EmbeddingConfig(BaseModel):
-    model: str = Field(..., description="Название embedding модели")
-    dimensions: int = Field(default=4096, description="Размерность вектора")
+class LlmSetup(BaseModel):
+    type: str = "ollama"
+    host: str
+    port: int = 11434
+    model: str
 
 
-class SshConfig(BaseModel):
-    username: str = Field(..., description="SSH пользователь")
-    password: str = Field(..., description="SSH пароль")
-    sudo_password: Optional[str] = Field(default=None, description="Пароль sudo")
-    llm_host: str = Field(..., description="Хост LLM для теста")
-    llm_port: int = Field(default=11434, description="Порт LLM для теста")
+class EmbeddingSetup(BaseModel):
+    model: str = "qwen3-embedding:4b"
+    dimensions: int = 4096
 
 
-class FullSetupRequest(BaseModel):
-    database: DatabaseConfig
-    llm: LlmConfig
-    embedding: EmbeddingConfig
-    ssh: SshConfig
+class SshSetup(BaseModel):
+    username: str
+    password: str
+    sudo_password: Optional[str] = None
 
 
-# ===========================================
-# Тестовые endpoints
-# ===========================================
+class FullSetupPayload(BaseModel):
+    database: DatabaseSetup
+    llm: LlmSetup
+    embedding: EmbeddingSetup
+    ssh: SshSetup
 
-@router.post("/test-db", summary="Тест подключения к базе данных")
-async def test_database(config: DatabaseConfig):
-    """
-    Проверяет подключение к PostgreSQL базе данных.
-    """
+
+# ==========================================
+# Тестовые эндпоинты
+# ==========================================
+
+@router.post("/test-db")
+async def test_db(cfg: DatabaseSetup):
+    """Тестирует подключение к PostgreSQL."""
     try:
-        # Используем psycopg2 для теста
         import psycopg2
-        
         conn = psycopg2.connect(
-            host=config.host,
-            port=config.port,
-            dbname=config.name,
-            user=config.user,
-            password=config.password,
+            host=cfg.host,
+            port=cfg.port,
+            dbname=cfg.name,
+            user=cfg.user,
+            password=cfg.password,
             connect_timeout=10
         )
-        
         conn.close()
-        
-        return {
-            "success": True,
-            "message": f"Подключено к {config.host}:{config.port}/{config.name}"
-        }
+        return {"success": True, "message": f"Подключено к {cfg.host}:{cfg.port}/{cfg.name}"}
     except ImportError:
-        return {
-            "success": False,
-            "message": "psycopg2 не установлен. Установите: pip install psycopg2-binary"
-        }
+        return {"success": False, "message": "psycopg2 не установлен"}
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Ошибка подключения: {str(e)}"
-        }
+        return {"success": False, "message": str(e)}
 
 
-@router.post("/test-llm", summary="Тест подключения к LLM бэкенду")
-async def test_llm(config: LlmConfig):
-    """
-    Проверяет доступность LLM сервера и наличие модели.
-    """
+@router.post("/test-llm")
+async def test_llm(cfg: LlmSetup):
+    """Тестирует доступность LLM сервера."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # Для Ollama проверяем через /api/tags
-            if config.type == "ollama":
-                response = await client.get(f"http://{config.host}:{config.port}/api/tags")
-                if response.status_code == 200:
-                    models = response.json().get("models", [])
-                    model_names = [m["name"] for m in models]
-                    
-                    if config.model in model_names:
-                        return {
-                            "success": True,
-                            "message": f"Модель {config.model} доступна"
-                        }
-                    else:
-                        return {
-                            "success": False,
-                            "message": f"Модель {config.model} не найдена. Доступны: {', '.join(model_names[:5])}"
-                        }
+            if cfg.type == "ollama":
+                # Проверяем наличие модели
+                resp = await client.get(f"http://{cfg.host}:{cfg.port}/api/tags")
+                if resp.status_code != 200:
+                    return {"success": False, "message": f"Ollama ошибка: {resp.status_code}"}
+                
+                models = resp.json().get("models", [])
+                model_names = [m["name"] for m in models]
+                
+                if cfg.model in model_names:
+                    return {"success": True, "message": f"Модель {cfg.model} доступна"}
                 else:
-                    return {
-                        "success": False,
-                        "message": f"Ollama вернул ошибку: {response.status_code}"
-                    }
+                    return {"success": False, "message": f"Модель не найдена. Доступны: {', '.join(model_names[:3])}..."}
             else:
-                # Для vLLM проверяем health endpoint
-                response = await client.get(f"http://{config.host}:{config.port}/health")
-                if response.status_code == 200:
-                    return {
-                        "success": True,
-                        "message": f"vLLM сервер доступен"
-                    }
+                # vLLM
+                resp = await client.get(f"http://{cfg.host}:{cfg.port}/health")
+                if resp.status_code == 200:
+                    return {"success": True, "message": "vLLM сервер доступен"}
                 else:
-                    return {
-                        "success": False,
-                        "message": f"vLLM вернул ошибку: {response.status_code}"
-                    }
+                    return {"success": False, "message": f"vLLM ошибка: {resp.status_code}"}
     except httpx.ConnectError:
-        return {
-            "success": False,
-            "message": f"Не удалось подключиться к {config.host}:{config.port}"
-        }
+        return {"success": False, "message": f"Не удалось подключиться к {cfg.host}:{cfg.port}"}
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Ошибка: {str(e)}"
-        }
+        return {"success": False, "message": str(e)}
 
 
-@router.post("/test-ssh", summary="Тест SSH подключения")
-async def test_ssh(config: SshConfig):
-    """
-    Проверяет SSH подключение к серверу LLM.
-    """
+@router.post("/test-ssh")
+async def test_ssh(cfg):
+    """Тестирует SSH подключение."""
     try:
-        # Формируем команду с sshpass
-        ssh_cmd = f"sshpass -p '{config.password}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {config.username}@{config.llm_host}"
+        # Извлекаем данные из запроса
+        username = cfg.username
+        password = cfg.password
+        llm_host = cfg.llm_host
+        llm_port = cfg.llm_port
+        sudo_pass = cfg.sudo_password if hasattr(cfg, 'sudo_password') else None
         
-        # Тестируем подключение
-        test_cmd = f"{ssh_cmd} 'echo OK'"
+        # Формируем команду
+        cmd = f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {username}@{llm_host} 'echo OK'"
         
         result = await asyncio.to_thread(
             subprocess.run,
-            test_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=15
+            cmd, shell=True, capture_output=True, text=True, timeout=15
         )
         
-        if result.returncode == 0:
-            # Проверяем Ollama
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(f"http://{config.llm_host}:{config.llm_port}/")
-                    ollama_ok = response.status_code == 200
-            except:
-                ollama_ok = False
-            
-            message = "SSH подключено"
-            if ollama_ok:
-                message += " • Ollama работает"
-            
-            return {
-                "success": True,
-                "message": message
-            }
-        else:
-            return {
-                "success": False,
-                "message": f"SSH ошибка: {result.stderr.strip()[:200]}"
-            }
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "message": "Таймаут подключения (15 секунд)"
-        }
+        if result.returncode != 0:
+            return {"success": False, "message": f"SSH ошибка: {result.stderr.strip()[:200]}"}
+        
+        # Проверяем Ollama
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"http://{llm_host}:{llm_port}/")
+                ollama_ok = resp.status_code == 200
+        except:
+            ollama_ok = False
+        
+        msg = "SSH подключено"
+        if ollama_ok:
+            msg += " • Ollama работает"
+        
+        return {"success": True, "message": msg}
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Ошибка: {str(e)}"
-        }
+        return {"success": False, "message": str(e)}
 
 
-# ===========================================
-# Сохранение настроек
-# ===========================================
+# ==========================================
+# Основной эндпоинт сохранения
+# ==========================================
 
-@router.post("/save", summary="Сохранить все настройки")
-async def save_setup(request: FullSetupRequest):
+@router.post("/save")
+async def save_setup(payload: FullSetupPayload):
     """
     Сохраняет все настройки системы в PostgreSQL.
+    
+    Это финальный шаг Setup Wizard.
     """
+    logger.info("=== НАЧАЛО СОХРАНЕНИЯ НАСТРОЕК ===")
+    
     try:
         crypto = GOSTCrypto()
+        now = datetime.utcnow().isoformat()
         
         # 1. Сохраняем настройки БД
-        db_config = request.database.model_dump()
-        db_config['password'] = crypto.encrypt_to_base64(db_config['password'])
-        config_store.set("database", "default", db_config)
+        logger.info("Сохраняем настройки БД...")
+        db_data = payload.database.model_dump()
+        db_data['password'] = crypto.encrypt_to_base64(db_data['password'])
+        db_data['saved_at'] = now
+        config_store.set("database", "default", db_data)
         
         # 2. Сохраняем настройки LLM
-        llm_config = request.llm.model_dump()
-        config_store.set("llm", "default", llm_config)
+        logger.info("Сохраняем настройки LLM...")
+        llm_data = payload.llm.model_dump()
+        llm_data['saved_at'] = now
+        config_store.set("llm", "default", llm_data)
         
         # 3. Сохраняем настройки Embedding
-        embed_config = request.embedding.model_dump()
-        config_store.set("embedding", "default", embed_config)
+        logger.info("Сохраняем настройки Embedding...")
+        emb_data = payload.embedding.model_dump()
+        emb_data['saved_at'] = now
+        config_store.set("embedding", "default", emb_data)
         
         # 4. Сохраняем настройки SSH
-        ssh_config = request.ssh.model_dump()
-        ssh_config['password'] = crypto.encrypt_to_base64(ssh_config['password'])
-        if ssh_config.get('sudo_password'):
-            ssh_config['sudo_password'] = crypto.encrypt_to_base64(ssh_config['sudo_password'])
-        ssh_config['host'] = request.llm.host
-        ssh_config['port'] = 22
-        ssh_config['ollama_port'] = request.llm.port
-        ssh_config['ollama_service_name'] = 'ollama'
-        ssh_config['updated_at'] = __import__('datetime').datetime.utcnow().isoformat()
+        logger.info("Сохраняем настройки SSH...")
+        ssh_data = payload.ssh.model_dump()
+        ssh_data['password'] = crypto.encrypt_to_base64(ssh_data['password'])
+        if ssh_data.get('sudo_password'):
+            ssh_data['sudo_password'] = crypto.encrypt_to_base64(ssh_data['sudo_password'])
+        # Добавляем хост из LLM настроек
+        ssh_data['host'] = payload.llm.host
+        ssh_data['ollama_port'] = payload.llm.port
+        ssh_data['saved_at'] = now
+        config_store.set("ssh", "default", ssh_data)
         
-        config_store.set("ssh", "default", ssh_config)
+        # 5. Ставим маркер: система настроена
+        logger.info("Ставим маркер настройки...")
+        config_store.set("setup", "status", {
+            "configured": True,
+            "timestamp": now,
+            "llm_model": payload.llm.model,
+            "db_host": payload.database.host
+        })
         
-        # 5. Помечаем систему как настроенную
-        config_store.set("setup", "status", {"configured": True, "timestamp": __import__('datetime').datetime.utcnow().isoformat()})
-        
-        logger.info("Система успешно настроена через Setup Wizard")
+        logger.info("=== НАСТРОЙКИ УСПЕШНО СОХРАНЕНЫ ===")
         
         return {
             "success": True,
-            "message": "Настройки сохранены. Перезапустите приложение для применения."
+            "message": "Настройки сохранены. Система готова к работе."
         }
         
     except Exception as e:
-        logger.error(f"Ошибка сохранения настроек: {e}")
+        logger.error(f"!!! ОШИБКА СОХРАНЕНИЯ: {e}")
         import traceback
         logger.error(traceback.format_exc())
         
-        raise HTTPException(status_code=500, detail=f"Ошибка сохранения: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ===========================================
+# ==========================================
 # Проверка статуса настройки
-# ===========================================
+# ==========================================
 
-@router.get("/check", summary="Проверить, настроена ли система")
-async def check_setup_status():
-    """
-    Проверяет, была ли уже выполнена первоначальная настройка.
-    """
-    setup_status = config_store.get("setup", "status", {})
-    
-    return {
-        "configured": setup_status.get("configured", False),
-        "timestamp": setup_status.get("timestamp")
-    }
+@router.get("/check")
+async def check_status():
+    """Проверяет, была ли выполнена первоначальная настройка."""
+    try:
+        status = config_store.get("setup", "status", {})
+        return {
+            "configured": status.get("configured", False),
+            "timestamp": status.get("timestamp")
+        }
+    except Exception as e:
+        logger.warning(f"Ошибка проверки статуса: {e}")
+        return {"configured": False, "timestamp": None}

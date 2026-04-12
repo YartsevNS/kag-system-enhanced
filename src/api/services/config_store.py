@@ -47,10 +47,17 @@ class PostgresConfigStore:
         try:
             self._engine = create_engine(self._db_url, pool_pre_ping=True)
             self._Session = sessionmaker(bind=self._engine)
-            
+
             # Создаем таблицу если не существует
-            Base.metadata.create_all(self._engine)
-            logger.info(f"Postgres Config Store подключен: {self._db_url}")
+            try:
+                Base.metadata.create_all(self._engine)
+                logger.info(f"Postgres Config Store подключен: {self._db_url}")
+                logger.info("Таблица system_configs проверена/создана")
+            except Exception as db_err:
+                logger.error(f"Ошибка создания таблицы: {db_err}")
+                # Не блокируем работу, пробуем позже
+                self._engine = None
+                self._Session = None
         except Exception as e:
             logger.error(f"Ошибка инициализации Postgres Config Store: {e}")
             self._engine = None
@@ -86,22 +93,29 @@ class PostgresConfigStore:
         Сохранить значение в БД.
         """
         if not self._engine:
-            logger.error("БД недоступна")
-            return False
-        
+            # Пробуем переподключиться
+            try:
+                self._engine = create_engine(self._db_url, pool_pre_ping=True)
+                self._Session = sessionmaker(bind=self._engine)
+                Base.metadata.create_all(self._engine)
+                logger.info("Postgres Config Store переподключен")
+            except Exception as e:
+                logger.error(f"Ошибка переподключения к БД: {e}")
+                return False
+
         try:
             session = self._get_session()
             config_id = f"{category}:{key}"
-            
+
             # Сериализуем значение
             if isinstance(value, (dict, list, bool, int, float)):
                 serialized = json.dumps(value)
             else:
                 serialized = str(value)
-            
+
             # Ищем существующую запись
             record = session.query(SystemConfig).filter_by(id=config_id).first()
-            
+
             if record:
                 record.value = serialized
                 record.updated_at = datetime.utcnow()
@@ -113,13 +127,15 @@ class PostgresConfigStore:
                     value=serialized
                 )
                 session.add(record)
-            
+
             session.commit()
             logger.debug(f"Сохранено в Postgres: {config_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Ошибка сохранения {category}:{key}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
         finally:
             session.close()

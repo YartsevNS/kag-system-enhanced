@@ -70,6 +70,9 @@ async def save_ssh_config(request: SSHConfigRequest, connection_id: str = "defau
 
     Пароли шифруются перед сохранением.
     """
+    logger.info(f"Запрос на сохранение SSH: host={request.host}, user={request.username}")
+    logger.debug(f"SSH Config Request: {request.model_dump(exclude={'password', 'sudo_password'})}")
+    
     try:
         config = SSHConnectionConfig(
             host=request.host,
@@ -82,20 +85,25 @@ async def save_ssh_config(request: SSHConfigRequest, connection_id: str = "defau
             ollama_port=request.ollama_port,
             ollama_service_name=request.ollama_service_name
         )
-        
+
+        logger.info("Вызываю ssh_manager.save_config...")
         success = ssh_manager.save_config(config, connection_id)
-        
+        logger.info(f"ssh_manager.save_config вернул: {success}")
+
         if success:
             return {
                 "status": "success",
                 "message": "Настройки SSH сохранены"
             }
         else:
+            logger.error("ssh_manager.save_config вернул False")
             raise HTTPException(status_code=500, detail="Ошибка сохранения")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Ошибка сохранения SSH конфигурации: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 

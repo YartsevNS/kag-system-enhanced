@@ -5,7 +5,11 @@
       "Bash(python *)",
       "Bash(curl *)",
       "Bash(docker compose *)",
-      "Bash(rm *)"
+      "Bash(rm *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git checkout *)"
     ]
   },
   "$version": 3
