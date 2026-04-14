@@ -464,7 +464,7 @@
                         <div class="chat-title" id="chat-title">Новый чат</div>
                         <div class="chat-status">
                             <span class="status-indicator"></span>
-                            <span id="model-name">mistral:7b</span>
+                            <span id="model-name">Загрузка...</span>
                         </div>
                     </div>
                 </div>
@@ -536,26 +536,36 @@
             document.getElementById('message-input').focus();
         });
         
-        // Загрузка текущей модели
+        // Загрузка текущей модели из API
         async function loadCurrentModel() {
+            const modelEl = document.getElementById('model-name');
+            const indicator = document.querySelector('.status-indicator');
+            
             try {
+                // Загружаем настройки LLM из сохраненных настроек
                 const response = await fetch(`${API_URL}/admin/models/status`);
-                const data = await response.json();
                 
-                const modelName = data.active_config?.llm_model || data.llm_backends?.ollama?.model || 'N/A';
-                const healthy = data.llm_backends?.ollama?.healthy || false;
-                
-                const modelEl = document.getElementById('model-name');
-                if (modelEl) {
-                    modelEl.textContent = modelName;
-                }
-                
-                const indicator = document.querySelector('.status-indicator');
-                if (indicator) {
-                    indicator.style.background = healthy ? 'var(--success)' : 'var(--accent)';
+                if (response.ok) {
+                    const data = await response.json();
+                    const modelName = data.active_config?.llm_model || 
+                                     data.llm_backends?.ollama?.model || 
+                                     'Неизвестная модель';
+                    
+                    if (modelEl) modelEl.textContent = modelName;
+                    
+                    // Обновляем индикатор статуса
+                    const healthy = data.llm_backends?.ollama?.healthy;
+                    if (indicator) {
+                        indicator.style.background = healthy ? 'var(--success)' : 'var(--accent)';
+                        indicator.title = healthy ? 'Модель активна' : 'Модель недоступна';
+                    }
+                } else {
+                    if (modelEl) modelEl.textContent = 'Ошибка загрузки';
                 }
             } catch (error) {
                 console.error('Ошибка загрузки модели:', error);
+                if (modelEl) modelEl.textContent = 'Offline';
+                if (indicator) indicator.style.background = 'var(--error)';
             }
         }
         

@@ -24,6 +24,7 @@ from src.llm import (
     OllamaClient,
     EmbeddingClient
 )
+from src.api.services.config_store import config_store
 from src.config import get_settings
 
 
@@ -119,12 +120,95 @@ class ModelManager:
         """
         Инициализировать все компоненты из конфигурации.
         
-        Вызывается при старте приложения.
+        Приоритет:
+        1. Настройки из Setup Wizard (PostgreSQL)
+        2. Настройки из .env / config.py
         """
-        settings = get_settings()
-
         logger.info("Инициализация ModelManager...")
 
+        # Пробуем загрузить настройки из БД (Setup Wizard)
+        db_config = config_store.get("llm", "default")
+        
+        if db_config:
+            logger.info("Загрузка настроек LLM из PostgreSQL (Setup Wizard)")
+            await self._init_from_db_config(db_config)
+        else:
+            logger.info("Загрузка настроек LLM из config.py / .env")
+            await self._init_from_env()
+
+    async def _init_from_db_config(self, db_config):
+        """Инициализация на основе данных из БД"""
+        try:
+            llm_type = db_config.get("type", "ollama")
+            host = db_config.get("host", "localhost")
+            port = db_config.get("port", 11434)
+            model = db_config.get("model", "phi4-mini:latest")
+            
+            base_url = f"http://{host}:{port}"
+            
+            self._llm_router = LLMRouter(
+                health_check_interval=60,
+                auto_recovery=True
+            )
+
+            if llm_type == "ollama":
+                ollama = OllamaClient(
+                    base_url=base_url,
+                    model=model,
+                    timeout=120.0,
+                    max_retries=3,
+                    retry_delay=1.0,
+                    keep_alive="24h"  # Исправлено с "-1" на "24h"
+                )
+                self._llm_router.add_backend(ollama, priority=0, enabled=True)
+                logger.info(f"Добавлен Ollama бэкенд: {model} @ {base_url}")
+            elif llm_type == "vllm":
+                vllm = VLLMClient(
+                    base_url=base_url,
+                    model=model,
+                    timeout=120.0
+                )
+                self._llm_router.add_backend(vllm, priority=0, enabled=True)
+                logger.info(f"Добавлен vLLM бэкенд: {model} @ {base_url}")
+
+            # Обновляем состояние (State)
+            self._state.active_llm_backend = LLMBackendType.OLLAMA if llm_type == "ollama" else LLMBackendType.VLLM
+            self._state.active_llm_model = model
+            self._state.backends[self._state.active_llm_backend.value] = BackendConfig(
+                backend_type=self._state.active_llm_backend,
+                base_url=base_url,
+                enabled=True,
+                priority=0
+            )
+
+            # Embedding клиент
+            emb_config = config_store.get("embedding", "default")
+            if emb_config:
+                self._embedding_client = EmbeddingClient(
+                    base_url=base_url,  # Обычно на том же сервере
+                    model=emb_config.get("model", "qwen3-embedding:4b"),
+                    timeout=60.0
+                )
+                self._state.active_embedding_model = emb_config.get("model", "qwen3-embedding:4b")
+                self._state.embedding_dimensions = emb_config.get("dimensions", 4096) # Или из конфига
+                logger.info(f"Добавлен Embedding клиент: {emb_config.get('model')}")
+
+            # Запускаем health monitoring
+            await self._llm_router.start_health_monitoring()
+            
+            # Сохраняем состояние
+            self._save_state()
+                
+        except Exception as e:
+            logger.error(f"Ошибка инициализации из БД: {e}")
+            # Фоллбэк на env
+            await self._init_from_env()
+
+    async def _init_from_env(self):
+        """Инициализация на основе переменных окружения"""
+        from src.config import get_settings
+        settings = get_settings()
+        
         # Создаем LLM роутер
         llm_config = settings.get_llm_router_config()
         self._llm_router = LLMRouter(

@@ -642,7 +642,7 @@
         
         async function loadChunkingSettings() {
             try {
-                const response = await fetch(`${API_URL}/admin/models/chunking-config`);
+                const response = await fetch(`${API_URL}/chunking-config`);
                 const config = await response.json();
                 
                 document.getElementById('chunk-size').value = config.chunk_size || 1000;
@@ -657,7 +657,7 @@
             const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
             
             try {
-                const response = await fetch(`${API_URL}/admin/models/chunking-config`, {
+                const response = await fetch(`${API_URL}/chunking-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({

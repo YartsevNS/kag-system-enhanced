@@ -29,7 +29,7 @@ async def upload_document(
     - CSV
 
     - **file**: Файл для загрузки
-    
+
     Возвращает document_id для отслеживания статуса.
     """
     logger.info(f"Загрузка документа: {file.filename}, тип: {file.content_type}")
@@ -37,23 +37,34 @@ async def upload_document(
     try:
         # Читаем содержимое файла
         content = await file.read()
-        
-        # Загружаем документ
+
+        # Загружаем документ (создаёт запись в _documents)
         record = await document_service.upload_document(
             filename=file.filename,
             file_content=content,
             file_type=file.content_type
         )
 
-        # Запускаем обработку в фоне
-        if background_tasks:
+        # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
+        if background_tasks is not None:
+            logger.info(f"Планирую фоновую обработку: {record.document_id}")
             background_tasks.add_task(_process_document_async, record.document_id)
+        else:
+            # Если BackgroundTasks недоступен, обрабатываем синхронно
+            logger.warning("BackgroundTasks недоступен, обрабатываю синхронно")
+            try:
+                result = await document_service.process_document(record.document_id)
+                logger.info(f"Документ обработан синхронно: {record.document_id}, результат: {result}")
+            except Exception as e:
+                logger.error(f"Ошибка синхронной обработки: {e}")
+                record.status = "failed"
+                record.error = str(e)
 
         return DocumentStatus(
             document_id=record.document_id,
             status=record.status,
             progress=record.progress,
-            error=None,
+            error=record.error if record.status == "failed" else None,
             created_at=record.created_at,
             updated_at=record.updated_at
         )
@@ -72,7 +83,7 @@ async def upload_documents_batch(
     Пакетная загрузка нескольких документов.
 
     - **files**: Список файлов для загрузки
-    
+
     Возвращает список document_id для отслеживания статуса.
     """
     logger.info(f"Пакетная загрузка: {len(files)} файлов")
@@ -87,9 +98,14 @@ async def upload_documents_batch(
                 file_type=file.content_type
             )
 
-            # Запускаем обработку в фоне
-            if background_tasks:
+            # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
+            if background_tasks is not None:
                 background_tasks.add_task(_process_document_async, record.document_id)
+            else:
+                try:
+                    await document_service.process_document(record.document_id)
+                except Exception as e:
+                    logger.error(f"Ошибка обработки {file.filename}: {e}")
 
             results.append({
                 "document_id": record.document_id,

@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     git \
     openssh-client \
     sshpass \
+    # OCR: Tesseract + русский язык + poppler для pdf2image
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание виртуального окружения
@@ -40,6 +44,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     openssh-client \
     sshpass \
+    # OCR: Tesseract + русский язык + poppler для pdf2image
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование виртуального окружения из builder

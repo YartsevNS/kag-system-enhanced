@@ -34,19 +34,60 @@ class GOSTCrypto:
     - Хэширование ГОСТ Р 34.11-2012 (Streebog-256/512)
     - Генерацию ключей
     - Гибридное шифрование
+
+    Ключ загружается из файла data/.encryption_key (если существует),
+    иначе генерируется новый и сохраняется. Это обеспечивает
+    стабильное шифрование/дешифрование между перезапусками.
     """
 
-    def __init__(self, key: Optional[bytes] = None):
+    _default_key_path = Path("/app/data/.encryption_key")
+
+    def __init__(self, key: Optional[bytes] = None, key_path: Optional[Path] = None):
         """
         Инициализация GOST криптографии.
 
         Args:
-            key: Ключ шифрования (32 байта для AES-256)
+            key: Ключ шифрования (32 байта для AES-256).
+                 Если не указан, загружается из файла или генерируется.
+            key_path: Путь к файлу ключа (по умолчанию /app/data/.encryption_key)
         """
-        self._key = key or self._generate_key()
+        self._key_path = key_path or self._default_key_path
+
+        if key:
+            self._key = key
+        else:
+            self._key = self._load_or_generate_key()
+
         self._backend = default_backend()
-        
-        logger.info("GOSTCrypto инициализирован")
+
+        logger.info(f"GOSTCrypto инициализирован, key_path={self._key_path}")
+
+    def _load_or_generate_key(self) -> bytes:
+        """Загрузить ключ из файла или сгенерировать новый"""
+        if self._key_path.exists():
+            try:
+                key = self._key_path.read_bytes()
+                if len(key) == 32:
+                    logger.info(f"Ключ загружен из файла: {self._key_path}")
+                    return key
+                else:
+                    logger.warning(f"Некорректный размер ключа в файле: {len(key)} байт, генерирую новый")
+            except Exception as e:
+                logger.warning(f"Ошибка загрузки ключа: {e}, генерирую новый")
+
+        return self._generate_and_save_key()
+
+    def _generate_and_save_key(self) -> bytes:
+        """Сгенерировать новый ключ и сохранить в файл"""
+        key = self._generate_key()
+        try:
+            self._key_path.parent.mkdir(parents=True, exist_ok=True)
+            self._key_path.write_bytes(key)
+            self._key_path.chmod(0o600)  # Только владелец
+            logger.info(f"Новый ключ сгенерирован и сохранён: {self._key_path}")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения ключа: {e}")
+        return key
 
     def _generate_key(self) -> bytes:
         """Сгенерировать случайный ключ"""

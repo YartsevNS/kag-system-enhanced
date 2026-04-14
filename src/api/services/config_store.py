@@ -25,25 +25,23 @@ class PostgresConfigStore:
     def __init__(self, db_url: Optional[str] = None):
         """
         Инициализация хранилища.
-        
+
         Args:
-            db_url: URL базы данных (если не передан, берется из конфига)
+            db_url: URL базы данных (если не передан, строится из конфига)
         """
         settings = get_settings()
-        
-        # Формируем URL для подключения к Keycloak DB (так как это наш единственный Postgres)
-        # KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
-        # Превращаем в: postgresql://keycloak:keycloak_password@keycloak-db:5432/key
-        
+
         if db_url:
             self._db_url = db_url
         else:
-            # Дефолтные настройки для контейнера keycloak-db
-            # Берем из конфига, если есть, иначе используем дефолт из docker-compose.yml
-            db_user = getattr(settings, 'KC_DB_USERNAME', 'keycloak')
-            db_pass = getattr(settings, 'KC_DB_PASSWORD', 'keycloak_password')
-            self._db_url = f"postgresql://{db_user}:{db_pass}@keycloak-db:5432/keycloak"
-        
+            # Строим URL из настроек Settings
+            self._db_url = (
+                f"postgresql://{settings.KC_DB_USERNAME}:{settings.KC_DB_PASSWORD}"
+                f"@{settings.KC_DB_HOST}:{settings.KC_DB_PORT}/{settings.KC_DB_NAME}"
+            )
+
+        logger.info(f"Postgres Config Store: инициализация, db_url={self._db_url}")
+
         try:
             self._engine = create_engine(self._db_url, pool_pre_ping=True)
             self._Session = sessionmaker(bind=self._engine)
@@ -55,7 +53,6 @@ class PostgresConfigStore:
                 logger.info("Таблица system_configs проверена/создана")
             except Exception as db_err:
                 logger.error(f"Ошибка создания таблицы: {db_err}")
-                # Не блокируем работу, пробуем позже
                 self._engine = None
                 self._Session = None
         except Exception as e:

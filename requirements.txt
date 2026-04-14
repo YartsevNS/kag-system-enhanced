@@ -45,5 +45,10 @@ psycopg2-binary>=2.9.0
 PyPDF2>=3.0.0
 python-docx>=1.1.0
 
+# OCR — распознавание текста на изображениях (русский язык)
+pytesseract>=0.3.10
+Pillow>=10.0.0
+pdf2image>=1.17.0
+
 # Экспорт документов
 reportlab>=4.0.0

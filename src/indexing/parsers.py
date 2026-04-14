@@ -110,7 +110,8 @@ class DocumentParser:
         Распарсить PDF файл.
 
         Использует PyPDF2 для извлечения текста.
-        TODO: Добавить OCR через pytesseract для изображений.
+        Если текст на странице пустой или слишком короткий — автоматически
+        применяется OCR через Tesseract (распознавание русского/английского).
         """
         try:
             import PyPDF2
@@ -120,11 +121,12 @@ class DocumentParser:
 
         segments = []
         metadata = {}
+        ocr_used = False
 
         try:
             with open(path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
-                
+
                 # Метаданные PDF
                 if reader.metadata:
                     metadata = {
@@ -138,18 +140,41 @@ class DocumentParser:
                 # Извлечение текста по страницам
                 for page_num, page in enumerate(reader.pages):
                     text = page.extract_text()
-                    if text.strip():
+
+                    # Если текст пустой или слишком короткий — используем OCR
+                    if not text or len(text.strip()) < 50:
+                        logger.info(
+                            f"Страница {page_num + 1}: текст не найден или "
+                            f"слишком короткий ({len(text) if text else 0} символов), "
+                            f"применяю OCR..."
+                        )
+                        from src.indexing.ocr_engine import ocr_engine
+                        if ocr_engine.is_available:
+                            ocr_result = ocr_engine.extract_text_from_pdf(str(path))
+                            if ocr_result.get("pages"):
+                                page_data = ocr_result["pages"][page_num]
+                                text = page_data.get("text", "")
+                                if text:
+                                    ocr_used = True
+                                    logger.info(
+                                        f"Страница {page_num + 1}: OCR распознал "
+                                        f"{len(text)} символов"
+                                    )
+
+                    if text and text.strip():
                         segments.append(DocumentSegment(
                             segment_type="text",
                             content=text.strip(),
                             page=page_num + 1,
                             metadata={
                                 "page_number": page_num + 1,
-                                "char_count": len(text)
+                                "char_count": len(text),
+                                "ocr_used": ocr_used
                             }
                         ).__dict__)
 
                 metadata["total_pages"] = len(reader.pages)
+                metadata["ocr_used"] = ocr_used
 
         except Exception as e:
             logger.error(f"Ошибка чтения PDF {path}: {e}")

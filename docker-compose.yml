@@ -27,6 +27,12 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-kag}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-kag-api}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-change_me}
+      # Keycloak DB (PostgreSQL для конфигов)
+      - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}
+      - KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
+      - KC_DB_HOST=keycloak-db
+      - KC_DB_PORT=5432
+      - KC_DB_NAME=keycloak
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
       - OLLAMA_BASE_URL=http://192.168.50.41:11434
@@ -56,6 +62,7 @@ services:
     depends_on:
       - qdrant
       - redis
+      - keycloak-db
     networks:
       - kag_internal
     restart: unless-stopped

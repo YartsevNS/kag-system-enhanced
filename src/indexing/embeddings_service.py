@@ -69,7 +69,7 @@ class EmbeddingsService:
         )
 
     async def initialize(self):
-        """Инициализировать подключения"""
+        """Инициализировать подключения и создать коллекцию при необходимости"""
         # Создаем embedding клиент если не передан
         if self._embedding_client is None:
             settings = get_settings()
@@ -78,6 +78,7 @@ class EmbeddingsService:
                 model=settings.EMBEDDING_MODEL,
                 timeout=settings.EMBEDDING_TIMEOUT
             )
+            logger.info(f"Embedding клиент инициализирован: {settings.EMBEDDING_MODEL}")
 
         # Создаем Qdrant клиент
         self._qdrant_client = QdrantClient(url=self.qdrant_url)
@@ -139,17 +140,6 @@ class EmbeddingsService:
         except Exception as e:
             logger.error(f"Ошибка создания коллекции: {e}")
             raise
-
-    async def initialize(self):
-        """Инициализировать embedding клиент"""
-        if self._embedding_client is None:
-            settings = get_settings()
-            self._embedding_client = EmbeddingClient(
-                base_url=settings.EMBEDDING_BASE_URL,
-                model=settings.EMBEDDING_MODEL,
-                timeout=settings.EMBEDDING_TIMEOUT
-            )
-            logger.info(f"Embedding клиент инициализирован: {settings.EMBEDDING_MODEL}")
 
     async def embed_and_store(
         self,

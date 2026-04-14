@@ -189,7 +189,13 @@ class ChatService:
 
         # История сообщений
         for msg in history:
-            role = MessageRole(msg.get("role", "user"))
+            role_str = msg.get("role", "user")
+            try:
+                role = MessageRole(role_str)
+            except ValueError:
+                # Если роль невалидна, используем user по умолчанию
+                logger.warning(f"Неизвестная роль '{role_str}', использую 'user'")
+                role = MessageRole.USER
             content = msg.get("content", "")
             messages.append(
                 ChatMessage(role=role, content=content)

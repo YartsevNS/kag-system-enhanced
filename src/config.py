@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     KEYCLOAK_REALM: str = "kag"
     KEYCLOAK_CLIENT_ID: str = "kag-api"
     KEYCLOAK_CLIENT_SECRET: str = "change_me"
+
+    # Keycloak DB (PostgreSQL)
+    KC_DB_USERNAME: str = "keycloak"
+    KC_DB_PASSWORD: str = "keycloak_password"
+    KC_DB_HOST: str = "keycloak-db"
+    KC_DB_PORT: int = 5432
+    KC_DB_NAME: str = "keycloak"
     
     # Casbin
     CASBIN_MODEL_PATH: str = "/app/src/auth/rbac_model.conf"

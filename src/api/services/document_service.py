@@ -40,30 +40,78 @@ class DocumentRecord(BaseModel):
 class DocumentService:
     """
     Сервис обработки документов.
-    
+
     Полный pipeline:
     1. Сохранение файла
     2. Парсинг
     3. Чанкинг
     4. Векторизация
     5. Сохранение в Qdrant
+
+    Метаданные документов хранятся в PostgreSQL через config_store
+    для сохранения между перезапусками.
     """
 
     def __init__(self, upload_dir: Optional[str] = None):
         """
         Инициализация сервиса.
-        
+
         Args:
             upload_dir: Директория для загруженных файлов
         """
         settings = get_settings()
         self._upload_dir = Path(upload_dir or "/app/data/uploads")
         self._upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Хранилище метаданных документов
+
+        # Кэш метаданных (загружается из БД при старте)
         self._documents: Dict[str, DocumentRecord] = {}
-        
-        logger.info(f"DocumentService инициализирован: {self._upload_dir}")
+
+        # Загружаем метаданные из БД
+        self._load_documents_from_db()
+
+        logger.info(f"DocumentService инициализирован: {self._upload_dir}, документов в кэше: {len(self._documents)}")
+
+    def _load_documents_from_db(self):
+        """Загрузить метаданные документов из PostgreSQL"""
+        try:
+            from src.api.services.config_store import config_store
+            all_data = config_store.get_all("documents")
+
+            for doc_id, data in all_data.items():
+                try:
+                    # Восстанавливаем datetime из строк
+                    if isinstance(data.get('created_at'), str):
+                        data['created_at'] = datetime.fromisoformat(data['created_at'])
+                    if isinstance(data.get('updated_at'), str):
+                        data['updated_at'] = datetime.fromisoformat(data['updated_at'])
+
+                    self._documents[doc_id] = DocumentRecord(**data)
+                except Exception as e:
+                    logger.warning(f"Ошибка загрузки документа {doc_id}: {e}")
+
+            if self._documents:
+                logger.info(f"Загружено {len(self._documents)} документов из БД")
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить документы из БД: {e}")
+
+    def _save_document_to_db(self, document_id: str):
+        """Сохранить метаданные одного документа в PostgreSQL"""
+        try:
+            from src.api.services.config_store import config_store
+            record = self._documents.get(document_id)
+            if not record:
+                return
+
+            data = record.model_dump()
+            # Преобразуем datetime в строки
+            if isinstance(data.get('created_at'), datetime):
+                data['created_at'] = data['created_at'].isoformat()
+            if isinstance(data.get('updated_at'), datetime):
+                data['updated_at'] = data['updated_at'].isoformat()
+
+            config_store.set("documents", document_id, data)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения документа {document_id}: {e}")
 
     async def upload_document(
         self,
@@ -105,7 +153,10 @@ class DocumentService:
         
         self._documents[doc_id] = record
         logger.info(f"Документ загружен: {doc_id}, {filename}")
-        
+
+        # Сохраняем метаданные в БД
+        self._save_document_to_db(doc_id)
+
         return record
 
     async def process_document(self, document_id: str) -> Dict[str, Any]:
@@ -127,20 +178,23 @@ class DocumentService:
             record.status = "processing"
             record.progress = 10
             record.updated_at = datetime.utcnow()
-            
+            self._save_document_to_db(document_id)
+
             # Находим файл
             file_path = self._find_file(document_id, record.filename)
             if not file_path:
                 raise FileNotFoundError(f"Файл не найден для документа {document_id}")
-            
+
             # Шаг 1: Парсинг (30%)
             logger.info(f"Парсинг документа: {document_id}")
             record.progress = 30
+            self._save_document_to_db(document_id)
             parsed_doc = document_parser.parse(str(file_path), record.file_type)
-            
+
             # Шаг 2: Чанкинг (50%)
             logger.info(f"Чанкинг документа: {document_id}")
             record.progress = 50
+            self._save_document_to_db(document_id)
             
             # Загружаем настройки чанкинга из Redis (или используем default)
             from src.api.services.config_store import config_store
@@ -184,6 +238,7 @@ class DocumentService:
             record.progress = 100
             record.chunks_count = len(chunks)
             record.updated_at = datetime.utcnow()
+            self._save_document_to_db(document_id)
             
             logger.info(
                 f"Документ обработан: {document_id}, "

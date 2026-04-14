@@ -39,19 +39,28 @@ async def lifespan(app: FastAPI):
         logger.info("Инициализация ModelManager...")
         await model_manager.initialize()
         logger.info("ModelManager инициализирован")
-        
-        # Инициализация БД конфигов (создание таблиц)
-        from src.api.services.config_store import config_store
-        if config_store._engine:
-            from src.database.models import Base
-            Base.metadata.create_all(config_store._engine)
-            logger.info("Таблицы конфигурации проверены/созданы")
     except Exception as e:
         logger.warning(f"Ошибка инициализации: {e}")
+
+    # Инициализация EmbeddingsService
+    try:
+        from src.indexing.embeddings_service import embeddings_service
+        logger.info("Инициализация EmbeddingsService...")
+        await embeddings_service.initialize()
+        logger.info("EmbeddingsService инициализирован")
+    except Exception as e:
+        logger.warning(f"EmbeddingsService не инициализирован: {e}")
     
     yield
     
     # Очистка при завершении
+    try:
+        from src.indexing.embeddings_service import embeddings_service
+        await embeddings_service.close()
+        logger.info("EmbeddingsService закрыт")
+    except Exception as e:
+        logger.warning(f"Ошибка закрытия EmbeddingsService: {e}")
+
     try:
         logger.info("Завершение работы ModelManager...")
         await model_manager.close()

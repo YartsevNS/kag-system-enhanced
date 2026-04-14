@@ -294,7 +294,7 @@ class EmbeddingClient:
         if self._dimensions is None:
             raise ValueError(
                 "Размерность еще не известна. "
-                "Выполните хотя бы один запрос generate() primero."
+                "Выполните хотя бы один запрос generate() сначала."
             )
         return self._dimensions
 
