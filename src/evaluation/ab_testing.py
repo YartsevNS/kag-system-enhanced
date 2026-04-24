@@ -10,6 +10,7 @@
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+from enum import Enum
 import json
 import hashlib
 from pathlib import Path
@@ -81,7 +82,12 @@ class ABTest:
         self.test_type = test_type
         self.variants = variants
         self._storage_path = storage_path or Path("/app/data/ab_tests")
-        self._storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self._storage_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning("Не могу создать /app/data, использую /tmp для ab_tests")
+            self._storage_path = Path("/tmp/kag_ab_tests")
+            self._storage_path.mkdir(parents=True, exist_ok=True)
         
         self._results: Dict[str, ABTestResult] = {}
         self._start_time = datetime.utcnow()
@@ -309,7 +315,12 @@ class ABTestManager:
         """Инициализация менеджера"""
         self._tests: Dict[str, ABTest] = {}
         self._storage_path = storage_path or Path("/app/data/ab_tests")
-        self._storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self._storage_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning("Не могу создать /app/data, использую /tmp для ab_tests")
+            self._storage_path = Path("/tmp/kag_ab_tests")
+            self._storage_path.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"ABTestManager инициализирован")
 

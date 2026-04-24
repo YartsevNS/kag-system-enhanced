@@ -77,7 +77,11 @@ class ModelManager:
             state_file: Файл для сохранения состояния
         """
         self._state_file = state_file or Path("/app/data/model_manager_state.json")
-        self._state_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._state_file.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning(f"Не могу создать директорию для {self._state_file}, использую /tmp")
+            self._state_file = Path("/tmp/model_manager_state.json")
 
         # Компоненты
         self._llm_router: Optional[LLMRouter] = None

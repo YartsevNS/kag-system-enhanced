@@ -136,7 +136,12 @@ class QualityTracker:
             storage_path: Путь для хранения данных
         """
         self._storage_path = storage_path or Path("/app/data/quality_tracking")
-        self._storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self._storage_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning("Не могу создать /app/data, использую /tmp для quality_tracking")
+            self._storage_path = Path("/tmp/kag_quality_tracking")
+            self._storage_path.mkdir(parents=True, exist_ok=True)
         
         self._metrics_history: List[Dict[str, Any]] = []
         

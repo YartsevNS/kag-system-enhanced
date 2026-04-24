@@ -83,10 +83,10 @@ class GOSTCrypto:
         try:
             self._key_path.parent.mkdir(parents=True, exist_ok=True)
             self._key_path.write_bytes(key)
-            self._key_path.chmod(0o600)  # Только владелец
+            self._key_path.chmod(0o600)
             logger.info(f"Новый ключ сгенерирован и сохранён: {self._key_path}")
         except Exception as e:
-            logger.error(f"Ошибка сохранения ключа: {e}")
+            logger.warning(f"Ошибка сохранения ключа: {e}, используется в памяти")
         return key
 
     def _generate_key(self) -> bytes:

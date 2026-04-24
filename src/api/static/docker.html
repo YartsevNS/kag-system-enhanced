@@ -199,6 +199,7 @@
     <div class="header">
         <div class="logo">🐳 KAG - Docker Dashboard</div>
         <div style="display: flex; gap: 0.5rem;">
+            <button class="back-btn" onclick="loadSystemInfo()">📊 Система</button>
             <a href="/admin" class="back-btn">← Назад к моделям</a>
             <a href="/" class="back-btn">💬 К чату</a>
         </div>
@@ -239,8 +240,134 @@
         </div>
     </div>
 
+    <!-- System Info Modal -->
+    <div class="modal" id="system-modal">
+        <div class="modal-content" style="max-width: 1100px;">
+            <div class="modal-header">
+                <h2>📊 Информация о системе</h2>
+                <button class="close-btn" onclick="closeSystemModal()">×</button>
+            </div>
+            <div id="system-details" class="logs-output" style="max-height: 75vh;"></div>
+        </div>
+    </div>
+
     <script>
         const API_URL = '/api/v1/admin/models';
+
+        async function loadDockerStats() {
+            try {
+                const response = await fetch(`${API_URL}/docker/stats`);
+                const data = await response.json();
+
+                renderSystemInfo(data.system);
+                renderContainers(data.containers);
+            } catch (error) {
+                console.error('Ошибка загрузки статистики Docker:', error);
+            }
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch(`${API_URL}/system/info`);
+                const data = await response.json();
+                renderSystemDetails(data);
+                document.getElementById('system-modal').classList.add('active');
+            } catch (error) {
+                console.error('Ошибка загрузки system info:', error);
+                alert('Ошибка: ' + error.message);
+            }
+        }
+
+        function renderSystemDetails(data) {
+            if (!data || data.error) {
+                document.getElementById('system-details').textContent = 'Ошибка: ' + (data.error || 'Unknown');
+                return;
+            }
+
+            const fmt = (v) => v !== undefined ? v : 'N/A';
+            const fmtBytes = (v) => v ? formatBytes(v) : '0B';
+
+            const cpu = data.cpu || {};
+            const mem = data.memory || {};
+            const os = data.os || {};
+            
+            let html = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+                    <div class="info-card">
+                        <div class="info-label">Хост</div>
+                        <div class="info-value">${fmt(data.hostname)}</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8;">${os.system} ${os.release}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">CPU</div>
+                        <div class="info-value">${fmt(cpu.physical_cores)} ядер / ${fmt(cpu.logical_cores)} потоков</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${getProgressClass(cpu.usage_percent, 50, 80)}" style="width: ${Math.min(cpu.usage_percent || 0, 100)}%"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #94a3b8;">${(cpu.usage_percent || 0).toFixed(1)}% • Load: ${(cpu.load_avg || [0,0,0]).join(', ')}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Память</div>
+                        <div class="info-value">${fmtBytes(mem.used)} / ${fmtBytes(mem.total)}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${getProgressClass(mem.percent, 70, 90)}" style="width: ${Math.min(mem.percent || 0, 100)}%"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #94a3b8;">${(mem.percent || 0).toFixed(1)}%</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Uptime</div>
+                        <div class="info-value">${fmt(data.uptime)} сек</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">💾 Диски</h3>
+                <table>
+                    <thead><tr><th>Устройство</th><th>Точка монтирования</th><th>Тип</th><th>Использовано</th><th>Свободно</th><th>%</th></tr></thead>
+                    <tbody>
+            `;
+            
+            (data.disk || []).forEach(d => {
+                html += `
+                    <tr>
+                        <td>${d.device}</td>
+                        <td>${d.mountpoint}</td>
+                        <td>${d.fstype}</td>
+                        <td>${fmtBytes(d.used)}</td>
+                        <td>${fmtBytes(d.free)}</td>
+                        <td>${d.percent.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            
+            html += `
+                <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">🌐 Сеть</h3>
+                <table>
+                    <thead><tr><th>Интерфейс</th><th>Принято</th><th>Отправлено</th><th>Pkts in</th><th>Pkts out</th><th>Ошибки</th></tr></thead>
+                    <tbody>
+            `;
+            
+            Object.entries(data.network || {}).forEach(([iface, stats]) => {
+                html += `
+                    <tr>
+                        <td>${iface}</td>
+                        <td>${fmtBytes(stats.bytes_recv)}</td>
+                        <td>${fmtBytes(stats.bytes_sent)}</td>
+                        <td>${stats.packets_recv}</td>
+                        <td>${stats.packets_sent}</td>
+                        <td style="color: ${stats.errin + stats.errout > 0 ? '#fca5a5' : '#6ee7b7'}">${stats.errin + stats.errout}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('system-details').innerHTML = html;
+        }
+
+        function closeSystemModal() {
+            document.getElementById('system-modal').classList.remove('active');
+        }
 
         async function loadDockerStats() {
             try {

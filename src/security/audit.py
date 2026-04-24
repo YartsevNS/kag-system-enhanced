@@ -119,7 +119,11 @@ class AuditLogger:
 
         # Создаем директорию если нужно
         if self._log_file:
-            self._log_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                self._log_file.parent.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                logger.warning("Не могу создать /app/data, отключаю file logging")
+                self._log_file = None
 
         logger.info(f"AuditLogger инициализирован, файл: {self._log_file}")
 

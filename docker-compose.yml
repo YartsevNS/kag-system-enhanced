@@ -35,7 +35,7 @@ services:
       - KC_DB_NAME=keycloak
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
-      - OLLAMA_BASE_URL=http://192.168.50.41:11434
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=phi4-mini:latest
       - OLLAMA_TIMEOUT=180.0
       - OLLAMA_KEEP_ALIVE=24h
@@ -47,10 +47,10 @@ services:
       - LLM_VLLM_ENABLED=${LLM_VLLM_ENABLED:-false}
       - LLM_VLLM_PRIORITY=1
       # Embedding модели
-      - EMBEDDING_BASE_URL=http://192.168.50.41:11434
-      - EMBEDDING_MODEL=qwen3-embedding:4b
+      - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=nomic-embed-text:latest
       - EMBEDDING_TIMEOUT=60.0
-      - EMBEDDING_DIMENSIONS=4096
+      - EMBEDDING_DIMENSIONS=768
       # Общие настройки
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
       - LLM_MAX_TOKENS=4096
@@ -58,11 +58,14 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - qdrant
-      - redis
-      - keycloak-db
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+      keycloak-db:
+        condition: service_started
     networks:
       - kag_internal
     restart: unless-stopped
@@ -75,7 +78,7 @@ services:
           cpus: "1.0"
           memory: 1G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -100,8 +103,10 @@ services:
       - ./src:/app/src
       - ./data:/app/data
     depends_on:
-      - redis
-      - qdrant
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
     networks:
       - kag_internal
     restart: unless-stopped
@@ -150,7 +155,7 @@ services:
           cpus: "2.0"
           memory: 2G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -183,12 +188,6 @@ services:
         reservations:
           cpus: "2.0"
           memory: 4G
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
     profiles:
       - dev
       - prod
@@ -259,7 +258,7 @@ services:
           cpus: "2.0"
           memory: 4G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -417,7 +416,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-    command: python -m src.indexing.scheduler
+    command: python -c "from src.indexing.scheduler import scheduler; scheduler.initialize(); import asyncio; asyncio.get_event_loop().run_forever()"
     volumes:
       - ./src:/app/src
     depends_on:

@@ -14,6 +14,7 @@ Docker Monitor Service для KAG
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
+import os
 from loguru import logger
 
 try:
@@ -35,11 +36,42 @@ class DockerMonitor:
         """Инициализация монитора"""
         self._client = None
         if DOCKER_AVAILABLE:
+            self._connect()
+    
+    def _connect(self):
+        """Подключиться к Docker через сокет"""
+        if DOCKER_AVAILABLE:
+            # Пробуем через сокет с правами root (host socket)
+            socket_path = os.environ.get('DOCKER_SOCKET', '/var/run/docker.sock')
+            
+            # Сначала пробуем стандартный способ
             try:
                 self._client = docker.from_env()
-                logger.info("DockerMonitor инициализирован с Docker SDK")
+                self._client.ping()
+                logger.info("DockerMonitor инициализирован (стандартное подключение)")
+                return
             except Exception as e:
-                logger.warning(f"Не удалось подключиться к Docker: {e}")
+                logger.debug(f"Стандартное подключение не работает: {e}")
+            
+            # Пробуем через Unix сокет
+            try:
+                self._client = docker.DockerClient(base_url=f'unix://{socket_path}')
+                self._client.ping()
+                logger.info(f"DockerMonitor инициализирован через сокет: {socket_path}")
+                return
+            except Exception as e:
+                logger.debug(f"Сокет не работает: {e}")
+            
+            # Пробуем через HTTP (если включен TCP)
+            try:
+                self._client = docker.DockerClient(base_url='http://localhost:2375')
+                self._client.ping()
+                logger.info("DockerMonitor инициализирован через HTTP")
+                return
+            except Exception as e:
+                logger.debug(f"HTTP не работает: {e}")
+                
+            logger.warning(f"Не удалось подключиться к Docker: нет доступа к сокету")
         else:
             logger.warning("Docker SDK недоступен")
 

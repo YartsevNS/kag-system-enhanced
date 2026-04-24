@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from src.api.services.model_manager import model_manager
 from src.api.services.ssh_manager import ssh_manager, SSHConnectionConfig
 from src.api.services.docker_monitor import docker_monitor
+from src.api.services.system_monitor import system_monitor
 from src.llm import LLMBackendType
 
 router = APIRouter(tags=["models"])
@@ -213,6 +214,60 @@ async def get_container_logs(container_name: str, lines: int = 100):
         return {"logs": logs}
     except Exception as e:
         logger.error(f"Ошибка получения логов: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===========================================
+# System мониторинг (хостовая машина)
+# ===========================================
+
+@router.get("/system/info", summary="Получить информацию о системе хоста")
+async def get_system_info():
+    """Получить полную информацию о системе"""
+    try:
+        return system_monitor.get_system_info()
+    except Exception as e:
+        logger.error(f"Ошибка получения system info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/cpu", summary="Получить информацию о CPU")
+async def get_cpu_info():
+    """Информация о CPU"""
+    try:
+        return system_monitor.get_cpu_info()
+    except Exception as e:
+        logger.error(f"Ошибка получения CPU info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/memory", summary="Получить информацию о памяти")
+async def get_memory_info():
+    """Информация о памяти"""
+    try:
+        return system_monitor.get_memory_info()
+    except Exception as e:
+        logger.error(f"Ошибка получения memory info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/disk", summary="Получить информацию о дисках")
+async def get_disk_info():
+    """Информация о дисках"""
+    try:
+        return system_monitor.get_disk_info()
+    except Exception as e:
+        logger.error(f"Ошибка получения disk info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/network", summary="Получить информацию о сети")
+async def get_network_info():
+    """Информация о сети"""
+    try:
+        return system_monitor.get_network_info()
+    except Exception as e:
+        logger.error(f"Ошибка получения network info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

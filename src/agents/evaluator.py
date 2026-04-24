@@ -83,7 +83,12 @@ class QualityEvaluator:
         """
         self._annotations: List[Annotation] = []
         self._storage_path = storage_path or Path("/app/data/annotations")
-        self._storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self._storage_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning("Не могу создать /app/data, использую /tmp для evaluator")
+            self._storage_path = Path("/tmp/kag_annotations")
+            self._storage_path.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"QualityEvaluator инициализирован, хранение: {self._storage_path}")
 

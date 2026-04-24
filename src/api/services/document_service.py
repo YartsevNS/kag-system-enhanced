@@ -61,7 +61,12 @@ class DocumentService:
         """
         settings = get_settings()
         self._upload_dir = Path(upload_dir or "/app/data/uploads")
-        self._upload_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._upload_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning("Не могу создать /app/data, использую /tmp для uploads")
+            self._upload_dir = Path("/tmp/kag_uploads")
+            self._upload_dir.mkdir(parents=True, exist_ok=True)
 
         # Кэш метаданных (загружается из БД при старте)
         self._documents: Dict[str, DocumentRecord] = {}
