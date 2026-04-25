@@ -152,15 +152,63 @@ class QdrantMonitor:
             for point in results:
                 points.append({
                     "id": point.id,
-                    "version": point.version,
-                    "score": point.score,
-                    "payload": point.payload
+"payload": point.payload
                 })
 
             return points
         except Exception as e:
             logger.error(f"Ошибка получения точек: {e}")
             return []
+    
+    def get_chunks(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        offset: int = 0,
+        document_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить чанки из коллекции.
+        
+        Args:
+            collection_name: Имя коллекции
+            limit: Количество
+            offset: Смещение
+            document_id: Фильтр по document_id
+        
+        Returns:
+            Список чанков
+        """
+        try:
+            if not self._ensure_client():
+                return []
+            
+            results, next_offset = self._client.scroll(
+                collection_name=collection_name,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            chunks = []
+            for point in results:
+                if document_id and point.payload.get("document_id") != document_id:
+                    continue
+                chunks.append({
+                    "id": str(point.id),
+                    "payload": point.payload
+                })
+            
+            return {
+                "chunks": chunks,
+                "offset": next_offset,
+                "limit": limit,
+                "total": len(chunks)
+            }
+        except Exception as e:
+            logger.error(f"Ошибка получения чанков: {e}")
+            return {"error": str(e)}
 
     def get_payload_stats(self, collection_name: str) -> Dict[str, Any]:
         """
@@ -275,3 +323,24 @@ class QdrantMonitor:
 
 
 qdrant_monitor = QdrantMonitor()
+
+
+def get_chunks(
+    collection_name: str = "kag_documents",
+    limit: int = 100,
+    offset: int = 0,
+    document_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Получить чанки из коллекции.
+    
+    Args:
+        collection_name: Имя коллекции
+        limit: Количество чанков
+        offset: Смещение
+        document_id: Фильтр по document_id (опционально)
+    
+    Returns:
+        Список чанков с пагинацией
+    """
+    return qdrant_monitor.get_chunks(collection_name, limit, offset, document_id)

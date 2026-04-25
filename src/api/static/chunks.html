@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Чанки документов</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .back-btn, .nav-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover, .nav-btn:hover { background: #64748b; }
+        .container { max-width: 1600px; margin: 2rem auto; padding: 0 2rem; }
+        
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .card-title {
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        .card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+        
+        .table-container {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            overflow: hidden;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #0f172a;
+            padding: 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            padding: 1rem;
+            border-top: 1px solid #334155;
+            font-size: 0.875rem;
+            vertical-align: top;
+        }
+        
+        tr:hover td {
+            background: #1e293b;
+        }
+        
+        .chunk-content {
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+            background: #0f172a;
+            padding: 0.5rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .doc-id {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        
+        .chunk-id {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #f59e0b;
+        }
+        
+        .metadata {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+        
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+        
+        .filter-input {
+            flex: 1;
+            max-width: 300px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+        
+        .search-btn {
+            background: #f59e0b;
+            color: black;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .search-btn:hover { background: #d97706; }
+        
+        .refresh-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">📚 KAG - Чанки документов</div>
+        <div class="nav-buttons">
+            <a href="/qdrant" class="nav-btn">🗄️ Qdrant</a>
+            <a href="/documents" class="nav-btn">📄 Документы</a>
+            <a href="/docker" class="nav-btn">🐳 Docker</a>
+            <a href="/" class="back-btn">💬 Чат</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="cards" id="stats"></div>
+        
+        <div class="filter-bar">
+            <input type="text" id="searchDocId" class="filter-input" placeholder="Поиск по document_id...">
+            <button class="search-btn" onclick="loadChunks()">🔍 Поиск</button>
+            <button class="refresh-btn" onclick="loadChunks()">🔄 Обновить</button>
+        </div>
+        
+        <div id="loading" class="loading">Загрузка чанков...</div>
+        
+        <div class="table-container" id="table" style="display: none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 150px;">Document ID</th>
+                        <th style="width: 120px;">Chunk ID</th>
+                        <th>Содержимое чанка</th>
+                        <th style="width: 150px;">Метаданные</th>
+                    </tr>
+                </thead>
+                <tbody id="chunks-tbody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = '';
+        let allChunks = [];
+        
+        async function loadChunks() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('table').style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/admin/models/qdrant/info`);
+                const data = await response.json();
+                
+                renderStats(data);
+                
+                const chunks = await loadAllChunks();
+                allChunks = chunks;
+                renderChunks(chunks);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('table').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading').textContent = 'Ошибка: ' + error.message;
+            }
+        }
+        
+        async function loadAllChunks() {
+            const chunks = [];
+            let offset = 0;
+            const limit = 100;
+            
+            while (true) {
+                try {
+                    const response = await fetch(
+                        `${API_URL}/api/v1/admin/models/qdrant/collections/kag_documents/chunks?limit=${limit}&offset=${offset}`
+                    );
+                    const data = await response.json();
+                    
+                    if (!data.chunks || data.chunks.length === 0) break;
+                    
+                    chunks.push(...data.chunks);
+                    offset += limit;
+                    
+                    if (data.chunks.length < limit) break;
+                } catch (e) {
+                    console.log('Stop:', e);
+                    break;
+                }
+            }
+            
+            return chunks;
+        }
+        
+        function renderStats(data) {
+            const collections = data.collections || [];
+            const totalChunks = collections.reduce((sum, c) => sum + (c.points_count || 0), 0);
+            
+            document.getElementById('stats').innerHTML = `
+                <div class="card">
+                    <div class="card-title">URL Qdrant</div>
+                    <div class="card-value" style="font-size: 1rem;">${data.url || 'N/A'}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Коллекций</div>
+                    <div class="card-value">${collections.length}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Чанков</div>
+                    <div class="card-value">${totalChunks.toLocaleString()}</div>
+                </div>
+            `;
+        }
+        
+        function renderChunks(chunks) {
+            const tbody = document.getElementById('chunks-tbody');
+            
+            // Фильтр
+            const filter = document.getElementById('searchDocId').value.toLowerCase();
+            let filtered = chunks;
+            if (filter) {
+                filtered = chunks.filter(c => 
+                    (c.payload?.document_id || '').toLowerCase().includes(filter) ||
+                    (c.payload?.chunk_id || '').toLowerCase().includes(filter) ||
+                    (c.payload?.content || '').toLowerCase().includes(filter)
+                );
+            }
+            
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #64748b;">Нет чанков</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filtered.map(chunk => {
+                const payload = chunk.payload || {};
+                const content = payload.content || '';
+                const truncated = content.length > 500 ? content.substring(0, 500) + '...' : content;
+                
+                const metadata = [];
+                if (payload.file_type) metadata.push(`type: ${payload.file_type}`);
+                if (payload.filename) metadata.push(`file: ${payload.filename}`);
+                if (payload.chunk_index !== undefined) metadata.push(`index: ${payload.chunk_index}`);
+                
+                return `
+                    <tr>
+                        <td><span class="doc-id">${payload.document_id || '-'}</span></td>
+                        <td><span class="chunk-id">${payload.chunk_id || '-'}</span></td>
+                        <td>
+                            <div class="chunk-content">${escapeHtml(truncated)}</div>
+                        </td>
+                        <td class="metadata">${metadata.join('<br>')}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        document.getElementById('searchDocId').addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') {
+                loadChunks();
+            }
+        });
+        
+        loadChunks();
+    </script>
+</body>
+</html>

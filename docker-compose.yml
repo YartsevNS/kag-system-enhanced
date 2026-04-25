@@ -35,7 +35,7 @@ services:
       - KC_DB_NAME=keycloak
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - OLLAMA_MODEL=phi4-mini:latest
       - OLLAMA_TIMEOUT=180.0
       - OLLAMA_KEEP_ALIVE=24h
@@ -47,7 +47,7 @@ services:
       - LLM_VLLM_ENABLED=${LLM_VLLM_ENABLED:-false}
       - LLM_VLLM_PRIORITY=1
       # Embedding модели
-      - EMBEDDING_BASE_URL=http://ollama:11434
+      - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - EMBEDDING_MODEL=nomic-embed-text:latest
       - EMBEDDING_TIMEOUT=60.0
       - EMBEDDING_DIMENSIONS=768

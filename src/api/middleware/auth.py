@@ -36,6 +36,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/docker",
             "/documents",
             "/setup",
+            "/chunks",
+            "/qdrant",
             "/api/v1/setup/check",
         ]
 

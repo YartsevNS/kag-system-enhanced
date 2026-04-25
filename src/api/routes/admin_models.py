@@ -9,7 +9,7 @@
 - Выбора embedding модели
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import HTMLResponse
 from loguru import logger
@@ -333,6 +333,21 @@ async def get_payload_stats(collection_name: str):
         return qdrant_monitor.get_payload_stats(collection_name)
     except Exception as e:
         logger.error(f"Ошибка получения статистики payload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/qdrant/collections/{collection_name}/chunks", summary="Получить чанки")
+async def get_collection_chunks(
+    collection_name: str,
+    limit: int = 100,
+    offset: int = 0,
+    document_id: Optional[str] = None
+):
+    """Получить чанки из коллекции с пагинацией"""
+    try:
+        return qdrant_monitor.get_chunks(collection_name, limit, offset, document_id)
+    except Exception as e:
+        logger.error(f"Ошибка получения чанков: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

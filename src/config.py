@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     VLLM_TIMEOUT: float = 120.0
 
     # Ollama настройки
-    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_BASE_URL: str = "http://192.168.50.41:11434"
     OLLAMA_MODEL: str = "phi4-mini:latest"  # Легкая модель (3.8B)
     OLLAMA_TIMEOUT: float = 180.0  # 3 минуты - модель может грузиться долго
     OLLAMA_KEEP_ALIVE: str = "24h"  # 24 часа - не выгружать из памяти
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     DASHSCOPE_MODEL: str = "qwen-max"
 
     # Embedding модели (Ollama)
-    EMBEDDING_BASE_URL: str = "http://host.docker.internal:11434"
+    EMBEDDING_BASE_URL: str = "http://192.168.50.41:11434"
     EMBEDDING_MODEL: str = "nomic-embed-text:latest"
     EMBEDDING_TIMEOUT: float = 60.0
     EMBEDDING_DIMENSIONS: int = 768

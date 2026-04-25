@@ -256,10 +256,9 @@ class DocumentParser:
                     }
                 })
 
-        # Извлечение таблиц (добавлено)
+        # Извлечение таблиц
         table_count = 0
         for table_idx, table in enumerate(doc.tables):
-            # Преобразуем таблицу в текст
             table_rows = []
             for row in table.rows:
                 row_cells = [cell.text.strip() for cell in row.cells]
@@ -280,35 +279,9 @@ class DocumentParser:
                     }
                 })
                 table_count += 1
-                logger.info(f"Извлечена таблица {table_idx + 1}: {len(table.rows)} строк")
-
-        # Извлечение изображений (base64)
-        image_count = 0
-        for rel in doc.part.rels.values():
-            if "image" in rel.target_ref:
-                try:
-                    image_part = doc.part.relationships[rel.rId]
-                    image_data = image_part.target_part.blob
-                    import base64
-                    b64_image = base64.b64encode(image_data).decode('utf-8')
-                    mime_type = image_part.content_type or "image/png"
-                    segments.append({
-                        "segment_type": "image",
-                        content": f"data:{mime_type};base64,{b64_image}",
-                        "page": 1,
-                        "metadata": {
-                            "image_index": image_count,
-                            "image_type": mime_type,
-                            "size_bytes": len(image_data)
-                        }
-                    })
-                    image_count += 1
-                except Exception as e:
-                    logger.debug(f"Не удалось извлечь изображение: {e}")
 
         metadata["total_paragraphs"] = len([s for s in segments if s.get("segment_type") == "text"])
         metadata["total_tables"] = table_count
-        metadata["total_images"] = image_count
 
         return {
             "segments": segments,
