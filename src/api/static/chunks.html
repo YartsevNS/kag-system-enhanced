@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Чанки документов</title>
+    <title>KAG - Просмотр чанков</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -23,9 +23,7 @@
         .logo {
             font-size: 1.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #f59e0b, #ef4444);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #f59e0b;
         }
         .nav-buttons {
             display: flex;
@@ -43,119 +41,40 @@
             display: inline-block;
         }
         .back-btn:hover, .nav-btn:hover { background: #64748b; }
-        .container { max-width: 1600px; margin: 2rem auto; padding: 0 2rem; }
+        .container { max-width: 1800px; margin: 1rem auto; padding: 0 1rem; }
         
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .card {
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid #334155;
-        }
-        .card-title {
-            font-size: 0.875rem;
-            color: #94a3b8;
-        }
-        .card-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-        
-        .table-container {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            overflow: hidden;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background: #0f172a;
-            padding: 1rem;
-            text-align: left;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            color: #64748b;
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-        }
-        
-        td {
-            padding: 1rem;
-            border-top: 1px solid #334155;
-            font-size: 0.875rem;
-            vertical-align: top;
-        }
-        
-        tr:hover td {
-            background: #1e293b;
-        }
-        
-        .chunk-content {
-            max-height: 150px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 0.8rem;
-            background: #0f172a;
-            padding: 0.5rem;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        
-        .doc-id {
-            font-family: monospace;
-            font-size: 0.75rem;
-            color: #64748b;
-        }
-        
-        .chunk-id {
-            font-family: monospace;
-            font-size: 0.75rem;
-            color: #f59e0b;
-        }
-        
-        .metadata {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-top: 0.5rem;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 3rem;
-            color: #64748b;
-        }
-        
-        .filter-bar {
+        .stats-bar {
             display: flex;
             gap: 1rem;
             margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #1e293b;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .stat-label { font-size: 0.75rem; color: #94a3b8; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: #f59e0b; }
+        
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
             align-items: center;
         }
-        
-        .filter-input {
-            flex: 1;
-            max-width: 300px;
+        .search-input {
             background: #1e293b;
             border: 1px solid #334155;
             color: white;
             padding: 0.5rem 1rem;
             border-radius: 6px;
             font-size: 0.875rem;
+            width: 300px;
         }
-        
-        .search-btn {
+        .btn {
             background: #f59e0b;
             color: black;
             border: none;
@@ -165,16 +84,164 @@
             font-size: 0.875rem;
             font-weight: 600;
         }
-        .search-btn:hover { background: #d97706; }
+        .btn:hover { background: #d97706; }
+        .btn-secondary { background: #475569; color: white; }
+        .btn-secondary:hover { background: #64748b; }
         
-        .refresh-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
+        .chunks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1rem;
+        }
+        
+        .chunk-card {
+            background: #1e293b;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            padding: 1rem;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chunk-card:hover {
+            border-color: #f59e0b;
+            transform: translateY(-2px);
+        }
+        
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+        }
+        .doc-id { color: #64748b; font-family: monospace; }
+        .chunk-id { color: #f59e0b; font-family: monospace; }
+        
+        .chunk-content-preview {
             font-size: 0.875rem;
+            color: #cbd5e1;
+            max-height: 80px;
+            overflow: hidden;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #0f172a;
+            padding: 0.5rem;
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+        
+        .chunk-meta {
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            color: #64748b;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .meta-tag {
+            background: #334155;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 2rem;
+        }
+        .modal-overlay.active { display: flex; }
+        
+        .modal {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .modal-body {
+            padding: 1rem 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .full-content {
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        
+        .metadata-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #334155;
+        }
+        .metadata-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #f59e0b;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.5rem;
+            font-size: 0.75rem;
+        }
+        .metadata-item {
+            background: #0f172a;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+        .meta-key { color: #64748b; }
+        .meta-value { color: #e2e8f0; }
+        
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+        
+        .pagination {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
         }
     </style>
 </head>
@@ -182,85 +249,80 @@
     <div class="header">
         <div class="logo">📚 KAG - Чанки документов</div>
         <div class="nav-buttons">
-            <a href="/qdrant" class="nav-btn">🗄️ Qdrant</a>
+            <a href="/" class="nav-btn">💬 Чат</a>
             <a href="/documents" class="nav-btn">📄 Документы</a>
+            <a href="/qdrant" class="nav-btn">🗄️ Qdrant</a>
             <a href="/docker" class="nav-btn">🐳 Docker</a>
-            <a href="/" class="back-btn">💬 Чат</a>
         </div>
     </div>
     
     <div class="container">
-        <div class="cards" id="stats"></div>
+        <div class="stats-bar" id="stats"></div>
         
-        <div class="filter-bar">
-            <input type="text" id="searchDocId" class="filter-input" placeholder="Поиск по document_id...">
-            <button class="search-btn" onclick="loadChunks()">🔍 Поиск</button>
-            <button class="refresh-btn" onclick="loadChunks()">🔄 Обновить</button>
+        <div class="controls">
+            <input type="text" id="search" class="search-input" placeholder="Поиск по содержимому или ID...">
+            <button class="btn" onclick="loadChunks()">🔍 Найти</button>
+            <button class="btn btn-secondary" onclick="loadChunks()">🔄 Обновить</button>
         </div>
         
         <div id="loading" class="loading">Загрузка чанков...</div>
+        <div class="chunks-grid" id="chunks-grid"></div>
         
-        <div class="table-container" id="table" style="display: none;">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 150px;">Document ID</th>
-                        <th style="width: 120px;">Chunk ID</th>
-                        <th>Содержимое чанка</th>
-                        <th style="width: 150px;">Метаданные</th>
-                    </tr>
-                </thead>
-                <tbody id="chunks-tbody">
-                </tbody>
-            </table>
+        <div class="pagination" id="pagination"></div>
+    </div>
+    
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title">Чанк</div>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="full-content" id="modal-content"></div>
+                <div class="metadata-section">
+                    <div class="metadata-title">Метаданные</div>
+                    <div class="metadata-grid" id="modal-meta"></div>
+                </div>
+            </div>
         </div>
     </div>
     
     <script>
         const API_URL = '';
         let allChunks = [];
+        let filteredChunks = [];
         
         async function loadChunks() {
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('table').style.display = 'none';
+            document.getElementById('chunks-grid').innerHTML = '';
             
             try {
-                const response = await fetch(`${API_URL}/api/v1/admin/models/qdrant/info`);
-                const data = await response.json();
-                
-                renderStats(data);
-                
-                const chunks = await loadAllChunks();
+                const chunks = await fetchChunksRecursive();
                 allChunks = chunks;
-                renderChunks(chunks);
-                
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('table').style.display = 'block';
+                renderStats(chunks.length);
+                applyFilter();
             } catch (error) {
                 document.getElementById('loading').textContent = 'Ошибка: ' + error.message;
             }
         }
         
-        async function loadAllChunks() {
+        async function fetchChunksRecursive() {
             const chunks = [];
             let offset = 0;
             const limit = 100;
             
             while (true) {
                 try {
-                    const response = await fetch(
+                    const resp = await fetch(
                         `${API_URL}/api/v1/admin/models/qdrant/collections/kag_documents/chunks?limit=${limit}&offset=${offset}`
                     );
-                    const data = await response.json();
+                    const data = await resp.json();
                     
                     if (!data.chunks || data.chunks.length === 0) break;
                     
                     chunks.push(...data.chunks);
                     offset += limit;
-                    
-                    if (data.chunks.length < limit) break;
                 } catch (e) {
-                    console.log('Stop:', e);
                     break;
                 }
             }
@@ -268,66 +330,89 @@
             return chunks;
         }
         
-        function renderStats(data) {
-            const collections = data.collections || [];
-            const totalChunks = collections.reduce((sum, c) => sum + (c.points_count || 0), 0);
-            
+        function renderStats(total) {
             document.getElementById('stats').innerHTML = `
-                <div class="card">
-                    <div class="card-title">URL Qdrant</div>
-                    <div class="card-value" style="font-size: 1rem;">${data.url || 'N/A'}</div>
+                <div class="stat-card">
+                    <div class="stat-label">Всего чанков</div>
+                    <div class="stat-value">${total}</div>
                 </div>
-                <div class="card">
-                    <div class="card-title">Коллекций</div>
-                    <div class="card-value">${collections.length}</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Чанков</div>
-                    <div class="card-value">${totalChunks.toLocaleString()}</div>
+                <div class="stat-card">
+                    <div class="stat-label">Документов</div>
+                    <div class="stat-value">${new Set(allChunks.map(c => c.payload?.document_id)).size}</div>
                 </div>
             `;
         }
         
-        function renderChunks(chunks) {
-            const tbody = document.getElementById('chunks-tbody');
+        function applyFilter() {
+            const search = document.getElementById('search').value.toLowerCase();
             
-            // Фильтр
-            const filter = document.getElementById('searchDocId').value.toLowerCase();
-            let filtered = chunks;
-            if (filter) {
-                filtered = chunks.filter(c => 
-                    (c.payload?.document_id || '').toLowerCase().includes(filter) ||
-                    (c.payload?.chunk_id || '').toLowerCase().includes(filter) ||
-                    (c.payload?.content || '').toLowerCase().includes(filter)
-                );
+            if (search) {
+                filteredChunks = allChunks.filter(c => {
+                    const content = c.payload?.content || '';
+                    const docId = c.payload?.document_id || '';
+                    const chunkId = c.payload?.chunk_id || '';
+                    return content.toLowerCase().includes(search) || 
+                           docId.toLowerCase().includes(search) ||
+                           chunkId.toLowerCase().includes(search);
+                });
+            } else {
+                filteredChunks = allChunks;
             }
             
-            if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #64748b;">Нет чанков</td></tr>';
+            renderChunks();
+        }
+        
+        function renderChunks() {
+            document.getElementById('loading').style.display = 'none';
+            
+            const grid = document.getElementById('chunks-grid');
+            
+            if (filteredChunks.length === 0) {
+                grid.innerHTML = '<div class="loading">Чанки не найдены</div>';
                 return;
             }
             
-            tbody.innerHTML = filtered.map(chunk => {
-                const payload = chunk.payload || {};
-                const content = payload.content || '';
-                const truncated = content.length > 500 ? content.substring(0, 500) + '...' : content;
-                
-                const metadata = [];
-                if (payload.file_type) metadata.push(`type: ${payload.file_type}`);
-                if (payload.filename) metadata.push(`file: ${payload.filename}`);
-                if (payload.chunk_index !== undefined) metadata.push(`index: ${payload.chunk_index}`);
+            grid.innerHTML = filteredChunks.map((chunk, idx) => {
+                const p = chunk.payload || {};
+                const content = p.content || '';
+                const preview = content.length > 300 ? content.substring(0, 300) + '...' : content;
                 
                 return `
-                    <tr>
-                        <td><span class="doc-id">${payload.document_id || '-'}</span></td>
-                        <td><span class="chunk-id">${payload.chunk_id || '-'}</span></td>
-                        <td>
-                            <div class="chunk-content">${escapeHtml(truncated)}</div>
-                        </td>
-                        <td class="metadata">${metadata.join('<br>')}</td>
-                    </tr>
+                    <div class="chunk-card" onclick="showChunk(${idx})">
+                        <div class="chunk-header">
+                            <span class="doc-id">${truncate(p.document_id || '-', 12)}</span>
+                            <span class="chunk-id">${p.chunk_id || '-'}</span>
+                        </div>
+                        <div class="chunk-content-preview">${escapeHtml(preview)}</div>
+                        <div class="chunk-meta">
+                            <span class="meta-tag">${p.file_type || '-'}</span>
+                            <span class="meta-tag">${content.length} симв.</span>
+                        </div>
+                    </div>
                 `;
             }).join('');
+        }
+        
+        function showChunk(idx) {
+            const chunk = filteredChunks[idx];
+            const p = chunk.payload || {};
+            
+            document.getElementById('modal-title').textContent = p.chunk_id || 'Чанк';
+            document.getElementById('modal-content').textContent = p.content || 'Нет содержимого';
+            
+            const meta = [];
+            for (const [key, value] of Object.entries(p)) {
+                if (key !== 'content' && key !== 'created_at') {
+                    meta.push(`<div class="metadata-item"><span class="meta-key">${key}:</span> <span class="meta-value">${truncate(String(value), 50)}</span></div>`);
+                }
+            }
+            document.getElementById('modal-meta').innerHTML = meta.join('');
+            
+            document.getElementById('modal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
         }
         
         function escapeHtml(text) {
@@ -336,10 +421,17 @@
             return div.innerHTML;
         }
         
-        document.getElementById('searchDocId').addEventListener('keyup', function(e) {
-            if (e.key === 'Enter') {
-                loadChunks();
-            }
+        function truncate(str, len) {
+            if (!str) return '';
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+        
+        document.getElementById('search').addEventListener('keyup', e => {
+            if (e.key === 'Enter') applyFilter();
+        });
+        
+        document.addEventListener('keyup', e => {
+            if (e.key === 'Escape') closeModal();
         });
         
         loadChunks();
