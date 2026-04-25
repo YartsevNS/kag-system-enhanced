@@ -9,7 +9,10 @@
       "Bash(git commit *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(docker logs *)",
+      "Bash(docker exec *)",
+      "Bash(find *)"
     ]
   },
   "$version": 3

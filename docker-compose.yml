@@ -3,33 +3,6 @@
 
 services:
   # ===========================================
-  # Ollama (LLM + Embeddings)
-  # ===========================================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: kag-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-
-  # ===========================================
   # Основные сервисы приложения
   # ===========================================
   
@@ -60,7 +33,7 @@ services:
       - KC_DB_HOST=keycloak-db
       - KC_DB_PORT=5432
       - KC_DB_NAME=keycloak
-      # LLM конфигурация - Ollama
+      # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=phi4-mini:latest
@@ -73,7 +46,7 @@ services:
       - VLLM_MODEL_NAME=${VLLM_MODEL_NAME:-mistralai/Mistral-7B-Instruct-v0.2}
       - LLM_VLLM_ENABLED=${LLM_VLLM_ENABLED:-false}
       - LLM_VLLM_PRIORITY=1
-      # Embedding модели - используем Ollama
+      # Embedding модели
       - EMBEDDING_BASE_URL=http://ollama:11434
       - EMBEDDING_MODEL=nomic-embed-text:latest
       - EMBEDDING_TIMEOUT=60.0
@@ -87,8 +60,6 @@ services:
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      ollama:
-        condition: service_started
       qdrant:
         condition: service_started
       redis:
@@ -132,8 +103,6 @@ services:
       - ./src:/app/src
       - ./data:/app/data
     depends_on:
-      ollama:
-        condition: service_healthy
       redis:
         condition: service_started
       qdrant:
@@ -493,32 +462,5 @@ volumes:
     driver: local
   grafana_data:
     driver: local
-loki_data:
+  loki_data:
     driver: local
-  ollama_data:
-    driver: local
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
