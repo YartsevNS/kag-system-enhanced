@@ -46,17 +46,16 @@ class PostgresConfigStore:
             self._engine = create_engine(self._db_url, pool_pre_ping=True)
             self._Session = sessionmaker(bind=self._engine)
 
-            # Создаем таблицу если не существует
             try:
                 Base.metadata.create_all(self._engine)
                 logger.info(f"Postgres Config Store подключен: {self._db_url}")
                 logger.info("Таблица system_configs проверена/создана")
             except Exception as db_err:
-                logger.error(f"Ошибка создания таблицы: {db_err}")
+                logger.warning(f"БД недоступна, использую в памяти: {db_err}")
                 self._engine = None
                 self._Session = None
         except Exception as e:
-            logger.error(f"Ошибка инициализации Postgres Config Store: {e}")
+            logger.warning(f"БД недоступна, использую в памяти: {e}")
             self._engine = None
             self._Session = None
 
@@ -82,7 +81,7 @@ class PostgresConfigStore:
             finally:
                 session.close()
         except Exception as e:
-            logger.error(f"Ошибка получения {category}:{key}: {e}")
+            logger.debug(f"Ошибка получения {category}:{key}: {e}")
             return default
 
     def set(self, category: str, key: str, value: Any) -> bool:
@@ -97,7 +96,7 @@ class PostgresConfigStore:
                 Base.metadata.create_all(self._engine)
                 logger.info("Postgres Config Store переподключен")
             except Exception as e:
-                logger.error(f"Ошибка переподключения к БД: {e}")
+                logger.debug(f"БД недоступна, пропускаю сохранение: {e}")
                 return False
 
         try:
@@ -130,12 +129,11 @@ class PostgresConfigStore:
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка сохранения {category}:{key}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.debug(f"БД недоступна, пропускаю сохранение: {e}")
             return False
         finally:
-            session.close()
+            if 'session' in locals():
+                session.close()
 
     def delete(self, category: str, key: str = "default") -> bool:
         """
@@ -171,10 +169,11 @@ class PostgresConfigStore:
             
             return result
         except Exception as e:
-            logger.error(f"Ошибка получения категории {category}: {e}")
+            logger.debug(f"БД недоступна, использую пустой кэш: {e}")
             return {}
         finally:
-            session.close()
+            if 'session' in locals():
+                session.close()
 
 
 # Глобальный экземпляр

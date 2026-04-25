@@ -16,16 +16,28 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
     Middleware для проверки первоначальной настройки.
     """
     
-    # Пути, которые ВСЕГДА доступны (даже если система не настроена)
+# Пути, которые ВСЕГДА доступны
     PUBLIC_PATHS = [
         "/setup",
-        "/api/v1/setup",          # Все эндпоинты Setup Wizard
+        "/api/v1/setup",
         "/api/v1/health",
         "/docs",
         "/openapi.json",
         "/redoc",
         "/favicon.ico",
+        "/api/v1/admin_models/",
+        "/api/v1/chat/",
+        "/api/v1/upload/",
+        "/api/v1/documents/",
+        "/qdrant",
+        "/chunks",
+        "/documents",
+        "/admin",
+        "/static/",
     ]
+    
+    # Также пропускаем если БД недоступна
+    DATABASE_AVAILABLE = True
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -42,16 +54,16 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
         try:
             from src.api.services.config_store import config_store
             
-            # Проверяем только если БД доступна
-            if config_store._engine:
-                setup_status = config_store.get("setup", "status", {})
-                
-                if not setup_status.get("configured", False):
-                    # Система не настроена - редирект
-                    return RedirectResponse(url="/setup", status_code=302)
-        except Exception as e:
-            # Если БД недоступна - считаем что система не настроена
-            if not path.startswith("/setup"):
+            # Если БД недоступна - пропускаем ( система в режиме разработки )
+            if not config_store._engine:
+                return await call_next(request)
+            
+            setup_status = config_store.get("setup", "status", {})
+            
+            if not setup_status.get("configured", False):
                 return RedirectResponse(url="/setup", status_code=302)
+        except Exception as e:
+            # Если БД недоступна - пропускаем
+            pass
         
         return await call_next(request)

@@ -25,7 +25,7 @@ class QdrantMonitor:
     Сервис мониторинга Qdrant базы данных.
     """
 
-    def __init__(self, host: str = "qdrant", port: int = 6333):
+    def __init__(self, host: str = "localhost", port: int = 6333):
         """Инициализация монитора"""
         self.host = host
         self.port = port
@@ -166,49 +166,34 @@ class QdrantMonitor:
         limit: int = 100,
         offset: int = 0,
         document_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Получить чанки из коллекции.
-        
-        Args:
-            collection_name: Имя коллекции
-            limit: Количество
-            offset: Смещение
-            document_id: Фильтр по document_id
-        
-        Returns:
-            Список чанков
-        """
+    ) -> Dict[str, Any]:
+        """Получить чанки через REST API."""
         try:
-            if not self._ensure_client():
-                return []
+            import requests
             
-            results, next_offset = self._client.scroll(
-                collection_name=collection_name,
-                limit=limit,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False
+            filter_data = None
+            if document_id:
+                filter_data = {"must": [{"key": "document_id", "match": {"value": document_id}}]}
+            
+            resp = requests.post(
+                f"{self.url}/collections/{collection_name}/points/scroll",
+                json={"limit": limit, "offset": offset, "with_payload": True, "filter": filter_data},
+                timeout=30
             )
+            resp.raise_for_status()
             
-            chunks = []
-            for point in results:
-                if document_id and point.payload.get("document_id") != document_id:
-                    continue
-                chunks.append({
-                    "id": str(point.id),
-                    "payload": point.payload
-                })
+            result_data = resp.json().get("result", {})
+            points = result_data.get("points", [])
             
             return {
-                "chunks": chunks,
-                "offset": next_offset,
+                "chunks": [{"id": p["id"], "payload": p.get("payload", {})} for p in points],
+                "offset": result_data.get("next_page_offset", offset + limit),
                 "limit": limit,
-                "total": len(chunks)
+                "total": len(points)
             }
         except Exception as e:
             logger.error(f"Ошибка получения чанков: {e}")
-            return {"error": str(e)}
+            return {"chunks": [], "offset": 0, "limit": limit, "total": 0}
 
     def get_payload_stats(self, collection_name: str) -> Dict[str, Any]:
         """

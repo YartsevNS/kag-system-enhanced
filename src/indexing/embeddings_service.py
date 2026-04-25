@@ -229,10 +229,8 @@ class EmbeddingsService:
         query_embedding = await self._embedding_client.generate(query)
 
         # Создаем фильтр если есть
-        qdrant_filter = None
+        conditions = []
         if filters:
-            conditions = []
-
             if "document_id" in filters:
                 conditions.append(
                     FieldCondition(
@@ -249,29 +247,44 @@ class EmbeddingsService:
                     )
                 )
 
-            if conditions:
-                qdrant_filter = Filter(must=conditions)
-
-        # Ищем похожие векторы
-        results = self._qdrant_client.search(
-            collection_name=self.collection_name,
-            query_vector=query_embedding,
-            query_filter=qdrant_filter,
-            limit=limit
-        )
-
-        # Форматируем результаты
+        # Ищем через REST API (обходим несовместимость клиента)
         formatted_results = []
-        for hit in results:
-            formatted_results.append({
-                "id": hit.id,
-                "score": hit.score,
-                "content": hit.payload.get("content", ""),
-                "document_id": hit.payload.get("document_id"),
-                "chunk_id": hit.payload.get("chunk_id"),
-                "file_type": hit.payload.get("file_type"),
-                "metadata": hit.payload.get("metadata", {})
-            })
+        try:
+            import requests
+            search_payload = {
+                "vector": query_embedding,
+                "limit": limit,
+                "with_payload": True
+            }
+            if conditions:
+                search_payload["filter"] = {
+                    "must": [
+                        {"key": c.key, "match": {"value": c.match.value}}
+                        for c in conditions
+                    ]
+                }
+
+            resp = requests.post(
+                f"{self.qdrant_url}/collections/{self.collection_name}/points/search",
+                json=search_payload,
+                timeout=30
+            )
+            resp.raise_for_status()
+            hits = resp.json().get("result", [])
+
+            for hit in hits:
+                payload = hit.get("payload", {})
+                formatted_results.append({
+                    "id": hit["id"],
+                    "score": hit["score"],
+                    "content": payload.get("content", ""),
+                    "document_id": payload.get("document_id"),
+                    "chunk_id": payload.get("chunk_id"),
+                    "file_type": payload.get("file_type"),
+                    "metadata": payload.get("metadata", {})
+                })
+        except Exception as e:
+            logger.warning(f"REST search failed: {e}")
 
         logger.debug(f"Найдено {len(formatted_results)} результатов")
         return formatted_results

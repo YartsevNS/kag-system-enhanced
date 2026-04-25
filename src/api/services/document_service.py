@@ -60,11 +60,19 @@ class DocumentService:
             upload_dir: Директория для загруженных файлов
         """
         settings = get_settings()
-        self._upload_dir = Path(upload_dir or "/app/data/uploads")
+        
+        # Используем ./user_data/uploads в рабочей директории
+        upload_base = Path("/home/nick/kagproject/user_data")
+        self._upload_dir = upload_base / "uploads"
+        
         try:
             self._upload_dir.mkdir(parents=True, exist_ok=True)
-        except PermissionError:
-            logger.warning("Не могу создать /app/data, использую /tmp для uploads")
+            # Проверяем доступность на запись
+            test_file = self._upload_dir / ".test"
+            test_file.write_text("test")
+            test_file.unlink()
+        except Exception:
+            logger.warning("data/uploads недоступен, использую /tmp")
             self._upload_dir = Path("/tmp/kag_uploads")
             self._upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -84,7 +92,6 @@ class DocumentService:
 
             for doc_id, data in all_data.items():
                 try:
-                    # Восстанавливаем datetime из строк
                     if isinstance(data.get('created_at'), str):
                         data['created_at'] = datetime.fromisoformat(data['created_at'])
                     if isinstance(data.get('updated_at'), str):
@@ -97,10 +104,10 @@ class DocumentService:
             if self._documents:
                 logger.info(f"Загружено {len(self._documents)} документов из БД")
         except Exception as e:
-            logger.warning(f"Не удалось загрузить документы из БД: {e}")
+            logger.debug(f"БД недоступна, использую пустой кэш: {e}")
 
     def _save_document_to_db(self, document_id: str):
-        """Сохранить метаданные одного документа в PostgreSQL"""
+        """Сохранить метаданные документа в PostgreSQL (не блокирует обработку)"""
         try:
             from src.api.services.config_store import config_store
             record = self._documents.get(document_id)
@@ -108,7 +115,6 @@ class DocumentService:
                 return
 
             data = record.model_dump()
-            # Преобразуем datetime в строки
             if isinstance(data.get('created_at'), datetime):
                 data['created_at'] = data['created_at'].isoformat()
             if isinstance(data.get('updated_at'), datetime):
@@ -116,7 +122,7 @@ class DocumentService:
 
             config_store.set("documents", document_id, data)
         except Exception as e:
-            logger.error(f"Ошибка сохранения документа {document_id}: {e}")
+            logger.debug(f"БД недоступна, пропускаю сохранение: {e}")
 
     async def upload_document(
         self,

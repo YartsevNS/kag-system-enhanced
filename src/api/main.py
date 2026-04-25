@@ -79,16 +79,17 @@ app = FastAPI(
 # Middleware для проверки setup (должен быть первым)
 app.add_middleware(SetupCheckMiddleware)
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # В продакшене ограничить!
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS middleware (optional - for browser)
+if os.getenv("ENABLE_CORS", "false").lower() == "true":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# Middleware аутентификации
+# Middleware аутентификации (все запросы разрешены для разработки)
 app.add_middleware(AuthMiddleware)
 
 # Подключение роутеров

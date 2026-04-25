@@ -148,18 +148,46 @@ class DocumentParser:
                             f"слишком короткий ({len(text) if text else 0} символов), "
                             f"применяю OCR..."
                         )
+                        
+                        # Сначала пробуем Tesseract
                         from src.indexing.ocr_engine import ocr_engine
                         if ocr_engine.is_available:
-                            ocr_result = ocr_engine.extract_text_from_pdf(str(path))
-                            if ocr_result.get("pages"):
-                                page_data = ocr_result["pages"][page_num]
-                                text = page_data.get("text", "")
-                                if text:
-                                    ocr_used = True
-                                    logger.info(
-                                        f"Страница {page_num + 1}: OCR распознал "
-                                        f"{len(text)} символов"
-                                    )
+                            try:
+                                ocr_result = ocr_engine.extract_text_from_pdf(str(path))
+                                if ocr_result.get("pages") and page_num < len(ocr_result["pages"]):
+                                    page_data = ocr_result["pages"][page_num]
+                                    text = page_data.get("text", "")
+                                    if text:
+                                        ocr_used = True
+                                        logger.info(
+                                            f"Страница {page_num + 1}: Tesseract OCR распознал "
+                                            f"{len(text)} символов"
+                                        )
+                            except Exception as e:
+                                logger.warning(f"Tesseract OCR не работает: {e}")
+                        
+                        # Если Tesseract не помог - пробуем LLM OCR
+                        if not text or len(text.strip()) < 50:
+                            try:
+                                from src.indexing.llm_ocr import get_llm_ocr_engine
+                                llm_ocr = get_llm_ocr_engine()
+                                if llm_ocr.is_available:
+                                    # Рендерим страницу в изображение
+                                    from pdf2image import convert_from_path
+                                    images = convert_from_path(str(path), dpi=150, first_page=page_num+1, last_page=page_num+1)
+                                    if images:
+                                        import tempfile
+                                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                            images[0].save(tmp.name, "PNG")
+                                            text = llm_ocr.extract_from_image(tmp.name)
+                                            if text:
+                                                ocr_used = True
+                                                logger.info(
+                                                    f"Страница {page_num + 1}: LLM OCR распознал "
+                                                    f"{len(text)} символов"
+                                                )
+                            except Exception as e:
+                                logger.debug(f"LLM OCR не работает: {e}")
 
                     if text and text.strip():
                         segments.append(DocumentSegment(

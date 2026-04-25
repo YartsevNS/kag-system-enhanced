@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     FASTAPI_WORKERS: int = 4
 
     # Qdrant
-    QDRANT_HOST: str = "qdrant"
+    QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "kag_documents"
 
@@ -190,4 +190,9 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """Получить кэшированные настройки"""
-    return Settings()
+    s = Settings()
+    # Override from environment if set (for Docker), otherwise use defaults
+    # Force localhost for local development
+    if s.QDRANT_HOST == "qdrant":
+        s.QDRANT_HOST = "localhost"
+    return s

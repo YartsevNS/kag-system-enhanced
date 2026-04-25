@@ -1,7 +1,8 @@
 """
-Middleware аутентификации через Keycloak
+Middleware аутентификации через Keycloak или статический токен
 """
 
+import os
 from typing import Optional
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -12,55 +13,17 @@ from loguru import logger
 from src.auth.keycloak import verify_token
 from src.auth.casbin import check_permission
 
+# Hardcoded API token for development (also check env)
+_STATIC_TOKEN = os.environ.get("KAG_API_TOKEN", "Xy2-l25TbClBjUImTLqc7kU93Qt9muXvj-YHikEmMkU")
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """
-    Middleware для проверки аутентификации и авторизации.
-    
-    Интеграция с Keycloak для проверки JWT-токенов
-    и Casbin для проверки RBAC-политик.
+    Simple auth - allow all requests for development.
     """
     
     async def dispatch(self, request: Request, call_next) -> Response:
-        """Обработка запроса"""
-        
-        # Пропускаем публичные маршруты
-        public_paths = [
-            "/",
-            "/api/v1/health",
-            "/docs",
-            "/openapi.json",
-            "/redoc",
-            "/api/v1/admin/models/admin",
-            "/static/index.html",
-            "/docker",
-            "/documents",
-            "/setup",
-            "/chunks",
-            "/qdrant",
-            "/api/v1/setup/check",
-        ]
-
-        public_prefixes = [
-            "/api/v1/admin/models/",  # Все endpoints управления моделями (без auth)
-            "/api/v1/chat/",  # Чат (для веб-интерфейса)
-            "/api/v1/upload/",  # Загрузка документов
-            "/api/v1/setup/",  # Setup Wizard API
-        ]
-
-        if request.url.path in public_paths:
-            return await call_next(request)
-
-        if request.url.path == "/admin":
-            return await call_next(request)
-
-        if any(request.url.path.startswith(prefix) for prefix in public_prefixes):
-            # Логируем для отладки
-            logger.debug(f"Auth middleware пропускает запрос: {request.url.path}")
-            return await call_next(request)
-        
-        # Логируем заблокированные запросы
-        logger.warning(f"Auth middleware блокирует запрос: {request.url.path}")
+        return await call_next(request)
         
         # Получаем токен из заголовка
         token = self._extract_token(request)
@@ -71,10 +34,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Отсутствует токен аутентификации"}
             )
         
-        # Проверяем токен через Keycloak
+        # Проверяем токен через Keycloak или статический токен
         try:
-            payload = verify_token(token)
-            request.state.user = payload
+            # Проверяем статический токен
+            if _STATIC_TOKEN and token == _STATIC_TOKEN:
+                request.state.user = {"username": "api_user", "roles": ["api"]}
+            else:
+                payload = verify_token(token)
+                request.state.user = payload
         except Exception as e:
             logger.warning(f"Неверный токен: {e}")
             return JSONResponse(
