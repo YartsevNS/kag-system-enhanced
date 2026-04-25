@@ -37,6 +37,7 @@ class LlmSetup(BaseModel):
     host: str
     port: int = 11434
     model: str
+    system_prompt: Optional[str] = "Ты - AI-ассистент. Отвечай на вопросы точно и по существу."
 
 
 class EmbeddingSetup(BaseModel):

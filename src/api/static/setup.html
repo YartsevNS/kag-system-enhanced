@@ -218,6 +218,11 @@
                     <input type="text" id="llm-model" value="phi4-mini:latest">
                     <div class="hint">Модель должна быть загружена на сервере</div>
                 </div>
+                <div class="field full">
+                    <label>Системный промпт</label>
+                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
+                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
+                </div>
             </div>
             <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
             <div class="test-status" id="llm-status"></div>
@@ -439,7 +444,8 @@
                     type: document.getElementById('llm-type').value,
                     host: document.getElementById('llm-host').value.trim(),
                     port: parseInt(document.getElementById('llm-port').value) || 11434,
-                    model: document.getElementById('llm-model').value.trim()
+                    model: document.getElementById('llm-model').value.trim(),
+                    system_prompt: document.getElementById('llm-system-prompt').value.trim()
                 },
                 embedding: {
                     model: document.getElementById('emb-model').value.trim(),

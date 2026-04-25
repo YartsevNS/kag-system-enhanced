@@ -213,7 +213,7 @@ class ChatService:
 
     def _get_system_prompt(self, context: str) -> str:
         """
-        Получить системный промпт.
+        Получить системный промпт из настроек или по умолчанию.
 
         Args:
             context: Контекст из RAG
@@ -221,15 +221,15 @@ class ChatService:
         Returns:
             Системный промпт
         """
-        base_prompt = """Ты — интеллектуальный ассистент системы KAG (Knowledge Augmentation Generation).
-Твоя задача — предоставлять точные и полезные ответы на основе предоставленной информации.
-
-Правила:
-1. Отвечай на русском языке
-2. Будь точен и конкретен
-3. Если не уверен в ответе, скажи об этом
-4. Используй предоставленный контекст для формирования ответа
-"""
+        # Пробуем загрузить из настроек
+        default_prompt = "Ты - AI-ассистент. Отвечай на вопросы точно и по существу."
+        
+        try:
+            from src.api.services.config_store import config_store
+            llm_config = config_store.get("llm", "default", {})
+            base_prompt = llm_config.get("system_prompt", default_prompt)
+        except:
+            base_prompt = default_prompt
 
         if context:
             return f"""{base_prompt}
