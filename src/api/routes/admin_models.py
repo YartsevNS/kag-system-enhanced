@@ -272,6 +272,71 @@ async def get_network_info():
 
 
 # ===========================================
+# Qdrant мониторинг (векторная БД)
+# ===========================================
+
+from src.api.services.qdrant_monitor import qdrant_monitor
+
+
+@router.get("/qdrant/info", summary="Получить информацию о Qdrant")
+async def get_qdrant_info(collection_name: str = "kag_documents"):
+    """
+    Получить полную информацию о Qdrant базе данных.
+
+    Включает:
+    - Список коллекций
+    - Количество документов/векторов
+    - Метаданные (payload schema)
+    - Примеры документов
+    """
+    try:
+        return qdrant_monitor.get_full_info(collection_name)
+    except Exception as e:
+        logger.error(f"Ошибка получения Qdrant info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/qdrant/collections", summary="Получить список коллекций Qdrant")
+async def get_qdrant_collections():
+    """Получить список всех коллекций"""
+    try:
+        return qdrant_monitor.get_collections_list()
+    except Exception as e:
+        logger.error(f"Ошибка получения коллекций: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/qdrant/collections/{collection_name}", summary="Получить информацию о коллекции")
+async def get_collection_info(collection_name: str):
+    """Детальная информация о коллекции"""
+    try:
+        return qdrant_monitor.get_collection_info(collection_name)
+    except Exception as e:
+        logger.error(f"Ошибка получения информации о коллекции: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/qdrant/collections/{collection_name}/points", summary="Получить пример точек")
+async def get_collection_points(collection_name: str, limit: int = 20):
+    """Получить пример точек (документов) из коллекции"""
+    try:
+        return {"points": qdrant_monitor.get_points_sample(collection_name, limit)}
+    except Exception as e:
+        logger.error(f"Ошибка получения точек: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/qdrant/collections/{collection_name}/payload-stats", summary="Получить статистику метаданных")
+async def get_payload_stats(collection_name: str):
+    """Статистика по метаданным (payload)"""
+    try:
+        return qdrant_monitor.get_payload_stats(collection_name)
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики payload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===========================================
 # Настройки чанкинга
 # ===========================================
 

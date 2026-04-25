@@ -155,3 +155,12 @@ async def documents_page():
     if os.path.exists(docs_path):
         return FileResponse(docs_path)
     return {"error": "Documents page not found"}
+
+
+@app.get("/qdrant", summary="Qdrant Database Dashboard")
+async def qdrant_dashboard():
+    """Страница Qdrant Dashboard"""
+    qdrant_path = os.path.join(static_path, "qdrant.html")
+    if os.path.exists(qdrant_path):
+        return FileResponse(qdrant_path)
+    return {"error": "Qdrant dashboard not found"}

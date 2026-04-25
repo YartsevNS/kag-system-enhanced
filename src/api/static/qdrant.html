@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Qdrant Database</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #10b981, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .back-btn, .nav-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover, .nav-btn:hover { background: #64748b; }
+        .container { max-width: 1600px; margin: 2rem auto; padding: 0 2rem; }
+        
+        .system-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .card-title {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+        }
+        .card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+        .card-subtitle {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .collections-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .collection-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .collection-card:hover {
+            border-color: #10b981;
+            transform: translateY(-2px);
+        }
+        .collection-card.selected {
+            border-color: #10b981;
+            background: #141e2e;
+        }
+        
+        .table-container {
+            background: #1e293b;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            overflow: hidden;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #0f172a;
+            padding: 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 1rem;
+            border-top: 1px solid #334155;
+            font-size: 0.875rem;
+        }
+        
+        tr:hover td {
+            background: #1e293b;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status-green { background: #065f46; color: #6ee7b7; }
+        .status-yellow { background: #78350f; color: #fcd34d; }
+        .status-red { background: #7f1d1d; color: #fca5a5; }
+        
+        .payload-key {
+            color: #06b6d4;
+            font-family: monospace;
+        }
+        
+        .payload-value {
+            color: #a5b4fc;
+            font-size: 0.8rem;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        
+        .tag {
+            display: inline-block;
+            background: #334155;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-right: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+        
+        .refresh-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .refresh-btn:hover { background: #059669; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .modal.active { display: block; }
+        
+        .modal-content {
+            background: #1e293b;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 12px;
+            max-width: 900px;
+            border: 1px solid #334155;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+        
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .close-btn:hover { color: white; }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .info-item {
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        
+        .info-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-bottom: 0.25rem;
+        }
+        
+        .info-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #10b981;
+        }
+        
+        .json-block {
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 0.5rem;
+        }
+        
+        .tab {
+            background: transparent;
+            border: none;
+            color: #64748b;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            border-radius: 6px 6px 0 0;
+        }
+        
+        .tab.active {
+            background: #334155;
+            color: #10b981;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🗄️ KAG - Qdrant Database</div>
+        <div class="nav-buttons">
+            <a href="/docker" class="nav-btn">🐳 Docker</a>
+            <a href="/" class="back-btn">← Назад</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div id="loading" class="loading">Загрузка данных Qdrant...</div>
+        
+        <div id="content" style="display: none;">
+            <div class="system-info" id="stats-cards">
+            </div>
+            
+            <h2 class="section-title">📚 Коллекции</h2>
+            <div class="collections-grid" id="collections">
+            </div>
+            
+            <div id="collection-details" style="display: none;">
+                <h2 class="section-title">📋 Детали коллекции</h2>
+                
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('points')">📄 Точки (документы)</button>
+                    <button class="tab" onclick="showTab('payload')">🏷️ Метаданные</button>
+                    <button class="tab" onclick="showTab('info')">ℹ️ Информация</button>
+                </div>
+                
+                <div id="tab-points" class="tab-content active">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Версия</th>
+                                    <th>Метаданные</th>
+                                </tr>
+                            </thead>
+                            <tbody id="points-table">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div id="tab-payload" class="tab-content">
+                    <div id="payload-stats">
+                    </div>
+                </div>
+                
+                <div id="tab-info" class="tab-content">
+                    <div id="collection-info">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="error-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">❌ Ошибка</div>
+                <button class="close-btn" onclick="closeErrorModal()">×</button>
+            </div>
+            <div id="error-message" class="json-block"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = '';
+        
+        let currentData = null;
+        let selectedCollection = 'kag_documents';
+        
+        async function loadQdrantData() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/admin/models/qdrant/info?collection_name=${selectedCollection}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                currentData = await response.json();
+                renderData(currentData);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                showError(`Ошибка загрузки данных: ${error.message}`);
+            }
+        }
+        
+        function renderData(data) {
+            renderStatsCards(data);
+            renderCollections(data.collections || []);
+            
+            if (data.collection_info && !data.collection_info.error) {
+                document.getElementById('collection-details').style.display = 'block';
+                renderCollectionDetails(data);
+            } else {
+                document.getElementById('collection-details').style.display = 'none';
+            }
+        }
+        
+        function renderStatsCards(data) {
+            const info = data.collection_info || {};
+            const collections = data.collections || [];
+            const totalPoints = collections.reduce((sum, c) => sum + (c.points_count || 0), 0);
+            const totalVectors = collections.reduce((sum, c) => sum + (c.vectors_count || 0), 0);
+            
+            document.getElementById('stats-cards').innerHTML = `
+                <div class="card">
+                    <div class="card-title">URL</div>
+                    <div class="card-value" style="font-size: 1rem;">${data.url || 'N/A'}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Коллекций</div>
+                    <div class="card-value">${collections.length}</div>
+                    <div class="card-subtitle">всего коллекций</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Точек</div>
+                    <div class="card-value">${totalPoints.toLocaleString()}</div>
+                    <div class="card-subtitle">документов в БД</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Векторов</div>
+                    <div class="card-value">${totalVectors.toLocaleString()}</div>
+                    <div class="card-subtitle">embeddings</div>
+                </div>
+            `;
+        }
+        
+        function renderCollections(collections) {
+            const container = document.getElementById('collections');
+            
+            if (collections.length === 0) {
+                container.innerHTML = '<div class="card">Нет коллекций</div>';
+                return;
+            }
+            
+            container.innerHTML = collections.map(col => `
+                <div class="collection-card ${col.name === selectedCollection ? 'selected' : ''}" 
+                     onclick="selectCollection('${col.name}')">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;">${col.name}</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #64748b;">Точек</div>
+                            <div style="font-weight: 600;">${(col.points_count || 0).toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #64748b;">Векторов</div>
+                            <div style="font-weight: 600;">${(col.vectors_count || 0).toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <span class="status-badge ${col.status === 'green' ? 'status-green' : 'status-yellow'}">${col.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function selectCollection(name) {
+            selectedCollection = name;
+            loadQdrantData();
+        }
+        
+        function renderCollectionDetails(data) {
+            const info = data.collection_info || {};
+            const points = data.points_sample || [];
+            const payloadStats = data.payload_stats || {};
+            
+            document.getElementById('points-table').innerHTML = points.map(point => `
+                <tr>
+                    <td><code>${point.id}</code></td>
+                    <td>${point.version || '-'}</td>
+                    <td>${renderPayload(point.payload)}</td>
+                </tr>
+            `).join('');
+            
+            renderPayloadStats(payloadStats);
+            
+            renderCollectionInfo(info);
+        }
+        
+        function renderPayload(payload) {
+            if (!payload) return '<span style="color: #64748b;">Нет данных</span>';
+            
+            const entries = Object.entries(payload).slice(0, 5);
+            return entries.map(([key, value]) => `
+                <span class="tag">
+                    <span class="payload-key">${key}</span>: 
+                    <span class="payload-value">${truncate(JSON.stringify(value), 50)}</span>
+                </span>
+            `).join('');
+        }
+        
+        function truncate(str, len) {
+            if (!str) return '';
+            str = JSON.stringify(str);
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+        
+        function renderPayloadStats(payloadStats) {
+            const container = document.getElementById('payload-stats');
+            
+            if (!payloadStats || Object.keys(payloadStats).length === 0) {
+                container.innerHTML = '<div class="card">Нет метаданных</div>';
+                return;
+            }
+            
+            container.innerHTML = Object.entries(payloadStats).map(([field, stats]) => `
+                <div class="card" style="margin-bottom: 1rem;">
+                    <div style="font-weight: 600; color: #06b6d4; margin-bottom: 0.5rem;">${field}</div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 0.5rem;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #64748b;">Вхождений</div>
+                            <div style="font-weight: 600;">${stats.occurrences || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #64748b;">Типы</div>
+                            <div>${(stats.types || []).join(', ')}</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b;">Примеры:</div>
+                    <div style="font-size: 0.8rem; color: #a5b4fc; margin-top: 0.25rem;">
+                        ${(stats.samples || []).map(s => s ? truncate(s, 100) : '').filter(s => s).join('<br>')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderCollectionInfo(info) {
+            const container = document.getElementById('collection-info');
+            
+            container.innerHTML = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Статус</div>
+                        <div class="info-value">${info.status || '-'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Точек</div>
+                        <div class="info-value">${(info.points_count || 0).toLocaleString()}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Векторов</div>
+                        <div class="info-value">${(info.vectors_count || 0).toLocaleString()}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Сегментов</div>
+                        <div class="info-value">${info.segments_count || 0}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Размер на диске</div>
+                        <div class="info-value">${formatBytes(info.disk_size || 0)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">RAM</div>
+                        <div class="info-value">${formatBytes(info.ram_size || 0)}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function formatBytes(bytes) {
+            if (!bytes) return '0 B';
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
+        }
+        
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+        
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-modal').classList.add('active');
+        }
+        
+        function closeErrorModal() {
+            document.getElementById('error-modal').classList.remove('active');
+        }
+        
+        loadQdrantData();
+        setInterval(loadQdrantData, 30000);
+    </script>
+</body>
+</html>
