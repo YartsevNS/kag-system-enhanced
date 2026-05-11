@@ -28,7 +28,7 @@ COPY requirements.txt .
 
 # Установка Python зависимостей
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git
 
