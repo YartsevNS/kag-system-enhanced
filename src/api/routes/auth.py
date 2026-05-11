@@ -8,10 +8,10 @@ GET  /auth/me       - Get current user info (requires JWT)
 
 from datetime import datetime, timedelta, timezone
 
+from passlib.hash import pbkdf2_sha256 as hash_method
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from jose import jwt
 
 from src.config import get_settings
@@ -20,8 +20,6 @@ from src.database.user_models import User
 from src.api.middleware.auth_v2 import get_current_user
 
 router = APIRouter()
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__ident="2b")
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────
@@ -127,7 +125,7 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
     user = User(
         username=body.username,
         email=body.email,
-        hashed_password=pwd_context.hash(body.password),
+        hashed_password=hash_method.hash(body.password),
     )
     db.add(user)
     db.commit()
@@ -144,7 +142,7 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
     401 if credentials are invalid.
     """
     user = db.query(User).filter(User.username == body.username).first()
-    if not user or not pwd_context.verify(body.password, user.hashed_password):
+    if not user or not hash_method.verify(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
