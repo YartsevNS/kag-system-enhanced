@@ -25,7 +25,8 @@ COPY requirements.txt .
 
 # Установка Python зависимостей
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git
 
 # ===========================================
 # Stage 2: Production - финальный образ

@@ -63,5 +63,3 @@ pyclipper>=1.3.0
 shapely>=2.0.0
 onnxruntime>=1.16.0
 pymupdf>=1.23.0
-
-git+https://github.com/Bodhi42/Occular-ocr.git
