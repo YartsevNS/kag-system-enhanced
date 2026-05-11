@@ -17,12 +17,28 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
+    MatchAny,
     Range,
     PayloadSchemaType
 )
 
 from src.llm.embeddings import EmbeddingClient
 from src.config import get_settings
+
+
+def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
+    """
+    Convert a Qdrant FieldCondition to a dict suitable for REST API.
+    
+    Handles MatchValue and MatchAny.
+    """
+    match = condition.match
+    if isinstance(match, MatchValue):
+        return {"key": condition.key, "match": {"value": match.value}}
+    elif isinstance(match, MatchAny):
+        return {"key": condition.key, "match": {"any": match.any}}
+    else:
+        raise ValueError(f"Unsupported match type: {type(match)}")
 
 
 class EmbeddingsService:
@@ -133,6 +149,12 @@ class EmbeddingsService:
                     field_schema=PayloadSchemaType.KEYWORD
                 )
 
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="group_ids",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
                 logger.info(f"Коллекция создана: {self.collection_name}")
             else:
                 logger.info(f"Коллекция существует: {self.collection_name}")
@@ -145,7 +167,8 @@ class EmbeddingsService:
         self,
         document_id: str,
         chunks: List[Dict[str, Any]],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        group_ids: Optional[List[str]] = None
     ) -> int:
         """
         Сгенерировать embeddings для чанков и сохранить в Qdrant.
@@ -178,6 +201,7 @@ class EmbeddingsService:
                 "chunk_id": chunk.get("chunk_id", f"chunk_{i}"),
                 "content": chunk.get("content", ""),
                 "file_type": metadata.get("file_type", "unknown") if metadata else "unknown",
+                "group_ids": group_ids or [],
                 "metadata": {
                     **(metadata or {}),
                     **(chunk.get("metadata", {}))
@@ -210,7 +234,9 @@ class EmbeddingsService:
         self,
         query: str,
         limit: int = 10,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        group_ids: Optional[List[str]] = None,
+        is_admin: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Семантический поиск по embeddings.
@@ -219,6 +245,8 @@ class EmbeddingsService:
             query: Поисковый запрос
             limit: Количество результатов
             filters: Фильтры по метаданным
+            group_ids: Список group_id для фильтрации (None = без фильтрации)
+            is_admin: Если True, group_ids фильтр не применяется
 
         Returns:
             Список результатов с текстом и score
@@ -247,6 +275,15 @@ class EmbeddingsService:
                     )
                 )
 
+        # Group-based access control: filter by group_ids unless admin
+        if not is_admin and group_ids:
+            conditions.append(
+                FieldCondition(
+                    key="group_ids",
+                    match=MatchAny(any=group_ids)
+                )
+            )
+
         # Ищем через REST API (обходим несовместимость клиента)
         formatted_results = []
         try:
@@ -259,8 +296,7 @@ class EmbeddingsService:
             if conditions:
                 search_payload["filter"] = {
                     "must": [
-                        {"key": c.key, "match": {"value": c.match.value}}
-                        for c in conditions
+                        _build_qdrant_filter_condition(c) for c in conditions
                     ]
                 }
 

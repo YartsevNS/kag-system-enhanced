@@ -3,7 +3,7 @@
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Depends
 from loguru import logger
 import uuid
 from datetime import datetime
@@ -11,6 +11,8 @@ from datetime import datetime
 from src.models import DocumentUpload, DocumentStatus
 from src.api.services.document_service import document_service
 from src.security.validator import SecurityValidator, SecurityValidationError
+from src.api.middleware.auth_v2 import get_current_user, get_current_user_optional
+from src.database.user_models import User
 
 router = APIRouter()
 
@@ -18,7 +20,8 @@ router = APIRouter()
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
 async def upload_document(
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Загрузить документ для индексации.
@@ -48,10 +51,16 @@ async def upload_document(
         except SecurityValidationError as ve:
             raise HTTPException(status_code=400, detail=ve.message)
 
+        # Extract user info for document access control
+        uploaded_by = current_user.id if current_user else None
+        group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+
         record = await document_service.upload_document(
             filename=file.filename,
             file_content=content,
-            file_type=file.content_type
+            file_type=file.content_type,
+            uploaded_by=uploaded_by,
+            group_ids=group_ids
         )
 
         # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
@@ -86,7 +95,8 @@ async def upload_document(
 @router.post("/batch", summary="Пакетная загрузка документов")
 async def upload_documents_batch(
     files: list[UploadFile] = File(...),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Пакетная загрузка нескольких документов.
@@ -96,6 +106,9 @@ async def upload_documents_batch(
     Возвращает список document_id для отслеживания статуса.
     """
     logger.info(f"Пакетная загрузка: {len(files)} файлов")
+
+    uploaded_by = current_user.id if current_user else None
+    group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
 
     results = []
     for file in files:
@@ -120,7 +133,9 @@ async def upload_documents_batch(
             record = await document_service.upload_document(
                 filename=file.filename,
                 file_content=content,
-                file_type=file.content_type
+                file_type=file.content_type,
+                uploaded_by=uploaded_by,
+                group_ids=group_ids
             )
 
             # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
@@ -178,13 +193,33 @@ async def get_document_status(document_id: str):
 
 
 @router.get("/list", summary="Список документов")
-async def list_documents(limit: int = 100):
+async def list_documents(
+    limit: int = 100,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     """
     Получить список загруженных документов.
 
     - **limit**: Максимальное количество записей
+
+    Для не-администраторов возвращаются только документы их групп.
     """
     documents = document_service.list_documents(limit)
+
+    # Filter by group access for non-admin users
+    if current_user and not current_user.is_admin:
+        user_group_ids = [g.id for g in current_user.groups] if current_user.groups else []
+        if user_group_ids:
+            documents = [
+                d for d in documents
+                if d.group_ids is None or not d.group_ids or any(g in d.group_ids for g in user_group_ids)
+            ]
+        else:
+            # User has no groups - only show public documents (empty group_ids)
+            documents = [
+                d for d in documents
+                if d.group_ids is None or not d.group_ids
+            ]
     
     return {
         "total": len(documents),

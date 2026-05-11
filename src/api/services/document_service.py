@@ -33,6 +33,8 @@ class DocumentRecord(BaseModel):
     progress: float = Field(default=0.0, description="Прогресс обработки (0-100)")
     chunks_count: int = Field(default=0, description="Количество чанков")
     error: Optional[str] = Field(default=None, description="Ошибка если есть")
+    uploaded_by: Optional[str] = Field(default=None, description="ID пользователя, загрузившего документ")
+    group_ids: Optional[List[str]] = Field(default=None, description="ID групп, имеющих доступ к документу")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -128,7 +130,9 @@ class DocumentService:
         self,
         filename: str,
         file_content: bytes,
-        file_type: Optional[str] = None
+        file_type: Optional[str] = None,
+        uploaded_by: Optional[str] = None,
+        group_ids: Optional[List[str]] = None
     ) -> DocumentRecord:
         """
         Загрузить документ.
@@ -137,6 +141,8 @@ class DocumentService:
             filename: Имя файла
             file_content: Содержимое файла
             file_type: MIME тип (опционально)
+            uploaded_by: ID пользователя, загрузившего документ
+            group_ids: Список group_id для контроля доступа
 
         Returns:
             Запись о документе
@@ -159,11 +165,13 @@ class DocumentService:
             filename=filename,
             file_type=file_type,
             file_size=len(file_content),
-            status="pending"
+            status="pending",
+            uploaded_by=uploaded_by,
+            group_ids=group_ids or []
         )
         
         self._documents[doc_id] = record
-        logger.info(f"Документ загружен: {doc_id}, {filename}")
+        logger.info(f"Документ загружен: {doc_id}, {filename}, groups={group_ids}")
 
         # Сохраняем метаданные в БД
         self._save_document_to_db(doc_id)
@@ -241,7 +249,8 @@ class DocumentService:
                     "file_type": record.file_type,
                     "file_size": record.file_size,
                     **parsed_doc.get("metadata", {})
-                }
+                },
+                group_ids=record.group_ids
             )
             
             # Завершено (100%)

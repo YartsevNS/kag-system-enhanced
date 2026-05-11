@@ -13,6 +13,8 @@ from src.models import ChatRequest, ChatResponse, ChatMessage
 from src.config import get_settings
 from src.api.services.chat_service import chat_service
 from src.api.services.export_service import export_service
+from src.api.middleware.auth_v2 import get_current_user, get_current_user_optional
+from src.database.user_models import User
 
 router = APIRouter()
 router_export = APIRouter()
@@ -21,6 +23,7 @@ router_export = APIRouter()
 @router.post("/", response_model=ChatResponse, summary="Отправить сообщение в чат")
 async def send_message(
     request: ChatRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Отправить сообщение в чат и получить ответ от LLM с RAG.
@@ -61,6 +64,10 @@ async def send_message(
             for msg in formatted_messages[:-1]
         ] if formatted_messages else []
 
+        # Extract group_ids and admin status for document access control
+        group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+        is_admin = current_user.is_admin if current_user else False
+
         # Генерируем ответ через chat_service
         response = await chat_service.generate_response(
             user_message=user_message,
@@ -68,7 +75,9 @@ async def send_message(
             history=history,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            use_rag=True
+            use_rag=True,
+            group_ids=group_ids,
+            is_admin=is_admin
         )
 
         return ChatResponse(

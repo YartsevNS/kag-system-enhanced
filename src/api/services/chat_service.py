@@ -51,7 +51,9 @@ class ChatService:
         history: Optional[List[Dict[str, str]]] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        use_rag: bool = True
+        use_rag: bool = True,
+        group_ids: Optional[List[str]] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Сгенерировать ответ с RAG.
@@ -63,6 +65,8 @@ class ChatService:
             temperature: Температура генерации
             max_tokens: Максимум токенов
             use_rag: Использовать ли RAG поиск
+            group_ids: Группы пользователя для фильтрации документов
+            is_admin: Если True, поиск возвращает все документы (без фильтрации)
 
         Returns:
             Словарь с ответом и метаданными
@@ -76,9 +80,13 @@ class ChatService:
         if use_rag:
             try:
                 logger.debug("Выполняю RAG поиск...")
+                # Use embeddings_service.search with group filtering
+                from src.indexing.embeddings_service import embeddings_service
                 search_results = await embeddings_service.search(
                     query=user_message,
-                    limit=self._search_limit
+                    limit=self._search_limit,
+                    group_ids=group_ids,
+                    is_admin=is_admin
                 )
 
                 if search_results:
@@ -245,7 +253,9 @@ class ChatService:
         self,
         user_message: str,
         session_id: Optional[str] = None,
-        history: Optional[List[Dict[str, str]]] = None
+        history: Optional[List[Dict[str, str]]] = None,
+        group_ids: Optional[List[str]] = None,
+        is_admin: bool = False
     ):
         """
         Потоковая генерация ответа.
@@ -254,6 +264,8 @@ class ChatService:
             user_message: Сообщение пользователя
             session_id: ID сессии
             history: История сообщений
+            group_ids: Группы пользователя для фильтрации документов
+            is_admin: Если True, поиск возвращает все документы (без фильтрации)
 
         Yields:
             Чанки ответа
@@ -261,9 +273,12 @@ class ChatService:
         logger.info(f"Потоковая генерация: session={session_id}")
 
         # RAG поиск
+        from src.indexing.embeddings_service import embeddings_service
         search_results = await embeddings_service.search(
             query=user_message,
-            limit=self._search_limit
+            limit=self._search_limit,
+            group_ids=group_ids,
+            is_admin=is_admin
         )
 
         context = ""
