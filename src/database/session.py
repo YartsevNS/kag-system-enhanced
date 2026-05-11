@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from src.database.models import Base
 from src.database.user_models import User, Group  # noqa: F401 - register models
 from src.database.document_models import Document, DocumentVersion  # noqa: F401 - register models
+from src.database.monitoring_models import WatchedURL, WatchedFolder, Notification  # noqa: F401 - register models
 from src.config import get_settings
 
 _engine = None

@@ -39,6 +39,7 @@ python-dotenv==1.0.1
 httpx==0.28.1
 loguru==0.7.3
 docker==7.1.0
+watchdog>=6.0.0
 
 # Работа с БД (конфиги)
 SQLAlchemy>=2.0.0

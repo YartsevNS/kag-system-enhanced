@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 import os
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.middleware.auth import AuthMiddleware
@@ -105,6 +105,8 @@ app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_models.router, prefix="/api/v1/admin/models", tags=["models"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 
 # Статические файлы и веб-интерфейс
 static_path = os.path.join(os.path.dirname(__file__), "static")
