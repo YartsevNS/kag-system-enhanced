@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-rus \
     poppler-utils \
     # OpenCV/GL для Occular-ocr
-    libgl1-mesa-glx \
-    libglib2.0-0 \
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание виртуального окружения
@@ -53,8 +53,8 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-rus \
     poppler-utils \
     # OpenCV/GL для Occular-ocr
-    libgl1-mesa-glx \
-    libglib2.0-0 \
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование виртуального окружения из builder
