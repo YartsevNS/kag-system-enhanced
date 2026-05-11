@@ -131,6 +131,14 @@ class Settings(BaseSettings):
     KAG_API_TOKEN: str = ""
     CORS_ORIGINS: str = "*"
 
+    # JWT
+    JWT_SECRET: str = "kag-system-secret-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # Database (for user auth)
+    DATABASE_URL: str = "sqlite:///./kag_users.db"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
