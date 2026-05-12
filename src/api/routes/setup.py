@@ -196,6 +196,19 @@ async def create_qdrant_collection():
         }
         config_store.set("qdrant", "default", qdrant_config)
         
+        # Применяем API ключ к самому Qdrant серверу
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as http:
+                await http.put(
+                    "http://qdrant:6333/cluster/api-key",
+                    json={"api_key": api_key},
+                    headers={"Content-Type": "application/json"}
+                )
+            logger.info("Qdrant API ключ установлен на сервере")
+        except Exception as e:
+            logger.warning(f"Не удалось установить API ключ Qdrant (возможно, уже установлен): {e}")
+        
         logger.info(f"Qdrant настроен: коллекция {collection_name}, размер вектора {vector_size}")
         
         return {
