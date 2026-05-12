@@ -155,29 +155,30 @@ async def create_qdrant_collection():
     Генерирует API ключ (если Qdrant поддерживает) и сохраняет в config_store.
     """
     try:
-        from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, VectorParams, OptimizersConfigDiff
+        collection_name = "kag_documents"
         
         settings = __import__('src.config', fromlist=['get_settings']).get_settings()
-        
-        client = QdrantClient(host="qdrant", port=6333)
-        
-        collection_name = "kag_documents"
         vector_size = settings.EMBEDDING_DIMENSIONS if hasattr(settings, 'EMBEDDING_DIMENSIONS') else 768
         
-        # Проверяем, существует ли коллекция
-        collections = client.get_collections().collections
-        existing = [c.name for c in collections]
-        
-        if collection_name not in existing:
-            client.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-                optimizers_config=OptimizersConfigDiff(default_segment_number=2)
-            )
-            logger.info(f"Qdrant коллекция создана: {collection_name}")
-        else:
-            logger.info(f"Qdrant коллекция уже существует: {collection_name}")
+        # Создаём коллекцию через REST API (без qdrant-client)
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            # Проверяем существование
+            resp = await http.get(f"http://qdrant:6333/collections/{collection_name}")
+            exists = resp.status_code == 200
+            
+            if not exists:
+                resp = await http.put(
+                    f"http://qdrant:6333/collections/{collection_name}",
+                    json={
+                        "vectors": {"size": vector_size, "distance": "Cosine"},
+                        "optimizers_config": {"default_segment_number": 2}
+                    }
+                )
+                if resp.status_code != 200:
+                    return {"success": False, "message": f"Qdrant ошибка: {resp.text}"}
+                logger.info(f"Qdrant коллекция создана: {collection_name}")
+            else:
+                logger.info(f"Qdrant коллекция уже существует: {collection_name}")
         
         # Генерируем API ключ для доступа (сохраняем как пароль)
         api_key = _generate_password(32)
@@ -221,9 +222,7 @@ async def create_qdrant_collection():
                 "vector_size": vector_size,
                 "api_key": api_key  # Показать один раз!
             }
-        }
-    except ImportError:
-        return {"success": False, "message": "qdrant-client не установлен"}
+            }
     except Exception as e:
         logger.error(f"Ошибка настройки Qdrant: {e}")
         return {"success": False, "message": str(e)}
