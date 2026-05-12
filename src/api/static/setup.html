@@ -451,89 +451,94 @@
         async function saveAll() {
             const btn = document.getElementById('btn-save');
             
-            // Валидация обязательных полей
-            const requiredFields = [
-                { id: 'db-host', label: 'Хост БД' },
-                { id: 'db-name', label: 'Имя БД' },
-                { id: 'db-user', label: 'Пользователь БД' },
-                { id: 'db-pass', label: 'Пароль БД' },
-                { id: 'llm-host', label: 'Адрес LLM' },
-                { id: 'llm-model', label: 'Модель LLM' },
-                { id: 'ssh-user', label: 'SSH пользователь' },
-                { id: 'ssh-pass', label: 'SSH пароль' }
-            ];
-
-            for (const field of requiredFields) {
-                const val = document.getElementById(field.id).value.trim();
-                if (!val) {
-                    showFinalStatus(false, `⚠️ Заполните поле: ${field.label}`);
-                    document.getElementById(field.id).focus();
+            // 1. Проверяем, созданы ли базы данных
+            try {
+                const statusRes = await fetch(`${API}/status`);
+                const statusData = await statusRes.json();
+                
+                if (!statusData.status.database) {
+                    showFinalStatus(false, '⚠️ Сначала создайте базу данных PostgreSQL (Шаг 1)');
                     return;
                 }
+                if (!statusData.status.qdrant) {
+                    showFinalStatus(false, '⚠️ Сначала создайте коллекцию Qdrant (Шаг 1)');
+                    return;
+                }
+                if (statusData.status.configured) {
+                    showFinalStatus(true, '✅ Система уже настроена! Перенаправление...');
+                    setTimeout(() => { window.location.href = '/'; }, 1500);
+                    return;
+                }
+            } catch (err) {
+                showFinalStatus(false, '❌ Не удалось проверить статус БД: ' + err.message);
+                return;
             }
 
-            // Формирование payload
+            // 2. Валидация полей LLM и SSH
+            const llmHost = document.getElementById('llm-host').value.trim();
+            const llmModel = document.getElementById('llm-model').value.trim();
+            const sshUser = document.getElementById('ssh-user').value.trim();
+            const sshPass = document.getElementById('ssh-pass').value;
+
+            if (!llmHost) { showFinalStatus(false, '⚠️ Введите адрес LLM сервера'); return; }
+            if (!llmModel) { showFinalStatus(false, '⚠️ Введите название модели'); return; }
+            if (!sshUser) { showFinalStatus(false, '⚠️ Введите SSH пользователя'); return; }
+            if (!sshPass) { showFinalStatus(false, '⚠️ Введите SSH пароль'); return; }
+
+            // 3. Формируем payload (БД берём из config_store, не из полей)
             const payload = {
                 database: {
-                    host: document.getElementById('db-host').value.trim(),
-                    port: parseInt(document.getElementById('db-port').value) || 5432,
-                    name: document.getElementById('db-name').value.trim(),
-                    user: document.getElementById('db-user').value.trim(),
-                    password: document.getElementById('db-pass').value
+                    host: "keycloak-db",  // Берётся из авто-создания
+                    port: 5432,
+                    name: "kag_config",
+                    user: "kag_user",
+                    password: "auto-generated"  // Будет перезаписано в save
                 },
                 llm: {
                     type: document.getElementById('llm-type').value,
-                    host: document.getElementById('llm-host').value.trim(),
+                    host: llmHost,
                     port: parseInt(document.getElementById('llm-port').value) || 11434,
-                    model: document.getElementById('llm-model').value.trim(),
+                    model: llmModel,
                     system_prompt: document.getElementById('llm-system-prompt').value.trim()
                 },
                 embedding: {
                     model: document.getElementById('emb-model').value.trim(),
-                    dimensions: parseInt(document.getElementById('emb-dim').value) || 4096
+                    dimensions: parseInt(document.getElementById('emb-dim').value) || 768
                 },
                 ssh: {
-                    username: document.getElementById('ssh-user').value.trim(),
-                    password: document.getElementById('ssh-pass').value,
+                    username: sshUser,
+                    password: sshPass,
                     sudo_password: document.getElementById('ssh-sudo').value || undefined
                 }
             };
 
-            // UI: Блокируем кнопку
+            // 4. Отправка
             btn.disabled = true;
             btn.textContent = '⏳ Сохранение...';
             showFinalStatus(false, 'Сохранение настроек...');
 
             try {
-                console.log('Отправка данных:', payload);
-
                 const res = await fetch(`${API}/save`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                console.log('Ответ сервера:', res.status);
-
                 const data = await res.json();
-                console.log('Данные:', data);
 
                 if (res.ok && data.success) {
-                    showFinalStatus(true, '✅ Настройки успешно сохранены! Перенаправление...');
-                    
-                    // Ждем 2 секунды и редиректим на главную
+                    showFinalStatus(true, '✅ Настройки сохранены! Перенаправление...');
                     setTimeout(() => {
                         window.location.href = '/';
-                    }, 2000);
+                    }, 1500);
                 } else {
                     const errorMsg = data.detail || data.message || 'Неизвестная ошибка';
-                    showFinalStatus(false, `❌ Ошибка: ${errorMsg}`);
+                    showFinalStatus(false, '❌ Ошибка: ' + errorMsg);
                     btn.disabled = false;
                     btn.textContent = '💾 Сохранить и продолжить';
                 }
             } catch (err) {
-                console.error('Ошибка сохранения:', err);
-                showFinalStatus(false, `❌ Ошибка сети: ${err.message}`);
+                showFinalStatus(false, '❌ Ошибка сети: ' + err.message);
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить и продолжить';
             }
@@ -618,16 +623,28 @@
         
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Проверяем, не настроена ли уже система
-                const res = await fetch(`${API}/check`);
-                const data = await res.json();
+                // Проверяем статус настройки
+                const statusRes = await fetch(`${API}/status`);
+                const status = await statusRes.json();
                 
-                if (data.configured) {
-                    // Система уже настроена, идем на главную
+                if (status.status.configured) {
                     window.location.href = '/';
+                    return;
+                }
+                
+                // Если БД уже созданы — показываем кнопки как завершённые
+                if (status.status.database) {
+                    const btn = document.getElementById('btn-create-pg');
+                    btn.textContent = '✅ Создано';
+                    btn.disabled = true;
+                }
+                if (status.status.qdrant) {
+                    const btn = document.getElementById('btn-create-qdrant');
+                    btn.textContent = '✅ Создано';
+                    btn.disabled = true;
                 }
             } catch (err) {
-                console.warn('Не удалось проверить статус настройки:', err);
+                console.warn('Не удалось проверить статус:', err);
             }
         });
     </script>

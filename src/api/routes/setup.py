@@ -64,7 +64,7 @@ class SshTestRequest(BaseModel):
 
 
 class FullSetupPayload(BaseModel):
-    database: DatabaseSetup
+    database: Optional[DatabaseSetup] = None  # Авто-создаётся в Шаге 1
     llm: LlmSetup
     embedding: EmbeddingSetup
     ssh: SshSetup
@@ -94,6 +94,11 @@ async def create_pg_database():
     Возвращает сгенерированные данные (показать один раз!).
     """
     try:
+        # Проверяем, не создана ли уже БД
+        existing = config_store.get("database", "default")
+        if existing and existing.get("auto_created"):
+            return {"success": False, "message": "База данных уже создана. Нельзя создать повторно."}
+        
         import psycopg2
         
         # Генерируем имя БД и пароль
@@ -165,6 +170,11 @@ async def create_qdrant_collection():
     Генерирует API ключ (если Qdrant поддерживает) и сохраняет в config_store.
     """
     try:
+        # Проверяем, не создана ли уже коллекция
+        existing = config_store.get("qdrant", "default")
+        if existing and existing.get("auto_created"):
+            return {"success": False, "message": "Коллекция Qdrant уже создана. Нельзя создать повторно."}
+        
         collection_name = "kag_documents"
         
         settings = __import__('src.config', fromlist=['get_settings']).get_settings()
@@ -362,15 +372,21 @@ async def save_setup(payload: FullSetupPayload):
     logger.info("=== НАЧАЛО СОХРАНЕНИЯ НАСТРОЕК ===")
     
     try:
+        # Проверяем, что БД и Qdrant уже созданы
+        db_config = config_store.get("database", "default")
+        qdrant_config = config_store.get("qdrant", "default")
+        
+        if not db_config or not db_config.get("auto_created"):
+            raise HTTPException(status_code=400, detail="Сначала создайте базу данных PostgreSQL (Шаг 1)")
+        if not qdrant_config or not qdrant_config.get("auto_created"):
+            raise HTTPException(status_code=400, detail="Сначала создайте коллекцию Qdrant (Шаг 1)")
+        
         crypto = GOSTCrypto()
         now = datetime.utcnow().isoformat()
         
-        # 1. Сохраняем настройки БД
-        logger.info("Сохраняем настройки БД...")
-        db_data = payload.database.model_dump()
-        db_data['password'] = crypto.encrypt_to_base64(db_data['password'])
-        db_data['saved_at'] = now
-        config_store.set("database", "default", db_data)
+        # 1. БД уже создана — не перезаписываем, только обновляем timestamp
+        db_config['saved_at'] = now
+        config_store.set("database", "default", db_config)
         
         # 2. Сохраняем настройки LLM
         logger.info("Сохраняем настройки LLM...")
@@ -401,7 +417,7 @@ async def save_setup(payload: FullSetupPayload):
             "configured": True,
             "timestamp": now,
             "llm_model": payload.llm.model,
-            "db_host": payload.database.host
+            "db_host": db_config.get("host", "keycloak-db")
         })
         
         logger.info("=== НАСТРОЙКИ УСПЕШНО СОХРАНЕНЫ ===")
