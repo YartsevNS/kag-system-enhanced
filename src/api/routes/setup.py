@@ -199,7 +199,6 @@ async def create_qdrant_collection():
         
         # Применяем API ключ к самому Qdrant серверу
         try:
-            import httpx
             async with httpx.AsyncClient(timeout=5.0) as http:
                 await http.put(
                     "http://qdrant:6333/cluster/api-key",
