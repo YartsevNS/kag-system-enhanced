@@ -51,6 +51,16 @@ class SshSetup(BaseModel):
     username: str
     password: str
     sudo_password: Optional[str] = None
+    llm_host: Optional[str] = None
+    llm_port: Optional[int] = 11434
+
+
+class SshTestRequest(BaseModel):
+    """Запрос для теста SSH (от frontend)."""
+    username: str
+    password: str
+    llm_host: str
+    llm_port: int = 11434
 
 
 class FullSetupPayload(BaseModel):
@@ -294,37 +304,47 @@ async def test_llm(cfg: LlmSetup):
 
 
 @router.post("/test-ssh")
-async def test_ssh(cfg):
-    """Тестирует SSH подключение."""
+async def test_ssh(cfg: SshTestRequest):
+    """Тестирует SSH подключение к LLM серверу."""
     try:
-        username = cfg.username
-        password = cfg.password
-        llm_host = cfg.llm_host
-        llm_port = cfg.llm_port
-        sudo_pass = cfg.sudo_password if hasattr(cfg, 'sudo_password') else None
+        import tempfile, os
         
-        cmd = f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {username}@{llm_host} 'echo OK'"
-        
-        result = await asyncio.to_thread(
-            subprocess.run,
-            cmd, shell=True, capture_output=True, text=True, timeout=15
-        )
-        
-        if result.returncode != 0:
-            return {"success": False, "message": f"SSH ошибка: {result.stderr.strip()[:200]}"}
+        # Записываем пароль во временный файл (безопаснее чем shell)
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+            f.write(cfg.password)
+            pass_file = f.name
         
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"http://{llm_host}:{llm_port}/")
-                ollama_ok = resp.status_code == 200
-        except:
-            ollama_ok = False
-        
-        msg = "SSH подключено"
-        if ollama_ok:
-            msg += " • Ollama работает"
-        
-        return {"success": True, "message": msg}
+            cmd = [
+                "sshpass", "-f", pass_file,
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                f"{cfg.username}@{cfg.llm_host}",
+                "echo OK"
+            ]
+            
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd, capture_output=True, text=True, timeout=15
+            )
+            
+            if result.returncode != 0:
+                error_msg = result.stderr.strip()[:200]
+                return {"success": False, "message": f"SSH ошибка: {error_msg}"}
+            
+            # Проверяем Ollama на том же хосте
+            msg = "SSH подключено"
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"http://{cfg.llm_host}:{cfg.llm_port}/")
+                    if resp.status_code == 200:
+                        msg += " • Ollama работает"
+            except Exception:
+                msg += " (Ollama не проверен)"
+            
+            return {"success": True, "message": msg}
+        finally:
+            os.unlink(pass_file)
     except Exception as e:
         return {"success": False, "message": str(e)}
 
