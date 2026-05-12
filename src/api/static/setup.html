@@ -107,6 +107,40 @@
             transition: background 0.2s;
         }
         .btn-test:hover { background: #64748b; }
+
+        .btn-create {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-create:hover { opacity: 0.85; }
+        .btn-create:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .create-status {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .create-status.success {
+            display: block;
+            background: #064e3b;
+            border: 1px solid #059669;
+            color: #6ee7b7;
+        }
+        .create-status.error {
+            display: block;
+            background: #450a0a;
+            border: 1px solid #dc2626;
+            color: #fca5a5;
+        }
         
         .test-status {
             font-size: 0.875rem;
@@ -159,36 +193,43 @@
         <div class="logo">🎯 KAG System</div>
         <div class="subtitle">Первоначальная настройка системы</div>
 
-        <!-- Шаг 1: База данных -->
+        <!-- Шаг 1: Базы данных (авто-создание) -->
         <div class="step">
             <div class="step-header">
                 <span class="step-num">1</span>
-                Настройка базы данных
+                Создание баз данных
             </div>
-            <div class="grid">
-                <div class="field">
-                    <label>Хост базы данных</label>
-                    <input type="text" id="db-host" value="kag-keycloak-db">
+            <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;">
+                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
+            </p>
+
+            <!-- PostgreSQL -->
+            <div style="background:#0f172a;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🐘 PostgreSQL</strong>
+                        <div style="color:#94a3b8;font-size:0.85rem;">Основная база конфигурации</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
+                        ⚡ Создать базу данных
+                    </button>
                 </div>
-                <div class="field">
-                    <label>Порт</label>
-                    <input type="number" id="db-port" value="5432">
-                </div>
-                <div class="field">
-                    <label>Имя базы данных</label>
-                    <input type="text" id="db-name" value="keycloak">
-                </div>
-                <div class="field">
-                    <label>Пользователь</label>
-                    <input type="text" id="db-user" value="keycloak">
-                </div>
-                <div class="field full">
-                    <label>Пароль пользователя БД</label>
-                    <input type="password" id="db-pass" value="keycloak_password">
-                </div>
+                <div class="create-status" id="pg-status"></div>
             </div>
-            <button class="btn-test" onclick="testDb()">🔍 Тест подключения к БД</button>
-            <div class="test-status" id="db-status"></div>
+
+            <!-- Qdrant -->
+            <div style="background:#0f172a;border-radius:8px;padding:1rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🔍 Qdrant</strong>
+                        <div style="color:#94a3b8;font-size:0.85rem;">Векторная база для документов</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
+                        ⚡ Создать коллекцию
+                    </button>
+                </div>
+                <div class="create-status" id="qdrant-status"></div>
+            </div>
         </div>
 
         <!-- Шаг 2: LLM Бэкенд -->
@@ -495,6 +536,79 @@
                 showFinalStatus(false, `❌ Ошибка сети: ${err.message}`);
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить и продолжить';
+            }
+        }
+
+        // ==========================================
+        // Авто-создание баз данных
+        // ==========================================
+
+        async function createPgDb() {
+            const btn = document.getElementById('btn-create-pg');
+            const status = document.getElementById('pg-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+            status.className = 'create-status';
+            status.style.display = 'block';
+            status.innerHTML = 'Создаю базу данных PostgreSQL...';
+
+            try {
+                const res = await fetch(`${API}/create-pg-db`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.className = 'create-status success';
+                    status.innerHTML = '✅ ' + data.message + '<br>' +
+                        '<b>База:</b> ' + data.database.name + '<br>' +
+                        '<b>Пользователь:</b> ' + data.database.user + '<br>' +
+                        '<b>Пароль:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.database.password + '</code><br>' +
+                        '<span style="color:#fbbf24;">⚠️ Скопируйте пароль! Он больше не будет показан.</span>';
+                    btn.textContent = '✅ Создано';
+                } else {
+                    status.className = 'create-status error';
+                    status.innerHTML = '❌ ' + data.message;
+                    btn.disabled = false;
+                    btn.textContent = '⚡ Создать базу данных';
+                }
+            } catch (err) {
+                status.className = 'create-status error';
+                status.innerHTML = '❌ Ошибка: ' + err.message;
+                btn.disabled = false;
+                btn.textContent = '⚡ Создать базу данных';
+            }
+        }
+
+        async function createQdrant() {
+            const btn = document.getElementById('btn-create-qdrant');
+            const status = document.getElementById('qdrant-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+            status.className = 'create-status';
+            status.style.display = 'block';
+            status.innerHTML = 'Создаю коллекцию Qdrant...';
+
+            try {
+                const res = await fetch(`${API}/create-qdrant-collection`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.className = 'create-status success';
+                    status.innerHTML = '✅ ' + data.message + '<br>' +
+                        '<b>Коллекция:</b> ' + data.qdrant.collection + '<br>' +
+                        '<b>API ключ:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.qdrant.api_key + '</code><br>' +
+                        '<span style="color:#fbbf24;">⚠️ Скопируйте ключ! Он больше не будет показан.</span>';
+                    btn.textContent = '✅ Создано';
+                } else {
+                    status.className = 'create-status error';
+                    status.innerHTML = '❌ ' + data.message;
+                    btn.disabled = false;
+                    btn.textContent = '⚡ Создать коллекцию';
+                }
+            } catch (err) {
+                status.className = 'create-status error';
+                status.innerHTML = '❌ Ошибка: ' + err.message;
+                btn.disabled = false;
+                btn.textContent = '⚡ Создать коллекцию';
             }
         }
 

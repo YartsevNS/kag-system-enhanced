@@ -13,6 +13,8 @@ from typing import Optional
 import httpx
 import asyncio
 import subprocess
+import secrets
+import string
 
 from src.api.services.config_store import config_store
 from src.security.gost_crypto import GOSTCrypto
@@ -59,7 +61,175 @@ class FullSetupPayload(BaseModel):
 
 
 # ==========================================
-# Тестовые эндпоинты
+# Генератор безопасных паролей
+# ==========================================
+
+def _generate_password(length: int = 24) -> str:
+    """Генерирует криптографически безопасный пароль."""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+# ==========================================
+# Новые эндпоинты: создание БД
+# ==========================================
+
+@router.post("/create-pg-db")
+async def create_pg_database():
+    """
+    Создаёт новую базу данных и пользователя PostgreSQL.
+    
+    Генерирует безопасный пароль, создаёт БД и пользователя,
+    сохраняет учётные данные в config_store (зашифрованные).
+    Возвращает сгенерированные данные (показать один раз!).
+    """
+    try:
+        import psycopg2
+        
+        # Генерируем имя БД и пароль
+        db_name = f"kag_{secrets.token_hex(4)}"
+        db_user = f"kag_user_{secrets.token_hex(4)}"
+        db_password = _generate_password(24)
+        
+        # Подключаемся к PostgreSQL с bootstrap-учёткой
+        settings = __import__('src.config', fromlist=['get_settings']).get_settings()
+        conn = psycopg2.connect(
+            host="keycloak-db",
+            port=5432,
+            dbname="keycloak",
+            user=settings.KC_DB_USERNAME,
+            password=settings.KC_DB_PASSWORD,
+            connect_timeout=10
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        
+        # Создаём пользователя и БД
+        cur.execute(f"CREATE USER {db_user} WITH PASSWORD '{db_password}'")
+        cur.execute(f"CREATE DATABASE {db_name} OWNER {db_user}")
+        cur.execute(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user}")
+        cur.close()
+        conn.close()
+        
+        # Сохраняем в config_store (пароль шифруется)
+        crypto = GOSTCrypto()
+        now = datetime.utcnow().isoformat()
+        
+        db_config = {
+            "host": "keycloak-db",
+            "port": 5432,
+            "name": db_name,
+            "user": db_user,
+            "password": crypto.encrypt_to_base64(db_password),
+            "saved_at": now,
+            "auto_created": True
+        }
+        config_store.set("database", "default", db_config)
+        
+        logger.info(f"PostgreSQL БД создана: {db_name}, пользователь: {db_user}")
+        
+        return {
+            "success": True,
+            "message": "База данных PostgreSQL создана",
+            "database": {
+                "host": "keycloak-db",
+                "port": 5432,
+                "name": db_name,
+                "user": db_user,
+                "password": db_password  # Показать один раз!
+            }
+        }
+    except ImportError:
+        return {"success": False, "message": "psycopg2 не установлен"}
+    except Exception as e:
+        logger.error(f"Ошибка создания PG БД: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@router.post("/create-qdrant-collection")
+async def create_qdrant_collection():
+    """
+    Настраивает коллекцию Qdrant.
+    
+    Создаёт коллекцию для документов KAG.
+    Генерирует API ключ (если Qdrant поддерживает) и сохраняет в config_store.
+    """
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import Distance, VectorParams, OptimizersConfigDiff
+        
+        settings = __import__('src.config', fromlist=['get_settings']).get_settings()
+        
+        client = QdrantClient(host="qdrant", port=6333)
+        
+        collection_name = "kag_documents"
+        vector_size = settings.EMBEDDING_DIMENSIONS if hasattr(settings, 'EMBEDDING_DIMENSIONS') else 768
+        
+        # Проверяем, существует ли коллекция
+        collections = client.get_collections().collections
+        existing = [c.name for c in collections]
+        
+        if collection_name not in existing:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+                optimizers_config=OptimizersConfigDiff(default_segment_number=2)
+            )
+            logger.info(f"Qdrant коллекция создана: {collection_name}")
+        else:
+            logger.info(f"Qdrant коллекция уже существует: {collection_name}")
+        
+        # Генерируем API ключ для доступа (сохраняем как пароль)
+        api_key = _generate_password(32)
+        
+        crypto = GOSTCrypto()
+        now = datetime.utcnow().isoformat()
+        
+        qdrant_config = {
+            "host": "qdrant",
+            "port": 6333,
+            "collection": collection_name,
+            "vector_size": vector_size,
+            "api_key": crypto.encrypt_to_base64(api_key),
+            "saved_at": now,
+            "auto_created": True
+        }
+        config_store.set("qdrant", "default", qdrant_config)
+        
+        logger.info(f"Qdrant настроен: коллекция {collection_name}, размер вектора {vector_size}")
+        
+        return {
+            "success": True,
+            "message": "Qdrant настроен",
+            "qdrant": {
+                "host": "qdrant",
+                "port": 6333,
+                "collection": collection_name,
+                "vector_size": vector_size,
+                "api_key": api_key  # Показать один раз!
+            }
+        }
+    except ImportError:
+        return {"success": False, "message": "qdrant-client не установлен"}
+    except Exception as e:
+        logger.error(f"Ошибка настройки Qdrant: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@router.get("/status")
+async def setup_status():
+    """Возвращает полный статус настройки: что создано, что нет."""
+    status = {
+        "database": bool(config_store.get("database", "default")),
+        "qdrant": bool(config_store.get("qdrant", "default")),
+        "llm": bool(config_store.get("llm", "default")),
+        "configured": config_store.get("setup", "status", {}).get("configured", False)
+    }
+    return {"success": True, "status": status}
+
+
+# ==========================================
+# Тестовые эндпоинты (существующие)
 # ==========================================
 
 @router.post("/test-db")
@@ -89,7 +259,6 @@ async def test_llm(cfg: LlmSetup):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if cfg.type == "ollama":
-                # Проверяем наличие модели
                 resp = await client.get(f"http://{cfg.host}:{cfg.port}/api/tags")
                 if resp.status_code != 200:
                     return {"success": False, "message": f"Ollama ошибка: {resp.status_code}"}
@@ -102,7 +271,6 @@ async def test_llm(cfg: LlmSetup):
                 else:
                     return {"success": False, "message": f"Модель не найдена. Доступны: {', '.join(model_names[:3])}..."}
             else:
-                # vLLM
                 resp = await client.get(f"http://{cfg.host}:{cfg.port}/health")
                 if resp.status_code == 200:
                     return {"success": True, "message": "vLLM сервер доступен"}
@@ -118,14 +286,12 @@ async def test_llm(cfg: LlmSetup):
 async def test_ssh(cfg):
     """Тестирует SSH подключение."""
     try:
-        # Извлекаем данные из запроса
         username = cfg.username
         password = cfg.password
         llm_host = cfg.llm_host
         llm_port = cfg.llm_port
         sudo_pass = cfg.sudo_password if hasattr(cfg, 'sudo_password') else None
         
-        # Формируем команду
         cmd = f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {username}@{llm_host} 'echo OK'"
         
         result = await asyncio.to_thread(
@@ -136,7 +302,6 @@ async def test_ssh(cfg):
         if result.returncode != 0:
             return {"success": False, "message": f"SSH ошибка: {result.stderr.strip()[:200]}"}
         
-        # Проверяем Ollama
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(f"http://{llm_host}:{llm_port}/")
@@ -161,7 +326,6 @@ async def test_ssh(cfg):
 async def save_setup(payload: FullSetupPayload):
     """
     Сохраняет все настройки системы в PostgreSQL.
-    
     Это финальный шаг Setup Wizard.
     """
     logger.info("=== НАЧАЛО СОХРАНЕНИЯ НАСТРОЕК ===")
@@ -195,7 +359,6 @@ async def save_setup(payload: FullSetupPayload):
         ssh_data['password'] = crypto.encrypt_to_base64(ssh_data['password'])
         if ssh_data.get('sudo_password'):
             ssh_data['sudo_password'] = crypto.encrypt_to_base64(ssh_data['sudo_password'])
-        # Добавляем хост из LLM настроек
         ssh_data['host'] = payload.llm.host
         ssh_data['ollama_port'] = payload.llm.port
         ssh_data['saved_at'] = now
