@@ -285,7 +285,8 @@ async def get_document_chunks(
     limit: int = 10
 ):
     """Получить чанки конкретного документа из Qdrant."""
-    from src.indexing.qdrant_service import qdrant_service
+    from src.indexing.qdrant_service import get_qdrant_service
+    qdrant_service = get_qdrant_service()
     
     try:
         results = qdrant_service.scroll_points(
