@@ -1,45 +1,61 @@
-     1|     1|<!DOCTYPE html>
-     2|     2|<html lang="ru">
-     3|     3|<head>
-     4|     4|    <meta charset="UTF-8">
-     5|     5|    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     6|     6|    <title>KAG - Просмотр чанков</title>
-     7|     7|    
-     8|   240|<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-     9|<style>
-    10|:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
-    11|*{margin:0;padding:0;box-sizing:border-box}
-    12|body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-    13|nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
-    14|nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
-    15|nav .logo span{color:var(--accent-h)}
-    16|nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
-    17|nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
-    18|nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-    19|main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
-    20|h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
-    21|.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
-    22|.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
-    23|input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
-    24|input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
-    25|.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
-    26|.btn:hover{opacity:0.85}
-    27|.btn:disabled{opacity:0.5;cursor:not-allowed}
-    28|.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    29|.btn-ghost:hover{background:rgba(255,255,255,0.06)}
-    30|.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    31|.btn-danger:hover{background:rgba(220,38,38,0.25)}
-    32|table{width:100%;border-collapse:collapse}
-    33|th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
-    34|td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
-    35|.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
-    36|.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
-    37|.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
-    38|.badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
-    39|@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
-    40|</style>
-    41|</head>
-    42|   241|<body>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Чанки документа</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:4px}
+.breadcrumb{font-size:13px;color:var(--text4);margin-bottom:24px}
+.breadcrumb a{color:var(--accent-h);text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+/* Controls */
+.controls{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.limit-select{display:flex;align-items:center;gap:8px}
+.limit-select label{font-size:13px;color:var(--text4)}
+.limit-select select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.limit-select select:focus{border-color:var(--accent-h)}
+.chunk-count{font-size:13px;color:var(--text4)}
+.chunk-count strong{color:var(--text2)}
+/* Chunk card */
+.chunk-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.chunk-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border-s)}
+.chunk-header .chunk-id{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-l);font-weight:500}
+.chunk-header .chunk-meta{font-size:11px;color:var(--text4)}
+.chunk-body{padding:16px 20px}
+.chunk-body pre{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto}
+.chunk-body pre::-webkit-scrollbar{width:6px}
+.chunk-body pre::-webkit-scrollbar-track{background:transparent}
+.chunk-body pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Empty */
+.empty{text-align:center;padding:60px 20px;color:var(--text4)}
+.empty-icon{font-size:48px;margin-bottom:16px}
+.empty-text{font-size:15px;color:var(--text4)}
+/* Pagination */
+.pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:20px}
+.pagination button{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:8px 14px;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s}
+.pagination button:hover:not(:disabled){background:var(--elevated);border-color:var(--border)}
+.pagination button:disabled{opacity:0.4;cursor:not-allowed}
+.pagination .page-info{font-size:13px;color:var(--text4);min-width:80px;text-align:center}
+/* Loading */
+.loading{text-align:center;padding:40px}
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.controls{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
 <nav>
   <div class="logo">🎯 <span>KAG</span></div>
   <a href="/">⬡ Дашборд</a>
@@ -50,264 +66,151 @@
   <a href="/users">👥 Пользователи</a>
   <a href="/admin">⚙️ Админ</a>
 </nav>
+
 <main>
-    43|   242|    <div class="header">
-    44|   243|        <div class="logo">KAG</div>
-    45|   244|        
-    46|   245|    </div>
-    47|   246|    
-    48|   247|    <div class="container">
-    49|   248|        <div class="stats-bar" id="stats"></div>
-    50|   249|        
-    51|   250|        <div class="controls">
-    52|   251|            <input type="text" id="search" class="search-input" placeholder="Поиск по тексту или ID..." onkeyup="handleSearch(event)">
-    53|   252|            <select id="search-type" class="search-select" onchange="handleSearchType()">
-    54|   253|                <option value="text">Поиск по тексту</option>
-    55|   254|                <option value="semantic">Семантический поиск</option>
-    56|   255|            </select>
-    57|   256|            <button class="btn" onclick="runSearch()">🔍 Найти</button>
-    58|   257|            <button class="btn btn-secondary" onclick="loadAllChunks()">🔄 Обновить</button>
-    59|   258|        </div>
-    60|   259|        
-    61|   260|        <div id="loading" class="loading">Загрузка чанков...</div>
-    62|   261|        <div class="chunks-grid" id="chunks-grid"></div>
-    63|   262|    </div>
-    64|   263|    
-    65|   264|    <div class="modal-overlay" id="modal">
-    66|   265|        <div class="modal modal-large">
-    67|   266|            <div class="modal-header">
-    68|   267|                <div class="modal-title">
-    69|   268|                    Редактирование чанка
-    70|   269|                    <span id="modal-score" class="score-badge" style="display:none"></span>
-    71|   270|                </div>
-    72|   271|                <button class="modal-close" onclick="closeModal()">×</button>
-    73|   272|            </div>
-    74|   273|            <div class="modal-body">
-    75|   274|                <div class="edit-section">
-    76|   275|                    <textarea id="chunk-edit" class="edit-textarea" placeholder="Содержимое чанка..."></textarea>
-    77|   276|                    <div class="edit-buttons">
-    78|   277|                        <button class="btn btn-save" onclick="saveChunk()">💾 Сохранить</button>
-    79|   278|                        <button class="btn btn-cancel" onclick="closeModal()">Отмена</button>
-    80|   279|                        <span id="save-status" class="save-status"></span>
-    81|   280|                    </div>
-    82|   281|                </div>
-    83|   282|                <div class="metadata-section">
-    84|   283|                    <div class="metadata-title">Метаданные</div>
-    85|   284|                    <div class="metadata-grid" id="modal-meta"></div>
-    86|   285|                </div>
-    87|   286|            </div>
-    88|   287|        </div>
-    89|   288|    </div>
-    90|   289|    
-    91|   290|    <script>
-    92|   291|const QDRANT_URL = 'http://localhost:6333';
-    93|   292|const OLLAMA_URL = 'http://192.168.50.41:11434';
-    94|   293|const COLLECTION = 'kag_documents';
-    95|   294|
-    96|   295|let allChunks = [];
-    97|   296|let filteredChunks = [];
-    98|   297|let currentChunk = null;
-    99|   298|
-   100|   299|// Load all chunks from Qdrant
-   101|   300|async function loadAllChunks() {
-   102|   301|    document.getElementById('loading').style.display = 'block';
-   103|   302|    document.getElementById('chunks-grid').innerHTML = '';
-   104|   303|    allChunks = [];
-   105|   304|    
-   106|   305|    try {
-   107|   306|        let offset = 0;
-   108|   307|        const limit = 100;
-   109|   308|        
-   110|   309|        while (true) {
-   111|   310|            const resp = await fetch(
-   112|   311|                `${QDRANT_URL}/collections/${COLLECTION}/points/scroll`,
-   113|   312|                {
-   114|   313|                    method: 'POST',
-   115|   314|                    headers: {'Content-Type': 'application/json'},
-   116|   315|                    body: JSON.stringify({
-   117|   316|                        limit: limit,
-   118|   317|                        offset: offset,
-   119|   318|                        with_payload: true,
-   120|   319|                        with_vectors: false
-   121|   320|                    })
-   122|   321|                }
-   123|   322|            );
-   124|   323|            const data = await resp.json();
-   125|   324|            
-   126|   325|            if (!data.result || !data.result.points || data.result.points.length === 0) break;
-   127|   326|            
-   128|   327|            for (const p of data.result.points) {
-   129|   328|                allChunks.push({id: p.id, payload: p.payload});
-   130|   329|            }
-   131|   330|            
-   132|   331|            offset += limit;
-   133|   332|        }
-   134|   333|        
-   135|   334|        filteredChunks = allChunks;
-   136|   335|        renderStats(allChunks.length);
-   137|   336|        renderChunks();
-   138|   337|    } catch (e) {
-   139|   338|        console.error('Error loading chunks:', e);
-   140|   339|        document.getElementById('loading').textContent = 'Ошибка: ' + e.message;
-   141|   340|    }
-   142|   341|}
-   143|   342|
-   144|   343|// Handle Enter key
-   145|   344|function handleSearch(event) {
-   146|   345|    if (event.key === 'Enter') runSearch();
-   147|   346|}
-   148|   347|
-   149|   348|// Handle search type change
-   150|   349|function handleSearchType() {
-   151|   350|    const type = document.getElementById('search-type').value;
-   152|   351|    const input = document.getElementById('search');
-   153|   352|    if (type === 'semantic') {
-   154|   353|        input.placeholder = 'Введите запрос для семантического поиска...';
-   155|   354|    } else {
-   156|   355|        input.placeholder = 'Поиск по тексту или ID...';
-   157|   356|    }
-   158|   357|}
-   159|   358|
-   160|   359|// Run search based on type
-   161|   360|async function runSearch() {
-   162|   361|    const query = document.getElementById('search').value;
-   163|   362|    const type = document.getElementById('search-type').value;
-   164|   363|    
-   165|   364|    if (!query) {
-   166|   365|        filteredChunks = allChunks;
-   167|   366|        renderChunks();
-   168|   367|        return;
-   169|   368|    }
-   170|   369|    
-   171|   370|    if (type === 'semantic') {
-   172|   371|        await semanticSearch(query);
-   173|   372|    } else {
-   174|   373|        textSearch(query);
-   175|   374|    }
-   176|   375|}
-   177|   376|
-   178|   377|// Text search in loaded chunks - sort by relevance
-   179|   378|function textSearch(query) {
-   180|   379|    const q = query.toLowerCase();
-   181|   380|    
-   182|   381|    // Calculate relevance score for each chunk
-   183|   382|    const scores = {};
-   184|   383|    
-   185|   384|    filteredChunks = allChunks
-   186|   385|        .map(c => {
-   187|   386|            const p = c.payload || {};
-   188|   387|            const content = (p.content || '').toLowerCase();
-   189|   388|            const docId = (p.document_id || '').toLowerCase();
-   190|   389|            
-   191|   390|            let score = 0;
-   192|   391|            if (content.includes(q)) {
-   193|   392|                const pos = content.indexOf(q);
-   194|   393|                score = 1000 - pos; // Higher score for earlier match
-   195|   394|                if (content === q) score += 500; // Exact match bonus
-   196|   395|            }
-   197|   396|            if (docId.includes(q)) {
-   198|   397|                score += 500;
-   199|   398|            }
-   200|   399|            
-   201|   400|            if (score > 0) {
-   202|   401|                scores[c.id] = score;
-   203|   402|            }
-   204|   403|            
-   205|   404|            return { chunk: c, score: score };
-   206|   405|        })
-   207|   406|        .filter(item => item.score > 0)
-   208|   407|        .sort((a, b) => b.score - a.score)
-   209|   408|        .map(item => item.chunk);
-   210|   409|    
-   211|   410|    renderChunks(false, scores);
-   212|   411|}
-   213|   412|
-   214|   413|// Semantic search via embedding
-   215|   414|async function semanticSearch(query) {
-   216|   415|    document.getElementById('loading').textContent = 'Семантический поиск...';
-   217|   416|    
-   218|   417|    try {
-   219|   418|        // Get embedding
-   220|   419|        const embedResp = await fetch(
-   221|   420|            `${OLLAMA_URL}/api/embeddings`,
-   222|   421|            {
-   223|   422|                method: 'POST',
-   224|   423|                headers: {'Content-Type': 'application/json'},
-   225|   424|                body: JSON.stringify({
-   226|   425|                    model: 'nomic-embed-text:latest',
-   227|   426|                    prompt: query
-   228|   427|                })
-   229|   428|            }
-   230|   429|        );
-   231|   430|        const embedData = await embedResp.json();
-   232|   431|        const vector = embedData.embedding;
-   233|   432|        
-   234|   433|        // Search Qdrant
-   235|   434|        const searchResp = await fetch(
-   236|   435|            `${QDRANT_URL}/collections/${COLLECTION}/points/search`,
-   237|   436|            {
-   238|   437|                method: 'POST',
-   239|   438|                headers: {'Content-Type': 'application/json'},
-   240|   439|                body: JSON.stringify({
-   241|   440|                    vector: vector,
-   242|   441|                    limit: 20,
-   243|   442|                    with_payload: true
-   244|   443|                })
-   245|   444|            }
-   246|   445|        );
-   247|   446|        const searchData = await searchResp.json();
-   248|   447|        
-   249|   448|        filteredChunks = (searchData.result || []).map(r => ({
-   250|   449|            id: r.id,
-   251|   450|            payload: r.payload,
-   252|   451|            score: r.score
-   253|   452|        }));
-   254|   453|        
-   255|   454|        renderChunks(true);
-   256|   455|    } catch (e) {
-   257|   456|        console.error('Semantic search error:', e);
-   258|   457|        textSearch(query); // Fallback to text search
-   259|   458|    }
-   260|   459|}
-   261|   460|
-   262|   461|// Render stats
-   263|   462|function renderStats(total) {
-   264|   463|    const docs = new Set(allChunks.map(c => c.payload?.document_id)).size;
-   265|   464|    document.getElementById('stats').innerHTML = `
-   266|   465|        <div class="stat-card">
-   267|   466|            <div class="stat-label">Всего чанков</div>
-   268|   467|            <div class="stat-value">${total}</div>
-   269|   468|        </div>
-   270|   469|        <div class="stat-card">
-   271|   470|            <div class="stat-label">Документов</div>
-   272|   471|            <div class="stat-value">${docs}</div>
-   273|   472|        </div>
-   274|   473|    `;
-   275|   474|}
-   276|   475|
-   277|   476|// Render chunks grid
-   278|   477|function renderChunks(showScores = false, customScores = null) {
-   279|   478|    document.getElementById('loading').style.display = 'none';
-   280|   479|    
-   281|   480|    const grid = document.getElementById('chunks-grid');
-   282|   481|    
-   283|   482|    if (filteredChunks.length === 0) {
-   284|   483|        grid.innerHTML = '<div class="loading">Чанки не найдены</div>';
-   285|   484|        return;
-   286|   485|    }
-   287|   486|    
-   288|   487|    grid.innerHTML = filteredChunks.map((chunk, idx) => {
-   289|   488|        const p = chunk.payload || {};
-   290|   489|        const content = p.content || '';
-   291|   490|        const preview = content.length > 150 ? content.substring(0, 150) + '...' : content;
-   292|   491|        
-   293|   492|        // Show relevance score for text search
-   294|   493|        let scoreBadge = '';
-   295|   494|        if (customScores && customScores[chunk.id]) {
-   296|   495|            const score = Math.min(100, customScores[chunk.id] / 10);
-   297|   496|            scoreBadge = `<span class="score-badge" style="background: ${score > 50 ? '#22c55e' : '#f59e0b'}">${score.toFixed(0)}%</span>`;
-   298|   497|        } else if (showScores && chunk.score) {
-   299|   498|            scoreBadge = `<span class="score-badge">${(chunk.score * 100).toFixed(1)}%</span>`;
-   300|   499|        }
-   301|   500|        
-   302|   501|
+  <h1 id="page-title">📄 Чанки документов</h1>
+  <div class="breadcrumb" id="breadcrumb">
+    <a href="/documents">← К списку документов</a>
+  </div>
+
+  <div class="controls">
+    <div class="limit-select">
+      <label>Показывать:</label>
+      <select id="limit-select" onchange="changeLimit()">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      <label>чанков</label>
+    </div>
+    <div class="chunk-count" id="chunk-count"></div>
+  </div>
+
+  <div id="chunks-container">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+
+  <div class="pagination" id="pagination" style="display:none"></div>
+</main>
+
+<script>
+const API = '/api/v1';
+const params = new URLSearchParams(window.location.search);
+const DOC_ID = params.get('doc_id');
+const DOC_NAME = params.get('name') || 'Документ';
+
+let currentPage = 0;
+let currentLimit = 10;
+let totalChunks = 0;
+
+if (DOC_ID) {
+  document.getElementById('page-title').textContent = '📄 Чанки: ' + DOC_NAME;
+  document.getElementById('breadcrumb').innerHTML = 
+    '<a href="/documents">← К списку документов</a> &nbsp;›&nbsp; ' + DOC_NAME;
+}
+
+function changeLimit() {
+  currentLimit = parseInt(document.getElementById('limit-select').value);
+  currentPage = 0;
+  loadChunks();
+}
+
+async function loadChunks() {
+  const container = document.getElementById('chunks-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const apiUrl = DOC_ID 
+      ? `${API}/upload/${DOC_ID}/chunks?offset=${currentPage * currentLimit}&limit=${currentLimit}`
+      : `${API}/chunks?offset=${currentPage * currentLimit}&limit=${currentLimit}`;
+
+    const resp = await fetch(apiUrl);
+    
+    if (!resp.ok) {
+      // Fallback: try searching via Qdrant
+      const searchData = DOC_ID 
+        ? { doc_id: DOC_ID, limit: currentLimit, offset: currentPage * currentLimit }
+        : { limit: currentLimit, offset: currentPage * currentLimit };
+      
+      const searchResp = await fetch(`${API}/chat/search`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: '', filters: searchData})
+      });
+      
+      if (searchResp.ok) {
+        const data = await searchResp.json();
+        renderChunks(data.chunks || data.results || [], data.total || 0);
+      } else {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Не удалось загрузить чанки</div></div>';
+      }
+      return;
+    }
+    
+    const data = await resp.json();
+    renderChunks(data.chunks || data.items || [], data.total || data.count || 0);
+    
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><div class="empty-text">Ошибка: ' + err.message + '</div></div>';
+  }
+}
+
+function renderChunks(chunks, total) {
+  totalChunks = total || chunks.length;
+  const container = document.getElementById('chunks-container');
+  
+  document.getElementById('chunk-count').innerHTML = 
+    'Всего: <strong>' + totalChunks + '</strong> чанков' +
+    (DOC_ID ? ' для этого документа' : '');
+  
+  if (!chunks.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">' +
+      (DOC_ID ? 'У этого документа нет чанков' : 'Чанки не найдены') + '</div></div>';
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = chunks.map((c, i) => {
+    const text = c.text || c.content || c.chunk_text || JSON.stringify(c);
+    const id = c.id || c.chunk_id || `#${currentPage * currentLimit + i + 1}`;
+    return `<div class="chunk-card">
+      <div class="chunk-header">
+        <span class="chunk-id">${id}</span>
+        <span class="chunk-meta">${text.length} символов</span>
+      </div>
+      <div class="chunk-body"><pre>${escapeHtml(text)}</pre></div>
+    </div>`;
+  }).join('');
+
+  // Pagination
+  const totalPages = Math.ceil(totalChunks / currentLimit);
+  const pag = document.getElementById('pagination');
+  if (totalPages <= 1) {
+    pag.style.display = 'none';
+  } else {
+    pag.style.display = 'flex';
+    pag.innerHTML = `
+      <button onclick="goPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>← Назад</button>
+      <span class="page-info">${currentPage + 1} / ${totalPages}</span>
+      <button onclick="goPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Вперёд →</button>
+    `;
+  }
+}
+
+function goPage(n) {
+  currentPage = Math.max(0, n);
+  loadChunks();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+loadChunks();
+</script>
+</body>
+</html>

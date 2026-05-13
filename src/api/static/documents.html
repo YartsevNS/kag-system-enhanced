@@ -239,7 +239,7 @@
                                         </div>
                                         ${doc.progress}%
                                     </td>
-                                    <td>${doc.chunks_count || '-'}</td>
+                                    <td><a href="/chunks?doc_id=${doc.document_id}&name=${encodeURIComponent(doc.filename)}" style="color:var(--accent-h);text-decoration:none;font-weight:500">${doc.chunks_count || '0'}</a></td>
                                     <td>${new Date(doc.created_at).toLocaleString('ru-RU')}</td>
                                     <td>
                                         <button class="action-btn btn-delete" onclick="deleteDocument('${doc.document_id}')">🗑️</button>
