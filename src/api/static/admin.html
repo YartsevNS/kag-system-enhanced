@@ -3,195 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление моделями</title>
+    <title>KAG — Управление моделями</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #08090a; --panel: #0f1011; --surface: #191a1b; --elevated: #23252a;
+            --text: #f7f8f8; --text2: #d0d6e0; --text3: #8a8f98; --text4: #62666d;
+            --accent: #5e6ad2; --accent-h: #7170ff; --accent-l: #828fff;
+            --green: #27a644; --emerald: #10b981;
+            --red: #dc2626; --red2: #ef4444;
+            --border: rgba(255,255,255,0.08); --border-s: rgba(255,255,255,0.05);
+            --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-        }
-        .header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+
+        /* ---- Sidebar ---- */
+        nav {
+            width: 240px; background: var(--panel);
+            border-right: 1px solid var(--border-s);
+            display: flex; flex-direction: column;
+            position: fixed; height: 100vh; z-index: 10;
         }
-        .back-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            text-decoration: none;
-            display: inline-block;
+        nav .logo {
+            padding: 20px 24px; font-size: 18px; font-weight: 600;
+            letter-spacing: -0.4px; color: var(--text);
+            border-bottom: 1px solid var(--border-s);
         }
-        .back-btn:hover { background: #64748b; }
-        .container {
+        nav .logo span { color: var(--accent-h); }
+        nav .nav-items { flex: 1; padding: 12px 8px; }
+        nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px; border-radius: var(--radius-sm);
+            color: var(--text3); font-size: 14px; font-weight: 500;
+            text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+        }
+        nav .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text2); }
+        nav .nav-item.active { background: rgba(255,255,255,0.06); color: var(--text); }
+        nav .nav-item .icon { width: 18px; text-align: center; font-size: 15px; }
+
+        /* ---- Main ---- */
+        main {
+            margin-left: 240px; flex: 1; padding: 32px 40px;
             max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 2rem;
         }
+        header { margin-bottom: 32px; }
+        h1 {
+            font-size: 28px; font-weight: 600; letter-spacing: -0.6px;
+            color: var(--text); margin-bottom: 8px;
+        }
+        .subtitle { font-size: 15px; color: var(--text3); font-weight: 400; }
+
+        /* ---- Status Bar ---- */
         .status-bar {
-            background: #1e293b;
-            padding: 1.5rem;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            margin-bottom: 2rem;
+            background: var(--surface); border: 1px solid var(--border-s);
+            border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
         }
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
         }
         .status-item {
-            background: #0f172a;
-            padding: 1rem;
-            border-radius: 8px;
+            background: var(--elevated); border: 1px solid var(--border-s);
+            padding: 16px; border-radius: var(--radius);
         }
         .status-label {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-bottom: 0.25rem;
+            font-size: 12px; color: var(--text4); margin-bottom: 6px;
+            font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;
         }
         .status-value {
-            font-size: 1.125rem;
-            font-weight: 600;
+            font-size: 16px; font-weight: 600; color: var(--text2);
         }
+
+        /* ---- Badges ---- */
         .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
+            display: inline-block; padding: 3px 10px; border-radius: 9999px;
+            font-size: 11px; font-weight: 500;
         }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        .badge-warning { background: #78350f; color: #fcd34d; }
+        .badge-success { background: rgba(39,166,68,0.15); color: var(--green); }
+        .badge-error { background: rgba(220,38,38,0.15); color: var(--red); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+        /* ---- Sections ---- */
         .section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            margin-bottom: 2rem;
-            padding: 1.5rem;
+            background: var(--surface); border: 1px solid var(--border-s);
+            border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
         }
         .section-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 16px; font-weight: 600; color: var(--text2);
+            margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+            letter-spacing: -0.3px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+
+        /* ---- Table ---- */
+        table { width: 100%; border-collapse: collapse; }
         th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #334155;
+            padding: 10px 14px; text-align: left;
+            border-bottom: 1px solid var(--border-s);
         }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        tr:hover { background: #334155; }
+        th {
+            color: var(--text4); font-weight: 500; font-size: 12px;
+            text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        td { font-size: 13px; color: var(--text2); }
+        tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* ---- Buttons ---- */
         .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.2s;
+            padding: 8px 16px; border-radius: var(--radius-sm); border: none;
+            cursor: pointer; font-size: 13px; font-weight: 500;
+            font-family: 'Inter', system-ui, sans-serif;
+            transition: all 0.15s; display: inline-flex; align-items: center;
+            gap: 6px; letter-spacing: -0.1px;
         }
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-secondary { background: #475569; color: white; }
-        .btn-secondary:hover { background: #64748b; }
-        .btn-success { background: #22c55e; color: white; }
-        .btn-success:hover { background: #16a34a; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-danger:hover { background: #dc2626; }
-        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .form-group { margin-bottom: 1rem; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-h); }
+        .btn-secondary {
+            background: var(--elevated); color: var(--text2);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: #2a2d33; color: var(--text); }
+        .btn-success { background: var(--green); color: #fff; }
+        .btn-success:hover { background: #1e8a38; }
+        .btn-danger { background: var(--red); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 4px; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ---- Forms ---- */
+        .form-group { margin-bottom: 16px; }
         .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
+            display: block; margin-bottom: 6px;
+            color: var(--text4); font-size: 13px; font-weight: 500;
         }
         input, select {
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            width: 100%;
+            background: var(--elevated); border: 1px solid var(--border);
+            color: var(--text); padding: 9px 12px; border-radius: var(--radius-sm);
+            font-size: 14px; font-family: 'Inter', system-ui, sans-serif;
+            width: 100%; transition: border-color 0.15s;
         }
         input:focus, select:focus {
-            outline: none;
-            border-color: #3b82f6;
+            outline: none; border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(94,106,210,0.15);
         }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: #1e293b;
-            padding: 2rem;
-            border-radius: 12px;
-            max-width: 500px;
-            width: 90%;
-        }
-        .modal-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #334155;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 1rem 0;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #3b82f6;
-            transition: width 0.3s;
-        }
+        input::placeholder { color: var(--text4); }
+        select { cursor: pointer; }
+
+        /* ---- Loading ---- */
         .loading {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #94a3b8;
+            display: flex; align-items: center; gap: 10px;
+            color: var(--text4); font-size: 14px;
         }
-        .loading-dots { display: flex; gap: 0.25rem; }
+        .loading-dots { display: flex; gap: 4px; }
         .loading-dots span {
-            width: 6px; height: 6px;
-            background: #3b82f6;
-            border-radius: 50%;
-            animation: bounce 1.4s infinite;
+            width: 5px; height: 5px; background: var(--accent);
+            border-radius: 50%; animation: bounce 1.4s infinite;
         }
         .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
         .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
@@ -199,41 +173,86 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+
+        /* ---- Progress ---- */
+        .progress-bar {
+            width: 100%; height: 6px; background: var(--elevated);
+            border-radius: 3px; overflow: hidden; margin: 12px 0;
+        }
+        .progress-fill {
+            height: 100%; background: var(--accent);
+            border-radius: 3px; transition: width 0.3s;
+        }
+
+        /* ---- Notification ---- */
         .notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 2000;
+            position: fixed; top: 24px; right: 24px;
+            padding: 12px 20px; border-radius: var(--radius);
+            background: var(--green); color: #fff;
+            font-size: 14px; font-weight: 500;
+            display: none; z-index: 2000;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
             animation: slideIn 0.3s ease;
         }
         @keyframes slideIn {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+
+        /* ---- Action bar ---- */
+        .action-bar {
+            display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;
+        }
+
+        /* ---- Responsive ---- */
+        @media(max-width:900px) {
+            nav { width: 60px; }
+            nav .logo { font-size: 0; padding: 20px 16px; }
+            nav .nav-item span { display: none; }
+            main { margin-left: 60px; padding: 24px 20px; }
+            .status-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media(max-width:600px) {
+            main { padding: 16px 12px; }
+            .status-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">🎯 KAG - Управление моделями</div>
-        <a href="/" class="back-btn">← Назад к чату</a>
-    </div>
+    <!-- Sidebar Navigation -->
+    <nav>
+        <div class="logo">🎯 <span>KAG</span></div>
+        <div class="nav-items">
+            <a href="/" class="nav-item"><span class="icon">⬡</span> <span>Дашборд</span></a>
+            <a href="/chat" class="nav-item"><span class="icon">💬</span> <span>Чат с AI</span></a>
+            <a href="/documents" class="nav-item"><span class="icon">📄</span> <span>Документы</span></a>
+            <a href="/ocr" class="nav-item"><span class="icon">🔍</span> <span>OCR-демо</span></a>
+            <a href="/monitoring" class="nav-item"><span class="icon">📡</span> <span>Мониторинг</span></a>
+            <a href="/users" class="nav-item"><span class="icon">👥</span> <span>Пользователи</span></a>
+            <a href="/admin" class="nav-item active"><span class="icon">⚙️</span> <span>Админ</span></a>
+        </div>
+        <div style="padding:16px 24px;border-top:1px solid var(--border-s)">
+            <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
+        </div>
+    </nav>
 
-    <div class="container">
+    <!-- Main Content -->
+    <main>
+        <header>
+            <h1>⚙️ Управление моделями</h1>
+            <div class="subtitle">Настройка LLM, Embedding моделей, SSH подключений и чанкинга</div>
+        </header>
+
         <!-- Статус системы -->
         <div class="status-bar">
-            <h2 style="margin-bottom: 1rem;">📊 Статус системы</h2>
+            <h2 style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:16px;letter-spacing:-0.3px;">📊 Статус системы</h2>
             <div class="status-grid" id="system-status">
                 <div class="loading">
                     <div class="loading-dots"><span></span><span></span><span></span></div>
                     Загрузка...
                 </div>
             </div>
-            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+            <div class="action-bar">
                 <button class="btn btn-primary" onclick="restartOllama()">🔄 Перезапустить Ollama</button>
                 <button class="btn btn-secondary" onclick="loadAll()">🔄 Обновить статус</button>
                 <a href="/docker" class="btn btn-secondary" style="text-decoration: none;">🐳 Docker</a>
@@ -293,14 +312,14 @@
                 <div class="form-group">
                     <label>Размер чанка (символы)</label>
                     <input type="number" id="chunk-size" placeholder="1000" value="1000">
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
                         Рекомендуемо: 500-2000
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Перекрытие чанков (символы)</label>
                     <input type="number" id="chunk-overlap" placeholder="200" value="200">
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
                         Рекомендуемо: 100-300
                     </div>
                 </div>
@@ -310,7 +329,7 @@
             </div>
             <div id="chunking-status" style="margin-top: 1rem;"></div>
         </div>
-        
+
         <!-- Активная LLM модель -->
         <div class="section">
             <h2 class="section-title">🤖 Активная LLM модель</h2>
@@ -355,7 +374,7 @@
             <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
             <div id="pull-status" style="margin-top: 1rem;"></div>
         </div>
-    </div>
+    </main>
 
     <div class="notification" id="notification"></div>
 
@@ -417,16 +436,16 @@
                 // Активная LLM модель
                 const activeLlm = llmModels.find(m => m.is_active);
                 document.getElementById('active-llm').innerHTML = activeLlm ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
                         <div style="font-size: 2rem;">🤖</div>
                         <div style="flex: 1;">
                             <div style="font-weight: 600; font-size: 1.125rem;">${activeLlm.name}</div>
-                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
+                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
                         </div>
                         <span class="badge badge-success">Активна</span>
                     </div>
                     <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить модель:</label>
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить модель:</label>
                         <div style="display: flex; gap: 0.5rem;">
                             <select id="llm-select" style="flex: 1;">
                                 ${llmModels.map(m => `<option value="${m.backend}|${m.name}" ${m.is_active ? 'selected' : ''}>${m.name} (${m.backend})</option>`).join('')}
@@ -434,21 +453,21 @@
                             <button class="btn btn-primary" onclick="switchLlmModel()">Применить</button>
                         </div>
                     </div>
-                ` : '<div style="color: #94a3b8;">Нет доступных LLM моделей</div>';
+                ` : '<div style="color: var(--text4);">Нет доступных LLM моделей</div>';
 
                 // Активная Embedding модель
                 const activeEmb = embModels.find(m => m.is_active);
                 document.getElementById('active-embedding').innerHTML = activeEmb ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
                         <div style="font-size: 2rem;">📐</div>
                         <div style="flex: 1;">
                             <div style="font-weight: 600; font-size: 1.125rem;">${activeEmb.name}</div>
-                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
+                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
                         </div>
                         <span class="badge badge-success">Активна</span>
                     </div>
                     <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить embedding модель:</label>
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить embedding модель:</label>
                         <div style="display: flex; gap: 0.5rem;">
                             <select id="emb-select" style="flex: 1;">
                                 ${embModels.map(m => `<option value="${m.name}" ${m.is_active ? 'selected' : ''}>${m.name}</option>`).join('')}
@@ -456,7 +475,7 @@
                             <button class="btn btn-primary" onclick="switchEmbeddingModel()">Применить</button>
                         </div>
                     </div>
-                ` : '<div style="color: #94a3b8;">Нет доступных embedding моделей</div>';
+                ` : '<div style="color: var(--text4);">Нет доступных embedding моделей</div>';
 
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
@@ -468,7 +487,7 @@
                 const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
                 
                 if (models.length === 0) {
-                    document.getElementById('ollama-models').innerHTML = '<div style="color: #94a3b8; padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
+                    document.getElementById('ollama-models').innerHTML = '<div style="color: var(--text4); padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
                     return;
                 }
 
@@ -670,7 +689,7 @@
                     const result = await response.json();
                     const statusDiv = document.getElementById('chunking-status');
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>
-                        <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">
+                        <div style="color: var(--text4); font-size: 0.875rem; margin-top: 0.5rem;">
                             Размер чанка: ${result.config.chunk_size} символов | Перекрытие: ${result.config.chunk_overlap} символов
                         </div>`;
                     

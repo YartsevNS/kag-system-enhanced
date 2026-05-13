@@ -5,169 +5,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KAG - Управление документами</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-        }
-        .header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .back-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .back-btn:hover { background: #64748b; }
-        .container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
-        
-        /* Upload Area */
-        .upload-section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        .upload-area {
-            border: 2px dashed #475569;
-            border-radius: 12px;
-            padding: 3rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .upload-area:hover { border-color: #3b82f6; background: #334155; }
-        .upload-icon { font-size: 3rem; margin-bottom: 1rem; }
-        .upload-text { font-size: 1.125rem; margin-bottom: 0.5rem; }
-        .upload-hint { font-size: 0.875rem; color: #94a3b8; }
-        .upload-form { display: none; }
-        
+        :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+
+        /* Sidebar Navigation */
+        nav{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1.5rem 1rem;flex-shrink:0}
+        nav .logo{font-size:1.25rem;font-weight:700;margin-bottom:2rem;display:flex;align-items:center;gap:0.5rem}
+        nav .logo span{background:linear-gradient(135deg,var(--accent),var(--accent-h));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        nav a{display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;border-radius:var(--radius-sm);color:var(--text3);text-decoration:none;font-size:0.875rem;transition:all 0.15s;margin-bottom:0.15rem}
+        nav a:hover{background:var(--surface);color:var(--text2)}
+        nav a.active{background:var(--accent);color:#fff}
+
+        /* Main Content */
+        main{flex:1;overflow-y:auto;padding:2rem}
+
+        /* Upload Section */
+        .upload-section{background:var(--panel);border-radius:var(--radius);border:1px solid var(--border);padding:2rem;margin-bottom:2rem}
+        .upload-section h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text2)}
+        .upload-area{border:2px dashed var(--border);border-radius:var(--radius);padding:3rem;text-align:center;cursor:pointer;transition:all 0.2s}
+        .upload-area:hover{border-color:var(--accent);background:var(--surface)}
+        .upload-icon{font-size:3rem;margin-bottom:1rem}
+        .upload-text{font-size:1.05rem;color:var(--text2);margin-bottom:0.5rem}
+        .upload-hint{font-size:0.8rem;color:var(--text4)}
+        .upload-form{display:none}
+
         /* Progress Bar */
-        .progress-container {
-            margin-top: 1rem;
-            display: none;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #334155;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #3b82f6;
-            transition: width 0.3s;
-        }
-        
+        .progress-container{margin-top:1rem;display:none}
+        .progress-container .label{font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem}
+        .progress-bar{width:100%;height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
+        .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s;width:0%}
+
         /* Documents Table */
-        .section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        .section-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #334155; }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        tr:hover { background: #334155; }
-        
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        .badge-warning { background: #78350f; color: #fcd34d; }
-        .badge-info { background: #1e3a8a; color: #93c5fd; }
-        
-        .action-btn {
-            padding: 0.375rem 0.75rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.75rem;
-            margin-right: 0.25rem;
-        }
-        .btn-delete { background: #ef4444; color: white; }
-        .btn-refresh { background: #3b82f6; color: white; }
-        
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            background: #3b82f6;
-            color: white;
-            margin-top: 1rem;
-        }
-        .btn:hover { background: #2563eb; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .loading { text-align: center; padding: 2rem; color: #94a3b8; }
-        .notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 1000;
-        }
+        .section{background:var(--panel);border-radius:var(--radius);border:1px solid var(--border);padding:1.5rem;margin-bottom:2rem}
+        .section-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;color:var(--text2)}
+        table{width:100%;border-collapse:collapse}
+        th,td{padding:0.75rem;text-align:left;border-bottom:1px solid var(--border-s);font-size:0.8125rem}
+        th{color:var(--text4);font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em}
+        td{color:var(--text2)}
+        tr:hover{background:var(--surface)}
+        tr:last-child td{border-bottom:none}
+
+        .badge{display:inline-block;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:500}
+        .badge-success{background:rgba(39,166,68,0.15);color:var(--green)}
+        .badge-error{background:rgba(220,38,38,0.15);color:var(--red)}
+        .badge-warning{background:rgba(245,158,11,0.15);color:#f59e0b}
+        .badge-info{background:rgba(94,106,210,0.15);color:var(--accent)}
+
+        .action-btn{padding:0.35rem 0.65rem;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:0.75rem;transition:all 0.15s}
+        .btn-delete{background:rgba(220,38,38,0.12);color:var(--red)}
+        .btn-delete:hover{background:rgba(220,38,38,0.25)}
+        .btn-refresh{background:var(--accent);color:#fff;padding:0.5rem 1rem;font-size:0.8125rem}
+        .btn-refresh:hover{background:var(--accent-h)}
+
+        .btn{padding:0.65rem 1.25rem;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:0.8125rem;font-weight:500;background:var(--accent);color:#fff;margin-top:1rem;transition:all 0.15s}
+        .btn:hover{background:var(--accent-h)}
+        .btn:disabled{opacity:0.4;cursor:not-allowed}
+
+        .loading{text-align:center;padding:2rem;color:var(--text4);font-size:0.875rem}
+        .empty-state{padding:2rem;text-align:center;color:var(--text4);font-size:0.875rem}
+
+        .notification{position:fixed;top:2rem;right:2rem;padding:0.75rem 1.25rem;border-radius:var(--radius);background:var(--green);color:#fff;display:none;z-index:1000;font-size:0.875rem;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">📄 KAG - Управление документами</div>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="/chunks" class="back-btn">📚 Чанки</a>
-            <a href="/qdrant" class="back-btn">🗄️ Qdrant</a>
-            <a href="/admin" class="back-btn">← Назад к настройкам</a>
-            <a href="/" class="back-btn">💬 К чату</a>
-        </div>
-    </div>
+    <nav>
+        <div class="logo">🎯 <span>KAG</span></div>
+        <a href="/">⬡ Дашборд</a>
+        <a href="/chat">💬 Чат с AI</a>
+        <a href="/documents" class="active">📄 Документы</a>
+        <a href="/ocr">🔍 OCR-демо</a>
+        <a href="/monitoring">📡 Мониторинг</a>
+        <a href="/users">👥 Пользователи</a>
+        <a href="/admin">⚙️ Админ</a>
+    </nav>
 
-    <div class="container">
+    <main>
         <!-- Upload Section -->
         <div class="upload-section">
-            <h2 style="margin-bottom: 1rem;">⬆️ Загрузка документов</h2>
+            <h2>⬆️ Загрузка документов</h2>
             
             <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
                 <div class="upload-icon">📁</div>
@@ -178,9 +94,9 @@
             <input type="file" id="file-input" class="upload-form" multiple accept=".pdf,.txt,.md,.docx,.csv">
             
             <div class="progress-container" id="progress-container">
-                <div style="margin-bottom: 0.5rem;">Загрузка... <span id="progress-percent">0%</span></div>
+                <div class="label">Загрузка... <span id="progress-percent">0%</span></div>
                 <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    <div class="progress-fill" id="progress-fill"></div>
                 </div>
             </div>
         </div>
@@ -189,19 +105,18 @@
         <div class="section">
             <div class="section-title">
                 <span>📋 Загруженные документы</span>
-                <button class="btn btn-refresh" onclick="loadDocuments()">🔄 Обновить</button>
+                <button class="action-btn btn-refresh" onclick="loadDocuments()">🔄 Обновить</button>
             </div>
             <div id="documents-table">
                 <div class="loading">Загрузка...</div>
             </div>
         </div>
-    </div>
+    </main>
 
     <div class="notification" id="notification"></div>
 
     <script>
         const API_URL = '/api/v1';
-        let uploadedFiles = [];
 
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
@@ -215,16 +130,16 @@
             
             area.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                area.style.borderColor = '#3b82f6';
+                area.style.borderColor = '#5e6ad2';
             });
             
             area.addEventListener('dragleave', () => {
-                area.style.borderColor = '#475569';
+                area.style.borderColor = '';
             });
             
             area.addEventListener('drop', (e) => {
                 e.preventDefault();
-                area.style.borderColor = '#475569';
+                area.style.borderColor = '';
                 const files = Array.from(e.dataTransfer.files);
                 uploadFiles(files);
             });
@@ -264,10 +179,9 @@
                         throw new Error(`Ошибка загрузки ${file.name}`);
                     }
 
-                    const data = await response.json();
+                    await response.json();
                     showNotification(`✅ ${file.name} загружен`);
                     
-                    // Обновляем прогресс
                     const percent = ((i + 1) / files.length) * 100;
                     progressFill.style.width = percent + '%';
                     progressPercent.textContent = Math.round(percent) + '%';
@@ -290,7 +204,7 @@
 
                 if (data.documents.length === 0) {
                     document.getElementById('documents-table').innerHTML = 
-                        '<div style="padding: 2rem; text-align: center; color: #94a3b8;">Нет загруженных документов</div>';
+                        '<div class="empty-state">Нет загруженных документов</div>';
                     return;
                 }
 
@@ -320,7 +234,7 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="progress-bar" style="width: 100px;">
+                                        <div class="progress-bar" style="width: 100px; display: inline-block; vertical-align: middle; margin-right: 8px;">
                                             <div class="progress-fill" style="width: ${doc.progress}%"></div>
                                         </div>
                                         ${doc.progress}%
@@ -390,7 +304,7 @@
         function showNotification(message, isError = false) {
             const notification = document.getElementById('notification');
             notification.textContent = message;
-            notification.style.background = isError ? '#ef4444' : '#22c55e';
+            notification.style.background = isError ? '#dc2626' : '#27a644';
             notification.style.display = 'block';
             
             setTimeout(() => {

@@ -1,652 +1,258 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Setup Wizard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        .container {
-            max-width: 700px;
-            width: 100%;
-        }
-        .logo {
-            text-align: center;
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-        }
-        .subtitle {
-            text-align: center;
-            color: #94a3b8;
-            font-size: 1.125rem;
-            margin-bottom: 2rem;
-        }
-        .step {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .step-header {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .step-num {
-            background: #3b82f6;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.875rem;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-        .full { grid-column: 1 / -1; }
-        
-        .field { margin-bottom: 1rem; }
-        .field label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
-        }
-        .field input, .field select {
-            width: 100%;
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-        }
-        .field input:focus, .field select:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        .hint {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-top: 0.25rem;
-        }
-        
-        .btn-test {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            transition: background 0.2s;
-        }
-        .btn-test:hover { background: #64748b; }
-
-        .btn-create {
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .btn-create:hover { opacity: 0.85; }
-        .btn-create:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .create-status {
-            margin-top: 0.75rem;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            display: none;
-        }
-        .create-status.success {
-            display: block;
-            background: #064e3b;
-            border: 1px solid #059669;
-            color: #6ee7b7;
-        }
-        .create-status.error {
-            display: block;
-            background: #450a0a;
-            border: 1px solid #dc2626;
-            color: #fca5a5;
-        }
-        
-        .test-status {
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            border-radius: 4px;
-            display: none;
-        }
-        .test-status.success { background: #064e3b; color: #6ee7b7; display: block; }
-        .test-status.error { background: #7f1d1d; color: #fca5a5; display: block; }
-        
-        .btn-save {
-            width: 100%;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: white;
-            border: none;
-            padding: 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            transition: opacity 0.2s;
-        }
-        .btn-save:hover { opacity: 0.9; }
-        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .status-box {
-            margin-top: 1rem;
-            padding: 1rem;
-            border-radius: 6px;
-            display: none;
-        }
-        .status-box.success {
-            background: #064e3b;
-            color: #6ee7b7;
-            border: 1px solid #059669;
-            display: block;
-        }
-        .status-box.error {
-            background: #7f1d1d;
-            color: #fca5a5;
-            border: 1px solid #dc2626;
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="logo">🎯 KAG System</div>
-        <div class="subtitle">Первоначальная настройка системы</div>
-
-        <!-- Шаг 1: Базы данных (авто-создание) -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">1</span>
-                Создание баз данных
-            </div>
-            <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;">
-                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
-            </p>
-
-            <!-- PostgreSQL -->
-            <div style="background:#0f172a;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div>
-                        <strong>🐘 PostgreSQL</strong>
-                        <div style="color:#94a3b8;font-size:0.85rem;">Основная база конфигурации</div>
-                    </div>
-                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
-                        ⚡ Создать базу данных
-                    </button>
-                </div>
-                <div class="create-status" id="pg-status"></div>
-            </div>
-
-            <!-- Qdrant -->
-            <div style="background:#0f172a;border-radius:8px;padding:1rem;">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div>
-                        <strong>🔍 Qdrant</strong>
-                        <div style="color:#94a3b8;font-size:0.85rem;">Векторная база для документов</div>
-                    </div>
-                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
-                        ⚡ Создать коллекцию
-                    </button>
-                </div>
-                <div class="create-status" id="qdrant-status"></div>
-            </div>
-        </div>
-
-        <!-- Шаг 2: LLM Бэкенд -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">2</span>
-                Настройка LLM бэкенда
-            </div>
-            <div class="grid">
-                <div class="field">
-                    <label>Тип бэкенда</label>
-                    <select id="llm-type" onchange="updateLlmDefaults()">
-                        <option value="ollama">Ollama</option>
-                        <option value="vllm">vLLM</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Порт</label>
-                    <input type="number" id="llm-port" value="11434">
-                </div>
-                <div class="field full">
-                    <label>Адрес сервера</label>
-                    <input type="text" id="llm-host" value="192.168.50.41">
-                </div>
-                <div class="field full">
-                    <label>Название модели</label>
-                    <input type="text" id="llm-model" value="phi4-mini:latest">
-                    <div class="hint">Модель должна быть загружена на сервере</div>
-                </div>
-                <div class="field full">
-                    <label>Системный промпт</label>
-                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
-                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
-                </div>
-            </div>
-            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
-            <div class="test-status" id="llm-status"></div>
-        </div>
-
-        <!-- Шаг 3: Embedding -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">3</span>
-                Настройка Embedding модели
-            </div>
-            <div class="grid">
-                <div class="field full">
-                    <label>Название embedding модели</label>
-                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
-                </div>
-                <div class="field">
-                    <label>Размерность вектора</label>
-                    <input type="number" id="emb-dim" value="4096">
-                </div>
-            </div>
-        </div>
-
-        <!-- Шаг 4: SSH -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">4</span>
-                SSH доступ к серверу LLM
-            </div>
-            <div class="grid">
-                <div class="field">
-                    <label>SSH пользователь</label>
-                    <input type="text" id="ssh-user" value="yartsevn">
-                </div>
-                <div class="field">
-                    <label>SSH пароль</label>
-                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
-                </div>
-                <div class="field full">
-                    <label>Пароль для sudo (если отличается)</label>
-                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
-                </div>
-            </div>
-            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
-            <div class="test-status" id="ssh-status"></div>
-        </div>
-
-        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
-        <div class="status-box" id="final-status"></div>
-    </div>
-
-    <script>
-        // ==========================================
-        // Глобальные переменные
-        // ==========================================
-        const API = '/api/v1/setup';
-        
-        // Состояние тестов (для UX)
-        const state = {
-            dbTested: false,
-            llmTested: false,
-            sshTested: false
-        };
-
-        // ==========================================
-        // Вспомогательные функции
-        // ==========================================
-        
-        /**
-         * Показывает статус теста
-         * @param {string} elementId - ID элемента статуса
-         * @param {boolean} success - Успех или ошибка
-         * @param {string} message - Текст сообщения
-         */
-        function showTestStatus(elementId, success, message) {
-            const el = document.getElementById(elementId);
-            el.textContent = (success ? '✅ ' : '❌ ') + message;
-            el.className = 'test-status ' + (success ? 'success' : 'error');
-        }
-
-        /**
-         * Показывает финальный статус сохранения
-         * @param {boolean} success 
-         * @param {string} message 
-         */
-        function showFinalStatus(success, message) {
-            const el = document.getElementById('final-status');
-            el.textContent = message;
-            el.className = 'status-box ' + (success ? 'success' : 'error');
-        }
-
-        // ==========================================
-        // Тестирование подключений
-        // ==========================================
-
-        async function testDb() {
-            const payload = {
-                host: document.getElementById('db-host').value,
-                port: parseInt(document.getElementById('db-port').value),
-                name: document.getElementById('db-name').value,
-                user: document.getElementById('db-user').value,
-                password: document.getElementById('db-pass').value
-            };
-
-            showTestStatus('db-status', false, 'Тестирование...');
-
-            try {
-                const res = await fetch(`${API}/test-db`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await res.json();
-                state.dbTested = data.success;
-                showTestStatus('db-status', data.success, data.message);
-            } catch (err) {
-                state.dbTested = false;
-                showTestStatus('db-status', false, 'Ошибка сети: ' + err.message);
-            }
-        }
-
-        function updateLlmDefaults() {
-            const type = document.getElementById('llm-type').value;
-            document.getElementById('llm-port').value = type === 'ollama' ? '11434' : '8000';
-        }
-
-        async function testLlm() {
-            const payload = {
-                type: document.getElementById('llm-type').value,
-                host: document.getElementById('llm-host').value,
-                port: parseInt(document.getElementById('llm-port').value),
-                model: document.getElementById('llm-model').value
-            };
-
-            showTestStatus('llm-status', false, 'Тестирование...');
-
-            try {
-                const res = await fetch(`${API}/test-llm`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await res.json();
-                state.llmTested = data.success;
-                showTestStatus('llm-status', data.success, data.message);
-            } catch (err) {
-                state.llmTested = false;
-                showTestStatus('llm-status', false, 'Ошибка сети: ' + err.message);
-            }
-        }
-
-        async function testSsh() {
-            const payload = {
-                username: document.getElementById('ssh-user').value,
-                password: document.getElementById('ssh-pass').value,
-                sudo_password: document.getElementById('ssh-sudo').value || undefined,
-                llm_host: document.getElementById('llm-host').value,
-                llm_port: parseInt(document.getElementById('llm-port').value)
-            };
-
-            showTestStatus('ssh-status', false, 'Тестирование...');
-
-            try {
-                const res = await fetch(`${API}/test-ssh`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await res.json();
-                state.sshTested = data.success;
-                showTestStatus('ssh-status', data.success, data.message);
-            } catch (err) {
-                state.sshTested = false;
-                showTestStatus('ssh-status', false, 'Ошибка сети: ' + err.message);
-            }
-        }
-
-        // ==========================================
-        // Основная функция сохранения
-        // ==========================================
-
-        async function saveAll() {
-            const btn = document.getElementById('btn-save');
-            
-            // 1. Проверяем, созданы ли базы данных
-            try {
-                const statusRes = await fetch(`${API}/status`);
-                const statusData = await statusRes.json();
-                
-                if (!statusData.status.database) {
-                    showFinalStatus(false, '⚠️ Сначала создайте базу данных PostgreSQL (Шаг 1)');
-                    return;
-                }
-                if (!statusData.status.qdrant) {
-                    showFinalStatus(false, '⚠️ Сначала создайте коллекцию Qdrant (Шаг 1)');
-                    return;
-                }
-                if (statusData.status.configured) {
-                    showFinalStatus(true, '✅ Система уже настроена! Перенаправление...');
-                    setTimeout(() => { window.location.href = '/'; }, 1500);
-                    return;
-                }
-            } catch (err) {
-                showFinalStatus(false, '❌ Не удалось проверить статус БД: ' + err.message);
-                return;
-            }
-
-            // 2. Валидация полей LLM и SSH
-            const llmHost = document.getElementById('llm-host').value.trim();
-            const llmModel = document.getElementById('llm-model').value.trim();
-            const sshUser = document.getElementById('ssh-user').value.trim();
-            const sshPass = document.getElementById('ssh-pass').value;
-
-            if (!llmHost) { showFinalStatus(false, '⚠️ Введите адрес LLM сервера'); return; }
-            if (!llmModel) { showFinalStatus(false, '⚠️ Введите название модели'); return; }
-            if (!sshUser) { showFinalStatus(false, '⚠️ Введите SSH пользователя'); return; }
-            if (!sshPass) { showFinalStatus(false, '⚠️ Введите SSH пароль'); return; }
-
-            // 3. Формируем payload (БД берём из config_store, не из полей)
-            const payload = {
-                database: {
-                    host: "keycloak-db",  // Берётся из авто-создания
-                    port: 5432,
-                    name: "kag_config",
-                    user: "kag_user",
-                    password: "auto-generated"  // Будет перезаписано в save
-                },
-                llm: {
-                    type: document.getElementById('llm-type').value,
-                    host: llmHost,
-                    port: parseInt(document.getElementById('llm-port').value) || 11434,
-                    model: llmModel,
-                    system_prompt: document.getElementById('llm-system-prompt').value.trim()
-                },
-                embedding: {
-                    model: document.getElementById('emb-model').value.trim(),
-                    dimensions: parseInt(document.getElementById('emb-dim').value) || 768
-                },
-                ssh: {
-                    username: sshUser,
-                    password: sshPass,
-                    sudo_password: document.getElementById('ssh-sudo').value || undefined
-                }
-            };
-
-            // 4. Отправка
-            btn.disabled = true;
-            btn.textContent = '⏳ Сохранение...';
-            showFinalStatus(false, 'Сохранение настроек...');
-
-            try {
-                const res = await fetch(`${API}/save`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await res.json();
-
-                if (res.ok && data.success) {
-                    showFinalStatus(true, '✅ Настройки сохранены! Перенаправление...');
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 1500);
-                } else {
-                    const errorMsg = data.detail || data.message || 'Неизвестная ошибка';
-                    showFinalStatus(false, '❌ Ошибка: ' + errorMsg);
-                    btn.disabled = false;
-                    btn.textContent = '💾 Сохранить и продолжить';
-                }
-            } catch (err) {
-                showFinalStatus(false, '❌ Ошибка сети: ' + err.message);
-                btn.disabled = false;
-                btn.textContent = '💾 Сохранить и продолжить';
-            }
-        }
-
-        // ==========================================
-        // Авто-создание баз данных
-        // ==========================================
-
-        async function createPgDb() {
-            const btn = document.getElementById('btn-create-pg');
-            const status = document.getElementById('pg-status');
-            btn.disabled = true;
-            btn.textContent = '⏳ Создание...';
-            status.className = 'create-status';
-            status.style.display = 'block';
-            status.innerHTML = 'Создаю базу данных PostgreSQL...';
-
-            try {
-                const res = await fetch(`${API}/create-pg-db`, { method: 'POST' });
-                const data = await res.json();
-
-                if (data.success) {
-                    status.className = 'create-status success';
-                    status.innerHTML = '✅ ' + data.message + '<br>' +
-                        '<b>База:</b> ' + data.database.name + '<br>' +
-                        '<b>Пользователь:</b> ' + data.database.user + '<br>' +
-                        '<b>Пароль:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.database.password + '</code><br>' +
-                        '<span style="color:#fbbf24;">⚠️ Скопируйте пароль! Он больше не будет показан.</span>';
-                    btn.textContent = '✅ Создано';
-                } else {
-                    status.className = 'create-status error';
-                    status.innerHTML = '❌ ' + data.message;
-                    btn.disabled = false;
-                    btn.textContent = '⚡ Создать базу данных';
-                }
-            } catch (err) {
-                status.className = 'create-status error';
-                status.innerHTML = '❌ Ошибка: ' + err.message;
-                btn.disabled = false;
-                btn.textContent = '⚡ Создать базу данных';
-            }
-        }
-
-        async function createQdrant() {
-            const btn = document.getElementById('btn-create-qdrant');
-            const status = document.getElementById('qdrant-status');
-            btn.disabled = true;
-            btn.textContent = '⏳ Создание...';
-            status.className = 'create-status';
-            status.style.display = 'block';
-            status.innerHTML = 'Создаю коллекцию Qdrant...';
-
-            try {
-                const res = await fetch(`${API}/create-qdrant-collection`, { method: 'POST' });
-                const data = await res.json();
-
-                if (data.success) {
-                    status.className = 'create-status success';
-                    status.innerHTML = '✅ ' + data.message + '<br>' +
-                        '<b>Коллекция:</b> ' + data.qdrant.collection + '<br>' +
-                        '<b>API ключ:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.qdrant.api_key + '</code><br>' +
-                        '<span style="color:#fbbf24;">⚠️ Скопируйте ключ! Он больше не будет показан.</span>';
-                    btn.textContent = '✅ Создано';
-                } else {
-                    status.className = 'create-status error';
-                    status.innerHTML = '❌ ' + data.message;
-                    btn.disabled = false;
-                    btn.textContent = '⚡ Создать коллекцию';
-                }
-            } catch (err) {
-                status.className = 'create-status error';
-                status.innerHTML = '❌ Ошибка: ' + err.message;
-                btn.disabled = false;
-                btn.textContent = '⚡ Создать коллекцию';
-            }
-        }
-
-        // ==========================================
-        // Проверка при загрузке страницы
-        // ==========================================
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                // Проверяем статус настройки
-                const statusRes = await fetch(`${API}/status`);
-                const status = await statusRes.json();
-                
-                if (status.status.configured) {
-                    window.location.href = '/';
-                    return;
-                }
-                
-                // Если БД уже созданы — показываем кнопки как завершённые
-                if (status.status.database) {
-                    const btn = document.getElementById('btn-create-pg');
-                    btn.textContent = '✅ Создано';
-                    btn.disabled = true;
-                }
-                if (status.status.qdrant) {
-                    const btn = document.getElementById('btn-create-qdrant');
-                    btn.textContent = '✅ Создано';
-                    btn.disabled = true;
-                }
-            } catch (err) {
-                console.warn('Не удалось проверить статус:', err);
-            }
-        });
-    </script>
-</body>
-</html>
+     1|     1|<!DOCTYPE html>
+     2|     2|<html lang="ru">
+     3|     3|<head>
+     4|     4|    <meta charset="UTF-8">
+     5|     5|    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6|     6|    <title>KAG - Setup Wizard</title>
+     7|     7|    
+     8|   295|<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+     9|<style>
+    10|:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+    11|*{margin:0;padding:0;box-sizing:border-box}
+    12|body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+    13|nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+    14|nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+    15|nav .logo span{color:var(--accent-h)}
+    16|nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+    17|nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+    18|nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+    19|main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+    20|h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+    21|.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
+    22|.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+    23|input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+    24|input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+    25|.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+    26|.btn:hover{opacity:0.85}
+    27|.btn:disabled{opacity:0.5;cursor:not-allowed}
+    28|.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+    29|.btn-ghost:hover{background:rgba(255,255,255,0.06)}
+    30|.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+    31|.btn-danger:hover{background:rgba(220,38,38,0.25)}
+    32|table{width:100%;border-collapse:collapse}
+    33|th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
+    34|td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+    35|.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+    36|.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
+    37|.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
+    38|.badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
+    39|@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
+    40|</style>
+    41|</head>
+    42|   296|<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/ocr">🔍 OCR-демо</a>
+  <a href="/monitoring">📡 Мониторинг</a>
+  <a href="/users">👥 Пользователи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+<main>
+    43|   297|    <!-- Sidebar -->
+    44|   298|    <aside class="sidebar">
+    45|   299|        <div class="sidebar-brand">
+    46|   300|            <div class="brand-name">🎯 KAG System</div>
+    47|   301|            <div class="brand-sub">RAG Pipeline</div>
+    48|   302|        </div>
+    49|   303|        <nav class="sidebar-nav">
+    50|   304|            <a href="/setup" class="active"><span class="sidebar-icon">⚙️</span> Setup</a>
+    51|   305|            <a href="/qdrant"><span class="sidebar-icon">🗄️</span> Qdrant</a>
+    52|   306|            <a href="/chunks"><span class="sidebar-icon">📄</span> Chunks</a>
+    53|   307|            <a href="/docker"><span class="sidebar-icon">🐳</span> Docker</a>
+    54|   308|            <a href="/"><span class="sidebar-icon">💬</span> Chat</a>
+    55|   309|        </nav>
+    56|   310|    </aside>
+    57|   311|
+    58|   312|    <!-- Main content -->
+    59|   313|    <div class="main-content">
+    60|   314|    <div class="container">
+    61|   315|        <div class="logo">🎯 KAG System</div>
+    62|   316|        <div class="subtitle">Первоначальная настройка системы</div>
+    63|   317|
+    64|   318|        <!-- Шаг 1: Базы данных (авто-создание) -->
+    65|   319|        <div class="step">
+    66|   320|            <div class="step-header">
+    67|   321|                <span class="step-num">1</span>
+    68|   322|                Создание баз данных
+    69|   323|            </div>
+    70|   324|            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
+    71|   325|                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
+    72|   326|            </p>
+    73|   327|
+    74|   328|            <!-- PostgreSQL -->
+    75|   329|            <div class="inner-card">
+    76|   330|                <div style="display:flex;align-items:center;justify-content:space-between;">
+    77|   331|                    <div>
+    78|   332|                        <strong>🐘 PostgreSQL</strong>
+    79|   333|                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
+    80|   334|                    </div>
+    81|   335|                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
+    82|   336|                        ⚡ Создать базу данных
+    83|   337|                    </button>
+    84|   338|                </div>
+    85|   339|                <div class="create-status" id="pg-status"></div>
+    86|   340|            </div>
+    87|   341|
+    88|   342|            <!-- Qdrant -->
+    89|   343|            <div class="inner-card">
+    90|   344|                <div style="display:flex;align-items:center;justify-content:space-between;">
+    91|   345|                    <div>
+    92|   346|                        <strong>🔍 Qdrant</strong>
+    93|   347|                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
+    94|   348|                    </div>
+    95|   349|                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
+    96|   350|                        ⚡ Создать коллекцию
+    97|   351|                    </button>
+    98|   352|                </div>
+    99|   353|                <div class="create-status" id="qdrant-status"></div>
+   100|   354|            </div>
+   101|   355|        </div>
+   102|   356|
+   103|   357|        <!-- Шаг 2: LLM Бэкенд -->
+   104|   358|        <div class="step">
+   105|   359|            <div class="step-header">
+   106|   360|                <span class="step-num">2</span>
+   107|   361|                Настройка LLM бэкенда
+   108|   362|            </div>
+   109|   363|            <div class="grid">
+   110|   364|                <div class="field">
+   111|   365|                    <label>Тип бэкенда</label>
+   112|   366|                    <select id="llm-type" onchange="updateLlmDefaults()">
+   113|   367|                        <option value="ollama">Ollama</option>
+   114|   368|                        <option value="vllm">vLLM</option>
+   115|   369|                    </select>
+   116|   370|                </div>
+   117|   371|                <div class="field">
+   118|   372|                    <label>Порт</label>
+   119|   373|                    <input type="number" id="llm-port" value="11434">
+   120|   374|                </div>
+   121|   375|                <div class="field full">
+   122|   376|                    <label>Адрес сервера</label>
+   123|   377|                    <input type="text" id="llm-host" value="192.168.50.41">
+   124|   378|                </div>
+   125|   379|                <div class="field full">
+   126|   380|                    <label>Название модели</label>
+   127|   381|                    <input type="text" id="llm-model" value="phi4-mini:latest">
+   128|   382|                    <div class="hint">Модель должна быть загружена на сервере</div>
+   129|   383|                </div>
+   130|   384|                <div class="field full">
+   131|   385|                    <label>Системный промпт</label>
+   132|   386|                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
+   133|   387|                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
+   134|   388|                </div>
+   135|   389|            </div>
+   136|   390|            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
+   137|   391|            <div class="test-status" id="llm-status"></div>
+   138|   392|        </div>
+   139|   393|
+   140|   394|        <!-- Шаг 3: Embedding -->
+   141|   395|        <div class="step">
+   142|   396|            <div class="step-header">
+   143|   397|                <span class="step-num">3</span>
+   144|   398|                Настройка Embedding модели
+   145|   399|            </div>
+   146|   400|            <div class="grid">
+   147|   401|                <div class="field full">
+   148|   402|                    <label>Название embedding модели</label>
+   149|   403|                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
+   150|   404|                </div>
+   151|   405|                <div class="field">
+   152|   406|                    <label>Размерность вектора</label>
+   153|   407|                    <input type="number" id="emb-dim" value="4096">
+   154|   408|                </div>
+   155|   409|            </div>
+   156|   410|        </div>
+   157|   411|
+   158|   412|        <!-- Шаг 4: SSH -->
+   159|   413|        <div class="step">
+   160|   414|            <div class="step-header">
+   161|   415|                <span class="step-num">4</span>
+   162|   416|                SSH доступ к серверу LLM
+   163|   417|            </div>
+   164|   418|            <div class="grid">
+   165|   419|                <div class="field">
+   166|   420|                    <label>SSH пользователь</label>
+   167|   421|                    <input type="text" id="ssh-user" value="yartsevn">
+   168|   422|                </div>
+   169|   423|                <div class="field">
+   170|   424|                    <label>SSH пароль</label>
+   171|   425|                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
+   172|   426|                </div>
+   173|   427|                <div class="field full">
+   174|   428|                    <label>Пароль для sudo (если отличается)</label>
+   175|   429|                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
+   176|   430|                </div>
+   177|   431|            </div>
+   178|   432|            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
+   179|   433|            <div class="test-status" id="ssh-status"></div>
+   180|   434|        </div>
+   181|   435|
+   182|   436|        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
+   183|   437|        <div class="status-box" id="final-status"></div>
+   184|   438|    </div>
+   185|   439|    </div>
+   186|   440|
+   187|   441|    <script>
+   188|   442|        // ==========================================
+   189|   443|        // Глобальные переменные
+   190|   444|        // ==========================================
+   191|   445|        const API = '/api/v1/setup';
+   192|   446|        
+   193|   447|        // Состояние тестов (для UX)
+   194|   448|        const state = {
+   195|   449|            dbTested: false,
+   196|   450|            llmTested: false,
+   197|   451|            sshTested: false
+   198|   452|        };
+   199|   453|
+   200|   454|        // ==========================================
+   201|   455|        // Вспомогательные функции
+   202|   456|        // ==========================================
+   203|   457|        
+   204|   458|        /**
+   205|   459|         * Показывает статус теста
+   206|   460|         * @param {string} elementId - ID элемента статуса
+   207|   461|         * @param {boolean} success - Успех или ошибка
+   208|   462|         * @param {string} message - Текст сообщения
+   209|   463|         */
+   210|   464|        function showTestStatus(elementId, success, message) {
+   211|   465|            const el = document.getElementById(elementId);
+   212|   466|            el.textContent = (success ? '✅ ' : '❌ ') + message;
+   213|   467|            el.className = 'test-status ' + (success ? 'success' : 'error');
+   214|   468|        }
+   215|   469|
+   216|   470|        /**
+   217|   471|         * Показывает финальный статус сохранения
+   218|   472|         * @param {boolean} success 
+   219|   473|         * @param {string} message 
+   220|   474|         */
+   221|   475|        function showFinalStatus(success, message) {
+   222|   476|            const el = document.getElementById('final-status');
+   223|   477|            el.textContent = message;
+   224|   478|            el.className = 'status-box ' + (success ? 'success' : 'error');
+   225|   479|        }
+   226|   480|
+   227|   481|        // ==========================================
+   228|   482|        // Тестирование подключений
+   229|   483|        // ==========================================
+   230|   484|
+   231|   485|        async function testDb() {
+   232|   486|            const payload = {
+   233|   487|                host: document.getElementById('db-host').value,
+   234|   488|                port: parseInt(document.getElementById('db-port').value),
+   235|   489|                name: document.getElementById('db-name').value,
+   236|   490|                user: document.getElementById('db-user').value,
+   237|   491|                password: document.getElementById('db-pass').value
+   238|   492|            };
+   239|   493|
+   240|   494|            showTestStatus('db-status', false, 'Тестирование...');
+   241|   495|
+   242|   496|            try {
+   243|   497|                const res = await fetch(`${API}/test-db`, {
+   244|   498|                    method: 'POST',
+   245|   499|                    headers: { 'Content-Type': 'application/json' },
+   246|   500|                    body: JSON.stringify(payload)
+   247|   501|
