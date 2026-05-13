@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Occular-ocr Демо</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1000px}
+header{margin-bottom:28px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+.sub{font-size:15px;color:var(--text3)}
+/* Upload zone */
+.dropzone{background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius-lg);padding:40px;text-align:center;transition:all 0.2s;cursor:pointer;margin-bottom:20px}
+.dropzone:hover{border-color:var(--accent-h);background:rgba(94,106,210,0.04)}
+.dropzone .dz-icon{font-size:36px;margin-bottom:12px}
+.dropzone .dz-text{font-size:15px;color:var(--text2);font-weight:500}
+.dropzone .dz-hint{font-size:13px;color:var(--text4);margin-top:6px}
+.dropzone.dragover{border-color:var(--accent);background:rgba(94,106,210,0.08)}
+/* Results */
+.result{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);margin-bottom:16px}
+.result-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border-s)}
+.result-header .rh-title{font-size:14px;font-weight:600;color:var(--text)}
+.result-header .rh-stats{display:flex;gap:16px;font-size:12px;color:var(--text4)}
+.result-body{padding:20px;max-height:500px;overflow-y:auto}
+.result-body pre{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6}
+/* Stats bar */
+.stats-bar{display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap}
+.stat-item{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:16px 20px;min-width:140px}
+.stat-item .sv{font-size:22px;font-weight:600;color:var(--text)}
+.stat-item .sl{font-size:12px;color:var(--text4);margin-top:2px}
+.stat-item.accent .sv{color:var(--accent-l)}
+.stat-item.green .sv{color:var(--emerald)}
+/* Compare */
+.compare{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px}
+.compare-item{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:16px}
+.compare-item .ci-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px}
+.compare-item .ci-metric{font-size:12px;color:var(--text4);margin-bottom:2px}
+.compare-item .ci-value{font-size:18px;font-weight:600}
+.compare-item.ocular .ci-value{color:var(--accent-l)}
+/* Loading */
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.compare{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/ocr" class="active">🔍 OCR-демо</a>
+  <a href="/monitoring">📡 Мониторинг</a>
+  <a href="/users">👥 Пользователи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+
+<main>
+  <header>
+    <h1>🔍 Occular-ocr — Распознавание текста</h1>
+    <div class="sub">Быстрый и точный OCR для русскоязычных документов. ONNX Runtime, оптимизирован под CPU.</div>
+  </header>
+
+  <div class="compare">
+    <div class="compare-item ocular">
+      <div class="ci-name">Occular-ocr</div>
+      <div class="ci-metric">Точность</div>
+      <div class="ci-value">93.7%</div>
+      <div class="ci-metric" style="margin-top:4px">Скорость (CPU)</div>
+      <div class="ci-value">0.57 сек/стр</div>
+    </div>
+    <div class="compare-item">
+      <div class="ci-name">Tesseract</div>
+      <div class="ci-metric">Точность</div>
+      <div class="ci-value" style="color:var(--text3)">46.2%</div>
+      <div class="ci-metric" style="margin-top:4px">Скорость (CPU)</div>
+      <div class="ci-value" style="color:var(--text3)">1.08 сек/стр</div>
+    </div>
+    <div class="compare-item">
+      <div class="ci-name">EasyOCR</div>
+      <div class="ci-metric">Точность</div>
+      <div class="ci-value" style="color:var(--text3)">78.4%</div>
+      <div class="ci-metric" style="margin-top:4px">Скорость (CPU)</div>
+      <div class="ci-value" style="color:var(--text3)">11.57 сек/стр</div>
+    </div>
+  </div>
+
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="dz-icon">📤</div>
+    <div class="dz-text">Загрузите PDF или изображение</div>
+    <div class="dz-hint">Поддерживаются PDF, PNG, JPG, TIFF</div>
+  </div>
+  <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" class="hidden" onchange="handleFile(this.files[0])">
+
+  <div class="stats-bar hidden" id="statsBar">
+    <div class="stat-item accent"><div class="sv" id="s-time">—</div><div class="sl">Время обработки</div></div>
+    <div class="stat-item green"><div class="sv" id="s-chars">—</div><div class="sl">Символов</div></div>
+    <div class="stat-item"><div class="sv" id="s-pages">—</div><div class="sl">Страниц</div></div>
+  </div>
+
+  <div class="result hidden" id="result">
+    <div class="result-header">
+      <div class="rh-title" id="r-title">Результат распознавания</div>
+      <div class="rh-stats"><span id="r-engine"></span></div>
+    </div>
+    <div class="result-body"><pre id="r-text"></pre></div>
+  </div>
+
+  <div id="loading" class="hidden" style="text-align:center;padding:40px">
+    <div class="spinner"></div>
+    <div style="font-size:14px;color:var(--text3);margin-top:12px">Распознавание...</div>
+  </div>
+</main>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover') });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+async function handleFile(file) {
+  if (!file) return;
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('statsBar').classList.add('hidden');
+
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const start = performance.now();
+  try {
+    const res = await fetch('/api/v1/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    
+    document.getElementById('loading').classList.add('hidden');
+    
+    if (res.ok && data.text) {
+      document.getElementById('r-text').textContent = data.text || data.message || 'OK';
+      document.getElementById('r-title').textContent = file.name;
+      document.getElementById('r-engine').textContent = 'Occular-ocr';
+      document.getElementById('s-time').textContent = elapsed + 'с';
+      document.getElementById('s-chars').textContent = (data.text || '').length;
+      document.getElementById('s-pages').textContent = data.pages || 1;
+      document.getElementById('result').classList.remove('hidden');
+      document.getElementById('statsBar').classList.remove('hidden');
+    } else {
+      document.getElementById('r-text').textContent = 'Ошибка: ' + (data.detail || data.message || 'Неизвестная ошибка');
+      document.getElementById('r-title').textContent = 'Ошибка распознавания';
+      document.getElementById('result').classList.remove('hidden');
+    }
+  } catch(err) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('r-text').textContent = 'Ошибка сети: ' + err.message;
+    document.getElementById('r-title').textContent = 'Ошибка соединения';
+    document.getElementById('result').classList.remove('hidden');
+  }
+}
+</script>
+</body>
+</html>

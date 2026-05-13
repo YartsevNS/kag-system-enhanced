@@ -181,3 +181,39 @@ async def chunks_page():
     if os.path.exists(chunks_path):
         return FileResponse(chunks_path, media_type="text/html")
     return {"error": "Chunks page not found"}
+
+
+@app.get("/chat", summary="Чат с AI")
+async def chat_page():
+    """Страница чата"""
+    chat_path = os.path.join(static_path, "chat.html")
+    if os.path.exists(chat_path):
+        return FileResponse(chat_path)
+    return {"error": "Chat page not found"}
+
+
+@app.get("/ocr", summary="OCR Демо")
+async def ocr_page():
+    """Страница демонстрации OCR"""
+    ocr_path = os.path.join(static_path, "ocr.html")
+    if os.path.exists(ocr_path):
+        return FileResponse(ocr_path)
+    return {"error": "OCR page not found"}
+
+
+@app.get("/monitoring", summary="Мониторинг")
+async def monitoring_page():
+    """Страница мониторинга"""
+    mon_path = os.path.join(static_path, "monitoring.html")
+    if os.path.exists(mon_path):
+        return FileResponse(mon_path)
+    return {"error": "Monitoring page not found"}
+
+
+@app.get("/users", summary="Пользователи и группы")
+async def users_page():
+    """Страница управления пользователями"""
+    users_path = os.path.join(static_path, "users.html")
+    if os.path.exists(users_path):
+        return FileResponse(users_path)
+    return {"error": "Users page not found"}
