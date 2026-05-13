@@ -399,6 +399,34 @@ class QdrantService:
             logger.error(f"Ошибка upsert точек: {e}")
             return False
 
+    def scroll_points(
+        self,
+        filter: Optional[Dict] = None,
+        limit: int = 10,
+        offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Прокрутка точек с фильтром (без поиска по вектору)."""
+        try:
+            query = {
+                "limit": limit,
+                "with_payload": True,
+                "with_vectors": False
+            }
+            if filter:
+                query["filter"] = filter
+            if offset is not None:
+                query["offset"] = offset
+
+            result = self._sync_request(
+                "POST",
+                f"collections/{self.collection_name}/points/scroll",
+                json_data=query
+            )
+            return result.get("result", {}).get("points", [])
+        except Exception as e:
+            logger.error(f"Ошибка scroll: {e}")
+            return []
+
     def search(
         self,
         query_vector: List[float],

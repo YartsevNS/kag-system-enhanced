@@ -278,6 +278,40 @@ async def reindex_document(document_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{document_id}/chunks", summary="Чанки документа")
+async def get_document_chunks(
+    document_id: str,
+    offset: int = 0,
+    limit: int = 10
+):
+    """Получить чанки конкретного документа из Qdrant."""
+    from src.indexing.qdrant_service import qdrant_service
+    
+    try:
+        results = qdrant_service.scroll_points(
+            filter={
+                "must": [{"key": "document_id", "match": {"value": document_id}}]
+            },
+            limit=limit,
+            offset=offset
+        )
+        
+        chunks = []
+        for r in results:
+            payload = r.get("payload", {})
+            chunks.append({
+                "id": r.get("id", ""),
+                "text": payload.get("text", payload.get("content", "")),
+                "chunk_index": payload.get("chunk_index", 0),
+                "document_id": document_id
+            })
+        
+        return {"chunks": chunks, "total": len(chunks), "offset": offset, "limit": limit}
+    except Exception as e:
+        logger.error(f"Ошибка получения чанков: {e}")
+        return {"chunks": [], "total": 0, "error": str(e)}
+
+
 async def _process_document_async(document_id: str):
     """Фоновая обработка документа"""
     try:
