@@ -108,7 +108,7 @@ class DocumentService:
             if stale:
                 logger.info(f"Автоочистка: удалено {len(stale)} stale-записей без файлов")
         except Exception as e:
-            logger.debug(f"Автоочистка не выполнена: {e}")
+            logger.warning(f"Автоочистка не выполнена: {e}")
 
     def _load_documents_from_db(self):
         """Загрузить метаданные документов из PostgreSQL"""
