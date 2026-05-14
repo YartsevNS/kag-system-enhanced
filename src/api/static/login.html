@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Вход</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--accent:#5e6ad2;--accent-h:#7170ff;--red:#dc2626;--border:rgba(255,255,255,0.08);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px;width:380px;max-width:90vw}
+h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:8px}
+.sub{font-size:14px;color:var(--text3);text-align:center;margin-bottom:28px}
+.field{margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--text3);margin-bottom:6px;font-weight:500}
+input{width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.btn{width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s;margin-top:8px}
+.btn:hover{opacity:0.85}
+.error{background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:var(--radius-sm);padding:10px 14px;color:var(--red);font-size:13px;margin-bottom:16px;display:none}
+.error.show{display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎯 KAG</h1>
+  <div class="sub">Войдите в систему</div>
+  <div class="error" id="error"></div>
+  <div class="field">
+    <label>Логин</label>
+    <input type="text" id="username" placeholder="admin" autocomplete="username">
+  </div>
+  <div class="field">
+    <label>Пароль</label>
+    <input type="password" id="password" placeholder="••••••" autocomplete="current-password">
+  </div>
+  <button class="btn" onclick="login()">Войти</button>
+</div>
+<script>
+async function login() {
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  const err = document.getElementById('error');
+  if (!u || !p) { err.textContent = 'Введите логин и пароль'; err.classList.add('show'); return; }
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:u, password:p})
+    });
+    const data = await res.json();
+    if (res.ok && data.access_token) {
+      localStorage.setItem('kag_token', data.access_token);
+      const redirect = new URLSearchParams(window.location.search).get('next') || '/';
+      window.location.href = redirect;
+    } else {
+      err.textContent = data.detail || 'Неверный логин или пароль';
+      err.classList.add('show');
+    }
+  } catch(e) { err.textContent = 'Ошибка сети'; err.classList.add('show'); }
+}
+document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+</script>
+</body>
+</html>

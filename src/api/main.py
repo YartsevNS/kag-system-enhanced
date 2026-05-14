@@ -14,6 +14,7 @@ from src.api.routes import chat, upload, admin, health, admin_models, auth, watc
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.middleware.auth import AuthMiddleware
+from src.api.middleware.auth_gate import AuthGateMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
@@ -93,7 +94,10 @@ if cors_origins:
         allow_headers=["*"],
     )
 
-# Middleware аутентификации (все запросы разрешены для разработки)
+# Auth gate — redirect unauthenticated web to /login
+app.add_middleware(AuthGateMiddleware)
+
+# Middleware аутентификации (для API, оставляем как fallback)
 app.add_middleware(AuthMiddleware)
 
 # Подключение роутеров
@@ -154,6 +158,15 @@ async def setup_page():
     if os.path.exists(setup_path):
         return FileResponse(setup_path)
     return {"error": "Setup page not found"}
+
+
+@app.get("/login", summary="Страница входа")
+async def login_page():
+    """Страница аутентификации"""
+    login_path = os.path.join(static_path, "login.html")
+    if os.path.exists(login_path):
+        return FileResponse(login_path)
+    return {"error": "Login page not found"}
 
 
 @app.get("/documents", summary="Управление документами")
