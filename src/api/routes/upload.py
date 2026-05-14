@@ -421,6 +421,7 @@ async def get_document_thumbnail(document_id: str):
         # Ищем файл документа по всем возможным директориям
         file_path = None
         for upload_dir in [
+            Path("/app/data/uploads"),
             Path("/app/user_data/uploads"),
             Path("/tmp/kag_uploads"),
         ]:
@@ -460,7 +461,7 @@ async def get_document_preview(document_id: str):
     from fastapi.responses import FileResponse
     
     # Ищем файл по всем возможным директориям
-    for upload_dir in [Path("/app/user_data/uploads"), Path("/tmp/kag_uploads")]:
+    for upload_dir in [Path("/app/data/uploads"), Path("/app/user_data/uploads"), Path("/tmp/kag_uploads")]:
         if not upload_dir.exists():
             continue
         for f in upload_dir.iterdir():

@@ -63,8 +63,8 @@ class DocumentService:
         """
         settings = get_settings()
         
-        # Используем /app/user_data/uploads (Docker volume — persistent)
-        upload_base = Path("/app/user_data")
+        # Используем /app/data/uploads (принадлежит kag, persistent)
+        upload_base = Path("/app/data")
         self._upload_dir = upload_base / "uploads"
         
         try:
