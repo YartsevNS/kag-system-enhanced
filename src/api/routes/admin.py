@@ -109,14 +109,69 @@ async def clear_cache():
 async def list_users():
     """
     Получить список пользователей (только для администраторов).
-    
-    Требуется роль: admin
     """
     logger.debug("Запрос списка пользователей")
     
-    # TODO: Интеграция с Keycloak API
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import User
     
-    return {"users": []}
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        users = db.query(User).all()
+        return {
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "is_admin": u.is_admin,
+                    "is_active": u.is_active,
+                    "created_at": u.created_at.isoformat() if u.created_at else None
+                }
+                for u in users
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.get("/groups", summary="Список групп")
+async def list_groups():
+    """Получить список групп."""
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import Group
+    
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        groups = db.query(Group).all()
+        return {
+            "groups": [
+                {"id": g.id, "name": g.name, "description": g.description}
+                for g in groups
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.post("/groups", summary="Создать группу")
+async def create_group(name: str, description: str = ""):
+    """Создать новую группу."""
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import Group
+    import uuid as _uuid
+    
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        group = Group(id=str(_uuid.uuid4()), name=name, description=description)
+        db.add(group)
+        db.commit()
+        return {"id": group.id, "name": group.name, "description": group.description}
+    finally:
+        db.close()
 
 
 @router.get("/audit-log", summary="Журнал аудита")

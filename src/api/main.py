@@ -217,3 +217,12 @@ async def users_page():
     if os.path.exists(users_path):
         return FileResponse(users_path)
     return {"error": "Users page not found"}
+
+
+@app.get("/logs", summary="Логи системы")
+async def logs_page():
+    """Страница просмотра логов"""
+    logs_path = os.path.join(static_path, "logs.html")
+    if os.path.exists(logs_path):
+        return FileResponse(logs_path)
+    return {"error": "Logs page not found"}
