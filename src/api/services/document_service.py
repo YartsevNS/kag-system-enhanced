@@ -85,6 +85,30 @@ class DocumentService:
         self._load_documents_from_db()
 
         logger.info(f"DocumentService инициализирован: {self._upload_dir}, документов в кэше: {len(self._documents)}")
+        
+        # Автоочистка: удаляем записи без файлов на диске
+        self._cleanup_stale_records()
+
+    def _cleanup_stale_records(self):
+        """Удалить записи в БД, для которых нет файлов на диске."""
+        try:
+            existing = set()
+            if self._upload_dir.exists():
+                for f in self._upload_dir.iterdir():
+                    if f.is_file():
+                        existing.add(f.name[:36])
+            
+            from src.api.services.config_store import config_store
+            stale = [did for did in self._documents if did not in existing]
+            for did in stale:
+                fname = self._documents[did].filename if did in self._documents else '?'
+                config_store.delete('documents', did)
+                del self._documents[did]
+            
+            if stale:
+                logger.info(f"Автоочистка: удалено {len(stale)} stale-записей без файлов")
+        except Exception as e:
+            logger.debug(f"Автоочистка не выполнена: {e}")
 
     def _load_documents_from_db(self):
         """Загрузить метаданные документов из PostgreSQL"""
