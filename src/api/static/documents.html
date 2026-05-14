@@ -282,7 +282,7 @@ function renderCards(docs) {
     const tags = d.tags || [];
     const thumbUrl = `${API}/upload/${d.document_id}/thumbnail`;
     const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
-    return `<div class="doc-card" onclick="showDetail('${d.document_id}')">
+    return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
       <div class="thumb-wrap">
         <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <div class="thumb" style="display:none;align-items:center;justify-content:center;font-size:48px">${fileIcon(d.file_type||d.filename)}</div>

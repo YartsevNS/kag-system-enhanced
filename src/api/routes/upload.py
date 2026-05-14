@@ -404,16 +404,23 @@ async def get_document_details(
 
 @router.get("/{document_id}/thumbnail", summary="Миниатюра документа")
 async def get_document_thumbnail(document_id: str):
-    """Сгенерировать и вернуть миниатюру первой страницы документа."""
-    import io
+    """Вернуть миниатюру документа (WebP/Png), с кэшированием."""
     from pathlib import Path
-    from fastapi.responses import Response
+    from fastapi.responses import FileResponse, Response
     
+    thumb_dir = Path("/app/data/thumbnails")
+    thumb_path = thumb_dir / f"{document_id}.webp"
+    
+    # Если миниатюра уже есть в кэше — отдаём сразу
+    if thumb_path.exists():
+        return FileResponse(thumb_path, media_type="image/webp",
+            headers={"Cache-Control": "public, max-age=86400"})
+    
+    # Пробуем сгенерировать на лету
     try:
-        # Find the document file in uploads directory
+        # Ищем файл документа
         upload_dir = Path("/app/user_data/uploads")
         if not upload_dir.exists():
-            # Fallback: try common upload paths
             for d in [Path("/home/yartsevn/kagproject/user_data/uploads"),
                       Path("/home/nick/kagproject/user_data/uploads"),
                       Path("/tmp/kag_uploads")]:
@@ -427,59 +434,49 @@ async def get_document_thumbnail(document_id: str):
                 file_path = f
                 break
         
-        if not file_path:
-            raise HTTPException(status_code=404, detail="Файл документа не найден")
-        file_path_str = str(file_path)
-        
-        # Try to generate PDF thumbnail
-        if file_path_str.lower().endswith('.pdf'):
-            try:
-                import fitz  # PyMuPDF
-                pdf = fitz.open(file_path)
-                page = pdf[0]
-                # Render at 200 DPI for good quality thumbnail
-                pix = page.get_pixmap(dpi=200)
-                img_bytes = pix.tobytes("png")
-                pdf.close()
-                return Response(content=img_bytes, media_type="image/png")
-            except ImportError:
-                logger.warning("PyMuPDF (fitz) не установлен — возвращаю placeholder")
-            except Exception as e:
-                logger.warning(f"Ошибка рендеринга PDF: {e}")
-        
-        # For images, return scaled version
-        if file_path_str.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-            try:
-                from PIL import Image
-                img = Image.open(file_path)
-                img.thumbnail((400, 400))
-                buf = io.BytesIO()
-                img.save(buf, format='PNG')
-                return Response(content=buf.getvalue(), media_type="image/png")
-            except Exception as e:
-                logger.warning(f"Ошибка обработки изображения: {e}")
-        
-        # Fallback: return file type icon as SVG
-        ext = file_path.suffix.lower()
-        colors = {'.pdf': '#dc2626', '.docx': '#2563eb', '.doc': '#2563eb', 
-                  '.txt': '#10b981', '.md': '#10b981', '.csv': '#f59e0b',
-                  '.xlsx': '#22c55e', '.png': '#8b5cf6', '.jpg': '#8b5cf6'}
-        color = colors.get(ext, '#5e6ad2')
-        label = ext.lstrip('.').upper()[:4]
-        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-          <rect width="400" height="300" fill="#0f1011" rx="12"/>
-          <rect x="0" y="0" width="400" height="300" fill="{color}" opacity="0.08" rx="12"/>
-          <rect x="100" y="80" width="200" height="140" fill="{color}" opacity="0.15" rx="8"/>
-          <text x="200" y="160" text-anchor="middle" fill="{color}" font-family="Inter,sans-serif" font-size="28" font-weight="700">{label}</text>
-          <text x="200" y="200" text-anchor="middle" fill="#8a8f98" font-family="Inter,sans-serif" font-size="16">{file_path.name.replace('_',' ')}</text>
-        </svg>'''
-        return Response(content=svg.encode(), media_type="image/svg+xml")
-        
-    except HTTPException:
-        raise
+        if file_path and file_path.exists():
+            # Генерируем через document_service
+            thumb = document_service._generate_thumbnail(document_id, file_path)
+            if thumb and thumb.exists():
+                return FileResponse(thumb, media_type="image/webp",
+                    headers={"Cache-Control": "public, max-age=86400"})
     except Exception as e:
-        logger.error(f"Thumbnail error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning(f"On-the-fly thumbnail failed for {document_id}: {e}")
+    
+    # Placeholder SVG
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="280" viewBox="0 0 400 280">
+      <rect width="400" height="280" fill="#0f1011" rx="12"/>
+      <rect width="400" height="280" fill="#5e6ad2" opacity="0.06" rx="12"/>
+      <text x="200" y="130" text-anchor="middle" fill="#62666d" font-family="Inter,sans-serif" font-size="40">📄</text>
+      <text x="200" y="170" text-anchor="middle" fill="#8a8f98" font-family="Inter,sans-serif" font-size="14">Миниатюра недоступна</text>
+    </svg>'''
+    return Response(content=svg.encode(), media_type="image/svg+xml",
+        headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/{document_id}/preview", summary="Файл документа для просмотра")
+async def get_document_preview(document_id: str):
+    """Вернуть файл документа для inline-просмотра в браузере."""
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    
+    # Ищем файл
+    upload_dir = Path("/app/user_data/uploads")
+    if not upload_dir.exists():
+        for d in [Path("/home/yartsevn/kagproject/user_data/uploads"),
+                  Path("/home/nick/kagproject/user_data/uploads"),
+                  Path("/tmp/kag_uploads")]:
+            if d.exists():
+                upload_dir = d
+                break
+    
+    for f in upload_dir.iterdir():
+        if f.is_file() and f.name.startswith(document_id):
+            mime = "application/pdf" if f.suffix.lower() == '.pdf' else "application/octet-stream"
+            return FileResponse(f, media_type=mime,
+                headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"})
+    
+    raise HTTPException(status_code=404, detail="Файл не найден")
 
 
 async def _process_document_async(document_id: str):

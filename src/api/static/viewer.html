@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Просмотр документа</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+
+main{margin-left:240px;flex:1;padding:20px 28px;display:flex;flex-direction:column}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;gap:12px;padding:10px 0;margin-bottom:12px;flex-wrap:wrap}
+.toolbar .doc-title{font-size:16px;font-weight:600;color:var(--text);flex:1;min-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toolbar a,.toolbar button{font-size:13px;padding:8px 16px;border-radius:var(--radius);text-decoration:none;cursor:pointer;font-weight:500;transition:all 0.15s;border:none}
+.btn-back{background:var(--surface);color:var(--text2);border:1px solid var(--border)}
+.btn-back:hover{background:var(--elevated)}
+.btn-download{background:var(--accent);color:#fff}
+.btn-download:hover{opacity:0.85}
+.btn-chunks{background:rgba(94,106,210,0.15);color:var(--accent-h)}
+.btn-chunks:hover{background:rgba(94,106,210,0.25)}
+
+/* Viewer area */
+.viewer{flex:1;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;position:relative;min-height:500px}
+
+/* Thumbnail overlay */
+.thumb-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--panel);z-index:2;transition:opacity 0.4s}
+.thumb-overlay img{max-width:90%;max-height:85%;object-fit:contain;border-radius:4px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.thumb-overlay.fade{opacity:0;pointer-events:none}
+
+/* Loading */
+.thumb-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:3;pointer-events:none}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:13px;color:var(--text4)}
+
+/* PDF object */
+.viewer object,.viewer iframe{width:100%;height:100%;border:none}
+
+/* Text preview */
+.text-preview{padding:24px;overflow-y:auto;height:100%;font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap}
+
+/* Meta sidebar */
+.meta-panel{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.meta-item{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:10px 14px}
+.meta-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px}
+.meta-value{font-size:13px;color:var(--text2)}
+.tag{font-size:10px;padding:3px 7px;border-radius:9999px;font-weight:500;background:rgba(94,106,210,0.15);color:var(--accent-l);display:inline-block;margin:1px}
+
+/* Error */
+.error-state{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:10px;color:var(--text4)}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:10px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/logs">📋 Логи</a>
+</nav>
+
+<main>
+  <div class="toolbar">
+    <div class="doc-title" id="doc-title">Загрузка...</div>
+    <a href="/documents" class="btn-back">← К документам</a>
+    <a href="#" class="btn-chunks" id="btn-chunks" style="display:none">🧩 Чанки</a>
+    <a href="#" class="btn-download" id="btn-download">📥 Скачать</a>
+  </div>
+
+  <div class="meta-panel" id="meta-panel"></div>
+
+  <div class="viewer" id="viewer">
+    <div class="thumb-overlay" id="thumb-overlay">
+      <img id="thumb-img" src="" alt="Миниатюра">
+    </div>
+    <div class="thumb-loading" id="thumb-loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Загрузка документа...</div>
+    </div>
+    <div id="viewer-content"></div>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1';
+const params = new URLSearchParams(window.location.search);
+const docId = params.get('id');
+
+if (!docId) {
+  document.getElementById('doc-title').textContent = '❌ Не указан ID документа';
+  document.getElementById('viewer-content').innerHTML = '<div class="error-state">Укажите ?id=... в URL</div>';
+} else {
+  loadDocument();
+}
+
+async function loadDocument() {
+  try {
+    // Load document details
+    const r = await fetch(`${API}/upload/${docId}/details`);
+    if (!r.ok) throw new Error('Документ не найден');
+    const doc = await r.json();
+    
+    document.getElementById('doc-title').textContent = doc.recognized_title || doc.filename;
+    document.title = 'KAG — ' + (doc.recognized_title || doc.filename);
+    
+    // Download link
+    document.getElementById('btn-download').href = `${API}/upload/${docId}/thumbnail`; // fallback
+    document.getElementById('btn-chunks').href = `/chunks?doc_id=${docId}&name=${encodeURIComponent(doc.filename)}`;
+    document.getElementById('btn-chunks').style.display = 'inline-block';
+    
+    // Meta panel
+    document.getElementById('meta-panel').innerHTML = `
+      <div class="meta-item"><div class="meta-label">Тип</div><div class="meta-value">${typeLabel(doc.document_type)}</div></div>
+      <div class="meta-item"><div class="meta-label">Статус</div><div class="meta-value">${statusLabel(doc.status)}</div></div>
+      <div class="meta-item"><div class="meta-label">Размер</div><div class="meta-value">${fmtBytes(doc.file_size)}</div></div>
+      <div class="meta-item"><div class="meta-label">Чанков</div><div class="meta-value">${doc.chunks_count||0}</div></div>
+      <div class="meta-item"><div class="meta-label">Загрузил</div><div class="meta-value">${doc.uploaded_by_name||'—'}</div></div>
+      <div class="meta-item"><div class="meta-label">Дата</div><div class="meta-value">${new Date(doc.created_at).toLocaleDateString('ru-RU')}</div></div>
+      ${(doc.tags||[]).length?`<div class="meta-item"><div class="meta-label">Тэги</div><div class="meta-value">${doc.tags.map(t=>`<span class="tag">${t}</span>`).join(' ')}</div></div>`:''}
+    `;
+    
+    // Load thumbnail
+    const thumbUrl = `${API}/upload/${docId}/thumbnail`;
+    const thumbImg = document.getElementById('thumb-img');
+    thumbImg.src = thumbUrl;
+    thumbImg.onload = () => {
+      document.getElementById('thumb-loading').style.display = 'none';
+    };
+    thumbImg.onerror = () => {
+      document.getElementById('thumb-overlay').style.display = 'none';
+      document.getElementById('thumb-loading').style.display = 'none';
+    };
+    
+    // Load document preview based on type
+    const mimeType = doc.file_type || 'application/pdf';
+    const viewerContent = document.getElementById('viewer-content');
+    
+      // For actual PDF inline view use /preview endpoint
+      const previewUrl = `${API}/upload/${docId}/preview`;
+      viewerContent.innerHTML = `<object data="${previewUrl}" type="application/pdf" width="100%" height="100%">
+        <div class="error-state">
+          <div style="font-size:48px">📄</div>
+          <div>PDF не может быть отображён в браузере</div>
+          <a href="#" class="btn-download" style="margin-top:12px;display:inline-block;padding:10px 20px" onclick="downloadDoc()">📥 Скачать PDF</a>
+        </div>
+      </object>`;
+    } else if (mimeType.includes('image')) {
+      viewerContent.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:var(--panel)">
+        <img src="${thumbUrl}" style="max-width:95%;max-height:95%;object-fit:contain" alt="${doc.filename}">
+      </div>`;
+    } else if (mimeType.includes('text') || doc.filename.match(/\.(txt|md)$/i)) {
+      viewerContent.innerHTML = '<div class="text-preview"><div class="spinner"></div> Загрузка текста...</div>';
+      // Try to get text from first chunks
+      try {
+        const cr = await fetch(`${API}/upload/${docId}/chunks?limit=5`);
+        if (cr.ok) {
+          const cd = await cr.json();
+          const text = (cd.chunks||[]).map(c=>c.text).join('\n\n');
+          viewerContent.innerHTML = `<div class="text-preview">${escapeHtml(text).substring(0,10000)}</div>`;
+        }
+      } catch(e) {
+        viewerContent.innerHTML = '<div class="error-state">Текст недоступен</div>';
+      }
+    } else {
+      // DOCX, CSV, etc. — offer download
+      viewerContent.innerHTML = `<div class="error-state">
+        <div style="font-size:48px">📘</div>
+        <div>Предпросмотр для ${doc.file_type||'этого типа'} недоступен</div>
+        <div style="color:var(--text4);font-size:13px">${doc.filename}</div>
+        <a href="#" class="btn-download" style="margin-top:12px;display:inline-block;padding:10px 20px" onclick="downloadDoc()">📥 Скачать файл</a>
+      </div>`;
+    }
+    
+    // Hide thumbnail overlay when viewer is ready
+    setTimeout(() => {
+      document.getElementById('thumb-overlay').classList.add('fade');
+    }, 2000);
+    
+  } catch(e) {
+    document.getElementById('doc-title').textContent = '❌ Ошибка';
+    document.getElementById('viewer-content').innerHTML = `<div class="error-state">${e.message}</div>`;
+    document.getElementById('thumb-loading').style.display = 'none';
+  }
+}
+
+function downloadDoc() {
+  // Create download link via API
+  const a = document.createElement('a');
+  a.href = `/api/v1/upload/${docId}/thumbnail`; // placeholder - we need a real download endpoint
+  a.download = document.getElementById('doc-title').textContent;
+  a.click();
+}
+
+// Helpers
+function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',medical:'Медицинский',legal:'Юридический',unknown:'Неизвестно'}; return m[t]||t||'Неизвестно'; }
+function statusLabel(s) { const m={completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'}; return m[s]||s; }
+function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
+function escapeHtml(t) { const d=document.createElement('div');d.textContent=t;return d.innerHTML; }
+</script>
+</body>
+</html>

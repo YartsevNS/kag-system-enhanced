@@ -253,6 +253,12 @@ class DocumentService:
                 group_ids=record.group_ids
             )
             
+            # Генерируем миниатюру
+            try:
+                self._generate_thumbnail(document_id, file_path)
+            except Exception as e:
+                logger.warning(f"Миниатюра не создана: {e}")
+            
             # Завершено (100%)
             record.status = "completed"
             record.progress = 100
@@ -320,6 +326,44 @@ class DocumentService:
         
         logger.info(f"Документ удален: {document_id}")
         return True
+
+    def _generate_thumbnail(self, document_id: str, file_path: Path) -> Optional[Path]:
+        """Сгенерировать WebP-миниатюру первой страницы документа."""
+        from PIL import Image
+        
+        thumb_dir = Path("/app/data/thumbnails")
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+        thumb_path = thumb_dir / f"{document_id}.webp"
+        
+        try:
+            if file_path.suffix.lower() == '.pdf':
+                import fitz
+                doc = fitz.open(file_path)
+                page = doc[0]
+                mat = fitz.Matrix(300/72, 300/72)  # 300 DPI
+                pix = page.get_pixmap(matrix=mat)
+                doc.close()
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            elif file_path.suffix.lower() in ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.tiff', '.bmp'):
+                img = Image.open(file_path)
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+            else:
+                # Не-PDF и не-изображение — генерируем placeholder
+                return None
+            
+            # Resize to max 500px wide
+            max_width = 500
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+            
+            img.save(thumb_path, format="WebP", quality=82)
+            logger.info(f"Миниатюра создана: {thumb_path}")
+            return thumb_path
+        except Exception as e:
+            logger.warning(f"Ошибка генерации миниатюры {document_id}: {e}")
+            return None
 
     def _find_file(self, document_id: str, filename: str) -> Optional[Path]:
         """Найти файл документа в директории uploads"""

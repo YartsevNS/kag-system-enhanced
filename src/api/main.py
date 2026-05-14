@@ -248,3 +248,12 @@ async def search_page():
     if os.path.exists(search_path):
         return FileResponse(search_path)
     return {"error": "Search page not found"}
+
+
+@app.get("/viewer", summary="Просмотр документа")
+async def viewer_page():
+    """Страница просмотра документа"""
+    viewer_path = os.path.join(static_path, "viewer.html")
+    if os.path.exists(viewer_path):
+        return FileResponse(viewer_path)
+    return {"error": "Viewer page not found"}
