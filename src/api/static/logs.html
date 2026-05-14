@@ -3,41 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Логи</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>KAG — Логи системы</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0}
-nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s);margin-bottom:12px}
-nav .logo span{color:var(--accent)}
+
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
 nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-main{margin-left:240px;flex:1;padding:32px 40px;max-width:1100px}
-h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:4px}
-.sub{font-size:15px;color:var(--text3);margin-bottom:24px}
-/* Log lines */
-.log-container{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;max-height:70vh;overflow-y:auto}
-.log-entry{display:flex;padding:8px 16px;border-bottom:1px solid var(--border-s);font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.6}
-.log-entry:last-child{border-bottom:none}
-.log-time{color:var(--text4);min-width:90px;flex-shrink:0}
-.log-level{min-width:60px;flex-shrink:0;font-weight:600}
-.log-level.INFO{color:var(--text2)}
-.log-level.WARNING{color:#fbbf24}
-.log-level.ERROR{color:var(--red)}
-.log-level.DEBUG{color:var(--text4)}
-.log-msg{color:var(--text2);word-break:break-all}
-/* Controls */
-.controls{display:flex;gap:12px;align-items:center;margin-bottom:16px}
-.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;color:var(--text);font-size:13px;cursor:pointer;font-family:'Inter',sans-serif}
-.controls button{background:var(--accent);border:none;font-weight:600}
-.controls button:hover{opacity:0.85}
+
+main{margin-left:240px;flex:1;padding:24px 32px;max-width:1600px;width:100%}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:18px}
+
+/* Top bar */
+.top-bar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.top-bar .stat-pill{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:6px 14px;font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.top-bar .stat-pill .dot{width:8px;height:8px;border-radius:50%}
+.dot-green{background:var(--emerald)}
+.dot-red{background:var(--red)}
+.dot-amber{background:var(--amber)}
+
+/* Tabs */
+.tabs{display:flex;gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
+.tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--text4);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
+.tab:hover{color:var(--text2)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+
+/* Controls row */
+.controls{display:flex;gap:10px;align-items:center;padding:12px 0;flex-wrap:wrap}
+.controls input,.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.controls input:focus,.controls select:focus{border-color:var(--accent)}
+.controls input{flex:1;min-width:180px}
+.controls select{min-width:110px}
+.btn{background:var(--accent)!important;color:#fff!important;border:none!important;font-weight:600!important}
+.btn:hover{opacity:0.85}
+.btn-ghost{background:transparent!important;color:var(--text3)!important;border:1px solid var(--border)!important}
+
+/* Log container */
+.log-container{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 310px);min-height:400px}
+.log-header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border-s);font-size:11px;color:var(--text4)}
+.log-stream{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7}
+.log-stream::-webkit-scrollbar{width:6px}
+.log-stream::-webkit-scrollbar-track{background:transparent}
+.log-stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.log-line{display:flex;padding:4px 14px;border-bottom:1px solid rgba(255,255,255,0.015);transition:background 0.15s}
+.log-line:hover{background:rgba(255,255,255,0.02)}
+.log-line .ltime{color:var(--text4);min-width:75px;flex-shrink:0;font-size:11px}
+.log-line .lsource{min-width:100px;flex-shrink:0;font-weight:600;font-size:11px}
+.log-line .ltext{color:var(--text2);word-break:break-all;white-space:pre-wrap}
+.lsource-kag-api{color:var(--accent-l)}
+.lsource-kag-worker{color:var(--accent-h)}
+.lsource-postgres{color:#60a5fa}
+.lsource-qdrant{color:var(--emerald)}
+.lsource-redis{color:#f87171}
+.lsource-nginx{color:var(--amber)}
+.lsource-ollama{color:#a78bfa}
+.lsource-keycloak{color:#fb923c}
+.lsource-system{color:var(--text3)}
+
+.llevel-ERROR{background:rgba(220,38,38,0.08)}
+.llevel-WARNING{background:rgba(245,158,11,0.05)}
+.llevel-ERROR .ltext{color:#fca5a5}
+.llevel-WARNING .ltext{color:#fcd34d}
+.llevel-DEBUG .ltext{color:var(--text4);font-style:italic}
+
+/* System panel */
+.sys-panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px}
+.sys-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
+.sys-card .sys-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sys-card .sys-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sys-item .sys-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em}
+.sys-item .sys-value{font-size:14px;color:var(--text);font-weight:600}
+.progress-bar{width:100%;height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin-top:4px}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.5s}
+.progress-ok{background:var(--emerald)}
+.progress-warn{background:var(--amber)}
+.progress-crit{background:var(--red)}
+
+/* Empty */
 .empty{text-align:center;padding:40px;color:var(--text4)}
-.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top:2px solid var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:1000;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}.sys-panel{grid-template-columns:1fr}.log-container{height:400px}}
 </style>
 </head>
 <body>
@@ -46,64 +104,367 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:4px}
   <a href="/">⬡ Дашборд</a>
   <a href="/chat">💬 Чат с AI</a>
   <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
   <a href="/ocr">🔍 OCR-демо</a>
-  <a href="/monitoring">📡 Мониторинг</a>
   <a href="/logs" class="active">📋 Логи</a>
+  <a href="/monitoring">📡 Мониторинг</a>
   <a href="/users">👥 Пользователи</a>
   <a href="/admin">⚙️ Админ</a>
 </nav>
 
 <main>
   <h1>📋 Логи системы</h1>
-  <div class="sub" id="log-info">Загрузка...</div>
-  <div class="controls">
-    <select id="level-filter" onchange="loadLogs()">
-      <option value="">Все уровни</option>
-      <option value="INFO">INFO</option>
-      <option value="WARNING">WARNING</option>
-      <option value="ERROR">ERROR</option>
-    </select>
-    <button onclick="loadLogs()">🔄 Обновить</button>
-    <span style="font-size:13px;color:var(--text4)" id="auto-refresh"></span>
+  <div class="sub">Реальное время — Docker, kag-api, PostgreSQL, Qdrant, Nginx, система</div>
+
+  <!-- System status pills -->
+  <div class="top-bar" id="top-bar">
+    <div class="stat-pill"><div class="dot dot-green"></div> Загрузка...</div>
   </div>
-  <div class="log-container" id="log-container">
-    <div class="empty"><div class="spinner"></div></div>
+
+  <!-- System info panel (collapsible) -->
+  <div class="sys-panel" id="sys-panel" style="display:none">
+    <div class="sys-card" id="sys-cpu">
+      <div class="sys-title">🖥️ CPU</div>
+      <div class="sys-grid"><div class="sys-item"><div class="sys-label">Использование</div><div class="sys-value" id="cpu-pct">—</div></div><div class="sys-item"><div class="sys-label">Нагрузка</div><div class="sys-value" id="cpu-load">—</div></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="cpu-bar"></div></div>
+    </div>
+    <div class="sys-card" id="sys-mem">
+      <div class="sys-title">🧠 Память</div>
+      <div class="sys-grid"><div class="sys-item"><div class="sys-label">Использовано</div><div class="sys-value" id="mem-used">—</div></div><div class="sys-item"><div class="sys-label">Всего</div><div class="sys-value" id="mem-total">—</div></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="mem-bar"></div></div>
+    </div>
+    <div class="sys-card" id="sys-disk">
+      <div class="sys-title">💾 Диск</div>
+      <div class="sys-grid"><div class="sys-item"><div class="sys-label">Использовано</div><div class="sys-value" id="disk-used">—</div></div><div class="sys-item"><div class="sys-label">Свободно</div><div class="sys-value" id="disk-free">—</div></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="disk-bar"></div></div>
+    </div>
+    <div class="sys-card" id="sys-docker">
+      <div class="sys-title">🐳 Docker</div>
+      <div class="sys-grid"><div class="sys-item"><div class="sys-label">Контейнеров</div><div class="sys-value" id="docker-count">—</div></div><div class="sys-item"><div class="sys-label">Запущено</div><div class="sys-value" id="docker-running">—</div></div></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="all">📋 Все источники</button>
+    <button class="tab" data-tab="kag-api">🐍 kag-api</button>
+    <button class="tab" data-tab="docker">🐳 Docker-контейнеры</button>
+    <button class="tab" data-tab="system">🖥️ Система</button>
+    <button class="tab" data-tab="audit">🔐 Аудит</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <input type="text" id="log-search" placeholder="🔍 Поиск по логам (Enter — фильтр)..." onkeydown="if(event.key==='Enter')applyFilters()">
+    <select id="log-level" onchange="applyFilters()">
+      <option value="">Все уровни</option>
+      <option value="ERROR">ERROR</option>
+      <option value="WARNING">WARNING</option>
+      <option value="INFO">INFO</option>
+      <option value="DEBUG">DEBUG</option>
+    </select>
+    <select id="refresh-rate" onchange="changeRefresh()">
+      <option value="2000">2 сек</option>
+      <option value="5000" selected>5 сек</option>
+      <option value="10000">10 сек</option>
+      <option value="30000">30 сек</option>
+      <option value="0">Выкл</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text3);cursor:pointer">
+      <input type="checkbox" id="auto-scroll" checked> Автоскролл
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text3);cursor:pointer">
+      <input type="checkbox" id="show-system" onchange="toggleSysPanel()"> Система
+    </label>
+    <button class="btn" onclick="refreshAll()">🔄 Обновить</button>
+    <button class="btn-ghost" onclick="exportLogs()">📥 Экспорт</button>
+    <button class="btn-ghost" onclick="clearLogs()">🗑️ Очистить</button>
+  </div>
+
+  <!-- Log stream -->
+  <div class="log-container">
+    <div class="log-header">
+      <span id="log-stats">Загрузка...</span>
+      <span id="log-time" style="font-family:'JetBrains Mono',monospace">—</span>
+    </div>
+    <div class="log-stream" id="log-stream">
+      <div class="empty"><div class="spinner"></div> Загрузка логов...</div>
+    </div>
   </div>
 </main>
 
+<div class="toast" id="toast"></div>
+
 <script>
-async function loadLogs() {
-  const container = document.getElementById('log-container');
-  const filter = document.getElementById('level-filter').value;
-  container.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+const API = '/api/v1/admin/models';
+const API_UPLOAD = '/api/v1';
+let allLogLines = [];
+let currentTab = 'all';
+let refreshInterval = null;
+let refreshMs = 5000;
+let dockers = [];
+
+// Known containers
+const DOCKER_SERVICES = ['kag-api','kag-worker','kag-postgres','kag-qdrant','kag-redis','kag-nginx','kag-ollama','kag-keycloak'];
+const SOURCE_CLASS = {
+  'kag-api':'lsource-kag-api','kag-worker':'lsource-kag-worker',
+  'kag-postgres':'lsource-postgres','kag-qdrant':'lsource-qdrant',
+  'kag-redis':'lsource-redis','kag-nginx':'lsource-nginx',
+  'kag-ollama':'lsource-ollama','kag-keycloak':'lsource-keycloak',
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Tab clicks
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      currentTab = t.dataset.tab;
+      applyFilters();
+    });
+  });
   
-  try {
-    // Fetch logs from API
-    const resp = await fetch('/api/v1/admin/audit-log?limit=200');
-    const data = await resp.json();
-    
-    if (data.logs && data.logs.length) {
-      const filtered = filter ? data.logs.filter(l => l.level === filter) : data.logs;
-      container.innerHTML = filtered.slice(-100).map(l => `
-        <div class="log-entry">
-          <span class="log-time">${l.timestamp || l.created_at || ''}</span>
-          <span class="log-level ${l.level || 'INFO'}">${l.level || 'INFO'}</span>
-          <span class="log-msg">${l.message || l.action || JSON.stringify(l)}</span>
-        </div>
-      `).join('') || '<div class="empty">Нет записей</div>';
-      document.getElementById('log-info').textContent = `Всего: ${data.logs.length} записей`;
-    } else {
-      container.innerHTML = '<div class="empty">Логи пока пусты — загрузите документ или выполните поиск</div>';
-    }
-  } catch(e) {
-    container.innerHTML = '<div class="empty">Ошибка загрузки: ' + e.message + '</div>';
-  }
-  
-  document.getElementById('auto-refresh').textContent = 'Авто: 30с';
+  refreshAll();
+  startRefresh();
+});
+
+function startRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  if (refreshMs > 0) refreshInterval = setInterval(refreshAll, refreshMs);
 }
 
-loadLogs();
-setInterval(loadLogs, 30000);
+function changeRefresh() {
+  refreshMs = parseInt(document.getElementById('refresh-rate').value);
+  startRefresh();
+  toast('Интервал: ' + (refreshMs===0?'выкл':(refreshMs/1000)+'с'));
+}
+
+function toggleSysPanel() {
+  document.getElementById('sys-panel').style.display = document.getElementById('show-system').checked ? 'grid' : 'none';
+}
+
+async function refreshAll() {
+  const promises = [];
+  
+  // System info
+  promises.push(fetch(`${API}/system/info`).then(r=>r.json()).catch(()=>null));
+  
+  // Docker stats
+  promises.push(fetch(`${API}/docker/stats`).then(r=>r.json()).catch(()=>null));
+  
+  // Application audit log
+  promises.push(fetch(`${API_UPLOAD}/admin/audit-log?limit=50`).then(r=>r.json()).catch(()=>null));
+  
+  const [sysInfo, dockerStats, auditLog] = await Promise.all(promises);
+  
+  // Update system panel
+  if (sysInfo && !sysInfo.error) updateSystemPanel(sysInfo);
+  if (dockerStats) updateDockerStats(dockerStats);
+  
+  // Fetch Docker container logs
+  const newLines = [];
+  
+  // System info logs
+  if (sysInfo) {
+    newLines.push({time:now(),source:'system',level:'INFO',text:`Система: ${sysInfo.hostname||'?'} — ${(sysInfo.os||{}).system||'?'} ${(sysInfo.os||{}).release||'?'}, ${(sysInfo.cpu||{}).physical_cores||'?'} ядер, ${fmtBytes((sysInfo.memory||{}).total||0)} RAM`});
+  }
+  
+  if (dockerStats && dockerStats.containers) {
+    dockers = dockerStats.containers;
+    dockerStats.containers.forEach(c => {
+      const s = c.stats || {};
+      const memInfo = s.mem_used ? `${fmtBytes(s.mem_used)}/${fmtBytes(s.mem_limit||0)}` : 'N/A';
+      newLines.push({
+        time: now(),
+        source: c.name.replace(/^kag-?/,''),
+        level: c.state==='running'?'INFO':'WARNING',
+        text: `${c.state==='running'?'✅':'⚠️'} ${c.image?.split(':')[0]||'?'} — CPU ${(s.cpu_percent||0).toFixed(1)}% | RAM ${memInfo} | PID ${s.pids||0}`
+      });
+    });
+    
+    // Docker system
+    const ds = dockerStats.system || {};
+    newLines.push({time:now(),source:'docker',level:'INFO',text:`Docker v${ds.docker_version||'?'} — ${ds.containers_running||0}/${ds.containers_total||0} running, ${ds.images_count||0} images`});
+  }
+  
+  // Audit logs
+  if (auditLog && auditLog.logs) {
+    auditLog.logs.forEach(l => {
+      newLines.push({
+        time: l.timestamp || l.created_at || now(),
+        source: 'kag-api',
+        level: l.level || 'INFO',
+        text: `${l.action || l.message || JSON.stringify(l)}${l.user_id ? ' [user:'+l.user_id+']' : ''}`
+      });
+    });
+  }
+  
+  // Fetch individual container logs (for Docker tab)
+  if (currentTab === 'docker' || currentTab === 'all') {
+    const containerLogs = await Promise.all(
+      dockers.filter(c => c.state==='running').slice(0,8).map(async c => {
+        try {
+          const r = await fetch(`${API}/docker/${c.name}/logs?lines=30`);
+          const d = await r.json();
+          return {name: c.name, logs: (d.logs||'').split('\n').filter(Boolean)};
+        } catch(e) { return {name: c.name, logs: []}; }
+      })
+    );
+    
+    containerLogs.forEach(cl => {
+      const shortName = cl.name.replace(/^kag-?/,'');
+      cl.logs.forEach(line => {
+        let level = 'INFO';
+        if (line.includes('ERROR')||line.includes('error')||line.includes('Error')) level = 'ERROR';
+        else if (line.includes('WARN')||line.includes('warning')) level = 'WARNING';
+        else if (line.includes('DEBUG')||line.includes('debug')) level = 'DEBUG';
+        newLines.push({time: now(), source: shortName, level, text: line.substring(0,500)});
+      });
+    });
+  }
+  
+  // Merge with existing, deduplicate, sort
+  allLogLines = mergeLogLines(allLogLines, newLines);
+  applyFilters();
+  
+  document.getElementById('log-time').textContent = new Date().toLocaleTimeString('ru-RU');
+}
+
+function mergeLogLines(existing, incoming) {
+  // Keep last 2000 lines, deduplicate by text within 5 seconds
+  const cutoff = Date.now() - 60000; // Keep last minute
+  const merged = [...existing.filter(l => l._ts > cutoff), ...incoming.map(l => ({...l, _ts: Date.now()}))];
+  
+  // Dedup: remove exact duplicates (same text within same second)
+  const seen = new Set();
+  const result = [];
+  for (let i = merged.length-1; i >= 0; i--) {
+    const key = merged[i].text.substring(0, 80);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.unshift(merged[i]);
+    }
+  }
+  
+  return result.slice(-2000);
+}
+
+function updateSystemPanel(info) {
+  if (!document.getElementById('show-system').checked) return;
+  document.getElementById('sys-panel').style.display = 'grid';
+  
+  const cpu = info.cpu || {};
+  const mem = info.memory || {};
+  const disk = (info.disk||[])[0] || {};
+  
+  document.getElementById('cpu-pct').textContent = (cpu.usage_percent||0).toFixed(1)+'%';
+  document.getElementById('cpu-load').textContent = (cpu.load_avg||[0,0,0]).map(v=>v.toFixed(1)).join(' / ');
+  updateBar('cpu-bar', cpu.usage_percent||0, 50, 80);
+  
+  document.getElementById('mem-used').textContent = fmtBytes(mem.used||0);
+  document.getElementById('mem-total').textContent = fmtBytes(mem.total||0);
+  updateBar('mem-bar', mem.percent||0, 70, 90);
+  
+  document.getElementById('disk-used').textContent = fmtBytes(disk.used||0);
+  document.getElementById('disk-free').textContent = fmtBytes(disk.free||0);
+  updateBar('disk-bar', disk.percent||0, 70, 90);
+}
+
+function updateDockerStats(stats) {
+  const sys = stats.system || {};
+  document.getElementById('docker-count').textContent = sys.containers_total||'?';
+  document.getElementById('docker-running').textContent = sys.containers_running||'?';
+  
+  // Top bar
+  const running = sys.containers_running || 0;
+  const total = sys.containers_total || 0;
+  const dotClass = running === total ? 'dot-green' : running > 0 ? 'dot-amber' : 'dot-red';
+  document.getElementById('top-bar').innerHTML = `
+    <div class="stat-pill"><div class="dot ${dotClass}"></div>Docker: ${running}/${total} running</div>
+    <div class="stat-pill">🐳 v${sys.docker_version||'?'}</div>
+    <div class="stat-pill">📦 ${sys.images_count||0} образов</div>
+    <div class="stat-pill">🖥️ ${sys.cpus||'?'} CPU · ${fmtBytes(sys.memory_total||0)} RAM</div>
+  `;
+}
+
+function updateBar(id, pct, warn, crit) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.width = Math.min(pct,100) + '%';
+  el.className = 'progress-fill ' + (pct >= crit ? 'progress-crit' : pct >= warn ? 'progress-warn' : 'progress-ok');
+}
+
+function applyFilters() {
+  const search = (document.getElementById('log-search')?.value || '').toLowerCase();
+  const level = document.getElementById('log-level')?.value || '';
+  
+  let lines = allLogLines;
+  
+  // Tab filter
+  if (currentTab === 'docker') {
+    lines = lines.filter(l => DOCKER_SERVICES.some(s => s.includes(l.source)) || l.source==='docker');
+  } else if (currentTab === 'kag-api') {
+    lines = lines.filter(l => l.source==='kag-api' || l.source==='kag-worker');
+  } else if (currentTab === 'system') {
+    lines = lines.filter(l => l.source==='system' || l.source==='docker');
+  } else if (currentTab === 'audit') {
+    lines = lines.filter(l => l.source==='kag-api' && (l.text.includes('user')||l.text.includes('auth')||l.text.includes('login')));
+  }
+  
+  // Search
+  if (search) lines = lines.filter(l => l.text.toLowerCase().includes(search) || l.source.toLowerCase().includes(search));
+  
+  // Level
+  if (level) lines = lines.filter(l => l.level === level);
+  
+  // Render
+  const stream = document.getElementById('log-stream');
+  if (lines.length === 0) {
+    stream.innerHTML = '<div class="empty">Нет логов</div>';
+  } else {
+    const display = lines.slice(-500); // Last 500 for performance
+    stream.innerHTML = display.map(l => {
+      const cls = SOURCE_CLASS[l.source] || '';
+      const lvlCls = l.level ? ' llevel-'+l.level : '';
+      return `<div class="log-line${lvlCls}"><span class="ltime">${l.time}</span><span class="lsource ${cls}">${l.source}</span><span class="ltext">${escapeHtml(l.text)}</span></div>`;
+    }).join('');
+    
+    // Auto-scroll
+    if (document.getElementById('auto-scroll').checked) {
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }
+  
+  const errCount = allLogLines.filter(l=>l.level==='ERROR').length;
+  const warnCount = allLogLines.filter(l=>l.level==='WARNING').length;
+  document.getElementById('log-stats').textContent = `Всего: ${allLogLines.length} строк · ERROR: ${errCount} · WARNING: ${warnCount} · Отфильтровано: ${lines.length}`;
+}
+
+function exportLogs() {
+  const text = allLogLines.map(l => `[${l.time}] [${l.source}] [${l.level}] ${l.text}`).join('\n');
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'kag-logs-'+new Date().toISOString().slice(0,19).replace(/:/g,'-')+'.log';
+  a.click();
+  toast('📥 Логи экспортированы');
+}
+
+function clearLogs() {
+  if (!confirm('Очистить все логи в памяти?')) return;
+  allLogLines = [];
+  applyFilters();
+  toast('🗑️ Логи очищены');
+}
+
+// Helpers
+function now() {
+  const d = new Date();
+  return d.toTimeString().slice(0,8);
+}
+function fmtBytes(b) {if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB','TB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];}
+function escapeHtml(t) {const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+function toast(msg) {const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2500);}
 </script>
 </body>
 </html>

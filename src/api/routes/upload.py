@@ -313,6 +313,94 @@ async def get_document_chunks(
         return {"chunks": [], "total": 0, "error": str(e)}
 
 
+@router.get("/{document_id}/details", summary="Детальная информация о документе")
+async def get_document_details(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Получить расширенную информацию о документе с тэгами, типом, пользователем."""
+    from src.database import get_session
+    from src.database.document_models import Document
+    from src.database.user_models import User as UserModel
+    from src.indexing.auto_tagger import get_auto_tagger
+    
+    session = get_session()
+    try:
+        record = session.query(Document).filter(Document.id == document_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Документ не найден")
+        
+        # Get user info
+        uploaded_by_name = None
+        if record.uploaded_by:
+            user = session.query(UserModel).filter(UserModel.id == record.uploaded_by).first()
+            if user:
+                uploaded_by_name = user.username
+        
+        # Get tags from Qdrant payload or auto-tagger
+        tags = []
+        doc_type = "unknown"
+        recognized_title = record.filename
+        
+        try:
+            from src.indexing.qdrant_service import get_qdrant_service
+            qdrant_service = get_qdrant_service()
+            results = qdrant_service.scroll_points(
+                filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
+                limit=1
+            )
+            if results:
+                payload = results[0].get("payload", {})
+                tags = payload.get("tags", [])
+                doc_type = payload.get("document_type", "unknown")
+                recognized_title = payload.get("title", record.filename)
+                chunks_total = payload.get("chunks_total", 0)
+            else:
+                chunks_total = 0
+        except Exception as e:
+            logger.warning(f"Не удалось получить тэги из Qdrant: {e}")
+            chunks_total = 0
+        
+        # If no tags, try auto-tagger (but we need document text)
+        if not tags:
+            try:
+                # Try to get first chunk text for tagging
+                from src.indexing.qdrant_service import get_qdrant_service
+                qdrant_service = get_qdrant_service()
+                results = qdrant_service.scroll_points(
+                    filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
+                    limit=3
+                )
+                if results:
+                    text = " ".join([r.get("payload", {}).get("text", "") for r in results])
+                    tagger = get_auto_tagger()
+                    classification = tagger.classify(text, record.filename)
+                    tags = classification.tags
+                    if classification.confidence > 0.3:
+                        doc_type = classification.document_type.value
+            except Exception as e:
+                logger.warning(f"Auto-tagger failed: {e}")
+        
+        return {
+            "document_id": record.id,
+            "filename": record.filename,
+            "recognized_title": recognized_title,
+            "file_type": record.mime_type or "unknown",
+            "file_size": record.file_size or 0,
+            "status": record.status,
+            "document_type": doc_type,
+            "tags": tags,
+            "chunks_count": chunks_total,
+            "uploaded_by": record.uploaded_by,
+            "uploaded_by_name": uploaded_by_name,
+            "file_hash": record.file_hash,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "updated_at": record.updated_at.isoformat() if record.updated_at else None
+        }
+    finally:
+        session.close()
+
+
 async def _process_document_async(document_id: str):
     """Фоновая обработка документа"""
     try:

@@ -1,319 +1,498 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление документами</title>
-    <style>
-        :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Документы</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
-        /* Sidebar Navigation */
-        nav{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1.5rem 1rem;flex-shrink:0}
-        nav .logo{font-size:1.25rem;font-weight:700;margin-bottom:2rem;display:flex;align-items:center;gap:0.5rem}
-        nav .logo span{background:linear-gradient(135deg,var(--accent),var(--accent-h));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-        nav a{display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;border-radius:var(--radius-sm);color:var(--text3);text-decoration:none;font-size:0.875rem;transition:all 0.15s;margin-bottom:0.15rem}
-        nav a:hover{background:var(--surface);color:var(--text2)}
-        nav a.active{background:var(--accent);color:#fff}
+/* Sidebar */
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
 
-        /* Main Content */
-        main{flex:1;overflow-y:auto;padding:2rem}
+/* Main */
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1500px;width:100%}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
 
-        /* Upload Section */
-        .upload-section{background:var(--panel);border-radius:var(--radius);border:1px solid var(--border);padding:2rem;margin-bottom:2rem}
-        .upload-section h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:var(--text2)}
-        .upload-area{border:2px dashed var(--border);border-radius:var(--radius);padding:3rem;text-align:center;cursor:pointer;transition:all 0.2s}
-        .upload-area:hover{border-color:var(--accent);background:var(--surface)}
-        .upload-icon{font-size:3rem;margin-bottom:1rem}
-        .upload-text{font-size:1.05rem;color:var(--text2);margin-bottom:0.5rem}
-        .upload-hint{font-size:0.8rem;color:var(--text4)}
-        .upload-form{display:none}
+/* Stats row */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
+.stat-card .stat-num{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-0.5px}
+.stat-card .stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
 
-        /* Progress Bar */
-        .progress-container{margin-top:1rem;display:none}
-        .progress-container .label{font-size:0.8rem;color:var(--text3);margin-bottom:0.5rem}
-        .progress-bar{width:100%;height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
-        .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s;width:0%}
+/* Filters */
+.filters{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.filters input,.filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none}
+.filters input:focus,.filters select:focus{border-color:var(--accent)}
+.filters input{flex:1;min-width:200px}
+.filters select{min-width:140px}
+.filters .btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
+.filters .btn:hover{opacity:0.85}
+.filters .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.filters .view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+.filters .view-toggle button{background:transparent;border:none;padding:8px 12px;color:var(--text3);cursor:pointer;font-size:16px;transition:all 0.15s}
+.filters .view-toggle button.active{background:var(--accent);color:#fff}
 
-        /* Documents Table */
-        .section{background:var(--panel);border-radius:var(--radius);border:1px solid var(--border);padding:1.5rem;margin-bottom:2rem}
-        .section-title{font-size:1.1rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;color:var(--text2)}
-        table{width:100%;border-collapse:collapse}
-        th,td{padding:0.75rem;text-align:left;border-bottom:1px solid var(--border-s);font-size:0.8125rem}
-        th{color:var(--text4);font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em}
-        td{color:var(--text2)}
-        tr:hover{background:var(--surface)}
-        tr:last-child td{border-bottom:none}
+/* Documents grid */
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-bottom:24px}
+.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s;position:relative}
+.doc-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 24px rgba(94,106,210,0.08)}
+.doc-card .thumb{height:140px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:48px;position:relative}
+.doc-card .thumb .type-badge{position:absolute;top:10px;right:10px;font-size:10px;padding:4px 10px;border-radius:9999px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em}
+.doc-card .card-body{padding:14px 18px 16px}
+.doc-card .card-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-card .card-meta{font-size:11px;color:var(--text4);margin-bottom:8px;line-height:1.5}
+.doc-card .card-meta span{display:inline-flex;align-items:center;gap:4px}
+.doc-card .card-tags{display:flex;gap:4px;flex-wrap:wrap}
+.doc-card .tag{font-size:10px;padding:3px 8px;border-radius:9999px;font-weight:500;letter-spacing:0.02em}
+.tag-type{background:rgba(94,106,210,0.15);color:var(--accent-l)}
+.tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
+.tag-stamped{background:rgba(39,166,68,0.15);color:var(--green)}
+.tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
+.tag-multi-page{background:rgba(255,255,255,0.06);color:var(--text3)}
 
-        .badge{display:inline-block;padding:0.2rem 0.6rem;border-radius:9999px;font-size:0.7rem;font-weight:500}
-        .badge-success{background:rgba(39,166,68,0.15);color:var(--green)}
-        .badge-error{background:rgba(220,38,38,0.15);color:var(--red)}
-        .badge-warning{background:rgba(245,158,11,0.15);color:#f59e0b}
-        .badge-info{background:rgba(94,106,210,0.15);color:var(--accent)}
+/* Table view */
+.docs-table{display:none}
+.docs-table.visible{display:block}
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border-s);font-size:13px}
+th{color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.04em}
+td{color:var(--text2)}
+tr:hover{background:var(--surface)}
+.action-btn{padding:5px 10px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s}
+.btn-danger{background:rgba(220,38,38,0.12);color:var(--red)}
+.btn-danger:hover{background:rgba(220,38,38,0.25)}
 
-        .action-btn{padding:0.35rem 0.65rem;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:0.75rem;transition:all 0.15s}
-        .btn-delete{background:rgba(220,38,38,0.12);color:var(--red)}
-        .btn-delete:hover{background:rgba(220,38,38,0.25)}
-        .btn-refresh{background:var(--accent);color:#fff;padding:0.5rem 1rem;font-size:0.8125rem}
-        .btn-refresh:hover{background:var(--accent-h)}
+/* Detail Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);max-width:700px;width:95%;max-height:85vh;overflow-y:auto;padding:0}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px 16px;border-bottom:1px solid var(--border-s)}
+.modal-header h2{font-size:18px;font-weight:600;letter-spacing:-0.3px;word-break:break-word}
+.modal-close{background:none;border:none;color:var(--text4);font-size:24px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--text2)}
+.modal-body{padding:20px 24px 24px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.detail-item .detail-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
+.detail-item .detail-value{font-size:14px;color:var(--text2)}
+.modal-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px}
+.chunks-preview{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px;margin-top:16px;max-height:200px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3);white-space:pre-wrap;line-height:1.6}
 
-        .btn{padding:0.65rem 1.25rem;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:0.8125rem;font-weight:500;background:var(--accent);color:#fff;margin-top:1rem;transition:all 0.15s}
-        .btn:hover{background:var(--accent-h)}
-        .btn:disabled{opacity:0.4;cursor:not-allowed}
+/* Empty */
+.empty{text-align:center;padding:60px 20px;color:var(--text4);grid-column:1/-1}
+.empty-icon{font-size:56px;margin-bottom:14px;opacity:0.5}
 
-        .loading{text-align:center;padding:2rem;color:var(--text4);font-size:0.875rem}
-        .empty-state{padding:2rem;text-align:center;color:var(--text4);font-size:0.875rem}
+/* Loading */
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{text-align:center;padding:60px}
 
-        .notification{position:fixed;top:2rem;right:2rem;padding:0.75rem 1.25rem;border-radius:var(--radius);background:var(--green);color:#fff;display:none;z-index:1000;font-size:0.875rem;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
-    </style>
+/* Notification */
+.notif{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:14px;font-weight:500;display:none;z-index:1000;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
+
+/* Type colors for badges */
+.ctype-invoice{background:rgba(220,38,38,0.12);color:#f87171}
+.ctype-contract{background:rgba(94,106,210,0.15);color:var(--accent-l)}
+.ctype-report{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.ctype-letter{background:rgba(245,158,11,0.15);color:var(--amber)}
+.ctype-identity{background:rgba(139,92,246,0.15);color:#a78bfa}
+.ctype-legal{background:rgba(239,68,68,0.15);color:#f87171}
+.ctype-medical{background:rgba(59,130,246,0.15);color:#60a5fa}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}.docs-grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-    <nav>
-        <div class="logo">🎯 <span>KAG</span></div>
-        <a href="/">⬡ Дашборд</a>
-        <a href="/chat">💬 Чат с AI</a>
-        <a href="/documents" class="active">📄 Документы</a>
-        <a href="/ocr">🔍 OCR-демо</a>
-        <a href="/monitoring">📡 Мониторинг</a>
-        <a href="/users">👥 Пользователи</a>
-        <a href="/admin">⚙️ Админ</a>
-    </nav>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents" class="active">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/ocr">🔍 OCR-демо</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/monitoring">📡 Мониторинг</a>
+  <a href="/users">👥 Пользователи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
 
-    <main>
-        <!-- Upload Section -->
-        <div class="upload-section">
-            <h2>⬆️ Загрузка документов</h2>
-            
-            <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text">Перетащите файлы сюда или нажмите для выбора</div>
-                <div class="upload-hint">Поддерживаемые форматы: PDF, TXT, MD, DOCX, CSV</div>
-            </div>
-            
-            <input type="file" id="file-input" class="upload-form" multiple accept=".pdf,.txt,.md,.docx,.csv">
-            
-            <div class="progress-container" id="progress-container">
-                <div class="label">Загрузка... <span id="progress-percent">0%</span></div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
-                </div>
-            </div>
+<main>
+  <h1>📄 Документы</h1>
+  <div class="sub">Управление документами — загрузка, классификация, поиск</div>
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="search-input" placeholder="🔍 Поиск по названию, типу, тэгам..." oninput="applyFilters()">
+    <select id="type-filter" onchange="applyFilters()">
+      <option value="">Все типы</option>
+      <option value="invoice">Счёт</option>
+      <option value="contract">Договор</option>
+      <option value="report">Отчёт</option>
+      <option value="letter">Письмо</option>
+      <option value="form">Форма</option>
+      <option value="identity">Удостоверение</option>
+      <option value="legal">Юридический</option>
+      <option value="medical">Медицинский</option>
+    </select>
+    <select id="status-filter" onchange="applyFilters()">
+      <option value="">Все статусы</option>
+      <option value="completed">✅ Готово</option>
+      <option value="processing">⚙️ В обработке</option>
+      <option value="pending">⏳ Ожидает</option>
+      <option value="failed">❌ Ошибка</option>
+    </select>
+    <div class="view-toggle">
+      <button id="view-grid" class="active" onclick="setView('grid')" title="Карточки">▦</button>
+      <button id="view-table" onclick="setView('table')" title="Таблица">☰</button>
+    </div>
+    <button class="btn" onclick="loadDocuments()">🔄 Обновить</button>
+  </div>
+
+  <!-- Grid view -->
+  <div class="docs-grid" id="docs-grid">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+
+  <!-- Table view -->
+  <div class="docs-table" id="docs-table">
+    <table>
+      <thead><tr><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто загрузил</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h2 id="modal-title"></h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script>
+const API = '/api/v1';
+let allDocs = [];
+let view = 'grid';
+let currentDetailDoc = null;
+
+// Upload area
+const uploadHTML = `
+  <div class="docs-grid" style="grid-template-columns:1fr">
+    <div class="doc-card" style="border:2px dashed var(--border);background:transparent" id="upload-zone">
+      <div class="thumb" style="height:100px;font-size:32px">📤</div>
+      <div class="card-body" style="text-align:center">
+        <div class="card-title">Загрузить документ</div>
+        <div class="card-meta">PDF, DOCX, TXT, MD, CSV — перетащите или нажмите</div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
+`;
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  loadDocuments();
+  setupUpload();
+});
+
+function setupUpload() {
+  const grid = document.getElementById('docs-grid');
+  
+  // Add upload zone after load
+  const obs = new MutationObserver(() => {
+    if (!document.getElementById('upload-zone')) {
+      const div = document.createElement('div');
+      div.innerHTML = uploadHTML;
+      grid.insertBefore(div.firstElementChild, grid.firstChild);
+      document.getElementById('upload-zone').addEventListener('click', () => document.getElementById('file-input').click());
+      setupDragDrop();
+      document.getElementById('file-input').addEventListener('change', (e) => uploadFiles(Array.from(e.target.files)));
+    }
+  });
+  obs.observe(grid, {childList: true});
+}
+
+function setupDragDrop() {
+  const zone = document.getElementById('upload-zone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+  zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.style.borderColor = '';
+    uploadFiles(Array.from(e.dataTransfer.files));
+  });
+}
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
+      const d = await r.json();
+      showNotif(`✅ ${file.name} загружен${d.document_id ? ' ('+d.document_id.slice(0,8)+'...)' : ''}`);
+    } catch(e) {
+      showNotif(`❌ ${file.name}: ${e.message}`, true);
+    }
+  }
+  setTimeout(loadDocuments, 1500);
+}
+
+async function loadDocuments() {
+  try {
+    const r = await fetch(`${API}/upload/list`);
+    const data = await r.json();
+    allDocs = data.documents || [];
+    await enrichDocuments();
+    updateStats();
+    renderDocs();
+  } catch(e) {
+    document.getElementById('docs-grid').innerHTML = '<div class="empty"><div class="empty-icon">❌</div>Ошибка загрузки: ' + e.message + '</div>';
+  }
+}
+
+async function enrichDocuments() {
+  // Try to get tags/types for each doc from Qdrant
+  const promises = allDocs.map(async (d) => {
+    try {
+      const r = await fetch(`${API}/upload/${d.document_id}/details`);
+      if (r.ok) {
+        const details = await r.json();
+        d.document_type = details.document_type || 'unknown';
+        d.tags = details.tags || [];
+        d.uploaded_by_name = details.uploaded_by_name || null;
+        d.recognized_title = details.recognized_title || d.filename;
+      }
+    } catch(e) { /* ignore */ }
+    return d;
+  });
+  allDocs = await Promise.all(promises);
+}
+
+function updateStats() {
+  const ready = allDocs.filter(d => d.status === 'completed').length;
+  const totalChunks = allDocs.reduce((s,d) => s + (d.chunks_count || 0), 0);
+  const types = new Set(allDocs.map(d => d.document_type).filter(Boolean));
+  const allTags = new Set();
+  allDocs.forEach(d => (d.tags||[]).forEach(t => allTags.add(t)));
+  
+  document.getElementById('stat-total').textContent = allDocs.length;
+  document.getElementById('stat-ready').textContent = ready;
+  document.getElementById('stat-chunks').textContent = totalChunks;
+  document.getElementById('stat-types').textContent = types.size;
+  document.getElementById('stat-tags').textContent = allTags.size;
+}
+
+function applyFilters() {
+  renderDocs();
+}
+
+function getFilteredDocs() {
+  const search = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const typeFilter = document.getElementById('type-filter')?.value || '';
+  const statusFilter = document.getElementById('status-filter')?.value || '';
+  
+  return allDocs.filter(d => {
+    if (search && !d.filename.toLowerCase().includes(search) && !(d.document_type||'').includes(search) && !(d.tags||[]).some(t=>t.includes(search))) return false;
+    if (typeFilter && d.document_type !== typeFilter) return false;
+    if (statusFilter && d.status !== statusFilter) return false;
+    return true;
+  });
+}
+
+function renderDocs() {
+  const docs = getFilteredDocs();
+  const grid = document.getElementById('docs-grid');
+  const tableBody = document.getElementById('table-body');
+  
+  // Grid
+  if (docs.length === 0) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div style="color:var(--text3);font-size:15px">Нет документов</div><div style="color:var(--text4);font-size:13px;margin-top:6px">Загрузите первый документ через зону выше</div></div>';
+  } else {
+    const uploadEl = document.getElementById('upload-zone')?.closest('.docs-grid');
+    // Preserve upload zone
+    grid.innerHTML = docs.map(d => {
+      const type = d.document_type || 'unknown';
+      const typeLabel = getTypeLabel(type);
+      const statusBadge = getStatusBadge(d.status);
+      const tags = d.tags || [];
+      const icon = getFileIcon(d.file_type || d.filename);
+      
+      return `<div class="doc-card" onclick="showDetail('${d.document_id}')">
+        <div class="thumb">
+          ${icon}
+          <span class="type-badge ${getTypeClass(type)}">${typeLabel}</span>
         </div>
-
-        <!-- Documents List -->
-        <div class="section">
-            <div class="section-title">
-                <span>📋 Загруженные документы</span>
-                <button class="action-btn btn-refresh" onclick="loadDocuments()">🔄 Обновить</button>
-            </div>
-            <div id="documents-table">
-                <div class="loading">Загрузка...</div>
-            </div>
+        <div class="card-body">
+          <div class="card-title" title="${d.recognized_title || d.filename}">${d.recognized_title || d.filename}</div>
+          <div class="card-meta">
+            <span>${formatBytes(d.file_size||0)}</span> · 
+            <span>${d.chunks_count||0} чанков</span> · 
+            <span>${d.uploaded_by_name || '—'}</span>
+          </div>
+          <div class="card-meta" style="margin-bottom:6px">${statusBadgeHTML(d.status)} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+          <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
         </div>
-    </main>
+      </div>`;
+    }).join('');
+    // Re-add upload zone
+    if (uploadEl) grid.insertBefore(uploadEl, grid.firstChild);
+  }
+  
+  // Table
+  tableBody.innerHTML = docs.map(d => `
+    <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
+      <td><strong>${d.recognized_title || d.filename}</strong></td>
+      <td><span class="tag ${getTypeClass(d.document_type||'unknown')}" style="font-size:11px">${getTypeLabel(d.document_type||'unknown')}</span></td>
+      <td>${(d.tags||[]).slice(0,3).map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
+      <td>${d.chunks_count||0}</td>
+      <td>${d.uploaded_by_name||'—'}</td>
+      <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
+      <td>${statusBadgeHTML(d.status)}</td>
+      <td><button class="action-btn btn-danger" onclick="event.stopPropagation();deleteDoc('${d.document_id}')">🗑️</button></td>
+    </tr>
+  `).join('');
+}
 
-    <div class="notification" id="notification"></div>
+async function showDetail(docId) {
+  const modal = document.getElementById('modal-overlay');
+  const titleEl = document.getElementById('modal-title');
+  const bodyEl = document.getElementById('modal-body');
+  
+  titleEl.textContent = 'Загрузка...';
+  bodyEl.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
+  modal.classList.add('active');
+  
+  try {
+    const r = await fetch(`${API}/upload/${docId}/details`);
+    const d = await r.json();
+    currentDetailDoc = d;
+    
+    titleEl.textContent = d.recognized_title || d.filename;
+    
+    const type = d.document_type || 'unknown';
+    const tags = d.tags || [];
+    const statusText = {'pending':'⏳ Ожидает','processing':'⚙️ Обработка','completed':'✅ Готово','failed':'❌ Ошибка'};
+    
+    bodyEl.innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Имя файла</div><div class="detail-value">${d.filename}</div></div>
+        <div class="detail-item"><div class="detail-label">Распознанное название</div><div class="detail-value">${d.recognized_title || d.filename}</div></div>
+        <div class="detail-item"><div class="detail-label">Тип документа</div><div class="detail-value"><span class="tag ${getTypeClass(type)}">${getTypeLabel(type)}</span></div></div>
+        <div class="detail-item"><div class="detail-label">Статус</div><div class="detail-value">${statusBadgeHTML(d.status)}</div></div>
+        <div class="detail-item"><div class="detail-label">Размер</div><div class="detail-value">${formatBytes(d.file_size||0)}</div></div>
+        <div class="detail-item"><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
+        <div class="detail-item"><div class="detail-label">Кто загрузил</div><div class="detail-value">${d.uploaded_by_name||d.uploaded_by||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">${(d.file_hash||'')}</div></div>
+        <div class="detail-item"><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
+        <div class="detail-item"><div class="detail-label">Обновлён</div><div class="detail-value">${new Date(d.updated_at).toLocaleString('ru-RU')}</div></div>
+      </div>
+      <div class="modal-tags">
+        <span style="font-size:11px;color:var(--text4);margin-right:6px">Тэги:</span>
+        ${tags.length ? tags.map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">нет</span>'}
+      </div>
+      <div style="margin-top:18px;display:flex;gap:8px">
+        <button class="btn" style="background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600" onclick="window.location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red);border:none;padding:8px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600" onclick="deleteDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+      </div>
+    `;
+  } catch(e) {
+    bodyEl.innerHTML = '<div style="color:var(--red);text-align:center;padding:20px">Ошибка: ' + e.message + '</div>';
+  }
+}
 
-    <script>
-        const API_URL = '/api/v1';
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
 
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDocuments();
-            setupDragAndDrop();
-            setupFileInput();
-        });
+async function deleteDoc(docId) {
+  if (!confirm('Удалить документ безвозвратно?')) return;
+  try {
+    await fetch(`${API}/upload/${docId}`, {method:'DELETE'});
+    showNotif('✅ Документ удалён');
+    loadDocuments();
+  } catch(e) {
+    showNotif('❌ Ошибка: ' + e.message, true);
+  }
+}
 
-        function setupDragAndDrop() {
-            const area = document.getElementById('upload-area');
-            
-            area.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                area.style.borderColor = '#5e6ad2';
-            });
-            
-            area.addEventListener('dragleave', () => {
-                area.style.borderColor = '';
-            });
-            
-            area.addEventListener('drop', (e) => {
-                e.preventDefault();
-                area.style.borderColor = '';
-                const files = Array.from(e.dataTransfer.files);
-                uploadFiles(files);
-            });
-        }
+function setView(v) {
+  view = v;
+  document.getElementById('view-grid').classList.toggle('active', v==='grid');
+  document.getElementById('view-table').classList.toggle('active', v==='table');
+  document.getElementById('docs-grid').style.display = v==='grid' ? 'grid' : 'none';
+  document.getElementById('docs-table').classList.toggle('visible', v==='table');
+}
 
-        function setupFileInput() {
-            const input = document.getElementById('file-input');
-            input.addEventListener('change', () => {
-                const files = Array.from(input.files);
-                uploadFiles(files);
-            });
-        }
+// Helpers
+function getFileIcon(ft) {
+  if (!ft) return '📄';
+  const t = ft.toLowerCase();
+  if (t.includes('pdf')) return '📕';
+  if (t.includes('doc')) return '📘';
+  if (t.includes('txt')||t.includes('md')) return '📝';
+  if (t.includes('csv')||t.includes('sheet')) return '📊';
+  if (t.includes('image')) return '🖼️';
+  return '📄';
+}
 
-        async function uploadFiles(files) {
-            if (files.length === 0) return;
+function getTypeLabel(t) {
+  const labels = {invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',other:'Другое',unknown:'Неизвестно'};
+  return labels[t] || t;
+}
 
-            const progressContainer = document.getElementById('progress-container');
-            const progressFill = document.getElementById('progress-fill');
-            const progressPercent = document.getElementById('progress-percent');
-            
-            progressContainer.style.display = 'block';
-            progressFill.style.width = '0%';
-            progressPercent.textContent = '0%';
+function getTypeClass(t) {
+  return 'ctype-' + (t||'unknown');
+}
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const formData = new FormData();
-                formData.append('file', file);
+function getTagClass(t) {
+  if (!t) return '';
+  if (t.includes('has-date')) return 'tag-has-date';
+  if (t.includes('signed')) return 'tag-signed';
+  if (t.includes('stamped')) return 'tag-stamped';
+  if (t.includes('amounts')) return 'tag-has-amounts';
+  if (t.includes('multi-page')) return 'tag-multi-page';
+  return getTypeClass(t);
+}
 
-                try {
-                    const response = await fetch(`${API_URL}/upload/`, {
-                        method: 'POST',
-                        body: formData
-                    });
+function statusBadgeHTML(s) {
+  const map = {pending:['⏳ Ожидает','amber'],processing:['⚙️ В обработке','amber'],completed:['✅ Готово','emerald'],failed:['❌ Ошибка','red']};
+  const [label,color] = map[s] || [s,'amber'];
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500;background:rgba(${color==='emerald'?'16,185,129':color==='red'?'220,38,38':'245,158,11'},0.15);color:var(--${color})">${label}</span>`;
+}
 
-                    if (!response.ok) {
-                        throw new Error(`Ошибка загрузки ${file.name}`);
-                    }
+function formatBytes(b) {if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];}
+function showNotif(msg,err){const n=document.getElementById('notif');n.textContent=msg;n.style.background=err?'var(--red)':'var(--green)';n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
 
-                    await response.json();
-                    showNotification(`✅ ${file.name} загружен`);
-                    
-                    const percent = ((i + 1) / files.length) * 100;
-                    progressFill.style.width = percent + '%';
-                    progressPercent.textContent = Math.round(percent) + '%';
-                    
-                } catch (error) {
-                    showNotification(`❌ ${file.name}: ${error.message}`, true);
-                }
-            }
+// Open modal on doc-card click handled by onclick on .doc-card
 
-            setTimeout(() => {
-                progressContainer.style.display = 'none';
-                loadDocuments();
-            }, 1000);
-        }
-
-        async function loadDocuments() {
-            try {
-                const response = await fetch(`${API_URL}/upload/list`);
-                const data = await response.json();
-
-                if (data.documents.length === 0) {
-                    document.getElementById('documents-table').innerHTML = 
-                        '<div class="empty-state">Нет загруженных документов</div>';
-                    return;
-                }
-
-                document.getElementById('documents-table').innerHTML = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Имя файла</th>
-                                <th>Тип</th>
-                                <th>Размер</th>
-                                <th>Статус</th>
-                                <th>Прогресс</th>
-                                <th>Чанков</th>
-                                <th>Дата</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.documents.map(doc => `
-                                <tr>
-                                    <td><strong>${doc.filename}</strong></td>
-                                    <td>${doc.file_type}</td>
-                                    <td>${formatBytes(doc.file_size)}</td>
-                                    <td>
-                                        <span class="badge ${getStatusBadge(doc.status)}">
-                                            ${getStatusText(doc.status)}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="progress-bar" style="width: 100px; display: inline-block; vertical-align: middle; margin-right: 8px;">
-                                            <div class="progress-fill" style="width: ${doc.progress}%"></div>
-                                        </div>
-                                        ${doc.progress}%
-                                    </td>
-                                    <td><a href="/chunks?doc_id=${doc.document_id}&name=${encodeURIComponent(doc.filename)}" style="color:var(--accent-h);text-decoration:none;font-weight:500">${doc.chunks_count || '0'}</a></td>
-                                    <td>${new Date(doc.created_at).toLocaleString('ru-RU')}</td>
-                                    <td>
-                                        <button class="action-btn btn-delete" onclick="deleteDocument('${doc.document_id}')">🗑️</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-            } catch (error) {
-                console.error('Ошибка загрузки документов:', error);
-            }
-        }
-
-        async function deleteDocument(docId) {
-            if (!confirm('Удалить этот документ?')) return;
-
-            try {
-                const response = await fetch(`${API_URL}/upload/${docId}`, {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    showNotification('✅ Документ удален');
-                    loadDocuments();
-                } else {
-                    showNotification('❌ Ошибка удаления', true);
-                }
-            } catch (error) {
-                showNotification(`❌ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        function getStatusBadge(status) {
-            const badges = {
-                'pending': 'badge-info',
-                'processing': 'badge-warning',
-                'completed': 'badge-success',
-                'failed': 'badge-error'
-            };
-            return badges[status] || 'badge-info';
-        }
-
-        function getStatusText(status) {
-            const texts = {
-                'pending': '⏳ Ожидает',
-                'processing': '⚙️ Обработка',
-                'completed': '✅ Готово',
-                'failed': '❌ Ошибка'
-            };
-            return texts[status] || status;
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function showNotification(message, isError = false) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.style.background = isError ? '#dc2626' : '#27a644';
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 3000);
-        }
-
-        // Автообновление каждые 5 секунд
-        setInterval(loadDocuments, 5000);
-    </script>
+// Auto-refresh
+setInterval(loadDocuments, 15000);
+</script>
 </body>
 </html>
