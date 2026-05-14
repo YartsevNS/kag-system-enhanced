@@ -30,7 +30,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git
+    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git && \
+    mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth
 
 # ===========================================
 # Stage 2: Production - финальный образ
