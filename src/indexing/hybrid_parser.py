@@ -26,7 +26,7 @@ from loguru import logger
 class ParsedPage:
     """One page of parsed document."""
     page_num: int
-    text: str                          # Full text of the page
+    text: str = ""                      # Full text of the page
     layout: List[Dict[str, Any]] = field(default_factory=list)  # Layout elements
     tables: List[Dict[str, Any]] = field(default_factory=list)  # Extracted tables
     images: List[Dict[str, Any]] = field(default_factory=list)  # Image descriptions
