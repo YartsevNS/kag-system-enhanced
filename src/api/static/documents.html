@@ -10,7 +10,6 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
-/* Sidebar */
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -18,98 +17,83 @@ nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
 
-/* Main */
-main{margin-left:240px;flex:1;padding:28px 36px;max-width:1500px;width:100%}
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1600px;width:100%}
 h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .sub{font-size:14px;color:var(--text4);margin-bottom:20px}
 
-/* Stats row */
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
 .stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
 .stat-card .stat-num{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-0.5px}
 .stat-card .stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
 
-/* Filters */
-.filters{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
 .filters input,.filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none}
 .filters input:focus,.filters select:focus{border-color:var(--accent)}
-.filters input{flex:1;min-width:200px}
-.filters select{min-width:140px}
-.filters .btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
-.filters .btn:hover{opacity:0.85}
-.filters .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}
-.filters .view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
-.filters .view-toggle button{background:transparent;border:none;padding:8px 12px;color:var(--text3);cursor:pointer;font-size:16px;transition:all 0.15s}
-.filters .view-toggle button.active{background:var(--accent);color:#fff}
+.filters input{flex:1;min-width:180px}
+.filters select{min-width:130px}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
+.btn:hover{opacity:0.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:500;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--text4)}
+.btn-outline.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-/* Documents grid */
-.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-bottom:24px}
-.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s;position:relative}
-.doc-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 24px rgba(94,106,210,0.08)}
-.doc-card .thumb{height:140px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:48px;position:relative}
-.doc-card .thumb .type-badge{position:absolute;top:10px;right:10px;font-size:10px;padding:4px 10px;border-radius:9999px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em}
-.doc-card .card-body{padding:14px 18px 16px}
-.doc-card .card-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.doc-card .card-meta{font-size:11px;color:var(--text4);margin-bottom:8px;line-height:1.5}
-.doc-card .card-meta span{display:inline-flex;align-items:center;gap:4px}
-.doc-card .card-tags{display:flex;gap:4px;flex-wrap:wrap}
-.doc-card .tag{font-size:10px;padding:3px 8px;border-radius:9999px;font-weight:500;letter-spacing:0.02em}
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:24px;text-align:center;cursor:pointer;margin-bottom:20px;transition:all 0.2s;background:var(--surface)}
+.upload-zone:hover{border-color:var(--accent);background:var(--elevated)}
+.upload-icon{font-size:32px;margin-bottom:6px;opacity:0.6}
+.upload-text{font-size:14px;color:var(--text2);font-weight:500}
+.upload-hint{font-size:12px;color:var(--text4);margin-top:4px}
+
+/* Cards grid */
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px}
+.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s}
+.doc-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 24px rgba(94,106,210,0.08)}
+.doc-card .thumb{width:100%;height:180px;object-fit:cover;background:var(--panel);display:block}
+.doc-card .thumb-wrap{position:relative;overflow:hidden;height:180px;background:var(--panel)}
+.doc-card .thumb-wrap .type-badge{position:absolute;top:10px;right:10px;font-size:10px;padding:3px 10px;border-radius:9999px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em}
+.doc-card .card-body{padding:12px 16px 14px}
+.doc-card .card-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-card .card-meta{font-size:11px;color:var(--text4);margin-bottom:6px;line-height:1.5}
+.doc-card .card-tags{display:flex;gap:3px;flex-wrap:wrap}
+.tag{font-size:10px;padding:3px 7px;border-radius:9999px;font-weight:500;letter-spacing:0.02em}
 .tag-type{background:rgba(94,106,210,0.15);color:var(--accent-l)}
 .tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
 .tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
-.tag-stamped{background:rgba(39,166,68,0.15);color:var(--green)}
 .tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
-.tag-multi-page{background:rgba(255,255,255,0.06);color:var(--text3)}
 
-/* Table view */
-.docs-table{display:none}
-.docs-table.visible{display:block}
+/* Table */
 table{width:100%;border-collapse:collapse}
 th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border-s);font-size:13px}
-th{color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.04em}
+th{color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;background:var(--panel)}
 td{color:var(--text2)}
-tr:hover{background:var(--surface)}
-.action-btn{padding:5px 10px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s}
-.btn-danger{background:rgba(220,38,38,0.12);color:var(--red)}
-.btn-danger:hover{background:rgba(220,38,38,0.25)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.status-badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+.s-ready{background:rgba(16,185,129,0.12);color:var(--emerald)}
+.s-proc{background:rgba(245,158,11,0.12);color:var(--amber)}
+.s-pend{background:rgba(94,106,210,0.12);color:var(--accent-l)}
+.s-fail{background:rgba(220,38,38,0.12);color:var(--red)}
 
-/* Detail Modal */
+/* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.active{display:flex}
-.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);max-width:700px;width:95%;max-height:85vh;overflow-y:auto;padding:0}
-.modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px 16px;border-bottom:1px solid var(--border-s)}
-.modal-header h2{font-size:18px;font-weight:600;letter-spacing:-0.3px;word-break:break-word}
-.modal-close{background:none;border:none;color:var(--text4);font-size:24px;cursor:pointer;line-height:1}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);max-width:750px;width:95%;max-height:85vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 22px 14px;border-bottom:1px solid var(--border-s)}
+.modal-header h2{font-size:17px;font-weight:600;word-break:break-word}
+.modal-close{background:none;border:none;color:var(--text4);font-size:22px;cursor:pointer}
 .modal-close:hover{color:var(--text2)}
-.modal-body{padding:20px 24px 24px}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.detail-item .detail-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
-.detail-item .detail-value{font-size:14px;color:var(--text2)}
-.modal-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px}
-.chunks-preview{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px;margin-top:16px;max-height:200px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3);white-space:pre-wrap;line-height:1.6}
+.modal-body{padding:18px 22px 22px}
+.modal-thumb{width:100%;max-height:300px;object-fit:contain;background:var(--surface);border-radius:var(--radius);margin-bottom:16px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.detail-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px}
+.detail-value{font-size:13px;color:var(--text2)}
+.modal-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
 
-/* Empty */
-.empty{text-align:center;padding:60px 20px;color:var(--text4);grid-column:1/-1}
-.empty-icon{font-size:56px;margin-bottom:14px;opacity:0.5}
-
-/* Loading */
-.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+.empty{text-align:center;padding:60px;color:var(--text4);grid-column:1/-1}
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading{text-align:center;padding:60px}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
 
-/* Notification */
-.notif{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:14px;font-weight:500;display:none;z-index:1000;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
-
-/* Type colors for badges */
-.ctype-invoice{background:rgba(220,38,38,0.12);color:#f87171}
-.ctype-contract{background:rgba(94,106,210,0.15);color:var(--accent-l)}
-.ctype-report{background:rgba(16,185,129,0.15);color:var(--emerald)}
-.ctype-letter{background:rgba(245,158,11,0.15);color:var(--amber)}
-.ctype-identity{background:rgba(139,92,246,0.15);color:#a78bfa}
-.ctype-legal{background:rgba(239,68,68,0.15);color:#f87171}
-.ctype-medical{background:rgba(59,130,246,0.15);color:#60a5fa}
-
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}.docs-grid{grid-template-columns:1fr}}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.docs-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -119,6 +103,7 @@ tr:hover{background:var(--surface)}
   <a href="/chat">💬 Чат с AI</a>
   <a href="/documents" class="active">📄 Документы</a>
   <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
   <a href="/ocr">🔍 OCR-демо</a>
   <a href="/logs">📋 Логи</a>
   <a href="/monitoring">📡 Мониторинг</a>
@@ -128,7 +113,7 @@ tr:hover{background:var(--surface)}
 
 <main>
   <h1>📄 Документы</h1>
-  <div class="sub">Управление документами — загрузка, классификация, поиск</div>
+  <div class="sub">Управление документами — загрузка, классификация, просмотр</div>
 
   <div class="stats-row" id="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
@@ -138,18 +123,23 @@ tr:hover{background:var(--surface)}
     <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
   </div>
 
+  <!-- Upload -->
+  <div class="upload-zone" id="upload-zone">
+    <div class="upload-icon">📤</div>
+    <div class="upload-text">Загрузить документы</div>
+    <div class="upload-hint">PDF, DOCX, TXT, MD, CSV — перетащите или нажмите</div>
+  </div>
+  <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
+
+  <!-- Filters + View toggle -->
   <div class="filters">
     <input type="text" id="search-input" placeholder="🔍 Поиск по названию, типу, тэгам..." oninput="applyFilters()">
     <select id="type-filter" onchange="applyFilters()">
       <option value="">Все типы</option>
-      <option value="invoice">Счёт</option>
-      <option value="contract">Договор</option>
-      <option value="report">Отчёт</option>
-      <option value="letter">Письмо</option>
-      <option value="form">Форма</option>
-      <option value="identity">Удостоверение</option>
-      <option value="legal">Юридический</option>
-      <option value="medical">Медицинский</option>
+      <option value="invoice">Счёт</option><option value="contract">Договор</option>
+      <option value="report">Отчёт</option><option value="letter">Письмо</option>
+      <option value="form">Форма</option><option value="identity">Удостоверение</option>
+      <option value="legal">Юридический</option><option value="medical">Медицинский</option>
     </select>
     <select id="status-filter" onchange="applyFilters()">
       <option value="">Все статусы</option>
@@ -158,91 +148,48 @@ tr:hover{background:var(--surface)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
-    <div class="view-toggle">
-      <button id="view-grid" class="active" onclick="setView('grid')" title="Карточки">▦</button>
-      <button id="view-table" onclick="setView('table')" title="Таблица">☰</button>
-    </div>
-    <button class="btn" onclick="loadDocuments()">🔄 Обновить</button>
+    <button class="btn-outline" id="btn-table" onclick="setView('table')">📋 Таблица</button>
+    <button class="btn-outline active" id="btn-cards" onclick="setView('cards')">🖼️ Карточки</button>
+    <button class="btn" onclick="loadAll()">🔄 Обновить</button>
   </div>
 
-  <!-- Grid view -->
-  <div class="docs-grid" id="docs-grid">
-    <div class="loading"><div class="spinner"></div></div>
-  </div>
+  <!-- Cards -->
+  <div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div>
 
-  <!-- Table view -->
-  <div class="docs-table" id="docs-table">
+  <!-- Table -->
+  <div id="docs-table" style="display:none">
     <table>
-      <thead><tr><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто загрузил</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
+      <thead><tr><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
       <tbody id="table-body"></tbody>
     </table>
+    <div class="empty" id="table-empty" style="display:none">Нет документов</div>
   </div>
 </main>
 
-<!-- Detail Modal -->
+<!-- Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal">
-    <div class="modal-header">
-      <h2 id="modal-title"></h2>
-      <button class="modal-close" onclick="closeModal()">×</button>
-    </div>
-    <div class="modal-body" id="modal-body"></div>
-  </div>
+  <div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div>
 </div>
-
-<div class="notif" id="notif"></div>
+<div class="toast" id="toast"></div>
 
 <script>
 const API = '/api/v1';
 let allDocs = [];
-let view = 'grid';
-let currentDetailDoc = null;
+let view = 'cards';
 
-// Upload area
-const uploadHTML = `
-  <div class="docs-grid" style="grid-template-columns:1fr">
-    <div class="doc-card" style="border:2px dashed var(--border);background:transparent" id="upload-zone">
-      <div class="thumb" style="height:100px;font-size:32px">📤</div>
-      <div class="card-body" style="text-align:center">
-        <div class="card-title">Загрузить документ</div>
-        <div class="card-meta">PDF, DOCX, TXT, MD, CSV — перетащите или нажмите</div>
-      </div>
-    </div>
-  </div>
-  <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
-`;
-
-// Init
 document.addEventListener('DOMContentLoaded', () => {
-  loadDocuments();
-  setupUpload();
+  loadAll();
+  document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('file-input').onchange = (e) => uploadFiles(Array.from(e.target.files));
+  setupDragDrop();
 });
-
-function setupUpload() {
-  const grid = document.getElementById('docs-grid');
-  
-  // Add upload zone after load
-  const obs = new MutationObserver(() => {
-    if (!document.getElementById('upload-zone')) {
-      const div = document.createElement('div');
-      div.innerHTML = uploadHTML;
-      grid.insertBefore(div.firstElementChild, grid.firstChild);
-      document.getElementById('upload-zone').addEventListener('click', () => document.getElementById('file-input').click());
-      setupDragDrop();
-      document.getElementById('file-input').addEventListener('change', (e) => uploadFiles(Array.from(e.target.files)));
-    }
-  });
-  obs.observe(grid, {childList: true});
-}
 
 function setupDragDrop() {
   const zone = document.getElementById('upload-zone');
-  if (!zone) return;
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
   zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
   zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.style.borderColor = '';
+    e.preventDefault(); zone.style.borderColor = '';
     uploadFiles(Array.from(e.dataTransfer.files));
   });
 }
@@ -250,48 +197,47 @@ function setupDragDrop() {
 async function uploadFiles(files) {
   if (!files.length) return;
   for (const file of files) {
-    const fd = new FormData();
-    fd.append('file', file);
+    const fd = new FormData(); fd.append('file', file);
     try {
       const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Upload failed'); }
       const d = await r.json();
-      showNotif(`✅ ${file.name} загружен${d.document_id ? ' ('+d.document_id.slice(0,8)+'...)' : ''}`);
+      toast(`✅ ${file.name} загружен`);
     } catch(e) {
-      showNotif(`❌ ${file.name}: ${e.message}`, true);
+      toast(`❌ ${file.name}: ${e.message}`, true);
     }
   }
-  setTimeout(loadDocuments, 1500);
+  setTimeout(loadAll, 2000);
 }
 
-async function loadDocuments() {
+async function loadAll() {
   try {
     const r = await fetch(`${API}/upload/list`);
+    if (!r.ok) throw new Error('Ошибка загрузки списка');
     const data = await r.json();
     allDocs = data.documents || [];
-    await enrichDocuments();
+    await enrichDocs();
     updateStats();
-    renderDocs();
+    renderAll();
   } catch(e) {
-    document.getElementById('docs-grid').innerHTML = '<div class="empty"><div class="empty-icon">❌</div>Ошибка загрузки: ' + e.message + '</div>';
+    document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
   }
 }
 
-async function enrichDocuments() {
-  // Try to get tags/types for each doc from Qdrant
-  const promises = allDocs.map(async (d) => {
+async function enrichDocs() {
+  // Get tags/types for docs — silently skip failures
+  await Promise.all(allDocs.map(async (d) => {
     try {
       const r = await fetch(`${API}/upload/${d.document_id}/details`);
       if (r.ok) {
-        const details = await r.json();
-        d.document_type = details.document_type || 'unknown';
-        d.tags = details.tags || [];
-        d.uploaded_by_name = details.uploaded_by_name || null;
-        d.recognized_title = details.recognized_title || d.filename;
+        const det = await r.json();
+        d.document_type = det.document_type || 'unknown';
+        d.tags = det.tags || [];
+        d.uploaded_by_name = det.uploaded_by_name || null;
+        d.recognized_title = det.recognized_title || d.filename;
       }
-    } catch(e) { /* ignore */ }
-    return d;
-  });
-  allDocs = await Promise.all(promises);
+    } catch(e) { /* skip */ }
+  }));
 }
 
 function updateStats() {
@@ -300,7 +246,6 @@ function updateStats() {
   const types = new Set(allDocs.map(d => d.document_type).filter(Boolean));
   const allTags = new Set();
   allDocs.forEach(d => (d.tags||[]).forEach(t => allTags.add(t)));
-  
   document.getElementById('stat-total').textContent = allDocs.length;
   document.getElementById('stat-ready').textContent = ready;
   document.getElementById('stat-chunks').textContent = totalChunks;
@@ -308,191 +253,136 @@ function updateStats() {
   document.getElementById('stat-tags').textContent = allTags.size;
 }
 
-function applyFilters() {
-  renderDocs();
-}
-
-function getFilteredDocs() {
+function getFiltered() {
   const search = (document.getElementById('search-input')?.value || '').toLowerCase();
-  const typeFilter = document.getElementById('type-filter')?.value || '';
-  const statusFilter = document.getElementById('status-filter')?.value || '';
-  
+  const tf = document.getElementById('type-filter')?.value || '';
+  const sf = document.getElementById('status-filter')?.value || '';
   return allDocs.filter(d => {
     if (search && !d.filename.toLowerCase().includes(search) && !(d.document_type||'').includes(search) && !(d.tags||[]).some(t=>t.includes(search))) return false;
-    if (typeFilter && d.document_type !== typeFilter) return false;
-    if (statusFilter && d.status !== statusFilter) return false;
+    if (tf && d.document_type !== tf) return false;
+    if (sf && d.status !== sf) return false;
     return true;
   });
 }
 
-function renderDocs() {
-  const docs = getFilteredDocs();
+function renderAll() {
+  const docs = getFiltered();
+  renderCards(docs);
+  renderTable(docs);
+}
+
+function renderCards(docs) {
   const grid = document.getElementById('docs-grid');
-  const tableBody = document.getElementById('table-body');
-  
-  // Grid
-  if (docs.length === 0) {
-    grid.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div style="color:var(--text3);font-size:15px">Нет документов</div><div style="color:var(--text4);font-size:13px;margin-top:6px">Загрузите первый документ через зону выше</div></div>';
-  } else {
-    const uploadEl = document.getElementById('upload-zone')?.closest('.docs-grid');
-    // Preserve upload zone
-    grid.innerHTML = docs.map(d => {
-      const type = d.document_type || 'unknown';
-      const typeLabel = getTypeLabel(type);
-      const statusBadge = getStatusBadge(d.status);
-      const tags = d.tags || [];
-      const icon = getFileIcon(d.file_type || d.filename);
-      
-      return `<div class="doc-card" onclick="showDetail('${d.document_id}')">
-        <div class="thumb">
-          ${icon}
-          <span class="type-badge ${getTypeClass(type)}">${typeLabel}</span>
-        </div>
-        <div class="card-body">
-          <div class="card-title" title="${d.recognized_title || d.filename}">${d.recognized_title || d.filename}</div>
-          <div class="card-meta">
-            <span>${formatBytes(d.file_size||0)}</span> · 
-            <span>${d.chunks_count||0} чанков</span> · 
-            <span>${d.uploaded_by_name || '—'}</span>
-          </div>
-          <div class="card-meta" style="margin-bottom:6px">${statusBadgeHTML(d.status)} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
-          <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
-        </div>
-      </div>`;
-    }).join('');
-    // Re-add upload zone
-    if (uploadEl) grid.insertBefore(uploadEl, grid.firstChild);
+  if (!docs.length) {
+    grid.innerHTML = '<div class="empty">📭 Нет документов</div>';
+    return;
   }
-  
-  // Table
-  tableBody.innerHTML = docs.map(d => `
+  grid.innerHTML = docs.map(d => {
+    const type = d.document_type || 'unknown';
+    const tags = d.tags || [];
+    const thumbUrl = `${API}/upload/${d.document_id}/thumbnail`;
+    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    return `<div class="doc-card" onclick="showDetail('${d.document_id}')">
+      <div class="thumb-wrap">
+        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="thumb" style="display:none;align-items:center;justify-content:center;font-size:48px">${fileIcon(d.file_type||d.filename)}</div>
+        <span class="type-badge tag tag-type">${typeLabel(type)}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
+        <div class="card-meta">${fmtBytes(d.file_size||0)} · ${d.chunks_count||0} чанков · ${d.uploaded_by_name||'—'}</div>
+        <div class="card-meta">${statusMap[d.status]||d.status} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+        <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(docs) {
+  const tbody = document.getElementById('table-body');
+  if (!docs.length) {
+    tbody.innerHTML = '';
+    document.getElementById('table-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('table-empty').style.display = 'none';
+  const statusMap = {completed:'<span class="status-badge s-ready">✅ Готово</span>',processing:'<span class="status-badge s-proc">⚙️ Обработка</span>',pending:'<span class="status-badge s-pend">⏳ Ожидает</span>',failed:'<span class="status-badge s-fail">❌ Ошибка</span>'};
+  tbody.innerHTML = docs.map(d => `
     <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
-      <td><strong>${d.recognized_title || d.filename}</strong></td>
-      <td><span class="tag ${getTypeClass(d.document_type||'unknown')}" style="font-size:11px">${getTypeLabel(d.document_type||'unknown')}</span></td>
-      <td>${(d.tags||[]).slice(0,3).map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
+      <td><strong>${d.recognized_title||d.filename}</strong></td>
+      <td><span class="tag tag-type" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
+      <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
       <td>${d.chunks_count||0}</td>
       <td>${d.uploaded_by_name||'—'}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
-      <td>${statusBadgeHTML(d.status)}</td>
-      <td><button class="action-btn btn-danger" onclick="event.stopPropagation();deleteDoc('${d.document_id}')">🗑️</button></td>
-    </tr>
-  `).join('');
+      <td>${statusMap[d.status]||d.status}</td>
+      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
+    </tr>`).join('');
 }
 
 async function showDetail(docId) {
-  const modal = document.getElementById('modal-overlay');
-  const titleEl = document.getElementById('modal-title');
-  const bodyEl = document.getElementById('modal-body');
-  
-  titleEl.textContent = 'Загрузка...';
-  bodyEl.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
-  modal.classList.add('active');
-  
+  const ov = document.getElementById('modal-overlay');
+  document.getElementById('modal-title').textContent = 'Загрузка...';
+  document.getElementById('modal-body').innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
+  ov.classList.add('active');
   try {
     const r = await fetch(`${API}/upload/${docId}/details`);
+    if (!r.ok) throw new Error('Ошибка загрузки');
     const d = await r.json();
-    currentDetailDoc = d;
-    
-    titleEl.textContent = d.recognized_title || d.filename;
-    
-    const type = d.document_type || 'unknown';
-    const tags = d.tags || [];
-    const statusText = {'pending':'⏳ Ожидает','processing':'⚙️ Обработка','completed':'✅ Готово','failed':'❌ Ошибка'};
-    
-    bodyEl.innerHTML = `
+    document.getElementById('modal-title').textContent = d.recognized_title || d.filename;
+    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    document.getElementById('modal-body').innerHTML = `
+      <img class="modal-thumb" src="${API}/upload/${docId}/thumbnail" onerror="this.style.display='none'" alt="Миниатюра">
       <div class="detail-grid">
-        <div class="detail-item"><div class="detail-label">Имя файла</div><div class="detail-value">${d.filename}</div></div>
-        <div class="detail-item"><div class="detail-label">Распознанное название</div><div class="detail-value">${d.recognized_title || d.filename}</div></div>
-        <div class="detail-item"><div class="detail-label">Тип документа</div><div class="detail-value"><span class="tag ${getTypeClass(type)}">${getTypeLabel(type)}</span></div></div>
-        <div class="detail-item"><div class="detail-label">Статус</div><div class="detail-value">${statusBadgeHTML(d.status)}</div></div>
-        <div class="detail-item"><div class="detail-label">Размер</div><div class="detail-value">${formatBytes(d.file_size||0)}</div></div>
-        <div class="detail-item"><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
-        <div class="detail-item"><div class="detail-label">Кто загрузил</div><div class="detail-value">${d.uploaded_by_name||d.uploaded_by||'—'}</div></div>
-        <div class="detail-item"><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">${(d.file_hash||'')}</div></div>
-        <div class="detail-item"><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
-        <div class="detail-item"><div class="detail-label">Обновлён</div><div class="detail-value">${new Date(d.updated_at).toLocaleString('ru-RU')}</div></div>
+        <div><div class="detail-label">Файл</div><div class="detail-value">${d.filename}</div></div>
+        <div><div class="detail-label">Название</div><div class="detail-value">${d.recognized_title||d.filename}</div></div>
+        <div><div class="detail-label">Тип</div><div class="detail-value"><span class="tag tag-type">${typeLabel(d.document_type||'unknown')}</span></div></div>
+        <div><div class="detail-label">Статус</div><div class="detail-value">${statusMap[d.status]||d.status}</div></div>
+        <div><div class="detail-label">Размер</div><div class="detail-value">${fmtBytes(d.file_size||0)}</div></div>
+        <div><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
+        <div><div class="detail-label">Кто загрузил</div><div class="detail-value">${d.uploaded_by_name||d.uploaded_by||'—'}</div></div>
+        <div><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'JetBrains Mono',monospace;font-size:10px;word-break:break-all">${d.file_hash||'—'}</div></div>
+        <div><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
       </div>
-      <div class="modal-tags">
-        <span style="font-size:11px;color:var(--text4);margin-right:6px">Тэги:</span>
-        ${tags.length ? tags.map(t => `<span class="tag ${getTagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">нет</span>'}
-      </div>
-      <div style="margin-top:18px;display:flex;gap:8px">
-        <button class="btn" style="background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600" onclick="window.location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
-        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red);border:none;padding:8px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600" onclick="deleteDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
-      </div>
-    `;
+      <div class="modal-tags">${(d.tags||[]).length ? d.tags.map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">Нет тэгов</span>'}</div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+      </div>`;
   } catch(e) {
-    bodyEl.innerHTML = '<div style="color:var(--red);text-align:center;padding:20px">Ошибка: ' + e.message + '</div>';
+    document.getElementById('modal-body').innerHTML = `<div style="color:var(--red);text-align:center;padding:20px">Ошибка: ${e.message}</div>`;
   }
 }
 
-function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('active');
-}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
-async function deleteDoc(docId) {
+async function delDoc(id) {
   if (!confirm('Удалить документ безвозвратно?')) return;
   try {
-    await fetch(`${API}/upload/${docId}`, {method:'DELETE'});
-    showNotif('✅ Документ удалён');
-    loadDocuments();
-  } catch(e) {
-    showNotif('❌ Ошибка: ' + e.message, true);
-  }
+    await fetch(`${API}/upload/${id}`, {method:'DELETE'});
+    toast('✅ Удалён');
+    loadAll();
+  } catch(e) { toast('❌ '+e.message, true); }
 }
 
 function setView(v) {
   view = v;
-  document.getElementById('view-grid').classList.toggle('active', v==='grid');
-  document.getElementById('view-table').classList.toggle('active', v==='table');
-  document.getElementById('docs-grid').style.display = v==='grid' ? 'grid' : 'none';
-  document.getElementById('docs-table').classList.toggle('visible', v==='table');
+  document.getElementById('btn-cards').classList.toggle('active', v==='cards');
+  document.getElementById('btn-table').classList.toggle('active', v==='table');
+  document.getElementById('docs-grid').style.display = v==='cards'?'grid':'none';
+  document.getElementById('docs-table').style.display = v==='table'?'block':'none';
 }
+
+function applyFilters() { renderAll(); }
 
 // Helpers
-function getFileIcon(ft) {
-  if (!ft) return '📄';
-  const t = ft.toLowerCase();
-  if (t.includes('pdf')) return '📕';
-  if (t.includes('doc')) return '📘';
-  if (t.includes('txt')||t.includes('md')) return '📝';
-  if (t.includes('csv')||t.includes('sheet')) return '📊';
-  if (t.includes('image')) return '🖼️';
-  return '📄';
-}
+function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'📕';if(t.includes('doc'))return'📘';if(t.includes('txt')||t.includes('md'))return'📝';if(t.includes('csv')||t.includes('sheet'))return'📊';return'📄'; }
+function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
+function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
+function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
+function toast(msg,err) { const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'var(--red)':'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000); }
 
-function getTypeLabel(t) {
-  const labels = {invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',other:'Другое',unknown:'Неизвестно'};
-  return labels[t] || t;
-}
-
-function getTypeClass(t) {
-  return 'ctype-' + (t||'unknown');
-}
-
-function getTagClass(t) {
-  if (!t) return '';
-  if (t.includes('has-date')) return 'tag-has-date';
-  if (t.includes('signed')) return 'tag-signed';
-  if (t.includes('stamped')) return 'tag-stamped';
-  if (t.includes('amounts')) return 'tag-has-amounts';
-  if (t.includes('multi-page')) return 'tag-multi-page';
-  return getTypeClass(t);
-}
-
-function statusBadgeHTML(s) {
-  const map = {pending:['⏳ Ожидает','amber'],processing:['⚙️ В обработке','amber'],completed:['✅ Готово','emerald'],failed:['❌ Ошибка','red']};
-  const [label,color] = map[s] || [s,'amber'];
-  return `<span style="display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500;background:rgba(${color==='emerald'?'16,185,129':color==='red'?'220,38,38':'245,158,11'},0.15);color:var(--${color})">${label}</span>`;
-}
-
-function formatBytes(b) {if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];}
-function showNotif(msg,err){const n=document.getElementById('notif');n.textContent=msg;n.style.background=err?'var(--red)':'var(--green)';n.style.display='block';setTimeout(()=>n.style.display='none',3000);}
-
-// Open modal on doc-card click handled by onclick on .doc-card
-
-// Auto-refresh
-setInterval(loadDocuments, 15000);
+setInterval(loadAll, 15000);
 </script>
 </body>
 </html>

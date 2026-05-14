@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Поиск по метаданным</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1600px;width:100%}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+
+/* Search panel */
+.search-panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px}
+.search-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.search-row input,.search-row select{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 16px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+.search-row input:focus,.search-row select:focus{border-color:var(--accent)}
+.search-row input{flex:1;min-width:200px;font-size:16px}
+.search-row select{min-width:140px}
+.search-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.search-tag{font-size:11px;padding:5px 12px;border-radius:9999px;border:1px solid var(--border);color:var(--text3);cursor:pointer;transition:all 0.15s;background:transparent;font-family:'Inter',sans-serif}
+.search-tag:hover{border-color:var(--text4);color:var(--text2)}
+.search-tag.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 22px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:600;transition:opacity 0.15s}
+.btn:hover{opacity:0.85}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text3);padding:10px 22px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px}
+
+/* Results */
+.results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.results-header .count{font-size:14px;color:var(--text3)}
+.results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}
+.result-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px;transition:all 0.15s;cursor:pointer}
+.result-card:hover{border-color:var(--border);background:var(--elevated)}
+.result-card .r-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.result-card .r-filename{font-size:11px;color:var(--text4);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.result-card .r-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.result-card .r-meta-item{font-size:11px;color:var(--text3)}
+.result-card .r-meta-item strong{color:var(--text2)}
+.result-card .r-tags{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px}
+.result-card .r-snippet{font-size:12px;color:var(--text4);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tag{font-size:10px;padding:3px 7px;border-radius:9999px;font-weight:500}
+.tag-type{background:rgba(94,106,210,0.15);color:var(--accent-l)}
+.tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
+.tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
+.highlight{background:rgba(94,106,210,0.25);padding:1px 2px;border-radius:2px;color:var(--accent-l)}
+
+.empty{text-align:center;padding:60px;color:var(--text4)}
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.results-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search" class="active">🔎 Поиск</a>
+  <a href="/ocr">🔍 OCR-демо</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/monitoring">📡 Мониторинг</a>
+  <a href="/users">👥 Пользователи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+
+<main>
+  <h1>🔎 Поиск по метаданным</h1>
+  <div class="sub">Полнотекстовый поиск по документам, тэгам, типам и содержимому</div>
+
+  <div class="search-panel">
+    <div class="search-row">
+      <input type="text" id="main-search" placeholder="Введите запрос... (название, текст, тэги, тип)" onkeydown="if(event.key==='Enter')doSearch()" autofocus>
+      <select id="type-select">
+        <option value="">Все типы</option>
+        <option value="invoice">Счёт</option><option value="contract">Договор</option>
+        <option value="report">Отчёт</option><option value="letter">Письмо</option>
+        <option value="form">Форма</option><option value="identity">Удостоверение</option>
+        <option value="legal">Юридический</option><option value="medical">Медицинский</option>
+      </select>
+      <select id="status-select">
+        <option value="">Все статусы</option>
+        <option value="completed">Готово</option><option value="processing">В обработке</option>
+        <option value="pending">Ожидает</option><option value="failed">Ошибка</option>
+      </select>
+      <button class="btn" onclick="doSearch()">🔍 Искать</button>
+      <button class="btn-ghost" onclick="clearSearch()">✕ Сброс</button>
+    </div>
+    <div class="search-tags" id="quick-tags">
+      <button class="search-tag" data-tag="invoice">Счёт</button>
+      <button class="search-tag" data-tag="contract">Договор</button>
+      <button class="search-tag" data-tag="report">Отчёт</button>
+      <button class="search-tag" data-tag="has-date">С датой</button>
+      <button class="search-tag" data-tag="signed">Подписан</button>
+      <button class="search-tag" data-tag="stamped">С печатью</button>
+      <button class="search-tag" data-tag="has-amounts">С суммами</button>
+      <button class="search-tag" data-tag="multi-page">Многостр.</button>
+    </div>
+  </div>
+
+  <div class="results-header" id="results-header" style="display:none">
+    <div class="count" id="results-count"></div>
+  </div>
+
+  <div class="results-grid" id="results-grid">
+    <div class="empty">🔍 Введите запрос для поиска по документам</div>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1';
+let allDocs = [];
+let activeTags = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Quick tag toggles
+  document.querySelectorAll('.search-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tag = btn.dataset.tag;
+      if (activeTags.includes(tag)) {
+        activeTags = activeTags.filter(t => t !== tag);
+        btn.classList.remove('active');
+      } else {
+        activeTags.push(tag);
+        btn.classList.add('active');
+      }
+      doSearch();
+    });
+  });
+  
+  loadDocs();
+});
+
+async function loadDocs() {
+  try {
+    const r = await fetch(`${API}/upload/list`);
+    if (!r.ok) return;
+    const data = await r.json();
+    allDocs = data.documents || [];
+    // Enrich all docs
+    await Promise.all(allDocs.map(async (d) => {
+      try {
+        const rr = await fetch(`${API}/upload/${d.document_id}/details`);
+        if (rr.ok) {
+          const det = await rr.json();
+          d.document_type = det.document_type;
+          d.tags = det.tags || [];
+          d.uploaded_by_name = det.uploaded_by_name;
+          d.recognized_title = det.recognized_title;
+        }
+      } catch(e) {}
+    }));
+  } catch(e) { console.error(e); }
+}
+
+function doSearch() {
+  const query = (document.getElementById('main-search').value || '').toLowerCase().trim();
+  const typeFilter = document.getElementById('type-select').value;
+  const statusFilter = document.getElementById('status-select').value;
+  
+  let results = allDocs;
+  
+  // Text search across all fields
+  if (query) {
+    const words = query.split(/\s+/);
+    results = results.filter(d => {
+      const searchText = [
+        d.filename, d.recognized_title, d.document_type,
+        d.uploaded_by_name, ...(d.tags||[])
+      ].join(' ').toLowerCase();
+      return words.every(w => searchText.includes(w));
+    });
+  }
+  
+  // Tag filter
+  if (activeTags.length) {
+    results = results.filter(d => {
+      const docTags = (d.tags||[]).concat(d.document_type||[]);
+      return activeTags.every(t => docTags.includes(t));
+    });
+  }
+  
+  // Type filter
+  if (typeFilter) {
+    results = results.filter(d => d.document_type === typeFilter);
+  }
+  
+  // Status filter
+  if (statusFilter) {
+    results = results.filter(d => d.status === statusFilter);
+  }
+  
+  renderResults(results, query);
+}
+
+function renderResults(results, query) {
+  const grid = document.getElementById('results-grid');
+  const header = document.getElementById('results-header');
+  const count = document.getElementById('results-count');
+  
+  header.style.display = 'flex';
+  count.textContent = `Найдено: ${results.length} документов${query ? ' по запросу «' + query + '»' : ''}`;
+  
+  if (!results.length) {
+    grid.innerHTML = '<div class="empty">🔍 Ничего не найдено. Попробуйте изменить запрос.</div>';
+    return;
+  }
+  
+  grid.innerHTML = results.map(d => {
+    const tags = d.tags || [];
+    return `<div class="result-card" onclick="location.href='/documents'">
+      <div class="r-title">${hl(d.recognized_title||d.filename, query)}</div>
+      <div class="r-filename">${d.filename}</div>
+      <div class="r-meta">
+        <div class="r-meta-item">Тип: <strong>${typeLabel(d.document_type||'unknown')}</strong></div>
+        <div class="r-meta-item">Чанков: <strong>${d.chunks_count||0}</strong></div>
+        <div class="r-meta-item">Загрузил: <strong>${d.uploaded_by_name||'—'}</strong></div>
+        <div class="r-meta-item">${fmtBytes(d.file_size||0)}</div>
+      </div>
+      ${tags.length ? `<div class="r-tags">${tags.slice(0,6).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}</div>` : ''}
+      <div class="r-meta">
+        <div class="r-meta-item">📅 ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+        <div class="r-meta-item">${statusBadge(d.status)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function clearSearch() {
+  document.getElementById('main-search').value = '';
+  document.getElementById('type-select').value = '';
+  document.getElementById('status-select').value = '';
+  activeTags = [];
+  document.querySelectorAll('.search-tag').forEach(b => b.classList.remove('active'));
+  document.getElementById('results-grid').innerHTML = '<div class="empty">🔍 Введите запрос для поиска по документам</div>';
+  document.getElementById('results-header').style.display = 'none';
+}
+
+function hl(text, query) {
+  if (!query) return text;
+  const words = query.split(/\s+/).filter(w=>w.length>1);
+  let result = text;
+  words.forEach(w => {
+    const re = new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+    result = result.replace(re, '<span class="highlight">$1</span>');
+  });
+  return result;
+}
+
+// Helpers
+function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
+function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
+function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
+function statusBadge(s) { const m={completed:'<span style="color:var(--emerald)">✅ Готово</span>',processing:'<span style="color:var(--amber)">⚙️ Обработка</span>',pending:'<span style="color:var(--accent-l)">⏳ Ожидает</span>',failed:'<span style="color:var(--red)">❌ Ошибка</span>'}; return m[s]||s; }
+</script>
+</body>
+</html>

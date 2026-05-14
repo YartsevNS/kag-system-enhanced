@@ -402,6 +402,72 @@ async def get_document_details(
         session.close()
 
 
+@router.get("/{document_id}/thumbnail", summary="Миниатюра документа")
+async def get_document_thumbnail(document_id: str):
+    """Сгенерировать и вернуть миниатюру первой страницы документа."""
+    import io
+    from fastapi.responses import Response
+    
+    try:
+        doc = document_service.get_document(document_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Документ не найден")
+        
+        file_path = doc.original_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        
+        # Try to generate PDF thumbnail
+        if file_path.lower().endswith('.pdf'):
+            try:
+                import fitz  # PyMuPDF
+                pdf = fitz.open(file_path)
+                page = pdf[0]
+                # Render at 200 DPI for good quality thumbnail
+                pix = page.get_pixmap(dpi=200)
+                img_bytes = pix.tobytes("png")
+                pdf.close()
+                return Response(content=img_bytes, media_type="image/png")
+            except ImportError:
+                logger.warning("PyMuPDF (fitz) не установлен — возвращаю placeholder")
+            except Exception as e:
+                logger.warning(f"Ошибка рендеринга PDF: {e}")
+        
+        # For images, return scaled version
+        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+            try:
+                from PIL import Image
+                img = Image.open(file_path)
+                img.thumbnail((400, 400))
+                buf = io.BytesIO()
+                img.save(buf, format='PNG')
+                return Response(content=buf.getvalue(), media_type="image/png")
+            except Exception as e:
+                logger.warning(f"Ошибка обработки изображения: {e}")
+        
+        # Fallback: return file type icon as SVG
+        ext = os.path.splitext(file_path)[1].lower()
+        colors = {'.pdf': '#dc2626', '.docx': '#2563eb', '.doc': '#2563eb', 
+                  '.txt': '#10b981', '.md': '#10b981', '.csv': '#f59e0b',
+                  '.xlsx': '#22c55e', '.png': '#8b5cf6', '.jpg': '#8b5cf6'}
+        color = colors.get(ext, '#5e6ad2')
+        label = ext.lstrip('.').upper()[:4]
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+          <rect width="400" height="300" fill="#0f1011" rx="12"/>
+          <rect x="0" y="0" width="400" height="300" fill="{color}" opacity="0.08" rx="12"/>
+          <rect x="100" y="80" width="200" height="140" fill="{color}" opacity="0.15" rx="8"/>
+          <text x="200" y="160" text-anchor="middle" fill="{color}" font-family="Inter,sans-serif" font-size="28" font-weight="700">{label}</text>
+          <text x="200" y="200" text-anchor="middle" fill="#8a8f98" font-family="Inter,sans-serif" font-size="16">{os.path.basename(file_path).replace('_',' ')}</text>
+        </svg>'''
+        return Response(content=svg.encode(), media_type="image/svg+xml")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Thumbnail error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def _process_document_async(document_id: str):
     """Фоновая обработка документа"""
     try:

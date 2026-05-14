@@ -239,3 +239,12 @@ async def logs_page():
     if os.path.exists(logs_path):
         return FileResponse(logs_path)
     return {"error": "Logs page not found"}
+
+
+@app.get("/search", summary="Поиск по метаданным")
+async def search_page():
+    """Страница поиска документов по метаданным"""
+    search_path = os.path.join(static_path, "search.html")
+    if os.path.exists(search_path):
+        return FileResponse(search_path)
+    return {"error": "Search page not found"}
