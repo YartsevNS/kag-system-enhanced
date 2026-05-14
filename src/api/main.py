@@ -255,5 +255,5 @@ async def viewer_page():
     """Страница просмотра документа"""
     viewer_path = os.path.join(static_path, "viewer.html")
     if os.path.exists(viewer_path):
-        return FileResponse(viewer_path)
+        return FileResponse(viewer_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"error": "Viewer page not found"}

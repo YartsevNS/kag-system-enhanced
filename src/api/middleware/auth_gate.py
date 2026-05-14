@@ -32,6 +32,20 @@ PUBLIC_PREFIXES: Set[str] = {
     "/favicon.ico",
 }
 
+# Дополнительные публичные пути (точные — для iframe/img)
+PUBLIC_EXACT: Set[str] = set()
+
+def _is_public(path: str) -> bool:
+    """Проверить, является ли путь публичным."""
+    if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+        return True
+    # Разрешить GET-запросы к preview/thumbnail/details без авторизации
+    if path.startswith("/api/v1/upload/"):
+        rest = path[len("/api/v1/upload/"):]
+        if "/preview" in rest or "/thumbnail" in rest or "/details" in rest:
+            return True
+    return False
+
 # Пути, которые НЕ редиректятся на /login (API)
 API_PREFIXES: Set[str] = {
     "/api/",
@@ -45,7 +59,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         
         # Public paths — always allow
-        if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+        if _is_public(path):
             return await call_next(request)
         
         # Extract JWT from cookie or Authorization header

@@ -6,53 +6,39 @@
 <title>KAG — Просмотр документа</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
-nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
 nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
 
-main{margin-left:240px;flex:1;padding:16px 24px;display:flex;flex-direction:column;max-height:100vh}
+main{margin-left:240px;flex:1;padding:16px 24px;display:flex;flex-direction:column;min-height:100vh}
 
-/* Toolbar */
 .toolbar{display:flex;align-items:center;gap:10px;padding:8px 0;flex-shrink:0;flex-wrap:wrap}
 .toolbar .doc-title{font-size:15px;font-weight:600;flex:1;min-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.toolbar button,.toolbar a{font-size:12px;padding:7px 14px;border-radius:var(--radius-sm);text-decoration:none;cursor:pointer;font-weight:500;transition:all 0.15s;border:none;font-family:'Inter',sans-serif;white-space:nowrap}
-.btn-back{background:var(--surface);color:var(--text2);border:1px solid var(--border)!important}
-.btn-back:hover{background:var(--elevated)}
+.toolbar a,.toolbar button{font-size:12px;padding:7px 14px;border-radius:var(--radius-sm);text-decoration:none;cursor:pointer;font-weight:500;transition:all 0.15s;border:none;font-family:'Inter',sans-serif;white-space:nowrap}
+.btn-back{background:var(--surface);color:var(--text2);border:1px solid var(--border)}
+.btn-back:hover{background:#25272e}
 .btn-accent{background:var(--accent);color:#fff}
 .btn-accent:hover{opacity:0.85}
 .btn-ghost{background:rgba(94,106,210,0.1);color:var(--accent-l)}
-.page-controls{display:flex;align-items:center;gap:4px}
-.page-controls button{background:var(--surface);color:var(--text2);border:1px solid var(--border);min-width:34px;text-align:center}
-.page-controls button:hover:not(:disabled){background:var(--elevated)}
-.page-controls button:disabled{opacity:0.3;cursor:not-allowed}
-.page-controls .page-info{font-size:12px;color:var(--text3);min-width:80px;text-align:center}
-.page-controls input{width:40px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 4px;color:var(--text);font-size:12px;text-align:center;font-family:'Inter',sans-serif}
-.zoom-controls{display:flex;align-items:center;gap:4px}
-.zoom-controls button{background:var(--surface);color:var(--text3);border:1px solid var(--border);min-width:30px;text-align:center;font-size:14px}
-.zoom-label{font-size:11px;color:var(--text4);min-width:38px;text-align:center}
 
-/* Viewer */
-.viewer-wrap{flex:1;background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);overflow:auto;display:flex;align-items:flex-start;justify-content:center;position:relative;min-height:400px}
-.viewer-wrap canvas{box-shadow:0 4px 24px rgba(0,0,0,0.3);margin:12px}
-
-/* Meta bar */
-.meta-bar{display:flex;gap:14px;padding:8px 0;flex-shrink:0;flex-wrap:wrap}
+.meta-bar{display:flex;gap:10px;padding:6px 0 10px;flex-shrink:0;flex-wrap:wrap}
 .meta-pill{font-size:11px;color:var(--text4);padding:4px 10px;background:var(--surface);border-radius:9999px;border:1px solid var(--border-s)}
 .meta-pill strong{color:var(--text2);font-weight:500}
 .tag{font-size:10px;padding:3px 7px;border-radius:9999px;font-weight:500;background:rgba(94,106,210,0.15);color:var(--accent-l)}
 
-/* Loading / error */
+.viewer-wrap{flex:1;background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;position:relative;min-height:500px}
+.viewer-wrap iframe{width:100%;height:100%;border:none;background:#525659}
+
 .loading-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:2;background:var(--panel)}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.error-state{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:10px;color:var(--text4)}
 
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:8px}}
 </style>
@@ -65,7 +51,6 @@ main{margin-left:240px;flex:1;padding:16px 24px;display:flex;flex-direction:colu
   <a href="/search">🔎 Поиск</a>
   <a href="/chunks">🧩 Чанки</a>
   <a href="/logs">📋 Логи</a>
-  <a href="/users">👥 Пользователи</a>
 </nav>
 
 <main>
@@ -73,19 +58,7 @@ main{margin-left:240px;flex:1;padding:16px 24px;display:flex;flex-direction:colu
     <div class="doc-title" id="doc-title">Загрузка...</div>
     <a href="/documents" class="btn-back">← Назад</a>
     <a href="#" class="btn-ghost" id="btn-chunks" style="display:none">🧩 Чанки</a>
-    <span style="flex:1"></span>
-    <div class="page-controls">
-      <button onclick="prevPage()" id="btn-prev" disabled title="Предыдущая">◀</button>
-      <span class="page-info"><input type="number" id="page-input" value="1" min="1" onchange="goToPage()" onkeydown="if(event.key==='Enter')goToPage()"> / <span id="page-total">—</span></span>
-      <button onclick="nextPage()" id="btn-next" disabled title="Следующая">▶</button>
-    </div>
-    <div class="zoom-controls">
-      <button onclick="zoomOut()" title="Уменьшить">−</button>
-      <span class="zoom-label" id="zoom-label">100%</span>
-      <button onclick="zoomIn()" title="Увеличить">+</button>
-      <button onclick="zoomFit()" title="По ширине">↔</button>
-    </div>
-    <a href="#" class="btn-accent" id="btn-download">📥 Скачать</a>
+    <a href="#" class="btn-accent" id="btn-download" download>📥 Скачать</a>
   </div>
 
   <div class="meta-bar" id="meta-bar"></div>
@@ -93,132 +66,75 @@ main{margin-left:240px;flex:1;padding:16px 24px;display:flex;flex-direction:colu
   <div class="viewer-wrap" id="viewer-wrap">
     <div class="loading-overlay" id="loading-overlay">
       <div class="spinner"></div>
-      <div style="font-size:14px;color:var(--text3)" id="loading-text">Загрузка PDF...</div>
+      <div style="font-size:14px;color:var(--text3)">Загрузка документа...</div>
     </div>
-    <div id="canvas-container"></div>
   </div>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 const API = '/api/v1';
 const params = new URLSearchParams(window.location.search);
 const docId = params.get('id');
 
-let pdfDoc = null, currentPage = 1, currentScale = 1.5, currentDoc = null;
-
 if (!docId) {
-  showError('Не указан ID документа (?id=...)');
+  document.getElementById('doc-title').textContent = '❌ Не указан ID';
+  document.getElementById('loading-overlay').innerHTML = '<div style="font-size:14px;color:var(--text3)">Укажите ?id=... в URL</div>';
 } else {
   init();
 }
 
 async function init() {
   try {
-    // Load doc info
     const r = await fetch(`${API}/upload/${docId}/details`);
-    if (!r.ok) throw new Error('Документ не найден');
-    currentDoc = await r.json();
+    if (!r.ok) {
+      if (r.status === 401) throw new Error('Требуется авторизация. Войдите заново.');
+      throw new Error('Документ не найден');
+    }
+    const doc = await r.json();
     
-    document.getElementById('doc-title').textContent = currentDoc.recognized_title || currentDoc.filename;
-    document.title = 'KAG — ' + (currentDoc.recognized_title || currentDoc.filename);
+    document.getElementById('doc-title').textContent = doc.recognized_title || doc.filename;
+    document.title = 'KAG — ' + (doc.recognized_title || doc.filename);
     
-    // Meta bar
-    const tags = (currentDoc.tags||[]).map(t => `<span class="tag">${t}</span>`).join(' ');
+    document.getElementById('btn-chunks').href = `/chunks?doc_id=${docId}&name=${encodeURIComponent(doc.filename)}`;
+    document.getElementById('btn-chunks').style.display = 'inline-block';
+    document.getElementById('btn-download').href = `${API}/upload/${docId}/preview`;
+    
+    // Meta
+    const tags = (doc.tags||[]).map(t => `<span class="tag">${t}</span>`).join(' ');
     document.getElementById('meta-bar').innerHTML = `
-      <div class="meta-pill">Тип: <strong>${typeLabel(currentDoc.document_type)}</strong></div>
-      <div class="meta-pill">Размер: <strong>${fmtBytes(currentDoc.file_size)}</strong></div>
-      <div class="meta-pill">Чанков: <strong>${currentDoc.chunks_count||0}</strong></div>
-      <div class="meta-pill">Загрузил: <strong>${currentDoc.uploaded_by_name||'—'}</strong></div>
-      <div class="meta-pill">📅 ${new Date(currentDoc.created_at).toLocaleDateString('ru-RU')}</div>
+      <div class="meta-pill">Тип: <strong>${typeLabel(doc.document_type)}</strong></div>
+      <div class="meta-pill">Размер: <strong>${fmtBytes(doc.file_size)}</strong></div>
+      <div class="meta-pill">Чанков: <strong>${doc.chunks_count||0}</strong></div>
+      <div class="meta-pill">📅 ${new Date(doc.created_at).toLocaleDateString('ru-RU')}</div>
       ${tags ? `<div class="meta-pill">${tags}</div>` : ''}
     `;
     
-    document.getElementById('btn-chunks').href = `/chunks?doc_id=${docId}&name=${encodeURIComponent(currentDoc.filename)}`;
-    document.getElementById('btn-chunks').style.display = 'inline-block';
-    document.getElementById('btn-download').href = `${API}/upload/${docId}/preview`;
-    document.getElementById('btn-download').setAttribute('download', currentDoc.filename);
-    
-    // Load PDF
+    // Load document in iframe — browser handles auth cookie
     const previewUrl = `${API}/upload/${docId}/preview`;
-    document.getElementById('loading-text').textContent = 'Загрузка PDF...';
+    const viewer = document.getElementById('viewer-wrap');
+    const iframe = document.createElement('iframe');
+    iframe.src = previewUrl;
+    iframe.onload = () => {
+      document.getElementById('loading-overlay').style.display = 'none';
+    };
+    iframe.onerror = () => {
+      document.getElementById('loading-overlay').innerHTML = '<div style="font-size:48px">📄</div><div style="color:var(--text3)">Не удалось загрузить документ</div>';
+    };
+    viewer.appendChild(iframe);
     
-    pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
-    
-    document.getElementById('page-total').textContent = pdfDoc.numPages;
-    document.getElementById('page-input').max = pdfDoc.numPages;
-    document.getElementById('btn-prev').disabled = false;
-    document.getElementById('btn-next').disabled = pdfDoc.numPages <= 1;
-    
-    document.getElementById('loading-overlay').style.display = 'none';
-    
-    renderPage(1);
+    // Fallback: hide loading after 5s
+    setTimeout(() => {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }, 5000);
     
   } catch(e) {
-    console.error(e);
-    showError(getUserMessage(e));
+    document.getElementById('doc-title').textContent = '❌ Ошибка';
+    document.getElementById('loading-overlay').innerHTML = `
+      <div style="font-size:48px;margin-bottom:8px">📄</div>
+      <div style="font-size:15px;color:var(--text3)">${e.message}</div>
+      <a href="/documents" class="btn-back" style="margin-top:16px;display:inline-block">← К документам</a>
+    `;
   }
-}
-
-async function renderPage(num) {
-  if (!pdfDoc) return;
-  currentPage = num;
-  
-  const page = await pdfDoc.getPage(num);
-  const viewport = page.getViewport({scale: currentScale});
-  
-  const container = document.getElementById('canvas-container');
-  container.innerHTML = '';
-  
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  container.appendChild(canvas);
-  
-  const ctx = canvas.getContext('2d');
-  await page.render({canvasContext: ctx, viewport}).promise;
-  
-  document.getElementById('page-input').value = num;
-  document.getElementById('btn-prev').disabled = num <= 1;
-  document.getElementById('btn-next').disabled = num >= pdfDoc.numPages;
-  document.getElementById('zoom-label').textContent = Math.round(currentScale * 100) + '%';
-  
-  // Scroll to top of viewer
-  document.getElementById('viewer-wrap').scrollTop = 0;
-}
-
-function nextPage() { if (currentPage < pdfDoc.numPages) renderPage(currentPage + 1); }
-function prevPage() { if (currentPage > 1) renderPage(currentPage - 1); }
-function goToPage() {
-  const n = parseInt(document.getElementById('page-input').value);
-  if (n >= 1 && n <= pdfDoc.numPages) renderPage(n);
-}
-function zoomIn() { currentScale = Math.min(3, currentScale + 0.25); renderPage(currentPage); }
-function zoomOut() { currentScale = Math.max(0.5, currentScale - 0.25); renderPage(currentPage); }
-function zoomFit() {
-  const wrap = document.getElementById('viewer-wrap');
-  currentScale = (wrap.clientWidth - 40) / 612; // letter width at 72dpi
-  renderPage(currentPage);
-}
-
-function showError(msg) {
-  document.getElementById('loading-overlay').innerHTML = `
-    <div style="font-size:48px;margin-bottom:8px">📄</div>
-    <div style="font-size:15px;color:var(--text3)">${msg}</div>
-    ${!docId ? '' : '<div style="font-size:12px;color:var(--text4);margin-top:4px">Файл отсутствует или повреждён</div>'}
-    <a href="/documents" class="btn-back" style="margin-top:16px;display:inline-block">← К документам</a>
-  `;
-  document.getElementById('doc-title').textContent = currentDoc ? (currentDoc.filename || 'Документ') : 'Ошибка';
-}
-
-function getUserMessage(e) {
-  const m = e.message || String(e);
-  if (m.includes('404') || m.includes('Not Found') || m.includes('не найден')) return 'Файл не найден на сервере';
-  if (m.includes('401') || m.includes('Unauthorized')) return 'Требуется авторизация';
-  if (m.includes('InvalidPDF') || m.includes('PDF')) return 'Файл повреждён или не является PDF';
-  return 'Ошибка загрузки: ' + m.substring(0, 100);
 }
 
 function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',medical:'Медицинский',legal:'Юридический'}; return m[t]||t||'—'; }
