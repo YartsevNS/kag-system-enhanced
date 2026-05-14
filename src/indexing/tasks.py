@@ -41,13 +41,32 @@ def process_document(
     logger.info(f"Начало обработки документа: {document_id}, тип: {file_type}")
     
     try:
-        # Шаг 1: Парсинг документа
-        parser = DocumentParser()
-        parsed_content = parser.parse(file_path, file_type)
+        # Шаг 1: Парсинг документа (гибридный: Docling + Occular-ocr)
+        from src.indexing.hybrid_parser import get_hybrid_parser
+        hybrid = get_hybrid_parser()
+        parsed_doc = hybrid.parse(file_path)
+        
+        # Структурированный вывод
+        parsed_content = {
+            'text': parsed_doc.full_text,
+            'pages': [{'num': p.page_num, 'text': p.text} for p in parsed_doc.pages],
+            'tables': sum((p.tables for p in parsed_doc.pages), []),
+            'segments': [p.text for p in parsed_doc.pages],
+            'metadata': parsed_doc.metadata,
+            'parse_method': parsed_doc.parse_method
+        }
+        
+        # Шаг 1.5: Авто-классификация
+        from src.indexing.auto_tagger import get_auto_tagger
+        tagger = get_auto_tagger()
+        classification = tagger.classify(parsed_doc.full_text, parsed_doc.filename)
         
         logger.info(
-            f"Документ распарсен: {document_id}, "
-            f"страниц/сегментов: {len(parsed_content.get('segments', []))}"
+            f"Документ распарсен: {parsed_doc.filename}, "
+            f"метод: {parsed_doc.parse_method}, "
+            f"страниц: {len(parsed_doc.pages)}, "
+            f"тип: {classification.document_type.value} ({classification.confidence:.0%}), "
+            f"теги: {classification.tags}"
         )
         
         # Шаг 2: Чанкинг
