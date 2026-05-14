@@ -59,8 +59,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
   <!-- Source toggle -->
   <div class="toggle">
-    <button class="active" onclick="switchSource('local', this)">💻 Локальные</button>
-    <button onclick="switchSource('domain', this)">🌐 Keycloak (домен)</button>
+  <button class="active" onclick="switchSource('local', this)">💻 Локальные</button>
+  <button onclick="switchSource('keycloak', this)">🌐 Keycloak</button>
+  <button onclick="switchSource('ad', this)">🏢 Active Directory</button>
   </div>
 
   <!-- Registration -->
@@ -114,6 +115,26 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
       </div>
     </div>
   </div>
+
+  <!-- AD/LDAP section -->
+  <div class="section" id="ad-section" style="display:none">
+    <div class="section-title">🏢 Active Directory — доменная авторизация</div>
+    <div class="card">
+      <div class="form">
+        <input type="text" id="ad-url" placeholder="LDAP URL (ldap://dc.company.local)">
+        <input type="text" id="ad-bind-dn" placeholder="Bind DN">
+        <input type="password" id="ad-bind-pw" placeholder="Bind Password">
+      </div>
+      <div class="form">
+        <input type="text" id="ad-users-dn" placeholder="Users DN">
+        <input type="text" id="ad-domain" placeholder="Домен (COMPANY)">
+        <button class="btn" onclick="testAD()">🔍 Проверить AD</button>
+        <button class="btn" onclick="saveAD()" style="background:var(--green)">💾 Сохранить</button>
+      </div>
+      <div class="status" id="ad-status"></div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text4)">Пароль хранится в PostgreSQL (GOST-шифрование). Не в .env.</div>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -138,10 +159,12 @@ function switchSource(src, btn) {
   document.querySelectorAll('.toggle button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('local-section').style.display = src === 'local' ? '' : 'none';
-  document.getElementById('groups-section').style.display = src === 'local' ? '' : 'none';
-  document.getElementById('keycloak-section').style.display = src === 'domain' ? '' : 'none';
+  document.getElementById('groups-section').style.display = (src === 'local') ? '' : 'none';
+  document.getElementById('keycloak-section').style.display = src === 'keycloak' ? '' : 'none';
+  document.getElementById('ad-section').style.display = src === 'ad' ? '' : 'none';
   if (src === 'local') { loadUsers(); loadGroups(); }
-  else { loadKeycloakUsers(); }
+  else if (src === 'keycloak') { loadKeycloakUsers(); }
+  else if (src === 'ad') { loadADConfig(); }
 }
 
 async function register() {
@@ -249,6 +272,55 @@ async function loadKeycloakUsers() {
 }
 
 loadUsers(); loadGroups();
+
+async function loadADConfig() {
+  try {
+    const res = await fetch(`${API}/admin/ad-config`, {headers:authHeaders()});
+    const cfg = await res.json();
+    document.getElementById('ad-url').value = cfg.ldap_url || '';
+    document.getElementById('ad-bind-dn').value = cfg.bind_dn || '';
+    document.getElementById('ad-users-dn').value = cfg.users_dn || '';
+    document.getElementById('ad-domain').value = cfg.domain || '';
+    document.getElementById('ad-bind-pw').value = '';
+    const st = document.getElementById('ad-status');
+    if (cfg.configured) st.textContent = cfg.enabled ? 'AD настроен и активен' : 'AD настроен, но выключен';
+  } catch(e) {}
+}
+
+async function saveAD() {
+  const st = document.getElementById('ad-status'); st.textContent = 'Сохранение...';
+  try {
+    const res = await fetch(`${API}/admin/ad-config`, {
+      method:'POST', headers:authHeaders(),
+      body: JSON.stringify({
+        ldap_url: document.getElementById('ad-url').value.trim(),
+        bind_dn: document.getElementById('ad-bind-dn').value.trim(),
+        bind_password: document.getElementById('ad-bind-pw').value,
+        users_dn: document.getElementById('ad-users-dn').value.trim(),
+        domain: document.getElementById('ad-domain').value.trim(), enabled: true
+      })
+    });
+    const data = await res.json();
+    st.textContent = data.success ? ('OK. ' + (data.keycloak || data.warning || '')) : ('Error: ' + (data.message || ''));
+  } catch(e) { st.textContent = 'Error: ' + e.message; }
+}
+
+async function testAD() {
+  const st = document.getElementById('ad-status'); st.textContent = 'Testing AD...';
+  try {
+    const res = await fetch(`${API}/admin/ad-config/test`, {
+      method:'POST', headers:authHeaders(),
+      body: JSON.stringify({
+        ldap_url: document.getElementById('ad-url').value.trim(),
+        bind_dn: document.getElementById('ad-bind-dn').value.trim(),
+        bind_password: document.getElementById('ad-bind-pw').value,
+        users_dn: document.getElementById('ad-users-dn').value.trim()
+      })
+    });
+    const data = await res.json();
+    st.textContent = data.success ? ('Found ' + data.users_found + ' users' + (data.sample ? ': ' + data.sample.map(u=>u.username).join(', ') : '')) : ('Error: ' + (data.message || ''));
+  } catch(e) { st.textContent = 'Error: ' + e.message; }
+}
 </script>
 </body>
 </html>
