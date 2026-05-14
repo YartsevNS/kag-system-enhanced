@@ -284,8 +284,9 @@ function renderCards(docs) {
     const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
     return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
       <div class="thumb-wrap">
-        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="thumb" style="display:none;align-items:center;justify-content:center;font-size:48px">${fileIcon(d.file_type||d.filename)}</div>
+        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" 
+             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22240%22 viewBox=%220 0 400 240%22><rect width=%22400%22 height=%22240%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22200%22 y=%22120%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22Inter,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22200%22 y=%22160%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22Inter,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
+             style="object-fit:cover">
         <span class="type-badge tag tag-type">${typeLabel(type)}</span>
       </div>
       <div class="card-body">
