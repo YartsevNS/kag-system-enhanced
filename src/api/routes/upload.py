@@ -406,19 +406,33 @@ async def get_document_details(
 async def get_document_thumbnail(document_id: str):
     """Сгенерировать и вернуть миниатюру первой страницы документа."""
     import io
+    from pathlib import Path
     from fastapi.responses import Response
     
     try:
-        doc = document_service.get_document(document_id)
-        if not doc:
-            raise HTTPException(status_code=404, detail="Документ не найден")
+        # Find the document file in uploads directory
+        upload_dir = Path("/app/user_data/uploads")
+        if not upload_dir.exists():
+            # Fallback: try common upload paths
+            for d in [Path("/home/yartsevn/kagproject/user_data/uploads"),
+                      Path("/home/nick/kagproject/user_data/uploads"),
+                      Path("/tmp/kag_uploads")]:
+                if d.exists():
+                    upload_dir = d
+                    break
         
-        file_path = doc.original_path
-        if not file_path or not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Файл не найден")
+        file_path = None
+        for f in upload_dir.iterdir():
+            if f.is_file() and f.name.startswith(document_id):
+                file_path = f
+                break
+        
+        if not file_path:
+            raise HTTPException(status_code=404, detail="Файл документа не найден")
+        file_path_str = str(file_path)
         
         # Try to generate PDF thumbnail
-        if file_path.lower().endswith('.pdf'):
+        if file_path_str.lower().endswith('.pdf'):
             try:
                 import fitz  # PyMuPDF
                 pdf = fitz.open(file_path)
@@ -434,7 +448,7 @@ async def get_document_thumbnail(document_id: str):
                 logger.warning(f"Ошибка рендеринга PDF: {e}")
         
         # For images, return scaled version
-        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+        if file_path_str.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
             try:
                 from PIL import Image
                 img = Image.open(file_path)
@@ -446,7 +460,7 @@ async def get_document_thumbnail(document_id: str):
                 logger.warning(f"Ошибка обработки изображения: {e}")
         
         # Fallback: return file type icon as SVG
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = file_path.suffix.lower()
         colors = {'.pdf': '#dc2626', '.docx': '#2563eb', '.doc': '#2563eb', 
                   '.txt': '#10b981', '.md': '#10b981', '.csv': '#f59e0b',
                   '.xlsx': '#22c55e', '.png': '#8b5cf6', '.jpg': '#8b5cf6'}
@@ -457,7 +471,7 @@ async def get_document_thumbnail(document_id: str):
           <rect x="0" y="0" width="400" height="300" fill="{color}" opacity="0.08" rx="12"/>
           <rect x="100" y="80" width="200" height="140" fill="{color}" opacity="0.15" rx="8"/>
           <text x="200" y="160" text-anchor="middle" fill="{color}" font-family="Inter,sans-serif" font-size="28" font-weight="700">{label}</text>
-          <text x="200" y="200" text-anchor="middle" fill="#8a8f98" font-family="Inter,sans-serif" font-size="16">{os.path.basename(file_path).replace('_',' ')}</text>
+          <text x="200" y="200" text-anchor="middle" fill="#8a8f98" font-family="Inter,sans-serif" font-size="16">{file_path.name.replace('_',' ')}</text>
         </svg>'''
         return Response(content=svg.encode(), media_type="image/svg+xml")
         

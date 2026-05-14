@@ -290,7 +290,7 @@ function renderCards(docs) {
       </div>
       <div class="card-body">
         <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
-        <div class="card-meta">${fmtBytes(d.file_size||0)} · ${d.chunks_count||0} чанков · ${d.uploaded_by_name||'—'}</div>
+        <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${d.uploaded_by_name||'—'}</div>
         <div class="card-meta">${statusMap[d.status]||d.status} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
       </div>
@@ -312,7 +312,7 @@ function renderTable(docs) {
       <td><strong>${d.recognized_title||d.filename}</strong></td>
       <td><span class="tag tag-type" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
       <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
-      <td>${d.chunks_count||0}</td>
+      <td><a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0}</a></td>
       <td>${d.uploaded_by_name||'—'}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td>
