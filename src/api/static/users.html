@@ -5,30 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Пользователи и группы</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+<style>:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0;z-index:10}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
 nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-main{margin-left:240px;flex:1;padding:32px 40px;max-width:1000px}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1100px}
 h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
 .sub{font-size:15px;color:var(--text3);margin-bottom:28px}
 .section{margin-bottom:32px}
 .section-title{font-size:16px;font-weight:600;color:var(--text2);margin-bottom:14px}
 .card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px}
-/* Form */
 .form{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-input{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;min-width:160px}
-input:focus{border-color:var(--accent-h)}
-.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+input,select{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;min-width:140px}
+input:focus,select:focus{border-color:var(--accent-h)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
 .btn:hover{opacity:0.85}
-.btn-sm{background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border-s);padding:5px 10px;border-radius:4px;font-size:12px;font-weight:500;cursor:pointer}
-.btn-sm:hover{color:var(--text2)}
-/* Table */
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
 td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
@@ -36,8 +32,14 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 .badge.admin{background:rgba(113,112,255,0.15);color:var(--accent-h)}
 .badge.user{background:rgba(255,255,255,0.05);color:var(--text3)}
 .badge.group{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.badge.domain{background:rgba(251,191,36,0.15);color:#fbbf24}
 .empty{text-align:center;padding:40px;color:var(--text4);font-size:14px}
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.form{flex-direction:column}}
+.status{font-size:13px;margin-top:4px}
+.status.ok{color:var(--green)} .status.err{color:var(--red)}
+.toggle{display:flex;gap:4px;background:var(--panel);border-radius:var(--radius-sm);padding:3px;margin-bottom:16px;width:fit-content}
+.toggle button{padding:6px 16px;border:none;border-radius:4px;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text3);font-family:'Inter',sans-serif}
+.toggle button.active{background:var(--accent);color:#fff}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}.form{flex-direction:column}}
 </style>
 </head>
 <body>
@@ -51,36 +53,64 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
   <a href="/users" class="active">👥 Пользователи</a>
   <a href="/admin">⚙️ Админ</a>
 </nav>
-
 <main>
   <h1>👥 Пользователи и группы</h1>
-  <div class="sub">Управление доступом: регистрация, группы, RBAC</div>
+  <div class="sub">Управление доступом: локальные пользователи, группы, Keycloak</div>
 
-  <div class="section">
-    <div class="section-title">📝 Регистрация пользователя</div>
+  <!-- Source toggle -->
+  <div class="toggle">
+    <button class="active" onclick="switchSource('local', this)">💻 Локальные</button>
+    <button onclick="switchSource('domain', this)">🌐 Keycloak (домен)</button>
+  </div>
+
+  <!-- Registration -->
+  <div class="section" id="local-section">
+    <div class="section-title">📝 Регистрация локального пользователя</div>
     <div class="card">
       <div class="form">
         <input type="text" id="reg-username" placeholder="Логин" autocomplete="off">
         <input type="password" id="reg-password" placeholder="Пароль (мин 6 символов)" autocomplete="off">
-        <input type="email" id="reg-email" placeholder="Email (необязательно)" autocomplete="off">
+        <input type="email" id="reg-email" placeholder="Email" autocomplete="off">
+        <select id="reg-role"><option value="user">User</option><option value="admin">Admin</option></select>
         <button class="btn" onclick="register()">Зарегистрировать</button>
       </div>
-      <div id="reg-status" style="font-size:13px;color:var(--text3)"></div>
+      <div class="status" id="reg-status"></div>
     </div>
   </div>
 
+  <!-- Users list -->
   <div class="section">
     <div class="section-title">👤 Пользователи</div>
     <div class="card"><div id="users-list"><div class="empty">Загрузка...</div></div></div>
   </div>
 
-  <div class="section">
+  <!-- Groups -->
+  <div class="section" id="groups-section">
     <div class="section-title">👥 Группы</div>
     <div class="card">
       <div id="groups-list"><div class="empty">Загрузка...</div></div>
       <div class="form" style="margin-top:12px;margin-bottom:0">
         <input type="text" id="group-name" placeholder="Название группы">
+        <input type="text" id="group-desc" placeholder="Описание">
         <button class="btn" onclick="createGroup()">+ Создать группу</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keycloak settings -->
+  <div class="section" id="keycloak-section" style="display:none">
+    <div class="section-title">🔐 Keycloak — доменные пользователи</div>
+    <div class="card">
+      <div class="form">
+        <input type="text" id="kc-url" placeholder="Keycloak URL" value="http://keycloak:8080">
+        <input type="text" id="kc-realm" placeholder="Realm" value="kag">
+        <input type="text" id="kc-client" placeholder="Client ID" value="kag-api">
+        <button class="btn" onclick="testKeycloak()">🔍 Проверить подключение</button>
+      </div>
+      <div class="status" id="kc-status"></div>
+      <div style="margin-top:16px">
+        <div class="section-title" style="font-size:14px">Пользователи Keycloak</div>
+        <div id="kc-users-list"><div class="empty" style="padding:20px">Нажмите «Проверить подключение»</div></div>
       </div>
     </div>
   </div>
@@ -88,63 +118,134 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
 <script>
 const API = '/api/v1';
+let currentSource = 'local';
+
+function getToken() {
+  // Read from cookie
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  // Fallback to localStorage
+  return localStorage.getItem('kag_token');
+}
+
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
+function switchSource(src, btn) {
+  currentSource = src;
+  document.querySelectorAll('.toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('local-section').style.display = src === 'local' ? '' : 'none';
+  document.getElementById('groups-section').style.display = src === 'local' ? '' : 'none';
+  document.getElementById('keycloak-section').style.display = src === 'domain' ? '' : 'none';
+  if (src === 'local') { loadUsers(); loadGroups(); }
+  else { loadKeycloakUsers(); }
+}
 
 async function register() {
   const u = document.getElementById('reg-username').value.trim();
   const p = document.getElementById('reg-password').value;
   const e = document.getElementById('reg-email').value.trim();
-  if (!u || !p) { document.getElementById('reg-status').textContent = 'Заполните логин и пароль'; return; }
+  const role = document.getElementById('reg-role').value;
+  const st = document.getElementById('reg-status');
+  if (!u || !p) { st.textContent = 'Заполните логин и пароль'; st.className='status err'; return; }
   try {
-    const res = await fetch(`${API}/auth/register`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({username:u, password:p, email:e||null})
-    });
+    const res = await fetch(`${API}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, email:e||null})});
     const data = await res.json();
-    const el = document.getElementById('reg-status');
-    if (res.ok) { el.style.color='var(--green)'; el.textContent = '✅ Пользователь создан: ' + data.username; loadUsers(); }
-    else { el.style.color='var(--red)'; el.textContent = '❌ ' + (data.detail || data.message); }
-  } catch(err) { document.getElementById('reg-status').textContent = 'Ошибка: ' + err.message; }
+    if (res.ok) {
+      // If admin role, update in DB
+      if (role === 'admin') {
+        const t = getToken();
+        if (t) await fetch(`${API}/admin/users/${data.id}/promote`, {method:'POST', headers:authHeaders()});
+      }
+      st.className='status ok'; st.textContent = '✅ Пользователь создан: ' + data.username;
+      loadUsers();
+    } else {
+      st.className='status err'; st.textContent = '❌ ' + (data.detail || data.message);
+    }
+  } catch(err) { st.className='status err'; st.textContent = 'Ошибка: ' + err.message; }
 }
 
 async function loadUsers() {
   try {
-    const res = await fetch(`${API}/admin/users`);
-    const users = await res.json();
+    const res = await fetch(`${API}/admin/users`, {headers:authHeaders()});
+    if (res.status === 401) { document.getElementById('users-list').innerHTML = '<div class="empty">Требуется авторизация</div>'; return; }
+    const data = await res.json();
+    const users = data.users || [];
     const c = document.getElementById('users-list');
-    if (!users || !users.length) { c.innerHTML = '<div class="empty">Нет пользователей</div>'; return; }
-    c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Роль</th><th>Активен</th><th>Создан</th></tr>
+    if (!users.length) { c.innerHTML = '<div class="empty">Нет пользователей</div>'; return; }
+    c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Роль</th><th>Источник</th><th>Активен</th><th>Создан</th></tr>
       ${users.map(u => `<tr>
         <td style="font-weight:500">${u.username}</td>
         <td style="color:var(--text4)">${u.email || '—'}</td>
         <td><span class="badge ${u.is_admin ? 'admin' : 'user'}">${u.is_admin ? 'Админ' : 'User'}</span></td>
+        <td><span class="badge ${u.source === 'keycloak' ? 'domain' : 'user'}">${u.source === 'keycloak' ? 'Keycloak' : 'Локальный'}</span></td>
         <td>${u.is_active ? '✅' : '❌'}</td>
         <td style="color:var(--text4);font-size:12px">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
       </tr>`).join('')}</table>`;
-  } catch(e) { document.getElementById('users-list').innerHTML = '<div class="empty">Ошибка</div>'; }
+  } catch(e) { document.getElementById('users-list').innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
 }
 
 async function loadGroups() {
   try {
-    const res = await fetch(`${API}/admin/groups`);
-    const groups = await res.json();
+    const res = await fetch(`${API}/admin/groups`, {headers:authHeaders()});
+    const data = await res.json();
+    const groups = data.groups || [];
     const c = document.getElementById('groups-list');
-    if (!groups || !groups.length) { c.innerHTML = '<div class="empty">Нет групп</div>'; return; }
-    c.innerHTML = `<table><tr><th>Название</th><th>Описание</th></tr>
-      ${groups.map(g => `<tr><td style="font-weight:500"><span class="badge group">${g.name}</span></td><td style="color:var(--text4)">${g.description || '—'}</td></tr>`).join('')}</table>`;
+    if (!groups.length) { c.innerHTML = '<div class="empty">Нет групп</div>'; return; }
+    c.innerHTML = `<table><tr><th>Название</th><th>Описание</th><th>ID</th></tr>
+      ${groups.map(g => `<tr><td style="font-weight:500"><span class="badge group">${g.name}</span></td><td style="color:var(--text4)">${g.description || '—'}</td><td style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text4)">${g.id}</td></tr>`).join('')}</table>`;
   } catch(e) { document.getElementById('groups-list').innerHTML = '<div class="empty">Ошибка</div>'; }
 }
 
 async function createGroup() {
   const name = document.getElementById('group-name').value.trim();
+  const desc = document.getElementById('group-desc').value.trim();
   if (!name) return;
   try {
-    await fetch(`${API}/admin/groups`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, description:''})
-    });
+    await fetch(`${API}/admin/groups`, {method:'POST', headers:authHeaders(), body: JSON.stringify({name, description:desc})});
     document.getElementById('group-name').value = '';
+    document.getElementById('group-desc').value = '';
     loadGroups();
   } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+async function testKeycloak() {
+  const url = document.getElementById('kc-url').value.trim();
+  const realm = document.getElementById('kc-realm').value.trim();
+  const st = document.getElementById('kc-status');
+  st.textContent = 'Проверка...';
+  try {
+    const res = await fetch(`${url}/realms/${realm}`, {headers:authHeaders()});
+    if (res.ok) {
+      st.className='status ok'; st.textContent = '✅ Keycloak доступен (realm: '+realm+')';
+      loadKeycloakUsers();
+    } else {
+      st.className='status err'; st.textContent = '❌ Keycloak недоступен (status: '+res.status+')';
+    }
+  } catch(e) { st.className='status err'; st.textContent = '❌ Ошибка подключения: ' + e.message; }
+}
+
+async function loadKeycloakUsers() {
+  const c = document.getElementById('kc-users-list');
+  c.innerHTML = '<div class="empty">Загрузка...</div>';
+  const url = document.getElementById('kc-url').value.trim();
+  const realm = document.getElementById('kc-realm').value.trim();
+  try {
+    const res = await fetch(`${url}/admin/realms/${realm}/users`, {headers:authHeaders()});
+    if (!res.ok) { c.innerHTML = '<div class="empty">Нет доступа к API Keycloak</div>'; return; }
+    const users = await res.json();
+    if (!users.length) { c.innerHTML = '<div class="empty">Нет доменных пользователей</div>'; return; }
+    c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Имя</th><th>Активен</th></tr>
+      ${users.map(u => `<tr>
+        <td style="font-weight:500">${u.username}</td>
+        <td style="color:var(--text4)">${u.email || '—'}</td>
+        <td>${u.firstName || ''} ${u.lastName || ''}</td>
+        <td>${u.enabled ? '✅' : '❌'}</td>
+      </tr>`).join('')}</table>`;
+  } catch(e) { c.innerHTML = '<div class="empty">Ошибка: ' + e.message + '</div>'; }
 }
 
 loadUsers(); loadGroups();
