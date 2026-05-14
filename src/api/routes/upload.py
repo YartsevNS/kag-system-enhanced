@@ -319,12 +319,13 @@ async def get_document_details(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Получить расширенную информацию о документе с тэгами, типом, пользователем."""
-    from src.database import get_session
+    from src.database.session import _get_engine, _SessionLocal
     from src.database.document_models import Document
     from src.database.user_models import User as UserModel
     from src.indexing.auto_tagger import get_auto_tagger
     
-    session = get_session()
+    _get_engine()
+    session = _SessionLocal()
     try:
         record = session.query(Document).filter(Document.id == document_id).first()
         if not record:
