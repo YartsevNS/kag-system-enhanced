@@ -157,11 +157,17 @@ async def list_groups():
 
 
 @router.post("/groups", summary="Создать группу")
-async def create_group(name: str, description: str = ""):
-    """Создать новую группу."""
+async def create_group(data: dict):
+    """Создать новую группу. Body: {name, description}"""
     from src.database.session import get_db as _get_db
     from src.database.user_models import Group
     import uuid as _uuid
+    
+    name = data.get("name", "")
+    description = data.get("description", "")
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
     
     db_gen = _get_db()
     db = next(db_gen)
