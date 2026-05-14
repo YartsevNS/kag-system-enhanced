@@ -69,7 +69,10 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Создание непривилегированного пользователя
-RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag
+RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag && \
+    mkdir -p /opt/venv/lib/python3.11/site-packages/rapidocr/models && \
+    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/rapidocr && \
+    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/ocr_skel/weights
 
 # Установка рабочей директории
 WORKDIR /app
