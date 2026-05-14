@@ -418,20 +418,19 @@ async def get_document_thumbnail(document_id: str):
     
     # Пробуем сгенерировать на лету
     try:
-        # Ищем файл документа
-        upload_dir = Path("/app/user_data/uploads")
-        if not upload_dir.exists():
-            for d in [Path("/home/yartsevn/kagproject/user_data/uploads"),
-                      Path("/home/nick/kagproject/user_data/uploads"),
-                      Path("/tmp/kag_uploads")]:
-                if d.exists():
-                    upload_dir = d
-                    break
-        
+        # Ищем файл документа по всем возможным директориям
         file_path = None
-        for f in upload_dir.iterdir():
-            if f.is_file() and f.name.startswith(document_id):
-                file_path = f
+        for upload_dir in [
+            Path("/app/user_data/uploads"),
+            Path("/tmp/kag_uploads"),
+        ]:
+            if not upload_dir.exists():
+                continue
+            for f in upload_dir.iterdir():
+                if f.is_file() and f.name.startswith(document_id):
+                    file_path = f
+                    break
+            if file_path:
                 break
         
         if file_path and file_path.exists():
@@ -460,21 +459,15 @@ async def get_document_preview(document_id: str):
     from pathlib import Path
     from fastapi.responses import FileResponse
     
-    # Ищем файл
-    upload_dir = Path("/app/user_data/uploads")
-    if not upload_dir.exists():
-        for d in [Path("/home/yartsevn/kagproject/user_data/uploads"),
-                  Path("/home/nick/kagproject/user_data/uploads"),
-                  Path("/tmp/kag_uploads")]:
-            if d.exists():
-                upload_dir = d
-                break
-    
-    for f in upload_dir.iterdir():
-        if f.is_file() and f.name.startswith(document_id):
-            mime = "application/pdf" if f.suffix.lower() == '.pdf' else "application/octet-stream"
-            return FileResponse(f, media_type=mime,
-                headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"})
+    # Ищем файл по всем возможным директориям
+    for upload_dir in [Path("/app/user_data/uploads"), Path("/tmp/kag_uploads")]:
+        if not upload_dir.exists():
+            continue
+        for f in upload_dir.iterdir():
+            if f.is_file() and f.name.startswith(document_id):
+                mime = "application/pdf" if f.suffix.lower() == '.pdf' else "application/octet-stream"
+                return FileResponse(f, media_type=mime,
+                    headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"})
     
     raise HTTPException(status_code=404, detail="Файл не найден")
 
