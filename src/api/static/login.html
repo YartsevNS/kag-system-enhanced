@@ -50,6 +50,8 @@ async function login() {
     });
     const data = await res.json();
     if (res.ok && data.access_token) {
+      // Set cookie (server reads this)
+      document.cookie = 'kag_token=' + data.access_token + ';path=/;max-age=86400;SameSite=Lax';
       localStorage.setItem('kag_token', data.access_token);
       const redirect = new URLSearchParams(window.location.search).get('next') || '/';
       window.location.href = redirect;
