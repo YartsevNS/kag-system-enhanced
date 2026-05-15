@@ -93,6 +93,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
 
+/* Progress */
+.progress-wrap{display:none;margin-top:12px}
+.progress-wrap .prog-label{font-size:12px;color:var(--text3);margin-bottom:4px;display:flex;justify-content:space-between}
+.progress-bar{width:100%;height:6px;background:var(--elevated);border-radius:3px;overflow:hidden}
+.progress-bar .prog-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s;width:0%}
+
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.docs-grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -128,6 +134,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="upload-icon">📤</div>
     <div class="upload-text">Загрузить документы</div>
     <div class="upload-hint">PDF, DOCX, TXT, MD, CSV — перетащите или нажмите</div>
+  </div>
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="prog-label"><span id="prog-file">—</span><span id="prog-pct">0%</span></div>
+    <div class="progress-bar"><div class="prog-fill" id="prog-fill"></div></div>
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
@@ -196,18 +206,30 @@ function setupDragDrop() {
 
 async function uploadFiles(files) {
   if (!files.length) return;
-  for (const file of files) {
+  const pw = document.getElementById('progress-wrap');
+  const pf = document.getElementById('prog-fill');
+  const pp = document.getElementById('prog-pct');
+  const pn = document.getElementById('prog-file');
+  pw.style.display = 'block';
+  pf.style.width = '0%';
+  pp.textContent = '0%';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    pn.textContent = file.name;
     const fd = new FormData(); fd.append('file', file);
     try {
       const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
       if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Upload failed'); }
-      const d = await r.json();
       toast(`✅ ${file.name} загружен`);
     } catch(e) {
       toast(`❌ ${file.name}: ${e.message}`, true);
     }
+    const pct = Math.round(((i + 1) / files.length) * 100);
+    pf.style.width = pct + '%';
+    pp.textContent = pct + '%';
   }
-  setTimeout(loadAll, 2000);
+  setTimeout(() => { pw.style.display = 'none'; loadAll(); }, 800);
 }
 
 async function loadAll() {
