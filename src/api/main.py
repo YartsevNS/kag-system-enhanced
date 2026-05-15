@@ -257,3 +257,11 @@ async def viewer_page():
     if os.path.exists(viewer_path):
         return FileResponse(viewer_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"error": "Viewer page not found"}
+
+@app.get("/docs", summary="Документация проекта")
+async def docs_page():
+    """Страница с архитектурой проекта"""
+    docs_path = os.path.join(static_path, "docs.html")
+    if os.path.exists(docs_path):
+        return FileResponse(docs_path)
+    return {"error": "Docs page not found"}
