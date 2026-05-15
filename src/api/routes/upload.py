@@ -289,18 +289,18 @@ async def get_document_chunks(
     qdrant_service = get_qdrant_service()
     
     try:
-        results = qdrant_service.scroll_points(
+        # Получаем ВСЕ чанки документа (Qdrant scroll возвращает неупорядоченно)
+        all_results = qdrant_service.scroll_points(
             filter={
                 "must": [{"key": "document_id", "match": {"value": document_id}}]
             },
-            limit=limit,
-            offset=offset
+            limit=10000
         )
         
-        chunks = []
-        for r in results:
+        all_chunks = []
+        for r in all_results:
             payload = r.get("payload", {})
-            chunks.append({
+            all_chunks.append({
                 "id": r.get("id", ""),
                 "chunk_id": payload.get("chunk_id", ""),
                 "text": payload.get("text", payload.get("content", "")),
@@ -320,9 +320,12 @@ async def get_document_chunks(
                 return int(cid.replace("chunk_", "").split("_")[0])
             except (ValueError, IndexError):
                 return c.get("chunk_index", 0)
-        chunks.sort(key=sort_key)
+        all_chunks.sort(key=sort_key)
         
-        return {"chunks": chunks, "total": len(chunks), "offset": offset, "limit": limit}
+        total = len(all_chunks)
+        chunks = all_chunks[offset:offset + limit]
+        
+        return {"chunks": chunks, "total": total, "offset": offset, "limit": limit}
     except Exception as e:
         logger.error(f"Ошибка получения чанков: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}
