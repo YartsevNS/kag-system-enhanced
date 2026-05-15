@@ -340,19 +340,54 @@ async def get_document_details(
     from src.api.services.config_store import config_store
     from src.indexing.auto_tagger import get_auto_tagger
 
-    # Получаем запись из config_store
+    # Первичный источник — document_service (in-memory, всегда актуальный)
+    record = document_service.get_document_status(document_id)
+    
+    # Получаем запись из config_store для дополнительных полей
     record_data = config_store.get("documents", document_id)
-    if not record_data:
+    
+    if not record and not record_data:
         raise HTTPException(status_code=404, detail="Документ не найден")
 
-    filename = record_data.get("filename", "unknown")
-    file_type = record_data.get("file_type", "unknown")
-    file_size = record_data.get("file_size", 0)
-    file_hash = record_data.get("file_hash", "")
-    status = record_data.get("status", "unknown")
-    uploaded_by = record_data.get("uploaded_by")
-    created_at = record_data.get("created_at")
-    updated_at = record_data.get("updated_at")
+    # Приоритет: in-memory record > config_store
+    filename = record.filename if record else record_data.get("filename", "unknown")
+    file_type = record.file_type if record else record_data.get("file_type", "unknown")
+    file_size = record.file_size if record else record_data.get("file_size", 0)
+    file_hash = record_data.get("file_hash", "") if record_data else ""
+    status = record.status if record else record_data.get("status", "unknown")
+    uploaded_by = record.uploaded_by if record else record_data.get("uploaded_by")
+    created_at_raw = record.created_at if record else record_data.get("created_at")
+    updated_at_raw = record.updated_at if record else record_data.get("updated_at")
+    
+    # chunks_count: приоритет in-memory, затем config_store, затем 0
+    chunks_count = record.chunks_count if record else record_data.get("chunks_count", 0) if record_data else 0
+    
+    # Если in-memory показывает 0, но в Qdrant есть чанки — обновим
+    if chunks_count == 0:
+        try:
+            from src.indexing.qdrant_service import get_qdrant_service
+            qdrant = get_qdrant_service()
+            qdrant_results = qdrant.scroll_points(
+                filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
+                limit=1
+            )
+            # Считаем реальное количество через отдельный запрос
+            all_qdrant = qdrant.scroll_points(
+                filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
+                limit=100000
+            )
+            real_count = len(all_qdrant)
+            if real_count > 0:
+                chunks_count = real_count
+                # Обновим в памяти и в БД
+                if record:
+                    record.chunks_count = real_count
+                    document_service._save_document_to_db(document_id)
+        except Exception:
+            pass
+    
+    created_at = created_at_raw.isoformat() if hasattr(created_at_raw, 'isoformat') else str(created_at_raw) if created_at_raw else None
+    updated_at = updated_at_raw.isoformat() if hasattr(updated_at_raw, 'isoformat') else str(updated_at_raw) if updated_at_raw else None
 
     # Get user info
     uploaded_by_name = None
@@ -419,7 +454,7 @@ async def get_document_details(
         "status": status,
         "document_type": doc_type,
         "tags": tags,
-        "chunks_count": chunks_total,
+        "chunks_count": chunks_count,
         "uploaded_by": uploaded_by,
         "uploaded_by_name": uploaded_by_name,
         "file_hash": file_hash,
