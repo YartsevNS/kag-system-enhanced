@@ -374,6 +374,45 @@
             <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
             <div id="pull-status" style="margin-top: 1rem;"></div>
         </div>
+
+        <!-- Внешние LLM для анализа -->
+        <div class="section">
+            <h2 class="section-title">🔗 Внешние LLM для анализа документов</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Подключение внешних нейросетей (OpenAI, DeepSeek, OpenRouter) для классификации и анализа документов.
+                Используется при фоновом анализе первого чанка — определение типа, темы, краткого содержания.
+            </p>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div class="form-group">
+                    <label>URL API</label>
+                    <input type="text" id="ext-llm-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
+                </div>
+                <div class="form-group">
+                    <label>Модель</label>
+                    <input type="text" id="ext-llm-model" placeholder="phi4-mini" value="phi4-mini">
+                </div>
+                <div class="form-group">
+                    <label>API ключ (если нужен)</label>
+                    <input type="password" id="ext-llm-key" placeholder="sk-...">
+                </div>
+                <div class="form-group">
+                    <label>Провайдер</label>
+                    <select id="ext-llm-provider">
+                        <option value="ollama">Ollama (локальный)</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="saveExtLLM()">💾 Сохранить</button>
+                <button class="btn btn-outline" onclick="testExtLLM()">🧪 Тест</button>
+                <span id="ext-llm-status" style="font-size:13px"></span>
+            </div>
+        </div>
     </main>
 
     <div class="notification" id="notification"></div>
@@ -899,6 +938,57 @@
         // Автообновление
         loadAll();
         setInterval(loadStatus, 30000);
+        loadExtLLM();
+
+        // === Внешние LLM ===
+        async function saveExtLLM() {
+            const config = {
+                url: document.getElementById('ext-llm-url').value.trim(),
+                model: document.getElementById('ext-llm-model').value.trim(),
+                api_key: document.getElementById('ext-llm-key').value,
+                provider: document.getElementById('ext-llm-provider').value
+            };
+            try {
+                const r = await fetch('/api/v1/admin/models/ext-llm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                const d = await r.json();
+                document.getElementById('ext-llm-status').innerHTML = 
+                    r.ok ? '<span style="color:#10b981">✅ Сохранено</span>' : 
+                    '<span style="color:#ef4444">❌ ' + (d.detail || 'Ошибка') + '</span>';
+            } catch(e) {
+                document.getElementById('ext-llm-status').innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function testExtLLM() {
+            const status = document.getElementById('ext-llm-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Тестирую...</span>';
+            try {
+                const r = await fetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
+                const d = await r.json();
+                status.innerHTML = d.ok 
+                    ? '<span style="color:#10b981">✅ OK — ' + (d.response || '').substring(0, 60) + '</span>'
+                    : '<span style="color:#ef4444">❌ ' + (d.error || 'Ошибка') + '</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function loadExtLLM() {
+            try {
+                const r = await fetch('/api/v1/admin/models/ext-llm');
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.url) document.getElementById('ext-llm-url').value = d.url;
+                    if (d.model) document.getElementById('ext-llm-model').value = d.model;
+                    if (d.provider) document.getElementById('ext-llm-provider').value = d.provider;
+                    if (d.api_key) document.getElementById('ext-llm-key').value = d.api_key;
+                }
+            } catch(e) {}
+        }
     </script>
 </body>
 </html>

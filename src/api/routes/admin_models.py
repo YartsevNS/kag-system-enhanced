@@ -1204,3 +1204,65 @@ async def delete_model(model_name: str):
     except Exception as e:
         logger.error(f"Ошибка удаления модели: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# === Внешние LLM для анализа документов ===
+
+from pydantic import BaseModel
+from typing import Optional as Opt
+
+class ExtLLMConfig(BaseModel):
+    url: str = "http://192.168.50.41:11434"
+    model: str = "phi4-mini"
+    api_key: Opt[str] = None
+    provider: str = "ollama"
+
+_ext_llm_config: ExtLLMConfig = ExtLLMConfig()
+
+
+@router.get("/ext-llm", summary="Получить настройки внешнего LLM")
+async def get_ext_llm():
+    """Вернуть текущие настройки внешнего LLM для анализа документов."""
+    return {
+        "url": _ext_llm_config.url,
+        "model": _ext_llm_config.model,
+        "provider": _ext_llm_config.provider,
+        "api_key": _ext_llm_config.api_key
+    }
+
+
+@router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
+async def save_ext_llm(config: ExtLLMConfig):
+    """Сохранить настройки внешнего LLM."""
+    global _ext_llm_config
+    _ext_llm_config = config
+    logger.info(f"Внешний LLM настроен: {config.provider}/{config.model} @ {config.url}")
+    return {"status": "ok", "message": "Настройки сохранены"}
+
+
+@router.post("/ext-llm/test", summary="Тест подключения к внешнему LLM")
+async def test_ext_llm():
+    """Проверить подключение к внешнему LLM."""
+    import aiohttp
+    
+    try:
+        if _ext_llm_config.provider == "ollama":
+            url = f"{_ext_llm_config.url}/api/generate"
+            payload = {
+                "model": _ext_llm_config.model,
+                "prompt": "Ответь одним словом: ОК",
+                "stream": False,
+                "options": {"max_tokens": 5}
+            }
+        else:
+            return {"ok": False, "error": f"Провайдер {_ext_llm_config.provider} пока не поддерживается для теста"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return {"ok": True, "response": data.get("response", "")}
+                else:
+                    return {"ok": False, "error": f"HTTP {resp.status}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

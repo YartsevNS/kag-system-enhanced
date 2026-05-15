@@ -122,11 +122,24 @@ class EmbeddingsService:
             if not exists:
                 logger.info(f"Создание коллекции: {self.collection_name}")
 
+                from qdrant_client.http.models import HnswConfigDiff, OptimizersConfigDiff, ScalarQuantization, ScalarType
+
                 self._qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
                         size=self._embedding_dimensions,
                         distance=Distance.COSINE
+                    ),
+                    hnsw_config=HnswConfigDiff(
+                        m=32,            # больше связей = точнее поиск
+                        ef_construct=128  # качественнее построение графа
+                    ),
+                    optimizers_config=OptimizersConfigDiff(
+                        indexing_threshold=5000  # индексация после 5000 точек
+                    ),
+                    quantization_config=ScalarQuantization(
+                        scalar=ScalarType.INT8,  # int8 квантование для скорости
+                        always_ram=True
                     )
                 )
 

@@ -295,6 +295,17 @@ class DocumentService:
                 f"чанков: {len(chunks)}, векторов: {vectors_count}"
             )
             
+            # Шаг 4: Фоновый анализ первого чанка (не блокирует)
+            if chunks and len(chunks) > 0:
+                try:
+                    import asyncio
+                    first_text = chunks[0].get("content", "")
+                    asyncio.create_task(self._analyze_document_async(
+                        document_id, first_text, record.filename
+                    ))
+                except Exception as e:
+                    logger.debug(f"Не удалось запустить анализ: {e}")
+            
             return {
                 "document_id": document_id,
                 "status": "completed",
@@ -396,6 +407,14 @@ class DocumentService:
             if f.name.startswith(document_id):
                 return f
         return None
+
+    async def _analyze_document_async(self, document_id: str, first_chunk_text: str, filename: str):
+        """Фоновый анализ документа через LLM."""
+        try:
+            from src.api.services.document_analyzer import document_analyzer
+            await document_analyzer.analyze_and_save(document_id, first_chunk_text, filename)
+        except Exception as e:
+            logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
 
 # Глобальный экземпляр
