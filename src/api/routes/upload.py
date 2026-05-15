@@ -310,8 +310,17 @@ async def get_document_chunks(
                 "document_id": document_id
             })
         
-        # Сортируем по chunk_seq
-        chunks.sort(key=lambda c: c.get("chunk_seq", c.get("chunk_index", 0)))
+        # Сортируем: chunk_seq если есть, иначе номер из chunk_id
+        def sort_key(c):
+            seq = c.get("chunk_seq")
+            if seq and seq > 0:
+                return seq
+            cid = c.get("chunk_id", "")
+            try:
+                return int(cid.replace("chunk_", "").split("_")[0])
+            except (ValueError, IndexError):
+                return c.get("chunk_index", 0)
+        chunks.sort(key=sort_key)
         
         return {"chunks": chunks, "total": len(chunks), "offset": offset, "limit": limit}
     except Exception as e:
