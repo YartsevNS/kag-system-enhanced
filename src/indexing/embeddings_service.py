@@ -426,8 +426,8 @@ class EmbeddingsService:
                     "metadata": point.payload.get("metadata", {})
                 })
 
-            # Сортируем по chunk_id
-            chunks.sort(key=lambda x: x.get("chunk_id", ""))
+            # Сортируем по chunk_seq (из metadata), fallback на chunk_id
+            chunks.sort(key=lambda x: x.get("metadata", {}).get("chunk_seq", 0) or int(x.get("chunk_id", "chunk_00000").split("_")[-1]))
 
             return chunks
 

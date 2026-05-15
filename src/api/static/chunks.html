@@ -174,10 +174,11 @@ function renderChunks(chunks, total) {
 
   container.innerHTML = chunks.map((c, i) => {
     const text = c.text || c.content || c.chunk_text || JSON.stringify(c);
+    const seq = c.metadata?.chunk_seq || (c.chunk_id || '').replace('chunk_', '');
     const id = c.id || c.chunk_id || `#${currentPage * currentLimit + i + 1}`;
     return `<div class="chunk-card">
       <div class="chunk-header">
-        <span class="chunk-id">${id}</span>
+        <span class="chunk-id">Чанк #${seq} <span style="color:var(--text4);font-weight:400">(${id})</span></span>
         <span class="chunk-meta">${text.length} символов</span>
       </div>
       <div class="chunk-body"><pre>${escapeHtml(text)}</pre></div>

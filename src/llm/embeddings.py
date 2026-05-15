@@ -232,7 +232,7 @@ class EmbeddingClient:
         results = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             result = {
-                "chunk_id": f"chunk_{i}",
+                "chunk_id": f"chunk_{i:05d}",
                 "content": chunk,
                 "embedding": embedding,
                 "metadata": metadata[i] if metadata and i < len(metadata) else {}

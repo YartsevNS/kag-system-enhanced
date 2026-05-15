@@ -49,24 +49,28 @@ class DocumentChunker:
         """
         segments = document.get("segments", [])
         chunks = []
+        chunk_seq = 0
 
         for i, segment in enumerate(segments):
             content = segment.get("content", "")
 
             if len(content) <= self.chunk_size:
+                chunk_seq += 1
                 chunks.append({
-                    "chunk_id": f"chunk_{i}_0",
+                    "chunk_id": f"chunk_{chunk_seq:05d}",
                     "content": content,
                     "metadata": {
                         **segment.get("metadata", {}),
                         "segment_index": i,
                         "chunk_index": 0,
-                        "total_chunks": 1
+                        "total_chunks": 1,
+                        "chunk_seq": chunk_seq
                     }
                 })
             else:
-                segment_chunks = self._split_content(content, i, segment.get("metadata", {}))
+                segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq)
                 chunks.extend(segment_chunks)
+                chunk_seq += len(segment_chunks)
 
         logger.info(f"Документ разбит на {len(chunks)} чанков")
         return chunks
@@ -85,24 +89,28 @@ class DocumentChunker:
             Список чанков для векторизации
         """
         chunks = []
+        chunk_seq = 0
 
         for i, segment in enumerate(segments):
             content = segment.get("content", "")
             metadata = segment.get("metadata", {})
 
             if len(content) <= self.chunk_size:
+                chunk_seq += 1
                 chunks.append({
-                    "chunk_id": f"chunk_{len(chunks)}",
+                    "chunk_id": f"chunk_{chunk_seq:05d}",
                     "content": content,
                     "metadata": {
                         **metadata,
-                        "chunk_index": len(chunks),
+                        "chunk_index": chunk_seq,
+                        "chunk_seq": chunk_seq,
                         "is_partial": False
                     }
                 })
             else:
-                segment_chunks = self._split_content(content, i, metadata)
+                segment_chunks = self._split_content(content, i, metadata, chunk_seq)
                 chunks.extend(segment_chunks)
+                chunk_seq += len(segment_chunks)
 
         logger.info(f"Сегменты разбиты на {len(chunks)} чанков")
         return chunks
@@ -111,13 +119,15 @@ class DocumentChunker:
         self,
         content: str,
         segment_index: int,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        start_seq: int = 0
     ) -> List[Dict[str, Any]]:
         """Разбить длинный контент на чанки с перекрытием"""
 
         chunks = []
         start = 0
         chunk_index = 0
+        chunk_seq = start_seq
 
         while start < len(content):
             end = start + self.chunk_size
@@ -130,13 +140,15 @@ class DocumentChunker:
             chunk_text = content[start:end].strip()
 
             if chunk_text:
+                chunk_seq += 1
                 chunks.append({
-                    "chunk_id": f"chunk_{segment_index}_{chunk_index}",
+                    "chunk_id": f"chunk_{chunk_seq:05d}",
                     "content": chunk_text,
                     "metadata": {
                         **metadata,
                         "segment_index": segment_index,
                         "chunk_index": chunk_index,
+                        "chunk_seq": chunk_seq,
                         "total_chunks": (len(content) + self.chunk_size - 1) // self.chunk_size,
                         "start_pos": start,
                         "end_pos": end,
