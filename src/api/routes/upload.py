@@ -302,10 +302,16 @@ async def get_document_chunks(
             payload = r.get("payload", {})
             chunks.append({
                 "id": r.get("id", ""),
+                "chunk_id": payload.get("chunk_id", ""),
                 "text": payload.get("text", payload.get("content", "")),
                 "chunk_index": payload.get("chunk_index", 0),
+                "chunk_seq": payload.get("chunk_seq", payload.get("chunk_index", 0)),
+                "metadata": payload.get("metadata", {}),
                 "document_id": document_id
             })
+        
+        # Сортируем по chunk_seq
+        chunks.sort(key=lambda c: c.get("chunk_seq", c.get("chunk_index", 0)))
         
         return {"chunks": chunks, "total": len(chunks), "offset": offset, "limit": limit}
     except Exception as e:
