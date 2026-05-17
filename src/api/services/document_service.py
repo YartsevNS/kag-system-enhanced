@@ -306,6 +306,15 @@ class DocumentService:
                 except Exception as e:
                     logger.debug(f"Не удалось запустить анализ: {e}")
             
+            # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей (фон)
+            try:
+                import asyncio
+                asyncio.create_task(self._build_knowledge_graph_async(
+                    document_id, record.filename, chunks
+                ))
+            except Exception as e:
+                logger.debug(f"Не удалось запустить построение графа: {e}")
+            
             return {
                 "document_id": document_id,
                 "status": "completed",
@@ -415,6 +424,33 @@ class DocumentService:
             await document_analyzer.analyze_and_save(document_id, first_chunk_text, filename)
         except Exception as e:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
+
+    async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list):
+        """Фоновое построение графа знаний."""
+        try:
+            from src.indexing.knowledge_graph import kg_service
+            from src.indexing.entity_extractor import entity_extractor
+            
+            # Создаём узел документа
+            kg_service.create_document_node(document_id, filename)
+            
+            # Обрабатываем чанки (первые 10 для скорости, остальные в фоне)
+            for i, chunk in enumerate(chunks[:10]):
+                chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+                chunk_text = chunk.get("content", "")
+                chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
+                
+                # Узел чанка в графе
+                kg_service.create_chunk_node(chunk_id, document_id, chunk_text, chunk_seq)
+                
+                # Извлечение сущностей
+                await entity_extractor.extract_and_store(
+                    document_id, chunk_id, chunk_text, chunk_seq, filename
+                )
+            
+            logger.info(f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано")
+        except Exception as e:
+            logger.warning(f"Ошибка построения графа для {document_id}: {e}")
 
 
 # Глобальный экземпляр

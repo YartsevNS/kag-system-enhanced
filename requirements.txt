@@ -19,6 +19,9 @@ apscheduler==3.10.4
 # Векторная БД
 qdrant-client==1.12.1
 
+# Граф знаний
+neo4j==5.27.0
+
 # MCP
 mcp==1.2.0
 

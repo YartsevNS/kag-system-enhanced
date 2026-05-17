@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Граф знаний</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1400px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
+.stat-num{font-size:26px;font-weight:700;color:var(--text)}
+.stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;margin-top:2px}
+.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px}
+.panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
+.search-row{display:flex;gap:10px;margin-bottom:12px}
+.search-row input{flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;font-family:'Inter',sans-serif}
+.search-row input:focus{border-color:var(--accent)}
+.search-row select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
+.btn:hover{opacity:0.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--text4)}
+.entities-table{width:100%;border-collapse:collapse;font-size:13px}
+.entities-table th{text-align:left;padding:10px 14px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid var(--border-s);background:var(--panel)}
+.entities-table td{padding:10px 14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+.entities-table tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:500}
+.badge-person{background:rgba(94,106,210,0.15);color:var(--accent-h)}
+.badge-org{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.badge-date{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-money{background:rgba(220,38,38,0.12);color:#f87171}
+.badge-location{background:rgba(139,92,246,0.15);color:#a78bfa}
+.badge-other{background:rgba(255,255,255,0.06);color:var(--text4)}
+.graph-viz{width:100%;height:400px;background:var(--panel);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--text4);font-size:14px}
+.empty{text-align:center;padding:40px;color:var(--text4)}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.stats-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg" class="active">🕸️ Граф знаний</a>
+  <a href="/admin">⚙️ Админ</a>
+  <a href="/docs">📖 Документация</a>
+</nav>
+<main>
+  <h1>🕸️ Граф знаний</h1>
+  <div class="sub">Neo4j — сущности, связи, гибридный поиск (граф + вектор)</div>
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-num" id="stat-docs">—</div><div class="stat-label">Документов</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-entities">—</div><div class="stat-label">Сущностей</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-relations">—</div><div class="stat-label">Связей</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>🔍 Поиск сущностей</h2>
+    <div class="search-row">
+      <input type="text" id="entity-search" placeholder="Имя сущности или ключевое слово..." onkeydown="if(event.key==='Enter')searchEntities()">
+      <select id="entity-type">
+        <option value="">Все типы</option>
+        <option value="person">👤 Люди</option>
+        <option value="organization">🏢 Организации</option>
+        <option value="date">📅 Даты</option>
+        <option value="money">💰 Суммы</option>
+        <option value="location">📍 Места</option>
+        <option value="legal_term">⚖️ Термины</option>
+      </select>
+      <button class="btn" onclick="searchEntities()">Найти</button>
+    </div>
+    <div id="entity-results"></div>
+  </div>
+
+  <div class="panel">
+    <h2>🔗 Гибридный поиск (граф + вектор)</h2>
+    <div class="search-row">
+      <input type="text" id="hybrid-query" placeholder="Сущности через запятую: Иванов, ООО Ромашка, 2024..." onkeydown="if(event.key==='Enter')hybridSearch()">
+      <button class="btn" onclick="hybridSearch()">Искать</button>
+    </div>
+    <div id="hybrid-results"></div>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1/kg';
+
+async function loadStats() {
+  try {
+    const r = await fetch(API + '/stats');
+    const d = await r.json();
+    document.getElementById('stat-docs').textContent = d.documents || 0;
+    document.getElementById('stat-chunks').textContent = d.chunks || 0;
+    document.getElementById('stat-entities').textContent = d.entities || 0;
+    document.getElementById('stat-relations').textContent = d.relations || 0;
+  } catch(e) {}
+}
+
+function badgeClass(type) {
+  const m = {person:'badge-person',organization:'badge-org',date:'badge-date',money:'badge-money',location:'badge-location'};
+  return m[type] || 'badge-other';
+}
+
+function labelType(t) {
+  const m = {person:'👤',organization:'🏢',date:'📅',money:'💰',location:'📍',legal_term:'⚖️',document_ref:'📄'};
+  return (m[t]||'•') + ' ' + (t||'other');
+}
+
+async function searchEntities() {
+  const q = document.getElementById('entity-search').value.trim();
+  const type = document.getElementById('entity-type').value;
+  if (!q) return;
+  const div = document.getElementById('entity-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Поиск...</div>';
+  try {
+    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&type=' + type : '') + '&limit=30');
+    const d = await r.json();
+    if (!d.results.length) {
+      div.innerHTML = '<div class="empty">🔍 Сущности не найдены</div>';
+      return;
+    }
+    div.innerHTML = '<table class="entities-table"><thead><tr><th>Сущность</th><th>Тип</th><th>Уверенность</th></tr></thead><tbody>' +
+      d.results.map(e => `<tr>
+        <td><strong>${e.name}</strong></td>
+        <td><span class="badge ${badgeClass(e.type)}">${labelType(e.type)}</span></td>
+        <td>${Math.round((e.confidence||1)*100)}%</td>
+      </tr>`).join('') + '</tbody></table>';
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+async function hybridSearch() {
+  const q = document.getElementById('hybrid-query').value.trim();
+  if (!q) return;
+  const div = document.getElementById('hybrid-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск...</div>';
+  try {
+    const r = await fetch(API + '/hybrid-search?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (!d.results.length) {
+      div.innerHTML = '<div class="empty">🔍 Ничего не найдено</div>';
+      return;
+    }
+    div.innerHTML = '<table class="entities-table"><thead><tr><th>Чанк</th><th>Документ</th><th>Сущностей</th></tr></thead><tbody>' +
+      d.results.map(r => `<tr>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.text||''}">${(r.text||'').substring(0,80)}</td>
+        <td><a href="/viewer?id=${r.doc_id}" style="color:var(--accent-h);text-decoration:none">${r.filename||r.doc_id?.substring(0,8)}</a></td>
+        <td><span class="badge badge-person">${r.entity_count||0}</span></td>
+      </tr>`).join('') + '</tbody></table>';
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>
