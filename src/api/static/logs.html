@@ -17,27 +17,27 @@ nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
 
-main{margin-left:240px;flex:1;padding:24px 32px;max-width:1600px;width:100%}
-h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
-.sub{font-size:14px;color:var(--text4);margin-bottom:18px}
+main{margin-left:240px;flex:1;padding:16px 24px;max-width:1600px;width:100%;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-shrink:0}
+.sub{font-size:12px;color:var(--text4);margin-bottom:8px;flex-shrink:0}
 
 /* Top bar */
-.top-bar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-.top-bar .stat-pill{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:6px 14px;font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.top-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;flex-shrink:0}
+.top-bar .stat-pill{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:4px 10px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;flex-shrink:0}
 .top-bar .stat-pill .dot{width:8px;height:8px;border-radius:50%}
 .dot-green{background:var(--emerald)}
 .dot-red{background:var(--red)}
 .dot-amber{background:var(--amber)}
 
 /* Tabs */
-.tabs{display:flex;gap:0;margin-bottom:0;border-bottom:1px solid var(--border)}
-.tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--text4);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
+.tabs{display:flex;gap:0;margin-bottom:0;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--text4);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
 
 /* Controls row */
-.controls{display:flex;gap:10px;align-items:center;padding:12px 0;flex-wrap:wrap}
-.controls input,.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.controls{display:flex;gap:8px;align-items:center;padding:6px 0;flex-wrap:wrap;flex-shrink:0}
+.controls input,.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
 .controls input:focus,.controls select:focus{border-color:var(--accent)}
 .controls input{flex:1;min-width:180px}
 .controls select{min-width:110px}
@@ -46,7 +46,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .btn-ghost{background:transparent!important;color:var(--text3)!important;border:1px solid var(--border)!important}
 
 /* Log container */
-.log-container{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 310px);min-height:400px}
+.log-container{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:200px}
 .log-header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border-s);font-size:11px;color:var(--text4)}
 .log-stream{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7}
 .log-stream::-webkit-scrollbar{width:6px}

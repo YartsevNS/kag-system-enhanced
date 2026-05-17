@@ -175,19 +175,29 @@ class KnowledgeGraphService:
         if not self.driver:
             return []
         try:
-            type_filter = f"AND e.type = '{entity_type}'" if entity_type else ""
             with self.driver.session() as session:
-                result = session.run(
-                    f"""
-                    MATCH (e:Entity)
-                    WHERE e.name CONTAINS $query {type_filter}
-                    RETURN e.name as name, e.type as type, e.confidence as confidence
-                    ORDER BY e.confidence DESC
-                    LIMIT $limit
-                    """,
-                    query=query,
-                    limit=limit
-                )
+                if entity_type:
+                    result = session.run(
+                        """
+                        MATCH (e:Entity)
+                        WHERE e.name CONTAINS $query AND e.type = $type
+                        RETURN e.name as name, e.type as type, e.confidence as confidence
+                        ORDER BY e.confidence DESC
+                        LIMIT $limit
+                        """,
+                        query=query, type=entity_type, limit=limit
+                    )
+                else:
+                    result = session.run(
+                        """
+                        MATCH (e:Entity)
+                        WHERE e.name CONTAINS $query
+                        RETURN e.name as name, e.type as type, e.confidence as confidence
+                        ORDER BY e.confidence DESC
+                        LIMIT $limit
+                        """,
+                        query=query, limit=limit
+                    )
                 return [dict(r) for r in result]
         except Exception as e:
             logger.warning(f"Ошибка поиска сущностей: {e}")
@@ -247,27 +257,37 @@ class KnowledgeGraphService:
 
     def hybrid_search(self, query_entities: List[str], doc_ids: List[str] = None) -> List[str]:
         """Гибридный поиск: найти чанки, связанные с заданными сущностями."""
-        if not self.driver:
+        if not self.driver or not query_entities:
             return []
         try:
-            doc_filter = ""
-            if doc_ids:
-                doc_list = "', '".join(doc_ids)
-                doc_filter = f"AND d.id IN ['{doc_list}']"
-
-            entity_list = "', '".join(query_entities)
             with self.driver.session() as session:
-                result = session.run(
-                    f"""
-                    MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
-                    WHERE e.name IN ['{entity_list}'] {doc_filter}
-                    RETURN DISTINCT c.id as chunk_id, c.text as text, 
-                           d.id as doc_id, d.filename as filename,
-                           count(e) as entity_count
-                    ORDER BY entity_count DESC
-                    LIMIT 20
-                    """
-                )
+                if doc_ids:
+                    result = session.run(
+                        """
+                        MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
+                        WHERE e.name IN $entities AND d.id IN $doc_ids
+                        RETURN DISTINCT c.id as chunk_id, c.text as text, 
+                               d.id as doc_id, d.filename as filename,
+                               count(e) as entity_count
+                        ORDER BY entity_count DESC
+                        LIMIT 20
+                        """,
+                        entities=query_entities,
+                        doc_ids=doc_ids
+                    )
+                else:
+                    result = session.run(
+                        """
+                        MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
+                        WHERE e.name IN $entities
+                        RETURN DISTINCT c.id as chunk_id, c.text as text, 
+                               d.id as doc_id, d.filename as filename,
+                               count(e) as entity_count
+                        ORDER BY entity_count DESC
+                        LIMIT 20
+                        """,
+                        entities=query_entities
+                    )
                 return [dict(r) for r in result]
         except Exception as e:
             logger.warning(f"Ошибка гибридного поиска: {e}")
