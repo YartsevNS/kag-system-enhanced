@@ -115,9 +115,22 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 <script>
 const API = '/api/v1/kg';
 
+function getToken() {
+  // Read from cookie
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  // Fallback to localStorage
+  return localStorage.getItem('kag_token');
+}
+
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
 async function loadStats() {
   try {
-    const r = await fetch(API + '/stats');
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
     const d = await r.json();
     document.getElementById('stat-docs').textContent = d.documents || 0;
     document.getElementById('stat-chunks').textContent = d.chunks || 0;
@@ -143,7 +156,7 @@ async function searchEntities() {
   const div = document.getElementById('entity-results');
   div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Поиск...</div>';
   try {
-    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&type=' + type : '') + '&limit=30');
+    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&type=' + type : '') + '&limit=30', { headers: authHeaders() });
     const d = await r.json();
     if (!d.results.length) {
       div.innerHTML = '<div class="empty">🔍 Сущности не найдены</div>';
@@ -166,7 +179,7 @@ async function hybridSearch() {
   const div = document.getElementById('hybrid-results');
   div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск...</div>';
   try {
-    const r = await fetch(API + '/hybrid-search?q=' + encodeURIComponent(q));
+    const r = await fetch(API + '/hybrid-search?q=' + encodeURIComponent(q), { headers: authHeaders() });
     const d = await r.json();
     if (!d.results.length) {
       div.innerHTML = '<div class="empty">🔍 Ничего не найдено</div>';
@@ -191,7 +204,7 @@ async function runCypher() {
   try {
     const r = await fetch(API + '/cypher', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ query: q, limit: 100 })
     });
     const d = await r.json();
