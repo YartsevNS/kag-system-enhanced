@@ -343,8 +343,13 @@ async def get_document_details(
     # Первичный источник — document_service (in-memory, всегда актуальный)
     record = document_service.get_document_status(document_id)
     
-    # Получаем запись из config_store для дополнительных полей
-    record_data = config_store.get("documents", document_id)
+    # Получаем запись из config_store через get_all (надёжнее чем get по ID)
+    record_data = None
+    try:
+        all_docs = config_store.get_all("documents")
+        record_data = all_docs.get(document_id)
+    except Exception:
+        record_data = config_store.get("documents", document_id)
     
     if not record and not record_data:
         raise HTTPException(status_code=404, detail="Документ не найден")
