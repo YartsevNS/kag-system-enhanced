@@ -260,12 +260,20 @@ async def viewer_page():
         return FileResponse(viewer_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"error": "Viewer page not found"}
 
+@app.get("/api", summary="API и архитектура")
+async def api_page():
+    """Техническая документация API и архитектуры"""
+    api_path = os.path.join(static_path, "docs.html")
+    if os.path.exists(api_path):
+        return FileResponse(api_path)
+    return {"error": "API page not found"}
+
 @app.get("/docs", summary="Документация проекта")
 async def docs_page():
-    """Страница с архитектурой проекта"""
-    docs_path = os.path.join(static_path, "docs.html")
-    if os.path.exists(docs_path):
-        return FileResponse(docs_path)
+    """Читаемая документация по проекту"""
+    guide_path = os.path.join(static_path, "guide.html")
+    if os.path.exists(guide_path):
+        return FileResponse(guide_path)
     return {"error": "Docs page not found"}
 
 @app.get("/kg", summary="Граф знаний")

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Документация</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;line-height:1.7}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 48px;max-width:900px}
+h1{font-size:30px;font-weight:700;letter-spacing:-0.5px;margin-bottom:6px}
+h2{font-size:20px;font-weight:600;margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border-s);color:var(--text)}
+h3{font-size:15px;font-weight:600;margin:20px 0 8px;color:var(--text2)}
+p{font-size:14px;color:var(--text3);margin-bottom:10px}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface);padding:2px 6px;border-radius:3px;color:var(--accent-h)}
+pre{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px;overflow-x:auto;margin:8px 0 16px;font-size:12px;line-height:1.5}
+pre code{background:none;padding:0;color:var(--text2)}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px 20px;margin-bottom:12px}
+.card h3{margin-top:0;display:flex;align-items:center;gap:8px}
+.card p{font-size:13px;color:var(--text4);margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.tag{display:inline-block;font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;margin:2px}
+.tag-blue{background:rgba(94,106,210,0.15);color:var(--accent-h)}
+.tag-green{background:rgba(16,185,129,0.15);color:var(--green)}
+.tag-amber{background:rgba(245,158,11,0.15);color:var(--amber)}
+a{color:var(--accent-h);text-decoration:none}
+a:hover{text-decoration:underline}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+  <a href="/docs" class="active">📖 Документация</a>
+</nav>
+<main>
+
+<h1>📖 KAG — Документация проекта</h1>
+<p style="color:var(--text4);margin-bottom:24px">Knowledge Augmentation Generation — система управления документами с ИИ</p>
+
+<h2>🚀 Что такое KAG</h2>
+<p>KAG — это self-hosted система для загрузки, распознавания, классификации и поиска документов с использованием искусственного интеллекта. Она объединяет OCR, векторный поиск, граф знаний и языковые модели для работы с документами на русском языке.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3>📄 Загрузка</h3>
+    <p>Перетащите PDF, DOCX, TXT, CSV — система распознает текст, создаст миниатюры и подготовит к поиску.</p>
+  </div>
+  <div class="card">
+    <h3>🔍 Поиск</h3>
+    <p>Семантический поиск по содержимому документов. Задайте вопрос — найдёт ответ в чанках.</p>
+  </div>
+  <div class="card">
+    <h3>🕸️ Граф знаний</h3>
+    <p>Автоматически извлекает сущности (люди, организации, даты, суммы) и строит связи между ними.</p>
+  </div>
+  <div class="card">
+    <h3>🤖 AI-анализ</h3>
+    <p>Определяет тип документа, генерирует название и краткое содержание через языковую модель.</p>
+  </div>
+</div>
+
+<h2>📋 Страницы системы</h2>
+
+<div class="card"><h3>⬡ Дашборд</h3><p>Главная страница. Сводка системы: количество документов, статус контейнеров, быстрые действия.</p></div>
+<div class="card"><h3>📄 Документы</h3><p>Загрузка и управление. Drag-and-drop, карточки с A4-превью, фильтры по типу и статусу, прогресс-бар при загрузке. Клик по документу → просмотрщик.</p></div>
+<div class="card"><h3>🧩 Чанки</h3><p>Просмотр чанков (фрагментов) документа. Пагинация, поиск, экспорт. Чанки пронумерованы по порядку.</p></div>
+<div class="card"><h3>🔎 Поиск</h3><p>Семантический RAG-поиск. Векторный поиск по Qdrant + фильтры. Возвращает релевантные чанки с контекстом.</p></div>
+<div class="card"><h3>🕸️ Граф знаний</h3><p>Neo4j. Поиск сущностей по типу, гибридный поиск (граф + вектор), статистика графа.</p></div>
+<div class="card"><h3>📋 Логи</h3><p>Единый хаб: Docker-статус контейнеров, процесс-логи обработки документов (6 этапов), аудит действий, системная информация. Автообновление.</p></div>
+<div class="card"><h3>⚙️ Админ</h3><p>Управление LLM-моделями (Ollama), загрузка/удаление, переключение активной модели, настройка внешних LLM для анализа.</p></div>
+<div class="card"><h3>📖 Документация</h3><p>Эта страница. <a href="/api">Техническая документация API →</a></p></div>
+
+<h2>🔧 Как это работает</h2>
+
+<h3>Загрузка документа (6 этапов)</h3>
+<pre><code>1. START      — получение файла, валидация, сохранение на диск
+2. FIND_FILE  — поиск файла в /app/data/uploads/
+3. PARSE      — извлечение текста (PDF→Docling+Occular, DOCX, TXT)
+4. CHUNKING   — разбивка на чанки (1000 символов, перекрытие 200)
+5. VECTORIZE  — эмбеддинги (nomic-embed-text, 768d) → Qdrant
+6. COMPLETED  — миниатюра, метаданные, граф знаний</code></pre>
+
+<h3>Фоновые процессы (после загрузки)</h3>
+<pre><code>→ Анализатор: первый чанк → LLM → title, type, summary, topics
+→ Граф знаний: чанки → LLM → сущности + связи → Neo4j
+→ Сохранение в config_store (PostgreSQL) + Qdrant payload</code></pre>
+
+<h2>🗄️ Инфраструктура</h2>
+
+<div class="grid2">
+  <div class="card"><h3>🐍 FastAPI</h3><p>Основной сервер (kag-api). Uvicorn, порт 8000. 15 HTML-страниц, REST API.</p></div>
+  <div class="card"><h3>🔍 Qdrant</h3><p>Векторная БД. HNSW (m=32), INT8-квантование. Коллекция kag_documents, 768 измерений.</p></div>
+  <div class="card"><h3>🕸️ Neo4j</h3><p>Граф знаний. Узлы: Document, Chunk, Entity. Связи: HAS_CHUNK, MENTIONS, SIGNED_BY.</p></div>
+  <div class="card"><h3>🗃️ PostgreSQL</h3><p>Keycloak-DB. Таблицы: system_configs (config_store), documents, users.</p></div>
+  <div class="card"><h3>⚡ Redis</h3><p>Кэш + брокер Celery. maxmemory 2GB, политика allkeys-lru.</p></div>
+  <div class="card"><h3>🦙 Ollama</h3><p>Внешний сервер (192.168.50.41). Модели: phi4-mini (LLM), nomic-embed-text (эмбеддинги).</p></div>
+</div>
+
+<h2>🔐 Безопасность</h2>
+<div class="card">
+  <h3>GOST-шифрование</h3>
+  <p><span class="tag tag-blue">ГОСТ Р 34.12-2015</span> <span class="tag tag-green">Кузнечик</span> <span class="tag tag-amber">Стрибог</span> <span class="tag tag-blue">152-ФЗ</span></p>
+  <p>Шифрование конфиденциальных данных. Библиотека <code>cryptography==44.0.0</code>. Ключ в <code>/app/data/.encryption_key</code>.</p>
+</div>
+<div class="card">
+  <h3>Аутентификация</h3>
+  <p>JWT-токены (python-jose) + cookie <code>kag_token</code>. Keycloak OIDC (опционально). Casbin RBAC. Аудит-лог.</p>
+</div>
+
+<h2>📦 OCR и парсинг</h2>
+<div class="card">
+  <h3>Движки распознавания</h3>
+  <p><span class="tag tag-green">Occular-ocr</span> — быстрый русский OCR (93.7% точность, CPU)<br>
+  <span class="tag tag-blue">Tesseract</span> — стандартный OCR (русский язык)<br>
+  <span class="tag tag-amber">Docling</span> — разметка и таблицы (CPU only)</p>
+  <p>Правило: Docling = структура, Occular-ocr = русский текст.</p>
+</div>
+
+<h2>🚢 Развёртывание</h2>
+<pre><code># Клонирование
+git clone https://github.com/YartsevNS/kag-system-enhanced.git
+cd kag-system-enhanced
+git checkout feature/docling-integration
+
+# Запуск (dev-профиль: 9 контейнеров)
+docker-compose --profile dev up -d
+
+# Обновление
+git pull
+docker-compose --profile dev up -d --no-deps --build api</code></pre>
+
+<h2>📡 Доступ</h2>
+<div class="card">
+  <p>🌐 <strong>Web:</strong> <a href="https://qd.gostsecret.ru">qd.gostsecret.ru</a> или <code>http://192.168.50.18:8000</code><br>
+  🔑 <strong>Логин:</strong> admin / User<br>
+  📖 <strong>API-документация:</strong> <a href="/api">/api</a></p>
+</div>
+
+<p style="margin-top:32px;padding-top:12px;border-top:1px solid var(--border-s);font-size:12px;color:var(--text4)">
+KAG v0.3.0 · Ветка feature/docling-integration · 25+ коммитов · 9 контейнеров Docker
+</p>
+</main>
+</body>
+</html>
