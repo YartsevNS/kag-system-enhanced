@@ -2,7 +2,7 @@
 API-роуты для Knowledge Graph (Neo4j).
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Optional
 from loguru import logger
 
@@ -10,6 +10,27 @@ from src.api.middleware.auth_v2 import get_current_user_optional
 from src.database.user_models import User
 
 router = APIRouter()
+
+
+@router.post("/cypher", summary="Произвольный Cypher-запрос")
+async def execute_cypher(
+    query: dict = Body(...),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Выполнение произвольного Cypher-запроса (только чтение)."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        q = query.get("query", "").strip()
+        if not q:
+            raise HTTPException(status_code=400, detail="Пустой запрос")
+        limit = int(query.get("limit", 100))
+        results = kg_service.execute_cypher(q, limit)
+        return {"query": q, "results": results, "total": len(results)}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Ошибка Cypher: {e}")
+        return {"query": query.get("query"), "results": [], "error": str(e)}
 
 
 @router.get("/stats", summary="Статистика графа знаний")

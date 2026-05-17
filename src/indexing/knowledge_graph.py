@@ -293,6 +293,28 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка гибридного поиска: {e}")
             return []
 
+    def execute_cypher(self, query: str, limit: int = 100) -> List[Dict]:
+        """Выполнить произвольный Cypher-запрос (только чтение)."""
+        if not self.driver:
+            return []
+        try:
+            # Базовая защита от модификации данных через UI
+            query_upper = query.upper()
+            if any(forbidden in query_upper for forbidden in ["CREATE", "MERGE", "SET", "DELETE", "REMOVE", "DROP", "CALL "]):
+                raise ValueError("Разрешены только запросы на чтение (MATCH, RETURN)")
+            
+            with self.driver.session() as session:
+                result = session.run(query)
+                records = []
+                for idx, record in enumerate(result):
+                    if idx >= limit:
+                        break
+                    records.append(dict(record))
+                return records
+        except Exception as e:
+            logger.error(f"Ошибка Cypher-запроса: {e}")
+            raise e
+
     def get_stats(self) -> Dict[str, int]:
         """Статистика графа."""
         if not self.driver:

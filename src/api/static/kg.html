@@ -98,6 +98,18 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     </div>
     <div id="hybrid-results"></div>
   </div>
+
+  <div class="panel">
+    <h2>💻 Прямой запрос Neo4j (Cypher)</h2>
+    <div class="search-row" style="flex-direction: column; gap: 8px;">
+      <textarea id="cypher-query" placeholder="MATCH (n) RETURN n LIMIT 10..." style="background:var(--elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; color:var(--text); font-size:13px; outline:none; font-family:'JetBrains Mono', monospace; width:100%; height:80px; resize:vertical;"></textarea>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:var(--text4)">* Только чтение (MATCH, RETURN)</span>
+        <button class="btn" onclick="runCypher()">Выполнить Cypher</button>
+      </div>
+    </div>
+    <div id="cypher-results" style="margin-top: 12px; overflow-x: auto;"></div>
+  </div>
 </main>
 
 <script>
@@ -166,6 +178,46 @@ async function hybridSearch() {
         <td><a href="/viewer?id=${r.doc_id}" style="color:var(--accent-h);text-decoration:none">${r.filename||r.doc_id?.substring(0,8)}</a></td>
         <td><span class="badge badge-person">${r.entity_count||0}</span></td>
       </tr>`).join('') + '</tbody></table>';
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+async function runCypher() {
+  const q = document.getElementById('cypher-query').value.trim();
+  if (!q) return;
+  const div = document.getElementById('cypher-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Выполнение...</div>';
+  try {
+    const r = await fetch(API + '/cypher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, limit: 100 })
+    });
+    const d = await r.json();
+    if (r.status !== 200 || d.error) throw new Error(d.error || d.detail || 'Ошибка выполнения');
+    
+    if (!d.results || !d.results.length) {
+      div.innerHTML = '<div class="empty">0 записей возвращено</div>';
+      return;
+    }
+    
+    const keys = Object.keys(d.results[0]);
+    let html = '<table class="entities-table"><thead><tr>';
+    keys.forEach(k => html += `<th>${k}</th>`);
+    html += '</tr></thead><tbody>';
+    
+    d.results.forEach(row => {
+      html += '<tr>';
+      keys.forEach(k => {
+        let val = row[k];
+        if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
+        html += `<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    div.innerHTML = html;
   } catch(e) {
     div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
   }
