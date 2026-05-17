@@ -180,7 +180,21 @@ async function hybridSearch() {
   div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск...</div>';
   try {
     const r = await fetch(API + '/hybrid-search?q=' + encodeURIComponent(q), { headers: authHeaders() });
+    if (!r.ok) {
+      const text = await r.text();
+      div.innerHTML = '<div class="empty">❌ Ошибка ' + r.status + ': ' + text.substring(0, 200) + '</div>';
+      return;
+    }
     const d = await r.json();
+    if (typeof d !== 'object' || d === null) {
+      div.innerHTML = '<div class="empty">❌ Неверный ответ сервера</div>';
+      return;
+    }
+    if (!Array.isArray(d.results)) {
+      div.innerHTML = '<div class="empty">❌ Нет поля results в ответе. Ответ: ' + JSON.stringify(d).substring(0, 200) + '</div>';
+      console.error('hybrid-search response:', d);
+      return;
+    }
     if (!d.results.length) {
       div.innerHTML = '<div class="empty">🔍 Ничего не найдено</div>';
       return;
