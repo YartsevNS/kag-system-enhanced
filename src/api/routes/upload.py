@@ -397,8 +397,8 @@ async def get_document_details(
     # document_type и recognized_title: приоритет in-memory, затем config_store
     doc_type_inmem = getattr(record, 'document_type', None) if record else None
     doc_title_inmem = getattr(record, 'recognized_title', None) if record else None
-    document_type = doc_type_inmem or (record_data.get('document_type') if record_data else None)
-    recognized_title = doc_title_inmem or (record_data.get('recognized_title') if record_data else None)
+    cfg_document_type = doc_type_inmem or (record_data.get('document_type') if record_data else None)
+    cfg_recognized_title = doc_title_inmem or (record_data.get('recognized_title') if record_data else None)
 
     # Get user info
     uploaded_by_name = None
@@ -459,11 +459,11 @@ async def get_document_details(
     return {
         "document_id": document_id,
         "filename": filename,
-        "recognized_title": recognized_title,
+        "recognized_title": cfg_recognized_title or recognized_title or filename,
         "file_type": file_type,
         "file_size": file_size or 0,
         "status": status,
-        "document_type": doc_type,
+        "document_type": cfg_document_type or doc_type or "unknown",
         "tags": tags,
         "chunks_count": chunks_count,
         "uploaded_by": uploaded_by,
