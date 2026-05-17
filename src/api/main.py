@@ -78,6 +78,8 @@ app = FastAPI(
     description="API для системы многоагентной обработки знаний (KAG)",
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    docs_url="/api/docs",       # Swagger → /api/docs
+    redoc_url="/api/redoc",     # ReDoc → /api/redoc
 )
 
 # Middleware для проверки setup (должен быть первым)
