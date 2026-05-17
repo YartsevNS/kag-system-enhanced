@@ -388,6 +388,12 @@ async def get_document_details(
     
     created_at = created_at_raw.isoformat() if hasattr(created_at_raw, 'isoformat') else str(created_at_raw) if created_at_raw else None
     updated_at = updated_at_raw.isoformat() if hasattr(updated_at_raw, 'isoformat') else str(updated_at_raw) if updated_at_raw else None
+    
+    # document_type и recognized_title: приоритет in-memory, затем config_store
+    doc_type_inmem = getattr(record, 'document_type', None) if record else None
+    doc_title_inmem = getattr(record, 'recognized_title', None) if record else None
+    document_type = doc_type_inmem or (record_data.get('document_type') if record_data else None)
+    recognized_title = doc_title_inmem or (record_data.get('recognized_title') if record_data else None)
 
     # Get user info
     uploaded_by_name = None
