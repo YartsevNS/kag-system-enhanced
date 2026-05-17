@@ -217,6 +217,16 @@ class DocumentService:
             raise ValueError(f"Документ не найден: {document_id}")
         
         try:
+            # Инициализируем логгер процесса
+            from src.indexing.process_logger import ProcessLogger
+            plog = ProcessLogger(document_id)
+            plog.log("start", {
+                "filename": record.filename,
+                "file_type": record.file_type,
+                "file_size": record.file_size,
+                "uploaded_by": record.uploaded_by
+            })
+            
             # Обновляем статус
             record.status = "processing"
             record.progress = 10
@@ -226,13 +236,19 @@ class DocumentService:
             # Находим файл
             file_path = self._find_file(document_id, record.filename)
             if not file_path:
+                plog.log_error("find_file", "Файл не найден")
                 raise FileNotFoundError(f"Файл не найден для документа {document_id}")
+            plog.log("find_file", {"path": str(file_path)})
 
             # Шаг 1: Парсинг (30%)
             logger.info(f"Парсинг документа: {document_id}")
             record.progress = 30
             self._save_document_to_db(document_id)
             parsed_doc = document_parser.parse(str(file_path), record.file_type)
+            plog.log("parse", {
+                "segments": len(parsed_doc.get("segments", [])),
+                "parser": str(type(document_parser).__name__)
+            })
 
             # Шаг 2: Чанкинг (50%)
             logger.info(f"Чанкинг документа: {document_id}")
@@ -257,6 +273,12 @@ class DocumentService:
             
             segments = parsed_doc.get("segments", [])
             chunks = chunker.chunk_document(segments)
+            plog.log("chunking", {
+                "chunk_size": chunking_config.get("chunk_size", 1000),
+                "chunk_overlap": chunking_config.get("chunk_overlap", 200),
+                "chunks_count": len(chunks),
+                "total_chars": sum(len(c.get("content", "")) for c in chunks)
+            })
             
             # Шаг 3: Векторизация и сохранение в Qdrant (90%)
             logger.info(f"Векторизация документа: {document_id}")
@@ -276,19 +298,30 @@ class DocumentService:
                 },
                 group_ids=record.group_ids
             )
-            
+            plog.log("vectorize", {
+                "vectors_stored": vectors_count,
+                "embedding_model": "nomic-embed-text",
+                "dimensions": 768
+            })
+
             # Генерируем миниатюру
             try:
                 self._generate_thumbnail(document_id, file_path)
             except Exception as e:
                 logger.warning(f"Миниатюра не создана: {e}")
-            
+
             # Завершено (100%)
             record.status = "completed"
             record.progress = 100
             record.chunks_count = len(chunks)
             record.updated_at = datetime.utcnow()
             self._save_document_to_db(document_id)
+            plog.log("completed", {
+                "chunks_count": len(chunks),
+                "vectors_count": vectors_count,
+                "thumbnail": True
+            })
+            plog.save()
             
             logger.info(
                 f"Документ обработан: {document_id}, "
