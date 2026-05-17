@@ -66,6 +66,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .lsource-nginx{color:var(--amber)}
 .lsource-ollama{color:#a78bfa}
 .lsource-keycloak{color:#fb923c}
+.lsource-process{color:#10b981}
 .lsource-system{color:var(--text3)}
 
 .llevel-ERROR{background:rgba(220,38,38,0.08)}
@@ -149,7 +150,8 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <div class="tabs">
     <button class="tab active" data-tab="all">📋 Все источники</button>
     <button class="tab" data-tab="kag-api">🐍 kag-api</button>
-    <button class="tab" data-tab="docker">🐳 Docker-контейнеры</button>
+    <button class="tab" data-tab="docker">🐳 Docker</button>
+    <button class="tab" data-tab="process">📊 Обработка</button>
     <button class="tab" data-tab="system">🖥️ Система</button>
     <button class="tab" data-tab="audit">🔐 Аудит</button>
   </div>
@@ -256,7 +258,10 @@ async function refreshAll() {
   // Application audit log
   promises.push(fetch(`${API_UPLOAD}/admin/audit-log?limit=50`).then(r=>r.json()).catch(()=>null));
   
-  const [sysInfo, dockerStats, auditLog] = await Promise.all(promises);
+  // Process logs
+  promises.push(fetch(`${API_UPLOAD}/process-logs?limit=20`).then(r=>r.json()).catch(()=>null));
+  
+  const [sysInfo, dockerStats, auditLog, processLogs] = await Promise.all(promises);
   
   // Update system panel
   if (sysInfo && !sysInfo.error) updateSystemPanel(sysInfo);
@@ -296,6 +301,20 @@ async function refreshAll() {
         source: 'kag-api',
         level: l.level || 'INFO',
         text: `${l.action || l.message || JSON.stringify(l)}${l.user_id ? ' [user:'+l.user_id+']' : ''}`
+      });
+    });
+  }
+  
+  // Process logs — detailed document processing
+  if (processLogs && processLogs.logs) {
+    processLogs.logs.forEach(pl => {
+      const docId = (pl.document_id || '').substring(0, 8);
+      const statusIcon = pl.status === 'completed' ? '✅' : '⚙️';
+      newLines.push({
+        time: pl.started_at ? new Date(pl.started_at).toTimeString().slice(0,8) : now(),
+        source: 'process',
+        level: pl.status === 'completed' ? 'INFO' : 'WARNING',
+        text: `${statusIcon} ${docId}... — ${pl.steps} этапов | Статус: ${pl.status}`
       });
     });
   }
@@ -410,6 +429,8 @@ function applyFilters() {
     lines = lines.filter(l => l.source==='system' || l.source==='docker');
   } else if (currentTab === 'audit') {
     lines = lines.filter(l => l.source==='kag-api' && (l.text.includes('user')||l.text.includes('auth')||l.text.includes('login')));
+  } else if (currentTab === 'process') {
+    lines = lines.filter(l => l.source==='process');
   }
   
   // Search
