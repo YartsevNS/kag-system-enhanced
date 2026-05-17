@@ -343,3 +343,62 @@ async def get_audit_log(
     # TODO: Получить записи из Loki
     
     return {"entries": []}
+
+
+@router.get("/disk-usage", summary="Использование диска по директориям")
+async def get_disk_usage():
+    """Детальная информация об использовании дискового пространства."""
+    import subprocess
+    import os
+    
+    result = {"disks": [], "directories": [], "docker_volumes": []}
+    
+    # df -h
+    try:
+        out = subprocess.check_output(["df", "-h", "--type=ext4", "--type=xfs", "--type=btrfs", "--type=overlay"], timeout=5).decode()
+        for line in out.strip().split("\n")[1:]:
+            parts = line.split()
+            if len(parts) >= 6:
+                result["disks"].append({
+                    "filesystem": parts[0],
+                    "size": parts[1],
+                    "used": parts[2],
+                    "available": parts[3],
+                    "use_pct": parts[4],
+                    "mountpoint": parts[5]
+                })
+    except Exception:
+        pass
+    
+    # du по ключевым директориям
+    dirs_to_check = ["/app/data", "/app/user_data", "/home", "/var/lib/docker", "/var/log", "/tmp"]
+    for d in dirs_to_check:
+        try:
+            if os.path.exists(d):
+                out = subprocess.check_output(["du", "-sh", d], timeout=10, stderr=subprocess.DEVNULL).decode()
+                size = out.split()[0] if out else "?"
+                result["directories"].append({"path": d, "size": size})
+        except Exception:
+            pass
+    
+    # Подробно по /app/data
+    if os.path.exists("/app/data"):
+        try:
+            out = subprocess.check_output(["du", "-sh", "/app/data/*"], timeout=10, stderr=subprocess.DEVNULL, shell=True).decode()
+            for line in out.strip().split("\n"):
+                if line.strip():
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        result["directories"].append({"path": parts[1], "size": parts[0]})
+        except Exception:
+            pass
+    
+    # Docker volumes через docker (если доступен)
+    try:
+        out = subprocess.check_output(["docker", "system", "df", "-v"], timeout=5, stderr=subprocess.DEVNULL).decode()
+        # Парсим вывод docker system df
+        result["docker_raw"] = out[:2000]
+    except Exception:
+        result["docker_raw"] = "Docker недоступен из контейнера"
+    
+    return result

@@ -89,12 +89,14 @@ tr:hover td{background:rgba(255,255,255,0.015)}
 <script>
 async function loadAll() {
   try {
-    const [sysR, dockerR] = await Promise.all([
+    const [sysR, dockerR, duR] = await Promise.all([
       fetch('/api/v1/admin/models/system/info').then(r=>r.json()).catch(()=>null),
-      fetch('/api/v1/admin/models/docker/stats').then(r=>r.json()).catch(()=>null)
+      fetch('/api/v1/admin/models/docker/stats').then(r=>r.json()).catch(()=>null),
+      fetch('/api/v1/admin/disk-usage').then(r=>r.json()).catch(()=>null)
     ]);
     if (sysR && !sysR.error) renderSystem(sysR);
     if (dockerR) renderDocker(dockerR);
+    if (duR) renderDiskUsage(duR);
   } catch(e) { console.error(e); }
 }
 
@@ -160,6 +162,37 @@ function renderDocker(d) {
         <td>${running?`<button class="btn-sm" onclick="act('${c.name}','restart')">🔄</button><button class="btn-sm" onclick="act('${c.name}','stop')">⏹</button>`:`<button class="btn-sm" onclick="act('${c.name}','start')">▶</button>`}<button class="btn-sm" onclick="act('${c.name}','logs')">📋</button></td>
       </tr>`;
     }).join('')+'</tbody></table>' : '<span style="color:var(--text4)">Нет контейнеров</span>';
+}
+
+function renderDiskUsage(d) {
+  const dirs = d.directories || [];
+  if (!dirs.length) return;
+  
+  // Total size calculation
+  let totalBytes = 0;
+  const parsed = dirs.map(x => {
+    const s = x.size || '0';
+    const num = parseFloat(s);
+    const mult = s.includes('G') ? 1024*1024*1024 : s.includes('M') ? 1024*1024 : s.includes('K') ? 1024 : 1;
+    const bytes = num * mult;
+    totalBytes += bytes;
+    return {...x, bytes, size: s};
+  }).sort((a,b) => b.bytes - a.bytes);
+  
+  let html = '<table><thead><tr><th>Директория</th><th>Размер</th><th>%</th></tr></thead><tbody>';
+  parsed.forEach(p => {
+    const pct = totalBytes > 0 ? (p.bytes/totalBytes*100).toFixed(1) : 0;
+    const cls = pct > 30 ? 'badge-err' : pct > 15 ? 'badge-warn' : 'badge-ok';
+    html += `<tr><td class="mono" style="font-size:11px">${p.path}</td><td><strong>${p.size}</strong></td><td><span class="badge ${cls}">${pct}%</span><div class="bar"><div class="fill ${fillClass(parseFloat(pct),30,60)}" style="width:${Math.min(parseFloat(pct),100)}%"></div></div></td></tr>`;
+  });
+  html += '</tbody></table>';
+  
+  if (d.docker_raw && d.docker_raw !== 'Docker недоступен из контейнера') {
+    html += '<div style="margin-top:12px"><strong style="font-size:11px;color:var(--text4)">docker system df:</strong><pre class="mono" style="background:var(--elevated);padding:8px;border-radius:4px;margin-top:4px;font-size:10px;max-height:200px;overflow:auto;white-space:pre-wrap">' + d.docker_raw + '</pre></div>';
+  }
+  
+  // Add to disk panel
+  document.getElementById('disks').innerHTML += '<div style="margin-top:14px"><h3 style="font-size:13px;color:var(--text2);margin-bottom:8px">📂 Что занимает место (du -sh)</h3>' + html + '</div>';
 }
 
 async function act(name, action) {
