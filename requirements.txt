@@ -40,6 +40,7 @@ cryptography==44.0.0
 # Утилиты
 python-dotenv==1.0.1
 httpx==0.28.1
+aiohttp>=3.9.0
 loguru==0.7.3
 docker==7.1.0
 watchdog>=6.0.0
