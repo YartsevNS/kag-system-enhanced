@@ -117,7 +117,7 @@ async def rebuild_graph(
         from src.indexing.knowledge_graph import kg_service
         from src.indexing.entity_extractor import entity_extractor
         from src.api.services.config_store import config_store
-        from src.embeddings.embedding_service import embedding_service
+        from src.indexing.embeddings_service import embedding_service
 
         if document_ids:
             docs = []
