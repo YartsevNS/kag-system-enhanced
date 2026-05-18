@@ -402,16 +402,17 @@ class ModelManager:
     async def get_ollama_models_detailed(self) -> List[Dict[str, Any]]:
         """
         Получить детальную информацию о моделях Ollama.
+        Не зависит от состояния _embedding_client.
 
         Returns:
             Список с детальной информацией
         """
-        if not self._embedding_client:
-            return []
-
         try:
+            import os
             from src.llm.ollama_client import OllamaClient
-            ollama = OllamaClient(base_url=self._embedding_client.base_url)
+            
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://192.168.50.41:11434")
+            ollama = OllamaClient(base_url=base_url)
             client = await ollama._get_client()
             
             response = await client.get("/api/tags")
