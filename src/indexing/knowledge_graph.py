@@ -331,19 +331,28 @@ class KnowledgeGraphService:
             return {"documents": 0, "chunks": 0, "entities": 0, "relations": 0}
 
     def clear_document(self, document_id: str):
-        """Удалить документ и все связанные узлы из графа."""
+        """Удалить документ и его чанки. Сущности удаляются только если их больше никто не упоминает."""
         if not self.driver:
             return
         try:
             with self.driver.session() as session:
+                # First, find entities that will be orphaned
+                # Delete document, its chunks, and only orphaned entities
                 session.run(
                     """
                     MATCH (d:Document {id: $doc_id})
                     OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
-                    OPTIONAL MATCH (c)-[:MENTIONS]->(e:Entity)
-                    DETACH DELETE d, c, e
+                    DETACH DELETE d, c
                     """,
                     doc_id=document_id
+                )
+                # Delete orphaned entities (no MENTIONS from any chunk)
+                session.run(
+                    """
+                    MATCH (e:Entity)
+                    WHERE NOT (()-[:MENTIONS]->(e))
+                    DETACH DELETE e
+                    """
                 )
         except Exception as e:
             logger.warning(f"Ошибка удаления документа из графа: {e}")
