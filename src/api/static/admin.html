@@ -419,18 +419,29 @@
                 Выбор модели LLM для извлечения сущностей и построения графа знаний.
                 Используется при обработке документов (Entity Extraction).
             </p>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div class="form-group">
-                    <label>Модель (Ollama)</label>
+                    <label>URL API</label>
+                    <input type="text" id="graph-api-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
+                </div>
+                <div class="form-group">
+                    <label>Модель</label>
                     <select id="graph-model-select" style="width: 100%; padding: 8px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);">
                         <option value="mistral:7b">mistral:7b</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>API ключ (если нужен)</label>
+                    <input type="password" id="graph-api-key" placeholder="sk-...">
                 </div>
                 <div class="form-group">
                     <label>Провайдер</label>
                     <select id="graph-provider">
                         <option value="ollama">Ollama (локальный)</option>
                         <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="openrouter">OpenRouter</option>
                     </select>
                 </div>
             </div>
@@ -550,7 +561,6 @@
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
-        }
         }
 
         async function loadModels() {
@@ -1028,7 +1038,9 @@
             status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
             const config = {
                 model: document.getElementById('graph-model-select').value.trim(),
-                provider: document.getElementById('graph-provider').value
+                provider: document.getElementById('graph-provider').value,
+                url: document.getElementById('graph-api-url').value.trim(),
+                api_key: document.getElementById('graph-api-key').value
             };
             try {
                 const r = await fetch('/api/v1/admin/models/graph', {
@@ -1053,7 +1065,6 @@
                     if (d.model) {
                         const select = document.getElementById('graph-model-select');
                         if (select) {
-                            // Проверяем, есть ли такая модель в списке
                             for (let i = 0; i < select.options.length; i++) {
                                 if (select.options[i].value === d.model) {
                                     select.selectedIndex = i;
@@ -1063,6 +1074,8 @@
                         }
                     }
                     if (d.provider) document.getElementById('graph-provider').value = d.provider;
+                    if (d.url) document.getElementById('graph-api-url').value = d.url;
+                    if (d.api_key) document.getElementById('graph-api-key').value = d.api_key;
                 }
             } catch(e) {}
         }
