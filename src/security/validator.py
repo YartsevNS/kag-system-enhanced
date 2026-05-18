@@ -32,8 +32,13 @@ DANGEROUS_PATTERNS = [
 ALLOWED_MIME_TYPES = {
     'application/pdf',
     'text/plain',
+    'text/markdown',
+    'text/csv',
+    'text/x-markdown',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.oasis.opendocument.text',
+    'application/rtf',
     'audio/mpeg',
     'audio/wav',
     'audio/ogg',
@@ -45,7 +50,7 @@ ALLOWED_MIME_TYPES = {
 
 # Разрешенные расширения файлов
 ALLOWED_EXTENSIONS = {
-    '.pdf', '.txt', '.doc', '.docx',
+    '.pdf', '.txt', '.md', '.csv', '.doc', '.docx', '.odt', '.rtf',
     '.mp3', '.wav', '.ogg', '.flac',
     '.png', '.jpg', '.jpeg', '.gif'
 }
