@@ -1521,11 +1521,14 @@ async def get_docker_stats():
 
 @router.get("/docker/{container_name}/logs", summary="Логи контейнера")
 async def get_container_logs(container_name: str, lines: int = 30):
-    """Последние N строк логов контейнера."""
+    """Последние N строк логов контейнера. Только безопасные имена."""
+    import re, subprocess
+    # Sanitize: only allow alphanumeric, hyphens, underscores
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$', container_name):
+        return {"container": container_name, "logs": "", "error": "Invalid container name"}
     try:
-        import subprocess
         out = subprocess.check_output(
-            ["docker", "logs", "--tail", str(lines), container_name],
+            ["docker", "logs", "--tail", str(max(1, min(lines, 200))), container_name],
             timeout=10, stderr=subprocess.STDOUT
         ).decode(errors='replace')
         return {"container": container_name, "logs": out[-10000:]}

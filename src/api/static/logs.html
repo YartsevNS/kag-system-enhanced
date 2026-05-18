@@ -240,20 +240,31 @@ function toggleSysPanel() {
   document.getElementById('sys-panel').style.display = document.getElementById('show-system').checked ? 'grid' : 'none';
 }
 
+function getToken() {
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  return localStorage.getItem('kag_token');
+}
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Authorization':'Bearer '+t} : {};
+}
+
 async function refreshAll() {
+  const headers = authHeaders();
   const promises = [];
   
   // System info
-  promises.push(fetch(`${API}/system/info`).then(r=>r.json()).catch(()=>null));
+  promises.push(fetch(`${API}/system/info`, {headers}).then(r=>r.ok?r.json():null).catch(e=>{console.warn('system/info:',e); return null;}));
   
   // Docker stats
-  promises.push(fetch(`${API}/docker/stats`).then(r=>r.json()).catch(()=>null));
+  promises.push(fetch(`${API}/docker/stats`, {headers}).then(r=>r.ok?r.json():null).catch(e=>{console.warn('docker/stats:',e); return null;}));
   
   // Application audit log
-  promises.push(fetch(`${API_UPLOAD}/admin/audit-log?limit=50`).then(r=>r.json()).catch(()=>null));
+  promises.push(fetch(`${API_UPLOAD}/admin/audit-log?limit=50`, {headers}).then(r=>r.ok?r.json():null).catch(()=>null));
   
   // Process logs
-  promises.push(fetch(`${API_UPLOAD}/process-logs?limit=20`).then(r=>r.json()).catch(()=>null));
+  promises.push(fetch(`${API_UPLOAD}/process-logs?limit=20`, {headers}).then(r=>r.ok?r.json():null).catch(()=>null));
   
   const [sysInfo, dockerStats, auditLog, processLogs] = await Promise.all(promises);
   
@@ -345,15 +356,15 @@ async function refreshAll() {
 }
 
 function mergeLogLines(existing, incoming) {
-  // Keep last 2000 lines, deduplicate by text within 5 seconds
-  const cutoff = Date.now() - 60000; // Keep last minute
+  // Keep last 2000 lines, hash-based dedup
+  const cutoff = Date.now() - 120000; // Keep last 2 minutes
   const merged = [...existing.filter(l => l._ts > cutoff), ...incoming.map(l => ({...l, _ts: Date.now()}))];
   
-  // Dedup: remove exact duplicates (same text within same second)
+  // Dedup by content hash (time+source+text)
   const seen = new Set();
   const result = [];
   for (let i = merged.length-1; i >= 0; i--) {
-    const key = merged[i].text.substring(0, 80);
+    const key = merged[i].time + '|' + merged[i].source + '|' + merged[i].text.substring(0, 120);
     if (!seen.has(key)) {
       seen.add(key);
       result.unshift(merged[i]);
@@ -426,25 +437,42 @@ function applyFilters() {
     lines = lines.filter(l => l.source==='process');
   }
   
-  // Search
   if (search) lines = lines.filter(l => l.text.toLowerCase().includes(search) || l.source.toLowerCase().includes(search));
-  
-  // Level
   if (level) lines = lines.filter(l => l.level === level);
   
-  // Render
+  // Safe render — DOM construction, no innerHTML
   const stream = document.getElementById('log-stream');
+  stream.innerHTML = '';
+  
   if (lines.length === 0) {
-    stream.innerHTML = '<div class="empty">Нет логов</div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'Нет логов';
+    stream.appendChild(empty);
   } else {
-    const display = lines.slice(-500); // Last 500 for performance
-    stream.innerHTML = display.map(l => {
-      const cls = SOURCE_CLASS[l.source] || '';
-      const lvlCls = l.level ? ' llevel-'+l.level : '';
-      return `<div class="log-line${lvlCls}"><span class="ltime">${l.time}</span><span class="lsource ${cls}">${l.source}</span><span class="ltext">${escapeHtml(l.text)}</span></div>`;
-    }).join('');
+    const display = lines.slice(-500);
+    display.forEach(l => {
+      const div = document.createElement('div');
+      div.className = 'log-line' + (l.level ? ' llevel-'+l.level : '');
+      
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'ltime';
+      timeSpan.textContent = l.time;
+      
+      const sourceSpan = document.createElement('span');
+      sourceSpan.className = 'lsource ' + (SOURCE_CLASS[l.source] || '');
+      sourceSpan.textContent = l.source;
+      
+      const textSpan = document.createElement('span');
+      textSpan.className = 'ltext';
+      textSpan.textContent = l.text;
+      
+      div.appendChild(timeSpan);
+      div.appendChild(sourceSpan);
+      div.appendChild(textSpan);
+      stream.appendChild(div);
+    });
     
-    // Auto-scroll
     if (document.getElementById('auto-scroll').checked) {
       stream.scrollTop = stream.scrollHeight;
     }
