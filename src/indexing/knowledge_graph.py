@@ -14,6 +14,7 @@ API: Bolt-драйвер neo4j (pip install neo4j)
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from loguru import logger
+import json
 
 
 @dataclass
@@ -146,7 +147,7 @@ class KnowledgeGraphService:
                     name=entity.name,
                     type=entity.type,
                     confidence=entity.confidence,
-                    properties=entity.properties,
+                    properties=json.dumps(entity.properties, ensure_ascii=False) if entity.properties else "{}",
                     chunk_id=entity.chunk_id
                 )
         except Exception as e:

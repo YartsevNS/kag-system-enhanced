@@ -76,7 +76,7 @@ class EntityExtractor:
                         "stream": False,
                         "options": {"temperature": 0.05, "max_tokens": 500}
                     },
-                    timeout=aiohttp.ClientTimeout(total=60)
+                    timeout=aiohttp.ClientTimeout(total=120)
                 ) as resp:
                     if resp.status != 200:
                         logger.warning(f"Ollama вернул {resp.status} для {chunk_id} (модель {model})")
