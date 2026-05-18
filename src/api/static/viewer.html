@@ -307,12 +307,12 @@ async function init() {
 
     if (isPdf) {
       await initPdfViewer();
+      showKbdHints();
     } else {
       await initTextViewer();
     }
 
     fadeOut(document.getElementById('loading-overlay'));
-    showKbdHints();
 
   } catch (err) {
     console.error(err);
