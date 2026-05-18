@@ -1478,25 +1478,45 @@ async def get_system_info():
 
 @router.get("/docker/stats", summary="Статистика Docker")
 async def get_docker_stats():
-    """Список контейнеров, системная информация Docker."""
+    """Список контейнеров через docker CLI или psutil."""
+    import subprocess, os
+    result = {"containers": [], "system": {}}
+    
+    # Try docker CLI
     try:
-        from src.api.services.docker_monitor import docker_monitor
-        return docker_monitor.get_detailed_stats()
-    except Exception as e:
-        import subprocess
-        try:
-            ps_out = subprocess.check_output(
-                ["docker", "ps", "--format", "{{.Names}} {{.Status}} {{.Image}}", "--no-trunc"],
-                timeout=5, stderr=subprocess.DEVNULL
-            ).decode().strip()
-            containers = []
-            for line in ps_out.split('\n'):
-                if line.strip():
-                    parts = line.split(' ', 2)
-                    containers.append({"name": parts[0], "status": parts[1] if len(parts) > 1 else '?', "image": parts[2] if len(parts) > 2 else '?'})
-            return {"containers": containers, "system": {"containers_running": len([c for c in containers if 'Up' in c.get('status','')]), "containers_total": len(containers)}}
-        except Exception:
-            return {"containers": [], "system": {}, "error": str(e)}
+        ps_out = subprocess.check_output(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.ID}}", "--no-trunc"],
+            timeout=5, stderr=subprocess.DEVNULL
+        ).decode().strip()
+        for line in ps_out.split('\n'):
+            if line.strip():
+                parts = line.split('\t')
+                if len(parts) >= 3:
+                    state = "running" if "Up" in parts[1] else "stopped"
+                    result["containers"].append({
+                        "name": parts[0], "state": state, "status": parts[1],
+                        "image": parts[2], "id": parts[3][:12] if len(parts) > 3 else ""
+                    })
+        # Docker system info
+        info_out = subprocess.check_output(["docker", "info", "--format", "{{.ContainersRunning}}/{{.Containers}}"], timeout=5, stderr=subprocess.DEVNULL).decode().strip()
+        parts = info_out.split('/')
+        result["system"] = {"containers_running": int(parts[0]) if parts[0].isdigit() else 0, "containers_total": int(parts[1]) if len(parts)>1 and parts[1].isdigit() else 0}
+    except Exception:
+        # Fallback: return self + host system info
+        import psutil
+        result["containers"].append({
+            "name": "kag-api", "state": "running",
+            "image": "kag-system_api:latest",
+            "stats": {
+                "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
+                "mem_used": psutil.virtual_memory().used,
+                "mem_limit": psutil.virtual_memory().total,
+                "pids": len(psutil.pids())
+            }
+        })
+        result["system"] = {"containers_running": 1, "containers_total": 1}
+        result["note"] = "Docker socket not available — showing kag-api only"
+    return result
 
 
 @router.get("/docker/{container_name}/logs", summary="Логи контейнера")

@@ -366,13 +366,13 @@ function mergeLogLines(existing, incoming) {
 function updateSystemPanel(info) {
   document.getElementById('sys-panel').style.display = 'grid';
   
-  const cpu = info.cpu || {};
-  const mem = info.memory || {};
-  const disk = (info.disk||[])[0] || {};
+  const cpu = info.cpu_instant || info.cpu || {};
+  const mem = info.memory_instant || info.memory || {};
+  const disk = info.disk_instant || (info.disk||[])[0] || {};
   
-  document.getElementById('cpu-pct').textContent = (cpu.usage_percent||0).toFixed(1)+'%';
-  document.getElementById('cpu-load').textContent = (cpu.load_avg||[0,0,0]).map(v=>v.toFixed(1)).join(' / ');
-  updateBar('cpu-bar', cpu.usage_percent||0, 50, 80);
+  document.getElementById('cpu-pct').textContent = (typeof cpu === 'number' ? cpu : (cpu.usage_percent||0)).toFixed(1)+'%';
+  document.getElementById('cpu-load').textContent = (cpu.load_avg||[0,0,0]).map(v=>typeof v==='number'?v.toFixed(1):v).join(' / ');
+  updateBar('cpu-bar', typeof cpu === 'number' ? cpu : (cpu.usage_percent||0), 50, 80);
   
   document.getElementById('mem-used').textContent = fmtBytes(mem.used||0);
   document.getElementById('mem-total').textContent = fmtBytes(mem.total||0);
@@ -384,19 +384,19 @@ function updateSystemPanel(info) {
 }
 
 function updateDockerStats(stats) {
+  const containers = stats.containers || [];
   const sys = stats.system || {};
-  document.getElementById('docker-count').textContent = sys.containers_total||'?';
-  document.getElementById('docker-running').textContent = sys.containers_running||'?';
+  document.getElementById('docker-count').textContent = sys.containers_total || containers.length || '?';
+  document.getElementById('docker-running').textContent = sys.containers_running || '?';
   
   // Top bar
   const running = sys.containers_running || 0;
-  const total = sys.containers_total || 0;
-  const dotClass = running === total ? 'dot-green' : running > 0 ? 'dot-amber' : 'dot-red';
+  const total = sys.containers_total || containers.length || 0;
+  const dotClass = running === total && total > 0 ? 'dot-green' : running > 0 ? 'dot-amber' : 'dot-red';
   document.getElementById('top-bar').innerHTML = `
     <div class="stat-pill"><div class="dot ${dotClass}"></div>Docker: ${running}/${total} running</div>
-    <div class="stat-pill">🐳 v${sys.docker_version||'?'}</div>
-    <div class="stat-pill">📦 ${sys.images_count||0} образов</div>
-    <div class="stat-pill">🖥️ ${sys.cpus||'?'} CPU · ${fmtBytes(sys.memory_total||0)} RAM</div>
+    <div class="stat-pill">📦 ${containers.length} контейнеров</div>
+    ${stats.note ? '<div class="stat-pill">ℹ️ '+stats.note+'</div>' : ''}
   `;
 }
 
