@@ -301,21 +301,75 @@ async function init() {
     document.getElementById('btn-chunks').style.display = 'inline-flex';
     document.getElementById('btn-download').href = API + '/upload/' + docId + '/preview';
 
-    const previewUrl = API + '/upload/' + docId + '/preview';
-    pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
+    // Determine if PDF or text document
+    const fname = (currentDoc.filename || '').toLowerCase();
+    const isPdf = fname.endsWith('.pdf') || (currentDoc.file_type || '').includes('pdf');
 
-    document.getElementById('page-total').textContent = '/ ' + pdfDoc.numPages;
-    document.getElementById('page-num').max = pdfDoc.numPages;
-    document.getElementById('btn-prev').disabled = false;
-    document.getElementById('btn-next').disabled = pdfDoc.numPages <= 1;
+    if (isPdf) {
+      await initPdfViewer();
+    } else {
+      await initTextViewer();
+    }
 
     fadeOut(document.getElementById('loading-overlay'));
     showKbdHints();
-    renderPage(1);
 
   } catch (err) {
     console.error(err);
     showError(getUserMessage(err));
+  }
+}
+
+async function initPdfViewer() {
+  const previewUrl = API + '/upload/' + docId + '/preview';
+  pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
+
+  document.getElementById('page-total').textContent = '/ ' + pdfDoc.numPages;
+  document.getElementById('page-num').max = pdfDoc.numPages;
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('btn-next').disabled = pdfDoc.numPages <= 1;
+  renderPage(1);
+}
+
+async function initTextViewer() {
+  // Load chunk text content
+  try {
+    const r = await fetch(API + '/upload/' + docId + '/details');
+    const d = await r.json();
+    
+    // Try to get chunks with text
+    let text = '';
+    try {
+      const cr = await fetch(API + '/chunks?document_id=' + docId);
+      if (cr.ok) {
+        const cd = await cr.json();
+        const chunks = cd.chunks || cd.results || [];
+        text = chunks.map(c => c.content || c.text || '').join('\n\n');
+      }
+    } catch(e) {}
+    
+    if (!text) {
+      // Fallback: fetch raw file
+      try {
+        const fr = await fetch(API + '/upload/' + docId + '/preview');
+        if (fr.ok) text = await fr.text();
+      } catch(e) {}
+    }
+    
+    const viewer = document.getElementById('viewer');
+    viewer.innerHTML = '';
+    
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'width:100%;max-width:900px;margin:0 auto;padding:24px 32px;background:#fff;color:#1a1a1a;font:13px/1.7 JetBrains Mono,monospace;white-space:pre-wrap;word-wrap:break-word;border-radius:8px;min-height:400px;';
+    pre.textContent = text || '(пустой документ)';
+    viewer.appendChild(pre);
+    
+    // Hide page controls
+    document.getElementById('page-controls').style.display = 'none';
+    document.getElementById('zoom-controls').style.display = 'none';
+    document.getElementById('kbd-hint').style.display = 'none';
+  } catch(e) {
+    showError('Не удалось загрузить текст документа');
   }
 }
 
