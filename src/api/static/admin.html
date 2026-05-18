@@ -413,6 +413,30 @@
                 <span id="ext-llm-status" style="font-size:13px"></span>
             </div>
         </div>
+        <div class="section">
+            <h2 class="section-title">🕸 Модель для построения графа (Neo4j)</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Выбор модели LLM для извлечения сущностей и построения графа знаний.
+                Используется при обработке документов (Entity Extraction).
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div class="form-group">
+                    <label>Модель (Ollama)</label>
+                    <input type="text" id="graph-model" placeholder="mistral:7b" value="mistral:7b">
+                </div>
+                <div class="form-group">
+                    <label>Провайдер</label>
+                    <select id="graph-provider">
+                        <option value="ollama">Ollama (локальный)</option>
+                        <option value="openai">OpenAI</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="saveGraphModel()">💾 Сохранить</button>
+                <span id="graph-model-status" style="font-size:13px"></span>
+            </div>
+        </div>
     </main>
 
     <div class="notification" id="notification"></div>
@@ -694,7 +718,8 @@
                 loadActiveModels(),
                 loadModels(),
                 loadSshConfig(),
-                loadChunkingSettings()
+                loadChunkingSettings(),
+                loadGraphModel()
             ]);
         }
         
@@ -989,6 +1014,39 @@
                 }
             } catch(e) {}
         }
+        async function saveGraphModel() {
+            const status = document.getElementById('graph-model-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
+            const config = {
+                model: document.getElementById('graph-model').value.trim(),
+                provider: document.getElementById('graph-provider').value
+            };
+            try {
+                const r = await fetch('/api/v1/admin/models/graph', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                const d = await r.json();
+                status.innerHTML = r.ok 
+                    ? '<span style="color:#10b981">✅ Сохранено</span>'
+                    : '<span style="color:#ef4444">❌ ' + (d.detail || 'Ошибка') + '</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function loadGraphModel() {
+            try {
+                const r = await fetch('/api/v1/admin/models/graph');
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.model) document.getElementById('graph-model').value = d.model;
+                    if (d.provider) document.getElementById('graph-provider').value = d.provider;
+                }
+            } catch(e) {}
+        }
+
     </script>
 </body>
 </html>

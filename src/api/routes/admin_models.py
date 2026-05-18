@@ -1266,3 +1266,16 @@ async def test_ext_llm():
                     return {"ok": False, "error": f"HTTP {resp.status}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+_graph_model_config = {"model": "mistral:7b", "provider": "ollama"}
+
+@router.get("/graph", summary="Получить модель для графа")
+async def get_graph_model():
+    return _graph_model_config
+
+@router.post("/graph", summary="Сохранить модель для графа")
+async def save_graph_model(config: dict):
+    global _graph_model_config
+    _graph_model_config = config
+    logger.info(f"Graph model set: model={config.get('model')} provider={config.get('provider')}")
+    return {"status": "ok", "message": "Модель для графа сохранена"}
