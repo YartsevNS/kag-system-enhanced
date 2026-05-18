@@ -175,11 +175,14 @@ class SecurityValidator:
                 "file"
             )
 
-        if mime_type and mime_type not in ALLOWED_MIME_TYPES:
+        if mime_type and mime_type not in ALLOWED_MIME_TYPES and ext not in ALLOWED_EXTENSIONS:
             raise SecurityValidationError(
                 f"Недопустимый MIME тип: {mime_type}",
                 "file"
             )
+        # Always allow known extensions regardless of MIME (browsers/curl send generic types)
+        if ext in ALLOWED_EXTENSIONS:
+            pass  # MIME check skipped for known extensions
 
         if re.search(r'[<>"\'|?*\\]', filename):
             raise SecurityValidationError(
