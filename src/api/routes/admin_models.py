@@ -1458,22 +1458,45 @@ async def get_system_info():
     try:
         from src.api.services.system_monitor import system_monitor
         info = system_monitor.get_system_info()
-        import psutil
-        info["cpu_instant"] = psutil.cpu_percent(interval=0.1)
-        info["memory_instant"] = {
-            "total": psutil.virtual_memory().total,
-            "used": psutil.virtual_memory().used,
-            "percent": psutil.virtual_memory().percent
-        }
-        info["disk_instant"] = {
-            "total": psutil.disk_usage('/').total,
-            "used": psutil.disk_usage('/').used,
-            "free": psutil.disk_usage('/').free,
-            "percent": psutil.disk_usage('/').percent
-        }
+        
+        # Добавляем моментальные метрики
+        try:
+            import psutil
+            info["cpu_pct"] = psutil.cpu_percent(interval=0.1)
+            info["mem"] = {
+                "used": psutil.virtual_memory().used,
+                "total": psutil.virtual_memory().total,
+                "percent": psutil.virtual_memory().percent,
+                "available": psutil.virtual_memory().available,
+            }
+            info["dsk"] = {
+                "used": psutil.disk_usage('/').used,
+                "total": psutil.disk_usage('/').total,
+                "free": psutil.disk_usage('/').free,
+                "percent": psutil.disk_usage('/').percent,
+            }
+        except Exception:
+            # Fallback to system_monitor data
+            cpu_data = info.get("cpu", {})
+            info["cpu_pct"] = cpu_data.get("usage_percent", 0)
+            mem_data = info.get("memory", {})
+            info["mem"] = {
+                "used": mem_data.get("used", 0),
+                "total": mem_data.get("total", 0),
+                "percent": mem_data.get("percent", 0),
+                "available": mem_data.get("available", 0),
+            }
+            dsk_list = info.get("disk", [])
+            dsk = dsk_list[0] if dsk_list else {}
+            info["dsk"] = {
+                "used": dsk.get("used", 0),
+                "total": dsk.get("total", 0),
+                "free": dsk.get("free", 0),
+                "percent": dsk.get("percent", 0),
+            }
         return info
     except Exception as e:
-        return {"error": str(e), "hostname": "unknown"}
+        return {"error": str(e), "hostname": "unknown", "cpu_pct": 0, "mem": {}, "dsk": {}}
 
 
 @router.get("/docker/stats", summary="Статистика Docker")

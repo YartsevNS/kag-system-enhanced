@@ -271,6 +271,7 @@ async function refreshAll() {
   // Update system panel
   if (sysInfo && !sysInfo.error) updateSystemPanel(sysInfo);
   if (dockerStats) updateDockerStats(dockerStats);
+  updateTopBar(sysInfo, dockerStats);
   
   // Fetch Docker container logs
   const newLines = [];
@@ -377,21 +378,21 @@ function mergeLogLines(existing, incoming) {
 function updateSystemPanel(info) {
   document.getElementById('sys-panel').style.display = 'grid';
   
-  const cpu = info.cpu_instant || info.cpu || {};
-  const mem = info.memory_instant || info.memory || {};
-  const disk = info.disk_instant || (info.disk||[])[0] || {};
+  const cpuPct = info.cpu_pct || (info.cpu || {}).usage_percent || 0;
+  const mem = info.mem || info.memory || {};
+  const dsk = info.dsk || (info.disk||[])[0] || {};
   
-  document.getElementById('cpu-pct').textContent = (typeof cpu === 'number' ? cpu : (cpu.usage_percent||0)).toFixed(1)+'%';
-  document.getElementById('cpu-load').textContent = (cpu.load_avg||[0,0,0]).map(v=>typeof v==='number'?v.toFixed(1):v).join(' / ');
-  updateBar('cpu-bar', typeof cpu === 'number' ? cpu : (cpu.usage_percent||0), 50, 80);
+  document.getElementById('cpu-pct').textContent = cpuPct.toFixed(1)+'%';
+  document.getElementById('cpu-load').textContent = ((info.cpu||{}).load_avg||[0,0,0]).map(function(v){return typeof v==='number'?v.toFixed(1):v;}).join(' / ');
+  updateBar('cpu-bar', cpuPct, 50, 80);
   
   document.getElementById('mem-used').textContent = fmtBytes(mem.used||0);
   document.getElementById('mem-total').textContent = fmtBytes(mem.total||0);
   updateBar('mem-bar', mem.percent||0, 70, 90);
   
-  document.getElementById('disk-used').textContent = fmtBytes(disk.used||0);
-  document.getElementById('disk-free').textContent = fmtBytes(disk.free||0);
-  updateBar('disk-bar', disk.percent||0, 70, 90);
+  document.getElementById('disk-used').textContent = fmtBytes(dsk.used||0);
+  document.getElementById('disk-free').textContent = fmtBytes(dsk.free||0);
+  updateBar('disk-bar', dsk.percent||0, 70, 90);
 }
 
 function updateDockerStats(stats) {
@@ -399,16 +400,22 @@ function updateDockerStats(stats) {
   const sys = stats.system || {};
   document.getElementById('docker-count').textContent = sys.containers_total || containers.length || '?';
   document.getElementById('docker-running').textContent = sys.containers_running || '?';
+}
+
+function updateTopBar(sysInfo, dockerStats) {
+  var cpuPct = (sysInfo && sysInfo.cpu_pct) || 0;
+  var mem = sysInfo && (sysInfo.mem || sysInfo.memory) || {};
+  var dsk = sysInfo && (sysInfo.dsk || (sysInfo.disk||[])[0]) || {};
+  var memPct = mem.percent || 0;
+  var dskPct = dsk.percent || 0;
+  var containers = (dockerStats && dockerStats.containers) || [];
+  var running = (dockerStats && dockerStats.system && dockerStats.system.containers_running) || containers.length || 1;
   
-  // Top bar
-  const running = sys.containers_running || 0;
-  const total = sys.containers_total || containers.length || 0;
-  const dotClass = running === total && total > 0 ? 'dot-green' : running > 0 ? 'dot-amber' : 'dot-red';
-  document.getElementById('top-bar').innerHTML = `
-    <div class="stat-pill"><div class="dot ${dotClass}"></div>Docker: ${running}/${total} running</div>
-    <div class="stat-pill">📦 ${containers.length} контейнеров</div>
-    ${stats.note ? '<div class="stat-pill">ℹ️ '+stats.note+'</div>' : ''}
-  `;
+  document.getElementById('top-bar').innerHTML = 
+    '<div class=\"stat-pill\"><div class=\"dot dot-green\"></div>CPU: ' + cpuPct.toFixed(1) + '%</div>' +
+    '<div class=\"stat-pill\">🧠 RAM: ' + fmtBytes(mem.used||0) + ' / ' + fmtBytes(mem.total||0) + ' (' + memPct.toFixed(0) + '%)</div>' +
+    '<div class=\"stat-pill\">💾 Диск: ' + fmtBytes(dsk.used||0) + ' / ' + fmtBytes(dsk.total||0) + ' (' + dskPct.toFixed(0) + '%)</div>' +
+    '<div class=\"stat-pill\">🐳 Контейнеров: ' + running + '</div>';
 }
 
 function updateBar(id, pct, warn, crit) {
