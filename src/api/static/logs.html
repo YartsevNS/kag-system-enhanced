@@ -378,9 +378,11 @@ function mergeLogLines(existing, incoming) {
 function updateSystemPanel(info) {
   document.getElementById('sys-panel').style.display = 'grid';
   
-  const cpuPct = info.cpu_pct || (info.cpu || {}).usage_percent || 0;
-  const mem = info.mem || info.memory || {};
-  const dsk = info.dsk || (info.disk||[])[0] || {};
+  // Support both new keys (cpu_pct/mem/dsk) and old keys (cpu/memory/disk)
+  var cpuPct = info.cpu_pct || (info.cpu || {}).usage_percent || 0;
+  var mem = info.mem || info.memory || {};
+  var dskList = info.dsk ? [info.dsk] : (info.disk || []);
+  var dsk = (dskList && dskList[0]) || {};
   
   document.getElementById('cpu-pct').textContent = cpuPct.toFixed(1)+'%';
   document.getElementById('cpu-load').textContent = ((info.cpu||{}).load_avg||[0,0,0]).map(function(v){return typeof v==='number'?v.toFixed(1):v;}).join(' / ');
@@ -403,9 +405,10 @@ function updateDockerStats(stats) {
 }
 
 function updateTopBar(sysInfo, dockerStats) {
-  var cpuPct = (sysInfo && sysInfo.cpu_pct) || 0;
+  var cpuPct = (sysInfo && (sysInfo.cpu_pct || (sysInfo.cpu || {}).usage_percent)) || 0;
   var mem = sysInfo && (sysInfo.mem || sysInfo.memory) || {};
-  var dsk = sysInfo && (sysInfo.dsk || (sysInfo.disk||[])[0]) || {};
+  var dskList = sysInfo && (sysInfo.dsk ? [sysInfo.dsk] : (sysInfo.disk || []));
+  var dsk = (dskList && dskList[0]) || {};
   var memPct = mem.percent || 0;
   var dskPct = dsk.percent || 0;
   var containers = (dockerStats && dockerStats.containers) || [];
