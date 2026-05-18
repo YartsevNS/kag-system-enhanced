@@ -604,6 +604,28 @@ strong{color:var(--text);font-weight:600}
 <p>   551|</p>
 <p>   552|---</p>
 <p>   553|</p>
+<p>## 11.1. Поток данных в Neo4j (Граф знаний)</p>
+<p></p>
+<p>### Общая схема</p>
+<p></p>
+<p>Данные попадают в Neo4j <strong>асинхронно</strong> после загрузки и векторизации документа.</p>
+<p></p>
+<p><code>Загрузка файла</code> → <code>Парсинг (Hybrid)</code> → <code>Чанкинг</code> → <code>Векторизация (Qdrant)</code> → <code>Построение графа (Neo4j)</code></p>
+<p></p>
+<p>### Ключевые файлы</p>
+<p></p>
+<p>- <strong><code>src/indexing/knowledge_graph.py</code></strong>: Сервис <code>KnowledgeGraphService</code>.</p>
+<p>- <strong><code>src/indexing/entity_extractor.py</code></strong>: Класс <code>EntityExtractor</code>.</p>
+<p>- <strong><code>src/api/services/document_service.py</code></strong>: Метод <code>_build_knowledge_graph_async()</code>.</p>
+<p></p>
+<p>### Почему гибридный поиск может не работать?</p>
+<p></p>
+<p>- В системе <strong>нет документов</strong> (<code>documents: 0</code>).</p>
+<p>- Граф знаний пуст (<code>entities: 0, relations: 0</code>).</p>
+<p>- Гибридный поиск возвращает пустой результат, так как искать нечего.</p>
+<p></p>
+<p>---</p>
+<p></p>
 <p>   554|## 12. Развёртывание</p>
 <p>   555|</p>
 <p>   556|### 12.1. Быстрый старт (dev)</p>
