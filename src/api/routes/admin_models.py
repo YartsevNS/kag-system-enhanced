@@ -1153,6 +1153,15 @@ async def switch_embedding_model(request: SwitchEmbeddingRequest):
     try:
         success = await model_manager.switch_embedding_model(request.model_name)
         
+        # Сохраняем в config_store
+        try:
+            from src.api.services.config_store import config_store
+            config = config_store.get("embedding", "default") or {}
+            config["model"] = request.model_name
+            config_store.set("embedding", "default", config)
+        except Exception as e:
+            logger.warning(f"Не удалось сохранить embedding модель в config_store: {e}")
+        
         if success:
             return {
                 "status": "success",
@@ -1271,11 +1280,25 @@ _graph_model_config = {"model": "mistral:7b", "provider": "ollama"}
 
 @router.get("/graph", summary="Получить модель для графа")
 async def get_graph_model():
+    # Пробуем загрузить из config_store
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("graph_model", "default")
+        if saved and saved.get("model"):
+            return saved
+    except Exception:
+        pass
     return _graph_model_config
 
 @router.post("/graph", summary="Сохранить модель для графа")
 async def save_graph_model(config: dict):
     global _graph_model_config
     _graph_model_config = config
+    # Сохраняем в config_store
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("graph_model", "default", config)
+    except Exception as e:
+        logger.warning(f"Не удалось сохранить в config_store: {e}")
     logger.info(f"Graph model set: model={config.get('model')} provider={config.get('provider')}")
     return {"status": "ok", "message": "Модель для графа сохранена"}
