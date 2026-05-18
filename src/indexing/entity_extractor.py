@@ -32,6 +32,13 @@ class EntityExtractor:
         except Exception:
             return None
 
+    def _get_graph_config(self):
+        try:
+            from src.api.routes.admin_models import _graph_model_config
+            return _graph_model_config
+        except Exception:
+            return None
+
     async def extract_from_chunk(
         self, 
         chunk_text: str, 
@@ -43,9 +50,14 @@ class EntityExtractor:
         if not chunk_text or len(chunk_text.strip()) < 20:
             return {"entities": [], "relations": [], "facts": []}
 
-        cfg = self._get_config()
-        llm_url = cfg.url if cfg else self._llm_url
-        model = cfg.model if cfg else self._model
+        graph_cfg = self._get_graph_config()
+        if graph_cfg and graph_cfg.get('model'):
+            model = graph_cfg['model']
+            llm_url = self._llm_url  # default Ollama URL
+        else:
+            cfg = self._get_config()
+            llm_url = cfg.url if cfg else self._llm_url
+            model = cfg.model if cfg else self._model
 
         prompt = self._build_extraction_prompt(chunk_text, filename)
 
