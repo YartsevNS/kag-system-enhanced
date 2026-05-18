@@ -1302,3 +1302,90 @@ async def save_graph_model(config: dict):
         logger.warning(f"Не удалось сохранить в config_store: {e}")
     logger.info(f"Graph model set: model={config.get('model')} provider={config.get('provider')}")
     return {"status": "ok", "message": "Модель для графа сохранена"}
+
+
+# ===========================================
+# Деплой (обновление из Git)
+# ===========================================
+
+class DeployRequest(BaseModel):
+    file_content: Optional[str] = Field(default=None, description="Содержимое файла для записи (base64 или текст)")
+    file_path: Optional[str] = Field(default=None, description="Путь к файлу относительно /app/src/")
+    action: str = Field(default="write_file", description="Действие: write_file | git_pull | restart")
+
+@router.post("/deploy", summary="Деплой: запись файла, git pull или перезапуск")
+async def deploy_action(req: DeployRequest):
+    """
+    Универсальный endpoint для деплоя:
+    - write_file: записать содержимое в файл на диске
+    - git_pull: выполнить git pull в /home/yartsevn/kag-system-enhanced
+    - restart: перезапустить Docker-контейнер api
+    """
+    import subprocess
+    import os
+    import base64
+
+    if req.action == "write_file":
+        if not req.file_content or not req.file_path:
+            return {"status": "error", "message": "file_content и file_path обязательны для write_file"}
+
+        full_path = os.path.join("/app/src", req.file_path)
+        # Безопасность: только внутри /app/src
+        if not os.path.realpath(full_path).startswith("/app/src"):
+            return {"status": "error", "message": "Недопустимый путь"}
+
+        try:
+            content = req.file_content
+            # Пробуем декодировать base64
+            try:
+                content = base64.b64decode(req.file_content).decode("utf-8")
+            except Exception:
+                pass  # Не base64 — используем как есть
+
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            logger.info(f"Deploy: записан файл {full_path} ({len(content)} байт)")
+            return {"status": "ok", "message": f"Файл {req.file_path} записан ({len(content)} байт)"}
+        except Exception as e:
+            logger.error(f"Deploy: ошибка записи {req.file_path}: {e}")
+            return {"status": "error", "message": str(e)}
+
+    elif req.action == "git_pull":
+        try:
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd="/home/yartsevn/kag-system-enhanced",
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            logger.info(f"Git pull: {result.stdout}")
+            return {
+                "status": "ok" if result.returncode == 0 else "error",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    elif req.action == "restart":
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "api"],
+                cwd="/home/yartsevn/kag-system-enhanced",
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            logger.info(f"Docker restart: {result.stdout}")
+            return {
+                "status": "ok" if result.returncode == 0 else "error",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    return {"status": "error", "message": f"Неизвестное действие: {req.action}"}
