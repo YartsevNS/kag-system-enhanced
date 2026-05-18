@@ -33,6 +33,14 @@ class EntityExtractor:
             return None
 
     def _get_graph_config(self):
+        """Get graph model config: first try config_store (persistent), then in-memory."""
+        try:
+            from src.api.services.config_store import config_store
+            saved = config_store.get("graph_model", "default")
+            if saved and saved.get("model"):
+                return saved
+        except Exception:
+            pass
         try:
             from src.api.routes.admin_models import _graph_model_config
             return _graph_model_config
@@ -53,38 +61,60 @@ class EntityExtractor:
         graph_cfg = self._get_graph_config()
         if graph_cfg and graph_cfg.get('model'):
             model = graph_cfg['model']
-            llm_url = self._llm_url  # default Ollama URL
+            # Use URL from graph config, fallback to default Ollama
+            llm_url = graph_cfg.get('url') or self._llm_url
         else:
             cfg = self._get_config()
             llm_url = cfg.url if cfg else self._llm_url
             model = cfg.model if cfg else self._model
-        
-        # Fallback: для русского текста phi4-mini работает лучше чем mistral:7b
-        if model == "mistral:7b":
-            model = "phi4-mini:latest"
 
         prompt = self._build_extraction_prompt(chunk_text, filename)
 
         try:
             import aiohttp
+            # Build request payload based on provider
+            provider = (graph_cfg or {}).get('provider', 'ollama')
+            api_key = (graph_cfg or {}).get('api_key', '')
+            
+            if provider == 'ollama':
+                req_url = f"{llm_url}/api/generate"
+                req_json = {
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.05, "max_tokens": 500}
+                }
+                req_headers = {}
+            else:
+                # OpenAI-compatible API (OpenAI, DeepSeek, OpenRouter)
+                req_url = f"{llm_url}/v1/chat/completions"
+                req_json = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.05,
+                    "max_tokens": 500
+                }
+                req_headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{llm_url}/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.05, "max_tokens": 500}
-                    },
+                    req_url,
+                    json=req_json,
+                    headers=req_headers,
                     timeout=aiohttp.ClientTimeout(total=180)
                 ) as resp:
                     if resp.status != 200:
-                        logger.warning(f"Ollama вернул {resp.status} для {chunk_id} (модель {model})")
+                        logger.warning(f"LLM вернул {resp.status} для {chunk_id} (модель {model}, provider {provider})")
                         return {"entities": [], "relations": [], "facts": []}
                     data = await resp.json()
-                    result = self._parse_response(data.get("response", ""))
+                    # Parse response based on provider
+                    if provider == 'ollama':
+                        response_text = data.get("response", "")
+                    else:
+                        response_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    result = self._parse_response(response_text)
                     if not result.get("entities") and not result.get("relations"):
-                        logger.warning(f"Не удалось извлечь сущности из {chunk_id}: модель {model} вернула невалидный JSON, ответ: {data.get('response', '')[:200]}")
+                        logger.warning(f"Не удалось извлечь сущности из {chunk_id}: модель {model} ({provider}), ответ: {response_text[:200]}")
                     return result
         except Exception as e:
             logger.warning(f"Ошибка извлечения сущностей из {chunk_id}: {type(e).__name__}: {e}")
