@@ -410,8 +410,8 @@ class DocumentService:
         return True
 
     def _generate_thumbnail(self, document_id: str, file_path: Path) -> Optional[Path]:
-        """Сгенерировать WebP-миниатюру первой страницы документа."""
-        from PIL import Image
+        """Сгенерировать WebP-миниатюру: первая страница PDF или текстовая карточка."""
+        from PIL import Image, ImageDraw, ImageFont
         
         thumb_dir = Path("/app/data/thumbnails")
         thumb_dir.mkdir(parents=True, exist_ok=True)
@@ -431,8 +431,10 @@ class DocumentService:
                 if img.mode in ('RGBA', 'P'):
                     img = img.convert('RGB')
             else:
-                # Не-PDF и не-изображение — генерируем placeholder
-                return None
+                # Текстовые документы: генерируем текстовую карточку
+                img = self._generate_text_thumbnail(file_path)
+                if img is None:
+                    return None
             
             # Resize to max 500px wide
             max_width = 500
@@ -446,6 +448,72 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Ошибка генерации миниатюры {document_id}: {e}")
             return None
+
+    def _generate_text_thumbnail(self, file_path: Path) -> Optional[Any]:
+        """Создать текстовую миниатюру для docx/txt/md/csv."""
+        from PIL import Image, ImageDraw, ImageFont
+        
+        # Extract text from file
+        suffix = file_path.suffix.lower()
+        filename = file_path.name
+        
+        try:
+            if suffix == '.docx':
+                from docx import Document
+                doc = Document(str(file_path))
+                text = '\n'.join(p.text for p in doc.paragraphs[:30])
+            elif suffix == '.csv':
+                text = file_path.read_text(encoding='utf-8', errors='replace')
+            else:  # .txt, .md
+                text = file_path.read_text(encoding='utf-8', errors='replace')
+        except Exception:
+            try:
+                text = file_path.read_text(encoding='latin-1', errors='replace')
+            except Exception:
+                text = file_path.read_text(errors='replace')
+        
+        if not text or not text.strip():
+            return None
+        
+        # Truncate
+        text_preview = text[:800].replace('\t', '    ')
+        lines = text_preview.split('\n')[:25]
+        
+        # Canvas: A4 ratio (1:√2), ~500px wide
+        W, H = 500, 700
+        img = Image.new('RGB', (W, H), '#08090a')
+        draw = ImageDraw.Draw(img)
+        
+        # Fonts
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12)
+        except Exception:
+            font_title = ImageFont.load_default()
+            font_body = ImageFont.load_default()
+        
+        # Header
+        y = 20
+        draw.rectangle([0, 0, W, 48], fill='#0f1011')
+        draw.text((16, 14), f"📄 {filename}", fill='#f7f8f8', font=font_title)
+        
+        # Type badge
+        badge = suffix.upper().replace('.', '')
+        badge_w = len(badge) * 10 + 16
+        draw.rectangle([W - badge_w - 12, 10, W - 12, 36], fill='#5e6ad2')
+        draw.text((W - badge_w - 4, 14), badge, fill='#fff', font=font_body)
+        
+        # Text content
+        y = 56
+        for line in lines:
+            if y > H - 20:
+                break
+            # Truncate line
+            display_line = line[:80]
+            draw.text((14, y), display_line, fill='#8a8f98', font=font_body)
+            y += 20
+        
+        return img
 
     def _find_file(self, document_id: str, filename: str) -> Optional[Path]:
         """Найти файл документа в директории uploads"""
