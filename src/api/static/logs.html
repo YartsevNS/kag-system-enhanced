@@ -120,8 +120,8 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
     <div class="stat-pill"><div class="dot dot-green"></div> Загрузка...</div>
   </div>
 
-  <!-- System info panel (collapsible) -->
-  <div class="sys-panel" id="sys-panel" style="display:none">
+  <!-- System info panel -->
+  <div class="sys-panel" id="sys-panel">
     <div class="sys-card" id="sys-cpu">
       <div class="sys-title">🖥️ CPU</div>
       <div class="sys-grid"><div class="sys-item"><div class="sys-label">Использование</div><div class="sys-value" id="cpu-pct">—</div></div><div class="sys-item"><div class="sys-label">Нагрузка</div><div class="sys-value" id="cpu-load">—</div></div></div>
@@ -364,7 +364,6 @@ function mergeLogLines(existing, incoming) {
 }
 
 function updateSystemPanel(info) {
-  if (!document.getElementById('show-system').checked) return;
   document.getElementById('sys-panel').style.display = 'grid';
   
   const cpu = info.cpu || {};

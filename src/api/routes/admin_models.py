@@ -1446,3 +1446,68 @@ async def save_upload_config(req: UploadConfigRequest):
         return {"status": "ok", "message": "Настройки форматов сохранены"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ===========================================
+# Мониторинг системы и Docker
+# ===========================================
+
+@router.get("/system/info", summary="Информация о системе")
+async def get_system_info():
+    """CPU, память, диск, ОС."""
+    try:
+        from src.api.services.system_monitor import system_monitor
+        info = system_monitor.get_system_info()
+        import psutil
+        info["cpu_instant"] = psutil.cpu_percent(interval=0.1)
+        info["memory_instant"] = {
+            "total": psutil.virtual_memory().total,
+            "used": psutil.virtual_memory().used,
+            "percent": psutil.virtual_memory().percent
+        }
+        info["disk_instant"] = {
+            "total": psutil.disk_usage('/').total,
+            "used": psutil.disk_usage('/').used,
+            "free": psutil.disk_usage('/').free,
+            "percent": psutil.disk_usage('/').percent
+        }
+        return info
+    except Exception as e:
+        return {"error": str(e), "hostname": "unknown"}
+
+
+@router.get("/docker/stats", summary="Статистика Docker")
+async def get_docker_stats():
+    """Список контейнеров, системная информация Docker."""
+    try:
+        from src.api.services.docker_monitor import docker_monitor
+        return docker_monitor.get_detailed_stats()
+    except Exception as e:
+        import subprocess
+        try:
+            ps_out = subprocess.check_output(
+                ["docker", "ps", "--format", "{{.Names}} {{.Status}} {{.Image}}", "--no-trunc"],
+                timeout=5, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            containers = []
+            for line in ps_out.split('\n'):
+                if line.strip():
+                    parts = line.split(' ', 2)
+                    containers.append({"name": parts[0], "status": parts[1] if len(parts) > 1 else '?', "image": parts[2] if len(parts) > 2 else '?'})
+            return {"containers": containers, "system": {"containers_running": len([c for c in containers if 'Up' in c.get('status','')]), "containers_total": len(containers)}}
+        except Exception:
+            return {"containers": [], "system": {}, "error": str(e)}
+
+
+@router.get("/docker/{container_name}/logs", summary="Логи контейнера")
+async def get_container_logs(container_name: str, lines: int = 30):
+    """Последние N строк логов контейнера."""
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["docker", "logs", "--tail", str(lines), container_name],
+            timeout=10, stderr=subprocess.STDOUT
+        ).decode(errors='replace')
+        return {"container": container_name, "logs": out[-10000:]}
+    except Exception as e:
+        return {"container": container_name, "logs": "", "error": str(e)}
