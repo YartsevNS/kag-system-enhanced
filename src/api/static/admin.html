@@ -493,60 +493,35 @@
 
         async function loadActiveModels() {
             try {
-                const [llmModels, embModels] = await Promise.all([
-                    fetch(`${API_URL}/llm`).then(r => r.json()),
-                    fetch(`${API_URL}/embeddings`).then(r => r.json())
-                ]);
+                // Получаем список моделей Ollama для заполнения селектов
+                const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
+                
+                if (!Array.isArray(models) || models.length === 0) {
+                    console.warn('Нет доступных моделей Ollama');
+                    return;
+                }
 
-                // Активная LLM модель
-                const activeLlm = llmModels.find(m => m.is_active);
-                document.getElementById('active-llm').innerHTML = activeLlm ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
-                        <div style="font-size: 2rem;">🤖</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeLlm.name}</div>
-                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="llm-select" style="flex: 1;">
-                                ${llmModels.map(m => `<option value="${m.backend}|${m.name}" ${m.is_active ? 'selected' : ''}>${m.name} (${m.backend})</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchLlmModel()">Применить</button>
-                        </div>
-                    </div>
-                ` : '<div style="color: var(--text4);">Нет доступных LLM моделей</div>';
+                // Заполняем селект для чата (LLM)
+                const llmSelect = document.getElementById('llm-select');
+                if (llmSelect) {
+                    llmSelect.innerHTML = models.map(m => `<option value="ollama|${m.name}">${m.name} (Ollama)</option>`).join('');
+                }
 
-                // Активная Embedding модель
-                const activeEmb = embModels.find(m => m.is_active);
-                document.getElementById('active-embedding').innerHTML = activeEmb ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
-                        <div style="font-size: 2rem;">📐</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeEmb.name}</div>
-                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить embedding модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="emb-select" style="flex: 1;">
-                                ${embModels.map(m => `<option value="${m.name}" ${m.is_active ? 'selected' : ''}>${m.name}</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchEmbeddingModel()">Применить</button>
-                        </div>
-                    </div>
-                ` : '<div style="color: var(--text4);">Нет доступных embedding моделей</div>';
-
-                // Модель для графа (заполняем select)
+                // Заполняем селект для графа
                 const graphSelect = document.getElementById('graph-model-select');
                 if (graphSelect) {
-                    graphSelect.innerHTML = llmModels.map(m => `<option value="${m.name}">${m.name} (${m.backend})</option>`).join('');
+                    graphSelect.innerHTML = models.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
                 }
+
+                // Получаем активные модели (если есть эндпоинт)
+                try {
+                    const activeRes = await fetch(`${API_URL}/status`);
+                    if (activeRes.ok) {
+                        const activeData = await activeRes.json();
+                        // Тут можно подсветить активную модель, если нужно
+                    }
+                } catch (e) { console.log('Статус активных моделей недоступен'); }
+
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
