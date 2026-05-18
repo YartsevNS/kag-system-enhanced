@@ -3,7 +3,7 @@ API-роуты для Knowledge Graph (Neo4j).
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Body
-from typing import Optional
+from typing import Optional, List
 from loguru import logger
 
 from src.api.middleware.auth_v2 import get_current_user_optional
@@ -102,3 +102,77 @@ async def hybrid_search(
         return {"query": q, "results": results, "total": len(results)}
     except Exception as e:
         return {"query": q, "results": [], "total": 0, "error": str(e)}
+
+
+@router.post("/rebuild-graph", summary="Перестроить граф для существующих документов")
+async def rebuild_graph(
+    document_ids: Optional[List[str]] = Body(None, embed=True),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Переизвлечь сущности и перестроить граф для указанных документов.
+    Если document_ids=None — обработать все документы со статусом completed.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        from src.indexing.entity_extractor import entity_extractor
+        from src.api.services.config_store import config_store
+        from src.embeddings.embedding_service import embedding_service
+
+        if document_ids:
+            docs = []
+            for did in document_ids:
+                doc = config_store.get("documents", did)
+                if doc:
+                    docs.append(doc)
+        else:
+            all_docs = config_store.get_all("documents") or {}
+            docs = []
+            for did, doc in all_docs.items():
+                if isinstance(doc, dict) and doc.get("status") == "completed":
+                    doc["document_id"] = did
+                    docs.append(doc)
+
+        results = []
+        for doc in docs:
+            doc_id = doc.get("document_id") or doc.get("id")
+            filename = doc.get("filename", "unknown")
+            
+            # Очищаем старые данные графа
+            kg_service.clear_document(doc_id)
+            
+            # Создаём узел документа
+            kg_service.create_document_node(doc_id, filename)
+            
+            # Получаем чанки из Qdrant
+            chunks = await embedding_service.get_document_chunks(doc_id)
+            if not chunks:
+                results.append({"document_id": doc_id, "status": "no_chunks"})
+                continue
+            
+            # Переизвлекаем сущности
+            entity_count = 0
+            for i, chunk in enumerate(chunks[:10]):
+                chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+                chunk_text = chunk.get("content", "")
+                chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
+                
+                kg_service.create_chunk_node(chunk_id, doc_id, chunk_text, chunk_seq)
+                await entity_extractor.extract_and_store(doc_id, chunk_id, chunk_text, chunk_seq, filename)
+                
+                # Считаем сущности после каждого чанка
+                stats = kg_service.get_stats()
+                entity_count = stats.get("entities", 0)
+            
+            results.append({
+                "document_id": doc_id,
+                "filename": filename,
+                "chunks_processed": min(len(chunks), 10),
+                "entities_found": entity_count
+            })
+        
+        total_stats = kg_service.get_stats()
+        return {"status": "ok", "results": results, "total_stats": total_stats}
+    except Exception as e:
+        logger.error(f"Rebuild graph error: {e}")
+        return {"status": "error", "message": str(e)}

@@ -58,6 +58,10 @@ class EntityExtractor:
             cfg = self._get_config()
             llm_url = cfg.url if cfg else self._llm_url
             model = cfg.model if cfg else self._model
+        
+        # Fallback: для русского текста phi4-mini работает лучше чем mistral:7b
+        if model == "mistral:7b":
+            model = "phi4-mini:latest"
 
         prompt = self._build_extraction_prompt(chunk_text, filename)
 
@@ -72,14 +76,18 @@ class EntityExtractor:
                         "stream": False,
                         "options": {"temperature": 0.05, "max_tokens": 500}
                     },
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    timeout=aiohttp.ClientTimeout(total=60)
                 ) as resp:
                     if resp.status != 200:
+                        logger.warning(f"Ollama вернул {resp.status} для {chunk_id} (модель {model})")
                         return {"entities": [], "relations": [], "facts": []}
                     data = await resp.json()
-                    return self._parse_response(data.get("response", ""))
+                    result = self._parse_response(data.get("response", ""))
+                    if not result.get("entities") and not result.get("relations"):
+                        logger.warning(f"Не удалось извлечь сущности из {chunk_id}: модель {model} вернула невалидный JSON, ответ: {data.get('response', '')[:200]}")
+                    return result
         except Exception as e:
-            logger.debug(f"Ошибка извлечения сущностей из {chunk_id}: {e}")
+            logger.warning(f"Ошибка извлечения сущностей из {chunk_id}: {type(e).__name__}: {e}")
             return {"entities": [], "relations": [], "facts": []}
 
     def _build_extraction_prompt(self, text: str, filename: str) -> str:

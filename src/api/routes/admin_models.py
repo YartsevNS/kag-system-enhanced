@@ -1276,7 +1276,7 @@ async def test_ext_llm():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-_graph_model_config = {"model": "mistral:7b", "provider": "ollama"}
+_graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 @router.get("/graph", summary="Получить модель для графа")
 async def get_graph_model():
