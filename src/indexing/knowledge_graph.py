@@ -177,28 +177,26 @@ class KnowledgeGraphService:
             return []
         try:
             with self.driver.session() as session:
+                # Use string interpolation for CONTAINS (parameterized CONTAINS unreliable in some Neo4j versions)
+                safe_query = query.replace('"', '\\"').replace("'", "\\'")
                 if entity_type:
-                    result = session.run(
-                        """
+                    safe_type = entity_type.replace('"', '\\"').replace("'", "\\'")
+                    cypher = f"""
                         MATCH (e:Entity)
-                        WHERE e.name CONTAINS $query AND e.type = $type
+                        WHERE e.name CONTAINS "{safe_query}" AND e.type = "{safe_type}"
                         RETURN e.name as name, e.type as type, e.confidence as confidence
                         ORDER BY e.confidence DESC
-                        LIMIT $limit
-                        """,
-                        query=query, type=entity_type, limit=limit
-                    )
+                        LIMIT {limit}
+                    """
                 else:
-                    result = session.run(
-                        """
+                    cypher = f"""
                         MATCH (e:Entity)
-                        WHERE e.name CONTAINS $query
+                        WHERE e.name CONTAINS "{safe_query}"
                         RETURN e.name as name, e.type as type, e.confidence as confidence
                         ORDER BY e.confidence DESC
-                        LIMIT $limit
-                        """,
-                        query=query, limit=limit
-                    )
+                        LIMIT {limit}
+                    """
+                result = session.run(cypher)
                 return [dict(r) for r in result]
         except Exception as e:
             logger.warning(f"Ошибка поиска сущностей: {e}")
