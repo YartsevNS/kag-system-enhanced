@@ -1318,7 +1318,7 @@ async def deploy_action(req: DeployRequest):
     """
     Универсальный endpoint для деплоя:
     - write_file: записать содержимое в файл на диске
-    - git_pull: выполнить git pull в /home/yartsevn/kag-system-enhanced
+    - git_pull: выполнить git pull в /home/yartsevn/kag-system
     - restart: перезапустить Docker-контейнер api
     """
     import subprocess
@@ -1356,7 +1356,7 @@ async def deploy_action(req: DeployRequest):
         try:
             result = subprocess.run(
                 ["git", "pull"],
-                cwd="/home/yartsevn/kag-system-enhanced",
+                cwd="/home/yartsevn/kag-system",
                 capture_output=True,
                 text=True,
                 timeout=60
@@ -1374,7 +1374,7 @@ async def deploy_action(req: DeployRequest):
         try:
             result = subprocess.run(
                 ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "api"],
-                cwd="/home/yartsevn/kag-system-enhanced",
+                cwd="/home/yartsevn/kag-system",
                 capture_output=True,
                 text=True,
                 timeout=120
@@ -1389,3 +1389,60 @@ async def deploy_action(req: DeployRequest):
             return {"status": "error", "message": str(e)}
 
     return {"status": "error", "message": f"Неизвестное действие: {req.action}"}
+
+
+# ===========================================
+# Конфигурация разрешённых форматов загрузки
+# ===========================================
+
+# Все поддерживаемые форматы
+ALL_SUPPORTED_EXTENSIONS = {
+    ".pdf":  "PDF",
+    ".docx": "DOCX",
+    ".doc":  "DOC",
+    ".txt":  "TXT",
+    ".md":   "MD",
+    ".csv":  "CSV",
+    ".odt":  "ODT",
+    ".rtf":  "RTF",
+    ".png":  "PNG",
+    ".jpg":  "JPG",
+    ".jpeg": "JPEG",
+    ".gif":  "GIF",
+}
+
+def _get_allowed_extensions() -> dict:
+    """Загрузить разрешённые расширения из config_store."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("upload_config", "allowed_extensions")
+        if saved and isinstance(saved, dict):
+            return saved
+    except Exception:
+        pass
+    # Default: all except image formats
+    return {ext: True for ext in ALL_SUPPORTED_EXTENSIONS if ext not in ('.png', '.jpg', '.jpeg', '.gif')}
+
+
+@router.get("/upload-config", summary="Разрешённые форматы загрузки")
+async def get_upload_config():
+    """Получить список разрешённых форматов."""
+    allowed = _get_allowed_extensions()
+    return {
+        "all_formats": ALL_SUPPORTED_EXTENSIONS,
+        "allowed": allowed
+    }
+
+
+class UploadConfigRequest(BaseModel):
+    allowed: dict = Field(default={}, description="Словарь {'.ext': True/False}")
+
+@router.post("/upload-config", summary="Сохранить разрешённые форматы")
+async def save_upload_config(req: UploadConfigRequest):
+    """Сохранить список разрешённых форматов."""
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("upload_config", "allowed_extensions", req.allowed)
+        return {"status": "ok", "message": "Настройки форматов сохранены"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

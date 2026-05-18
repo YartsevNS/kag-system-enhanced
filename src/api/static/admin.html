@@ -330,6 +330,21 @@
             <div id="chunking-status" style="margin-top: 1rem;"></div>
         </div>
 
+        <!-- Разрешённые форматы загрузки -->
+        <div class="section">
+            <h2 class="section-title">📎 Разрешённые форматы загрузки</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:12px">
+                Отметьте форматы, разрешённые к загрузке и обработке.
+            </p>
+            <div id="upload-formats-checkboxes" style="display:flex;flex-wrap:wrap;gap:10px 20px;">
+                <span style="color:var(--text4);">Загрузка...</span>
+            </div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary" onclick="saveUploadFormats()">💾 Сохранить форматы</button>
+                <span id="upload-formats-status" style="font-size:13px;margin-left:12px;"></span>
+            </div>
+        </div>
+
         <!-- Активная LLM модель -->
         <div class="section">
             <h2 class="section-title">🤖 Активная LLM модель</h2>
@@ -736,7 +751,8 @@
                 loadActiveModels(),
                 loadModels(),
                 loadSshConfig(),
-                loadChunkingSettings()
+                loadChunkingSettings(),
+                loadUploadFormats()
             ]);
             // Загружаем модель графа после того, как заполнился селект
             await loadGraphModel();
@@ -1078,6 +1094,52 @@
                     if (d.api_key) document.getElementById('graph-api-key').value = d.api_key;
                 }
             } catch(e) {}
+        }
+
+        // === Разрешённые форматы загрузки ===
+        async function loadUploadFormats() {
+            try {
+                const r = await fetch('/api/v1/admin/models/upload-config');
+                if (!r.ok) return;
+                const d = await r.json();
+                const formats = d.all_formats || {};
+                const allowed = d.allowed || {};
+                const container = document.getElementById('upload-formats-checkboxes');
+                // Сортируем по алфавиту
+                const sorted = Object.entries(formats).sort((a, b) => a[1].localeCompare(b[1]));
+                container.innerHTML = sorted.map(([ext, label]) => {
+                    const checked = allowed[ext] !== false; // default true
+                    const color = checked ? 'var(--accent-h)' : 'var(--text4)';
+                    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:${color};font-size:13px;">
+                        <input type="checkbox" data-ext="${ext}" ${checked ? 'checked' : ''} 
+                               onchange="this.parentElement.style.color=this.checked?'var(--accent-h)':'var(--text4)'">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;">${ext}</span>
+                        <span style="font-size:12px;">${label}</span>
+                    </label>`;
+                }).join('');
+            } catch(e) { console.error('Upload formats:', e); }
+        }
+
+        async function saveUploadFormats() {
+            const status = document.getElementById('upload-formats-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
+            const allowed = {};
+            document.querySelectorAll('#upload-formats-checkboxes input[type=checkbox]').forEach(cb => {
+                allowed[cb.dataset.ext] = cb.checked;
+            });
+            try {
+                const r = await fetch('/api/v1/admin/models/upload-config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ allowed })
+                });
+                const d = await r.json();
+                status.innerHTML = r.ok 
+                    ? '<span style="color:#10b981">✅ ' + (d.message || 'Сохранено') + '</span>'
+                    : '<span style="color:#ef4444">❌ Ошибка</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
         }
 
     </script>

@@ -479,39 +479,40 @@ class DocumentService:
         text_preview = text[:800].replace('\t', '    ')
         lines = text_preview.split('\n')[:25]
         
-        # Canvas: A4 ratio (1:√2), ~500px wide
+        # Canvas: A4 ratio (1:√2), ~500px wide, white bg
         W, H = 500, 700
-        img = Image.new('RGB', (W, H), '#08090a')
+        img = Image.new('RGB', (W, H), '#ffffff')
         draw = ImageDraw.Draw(img)
         
         # Fonts
         try:
             font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
-            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 12)
+            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 11)
         except Exception:
             font_title = ImageFont.load_default()
             font_body = ImageFont.load_default()
         
-        # Header
-        y = 20
-        draw.rectangle([0, 0, W, 48], fill='#0f1011')
-        draw.text((16, 14), f"📄 {filename}", fill='#f7f8f8', font=font_title)
+        # Header bar
+        y = 0
+        draw.rectangle([0, 0, W, 52], fill='#f0f0f0')
+        draw.line([(0, 52), (W, 52)], fill='#e0e0e0')
+        draw.text((16, 16), f"📄 {filename}", fill='#1a1a1a', font=font_title)
         
         # Type badge
         badge = suffix.upper().replace('.', '')
-        badge_w = len(badge) * 10 + 16
-        draw.rectangle([W - badge_w - 12, 10, W - 12, 36], fill='#5e6ad2')
-        draw.text((W - badge_w - 4, 14), badge, fill='#fff', font=font_body)
+        badge_w = len(badge) * 9 + 14
+        draw.rectangle([W - badge_w - 14, 12, W - 14, 38], fill='#5e6ad2')
+        draw.text((W - badge_w - 7, 16), badge, fill='#ffffff', font=font_body)
         
         # Text content
-        y = 56
+        y = 60
         for line in lines:
-            if y > H - 20:
+            if y > H - 16:
                 break
-            # Truncate line
-            display_line = line[:80]
-            draw.text((14, y), display_line, fill='#8a8f98', font=font_body)
-            y += 20
+            display_line = line[:85]
+            color = '#1a1a1a' if line.strip() else '#aaaaaa'
+            draw.text((14, y), display_line, fill=color, font=font_body)
+            y += 18
         
         return img
 

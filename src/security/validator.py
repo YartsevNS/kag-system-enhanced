@@ -169,19 +169,21 @@ class SecurityValidator:
             raise SecurityValidationError("Пустой файл", "file")
 
         ext = Path(filename).suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
+        # Динамическая проверка: разрешённые форматы из config_store (админка)
+        allowed = _get_dynamic_allowed_extensions()
+        if ext not in allowed:
             raise SecurityValidationError(
                 f"Недопустимое расширение файла: {ext}",
                 "file"
             )
 
-        if mime_type and mime_type not in ALLOWED_MIME_TYPES and ext not in ALLOWED_EXTENSIONS:
+        if mime_type and mime_type not in ALLOWED_MIME_TYPES and ext not in allowed:
             raise SecurityValidationError(
                 f"Недопустимый MIME тип: {mime_type}",
                 "file"
             )
         # Always allow known extensions regardless of MIME (browsers/curl send generic types)
-        if ext in ALLOWED_EXTENSIONS:
+        if ext in allowed:
             pass  # MIME check skipped for known extensions
 
         if re.search(r'[<>"\'|?*\\]', filename):
@@ -314,3 +316,16 @@ class SecureInputMixin(BaseModel):
         if isinstance(v, str):
             return SecurityValidator.sanitize_text(v)
         return v
+
+
+def _get_dynamic_allowed_extensions() -> set:
+    """Загрузить разрешённые расширения из config_store (админка)."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("upload_config", "allowed_extensions")
+        if saved and isinstance(saved, dict):
+            return {ext for ext, enabled in saved.items() if enabled}
+    except Exception:
+        pass
+    # Fallback: статический список
+    return ALLOWED_EXTENSIONS

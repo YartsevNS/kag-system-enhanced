@@ -131,7 +131,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="upload-zone" id="upload-zone">
     <div class="upload-icon">📤</div>
     <div class="upload-text">Загрузить документы</div>
-    <div class="upload-hint">PDF, DOCX, TXT, MD, CSV — перетащите или нажмите</div>
+    <div class="upload-hint">Перетащите файлы или нажмите для выбора</div>
+    <div id="allowed-formats-bar" style="display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px;"></div>
   </div>
   <div class="progress-wrap" id="progress-wrap">
     <div class="prog-label"><span id="prog-file">—</span><span id="prog-pct">0%</span></div>
@@ -187,10 +188,39 @@ let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadAll();
+  loadFormatsBar();
   document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
   document.getElementById('file-input').onchange = (e) => uploadFiles(Array.from(e.target.files));
   setupDragDrop();
 });
+
+async function loadFormatsBar() {
+  try {
+    const r = await fetch('/api/v1/admin/models/upload-config');
+    if (!r.ok) return;
+    const d = await r.json();
+    const formats = d.all_formats || {};
+    const allowed = d.allowed || {};
+    const bar = document.getElementById('allowed-formats-bar');
+    // Alphabetical order by label
+    const sorted = Object.entries(formats).sort((a, b) => a[1].localeCompare(b[1]));
+    bar.innerHTML = '';
+    const acceptExts = [];
+    sorted.forEach(([ext, label]) => {
+      const enabled = allowed[ext] !== false;
+      if (enabled) acceptExts.push(ext);
+      const badge = document.createElement('span');
+      badge.style.cssText = `font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;font-family:'JetBrains Mono',monospace;${
+        enabled ? 'background:rgba(94,106,210,0.18);color:#7170ff;' : 'background:rgba(255,255,255,0.04);color:#62666d;'
+      }`;
+      badge.textContent = ext + ' ' + label;
+      bar.appendChild(badge);
+    });
+    // Update file input accept
+    const inp = document.getElementById('file-input');
+    if (inp) inp.accept = acceptExts.join(',');
+  } catch(e) {}
+}
 
 function setupDragDrop() {
   const zone = document.getElementById('upload-zone');
