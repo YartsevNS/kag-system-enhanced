@@ -117,7 +117,7 @@ async def rebuild_graph(
         from src.indexing.knowledge_graph import kg_service
         from src.indexing.entity_extractor import entity_extractor
         from src.api.services.config_store import config_store
-        from src.indexing.embeddings_service import embedding_service
+        from src.indexing.embeddings_service import embeddings_service
 
         if document_ids:
             docs = []
@@ -145,7 +145,7 @@ async def rebuild_graph(
             kg_service.create_document_node(doc_id, filename)
             
             # Получаем чанки из Qdrant
-            chunks = await embedding_service.get_document_chunks(doc_id)
+            chunks = await embeddings_service.get_document_chunks(doc_id)
             if not chunks:
                 results.append({"document_id": doc_id, "status": "no_chunks"})
                 continue
