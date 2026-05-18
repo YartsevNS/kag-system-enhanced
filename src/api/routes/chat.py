@@ -101,6 +101,35 @@ async def send_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/search", summary="Векторный поиск по чанкам")
+async def search_chunks(
+    request: dict,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Векторный поиск по чанкам через Qdrant.
+    Принимает {"query": "...", "limit": 10}
+    """
+    try:
+        from src.indexing.embeddings_service import embeddings_service
+        
+        query = request.get("query", "")
+        limit = request.get("limit", 10)
+        
+        if not query:
+            return {"chunks": [], "total": 0}
+        
+        # Initialize if needed
+        if embeddings_service._qdrant_client is None:
+            await embeddings_service.initialize()
+        
+        chunks = await embeddings_service.search(query, limit=limit)
+        return {"chunks": chunks, "total": len(chunks)}
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return {"chunks": [], "total": 0, "error": str(e)}
+
+
 @router.post("/sessions/{session_id}/reset", summary="Сбросить сессию чата")
 async def reset_session(session_id: str):
     """

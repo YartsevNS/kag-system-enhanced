@@ -90,6 +90,16 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 </main>
 
 <script>
+function getToken() {
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  return localStorage.getItem('kag_token');
+}
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
 let mode = 'all';
 function setMode(m, el) {
   mode = m;
@@ -112,7 +122,7 @@ async function doSearch() {
     promises.push((async () => {
       try {
         const r = await fetch('/api/v1/chat/search', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: authHeaders(),
           body: JSON.stringify({query: q, limit: 10})
         });
         if (r.ok) {
@@ -128,7 +138,7 @@ async function doSearch() {
   if (mode === 'all' || mode === 'docs') {
     promises.push((async () => {
       try {
-        const r = await fetch('/api/v1/upload/list');
+        const r = await fetch('/api/v1/upload/list', { headers: authHeaders() });
         if (!r.ok) return {type:'docs', data: []};
         const d = await r.json();
         const docs = (d.documents || []).filter(doc => {
@@ -138,7 +148,7 @@ async function doSearch() {
         // Enrich first 5
         await Promise.all(docs.slice(0,5).map(async doc => {
           try {
-            const rd = await fetch('/api/v1/upload/'+doc.document_id+'/details');
+            const rd = await fetch('/api/v1/upload/'+doc.document_id+'/details', { headers: authHeaders() });
             if (rd.ok) {
               const det = await rd.json();
               doc.recognized_title = det.recognized_title;
@@ -157,7 +167,7 @@ async function doSearch() {
   if (mode === 'all' || mode === 'graph') {
     promises.push((async () => {
       try {
-        const r = await fetch('/api/v1/kg/entities/search?q=' + encodeURIComponent(q) + '&limit=10');
+        const r = await fetch('/api/v1/kg/entities/search?q=' + encodeURIComponent(q) + '&limit=10', { headers: authHeaders() });
         if (r.ok) {
           const d = await r.json();
           return {type:'graph', data: d.results || []};
