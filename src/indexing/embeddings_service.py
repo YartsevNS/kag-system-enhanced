@@ -417,6 +417,8 @@ class EmbeddingsService:
             Список чанков
         """
         try:
+            if self._qdrant_client is None:
+                await self.initialize()
             results, _ = self._qdrant_client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=Filter(

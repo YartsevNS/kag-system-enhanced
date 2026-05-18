@@ -99,7 +99,7 @@ class KnowledgeGraphService:
                     """,
                     id=document_id,
                     filename=filename,
-                    metadata=metadata or {}
+                    metadata=json.dumps(metadata, ensure_ascii=False) if metadata else "{}",
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания узла документа: {e}")
