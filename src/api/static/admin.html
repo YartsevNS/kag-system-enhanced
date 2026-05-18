@@ -422,7 +422,9 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div class="form-group">
                     <label>Модель (Ollama)</label>
-                    <input type="text" id="graph-model" placeholder="mistral:7b" value="mistral:7b">
+                    <select id="graph-model-select" style="width: 100%; padding: 8px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);">
+                        <option value="mistral:7b">mistral:7b</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Провайдер</label>
@@ -540,9 +542,15 @@
                     </div>
                 ` : '<div style="color: var(--text4);">Нет доступных embedding моделей</div>';
 
+                // Модель для графа (заполняем select)
+                const graphSelect = document.getElementById('graph-model-select');
+                if (graphSelect) {
+                    graphSelect.innerHTML = llmModels.map(m => `<option value="${m.name}">${m.name} (${m.backend})</option>`).join('');
+                }
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
+        }
         }
 
         async function loadModels() {
@@ -718,9 +726,10 @@
                 loadActiveModels(),
                 loadModels(),
                 loadSshConfig(),
-                loadChunkingSettings(),
-                loadGraphModel()
+                loadChunkingSettings()
             ]);
+            // Загружаем модель графа после того, как заполнился селект
+            await loadGraphModel();
         }
         
         async function loadChunkingSettings() {
@@ -1018,7 +1027,7 @@
             const status = document.getElementById('graph-model-status');
             status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
             const config = {
-                model: document.getElementById('graph-model').value.trim(),
+                model: document.getElementById('graph-model-select').value.trim(),
                 provider: document.getElementById('graph-provider').value
             };
             try {
@@ -1041,7 +1050,18 @@
                 const r = await fetch('/api/v1/admin/models/graph');
                 if (r.ok) {
                     const d = await r.json();
-                    if (d.model) document.getElementById('graph-model').value = d.model;
+                    if (d.model) {
+                        const select = document.getElementById('graph-model-select');
+                        if (select) {
+                            // Проверяем, есть ли такая модель в списке
+                            for (let i = 0; i < select.options.length; i++) {
+                                if (select.options[i].value === d.model) {
+                                    select.selectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     if (d.provider) document.getElementById('graph-provider').value = d.provider;
                 }
             } catch(e) {}
