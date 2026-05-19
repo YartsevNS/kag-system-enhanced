@@ -75,7 +75,7 @@ class MonitorSource:
     check_interval_minutes: int = 360  # 6 часов по умолчанию
     keywords: List[str] = field(default_factory=list)  # фильтр по словам
     file_types: List[str] = field(default_factory=lambda: [".pdf", ".docx"])  # какие файлы скачивать
-    css_selector: str = "a[href*='file/load'], a[href*='download'], a[href$='.pdf'], a[href$='.docx'], a[href$='.xlsx']"  # CSS для поиска ссылок
+    css_selector: str = "a[href]"  # CSS для поиска ссылок (дальше фильтруем программно по href)
     last_check: Optional[datetime] = None
     last_etag: Optional[str] = None
     last_modified: Optional[str] = None
