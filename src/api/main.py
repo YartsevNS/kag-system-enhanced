@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 import os
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.middleware.auth import AuthMiddleware
@@ -112,6 +112,7 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_models.router, prefix="/api/v1/admin/models", tags=["models"])
 app.include_router(knowledge_graph.router, prefix="/api/v1/kg", tags=["knowledge-graph"])
 app.include_router(process_logs.router, prefix="/api/v1/process-logs", tags=["process-logs"])
+app.include_router(web_monitor.router, prefix="/api/v1/monitor", tags=["web-monitor"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
@@ -285,3 +286,11 @@ async def kg_page():
     if os.path.exists(kg_path):
         return FileResponse(kg_path)
     return {"error": "KG page not found"}
+
+
+@app.get("/monitor", summary="Веб-мониторинг")
+async def monitor_page():
+    monitor_path = os.path.join(static_path, "monitor.html")
+    if os.path.exists(monitor_path):
+        return FileResponse(monitor_path)
+    return {"error": "Monitor page not found"}

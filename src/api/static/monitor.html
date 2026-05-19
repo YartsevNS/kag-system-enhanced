@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Веб-мониторинг</title>
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:24px 32px;max-width:1500px}
+h1{font-size:26px;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:var(--text4);margin-bottom:20px}
+.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 16px}
+.stat-num{font-size:22px;font-weight:700;color:var(--text)}
+.stat-label{font-size:10px;color:var(--text4);text-transform:uppercase;margin-top:2px}
+.btn{background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600}
+.btn:hover{opacity:0.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:8px 16px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px}
+.btn-outline:hover{border-color:var(--text4)}
+.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+.form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:11px;color:var(--text4);text-transform:uppercase}
+.form-group input,.form-group select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;outline:none;min-width:160px}
+.form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;color:var(--text4);font-weight:500;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border-s);background:var(--panel)}
+td{padding:8px 12px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:500}
+.badge-ok{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.badge-warn{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-err{background:rgba(220,38,38,0.12);color:var(--red)}
+.badge-info{background:rgba(94,106,210,0.12);color:var(--accent-h)}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:1000}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.stats-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+<main>
+  <h1>🌐 Веб-мониторинг документов</h1>
+  <div class="sub">Автоматический поиск новых документов на государственных порталах — RSS, скрапинг, change detection → KAG Pipeline</div>
+
+  <!-- Статистика -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-num" id="stat-sources">—</div><div class="stat-label">Источников</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-found">—</div><div class="stat-label">Найдено всего</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-uploaded">—</div><div class="stat-label">Загружено в KAG</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-last">—</div><div class="stat-label">Последняя проверка</div></div>
+  </div>
+
+  <!-- Добавление источника -->
+  <div class="panel">
+    <h2>➕ Добавить источник</h2>
+    <div class="form-row">
+      <div class="form-group"><label>Название</label><input type="text" id="add-name" placeholder="Например: ФСТЭК — документы"></div>
+      <div class="form-group"><label>URL</label><input type="text" id="add-url" placeholder="https://..."></div>
+      <div class="form-group"><label>Тип</label><select id="add-type">
+        <option value="rss">RSS/Atom — лента новостей</option>
+        <option value="scrape">Scrape — парсинг ссылок со страницы</option>
+        <option value="change">Change — отслеживание изменений страницы</option>
+      </select></div>
+      <div class="form-group"><label>Интервал (мин)</label><input type="number" id="add-interval" value="360" min="60" max="10080" style="width:100px"></div>
+      <div class="form-group"><label>Ключевые слова</label><input type="text" id="add-keywords" placeholder="через запятую"></div>
+      <button class="btn" onclick="addSource()">✅ Добавить</button>
+    </div>
+    <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить все встроенные источники (5 федеральных RSS)</button>
+  </div>
+
+  <!-- Список источников -->
+  <div class="panel">
+    <h2>📋 Источники мониторинга</h2>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" onclick="runCheck()">🔍 Проверить все источники</button>
+      <button class="btn-outline" onclick="loadSources()">🔄 Обновить</button>
+    </div>
+    <div id="sources-table"></div>
+  </div>
+
+  <!-- История проверок -->
+  <div class="panel">
+    <h2>📜 История проверок</h2>
+    <div id="history-table"></div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/v1/monitor';
+
+function getToken() {
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  return localStorage.getItem('kag_token');
+}
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
+async function loadAll() {
+  await loadSources();
+  await loadHistory();
+}
+
+async function loadSources() {
+  try {
+    const r = await fetch(API + '/sources', { headers: authHeaders() });
+    const d = await r.json();
+    const sources = d.sources || [];
+    
+    // Статистика
+    document.getElementById('stat-sources').textContent = sources.length;
+    document.getElementById('stat-found').textContent = sources.reduce(function(s,c){return s+(c.items_found||0)},0);
+    document.getElementById('stat-uploaded').textContent = sources.reduce(function(s,c){return s+(c.items_uploaded||0)},0);
+    var lastChecks = sources.filter(function(s){return s.last_check}).map(function(s){return s.last_check}).sort();
+    document.getElementById('stat-last').textContent = lastChecks.length ? new Date(lastChecks[lastChecks.length-1]).toLocaleString('ru-RU') : '—';
+
+    // Таблица источников
+    var html = '<table><thead><tr><th>Название</th><th>URL</th><th>Тип</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
+    if (!sources.length) {
+      html += '<tr><td colspan="9" style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</td></tr>';
+    } else {
+      sources.forEach(function(s) {
+        var typeLabel = s.type === 'rss' ? '📡 RSS' : s.type === 'scrape' ? '🔍 Scrape' : '🔄 Change';
+        var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
+        html += '<tr>' +
+          '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') + '</td>' +
+          '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + s.url + '">' + s.url.substring(0,50) + '</td>' +
+          '<td><span class="badge badge-info">' + typeLabel + '</span></td>' +
+          '<td>' + (s.enabled ? '<span class="badge badge-ok">✅ Активен</span>' : '<span class="badge badge-warn">⏸ Пауза</span>') + '</td>' +
+          '<td>' + (s.check_interval_minutes >= 1440 ? Math.round(s.check_interval_minutes/1440) + ' д' : s.check_interval_minutes >= 60 ? Math.round(s.check_interval_minutes/60) + ' ч' : s.check_interval_minutes + ' мин') + '</td>' +
+          '<td>' + (s.items_found||0) + '</td>' +
+          '<td>' + (s.items_uploaded||0) + '</td>' +
+          '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
+          '<td><button class="btn-outline" style="font-size:11px;padding:4px 8px" onclick="runCheck(\'' + s.id + '\')">🔍</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
+          '</tr>';
+      });
+    }
+    html += '</tbody></table>';
+    document.getElementById('sources-table').innerHTML = html;
+  } catch(e) {
+    document.getElementById('sources-table').innerHTML = '<span style="color:var(--red)">Ошибка: ' + e.message + '</span>';
+  }
+}
+
+async function addSource() {
+  var name = document.getElementById('add-name').value.trim();
+  var url = document.getElementById('add-url').value.trim();
+  if (!name || !url) { toast('Заполните название и URL', true); return; }
+  try {
+    var r = await fetch(API + '/sources', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({
+        name: name, url: url,
+        type: document.getElementById('add-type').value,
+        check_interval_minutes: parseInt(document.getElementById('add-interval').value) || 360,
+        keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean)
+      })
+    });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      toast('✅ Источник добавлен');
+      document.getElementById('add-name').value = '';
+      document.getElementById('add-url').value = '';
+      document.getElementById('add-keywords').value = '';
+      loadSources();
+    } else {
+      toast('❌ ' + (d.message || 'Ошибка'), true);
+    }
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function addBuiltinSources() {
+  try {
+    var r = await fetch(API + '/add-builtin', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function runCheck(sourceId) {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    var body = sourceId ? JSON.stringify({source_id: sourceId}) : '{}';
+    var r = await fetch(API + '/check', {
+      method: 'POST', headers: authHeaders(),
+      body: sourceId ? body : undefined
+    });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      toast('✅ Проверено: ' + d.checked + ' источников, найдено: ' + d.results.reduce(function(s,r){return s+r.new_items},0) + ' новых');
+    } else {
+      toast('❌ ' + (d.message || 'Ошибка'), true);
+    }
+    loadAll();
+  } catch(e) { toast('❌ ' + e.message, true); }
+  btn.disabled = false;
+  btn.textContent = '🔍';
+}
+
+async function deleteSource(id) {
+  if (!confirm('Удалить источник мониторинга?')) return;
+  try {
+    await fetch(API + '/sources/' + id, { method: 'DELETE', headers: authHeaders() });
+    toast('✅ Удалён');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function loadHistory() {
+  try {
+    var r = await fetch(API + '/history?limit=20', { headers: authHeaders() });
+    var d = await r.json();
+    var history = d.history || [];
+    var html = '<table><thead><tr><th>Время</th><th>Источник</th><th>Результат</th><th>Детали</th></tr></thead><tbody>';
+    if (!history.length) {
+      html += '<tr><td colspan="4" style="text-align:center;color:var(--text4);padding:20px">История проверок пуста</td></tr>';
+    } else {
+      history.slice().reverse().forEach(function(h) {
+        html += '<tr>' +
+          '<td style="font-size:11px;color:var(--text4)">' + new Date(h.time||h.checked_at||'').toLocaleString('ru-RU') + '</td>' +
+          '<td>' + (h.source_name||h.source_id||'?') + '</td>' +
+          '<td><span class="badge ' + (h.status==='ok'?'badge-ok':h.status==='error'?'badge-err':'badge-warn') + '">' + (h.status||'?') + '</span></td>' +
+          '<td style="font-size:12px">Найдено: '+(h.new_items||0)+', пропущено: '+(h.skipped||0)+'</td>' +
+          '</tr>';
+      });
+    }
+    html += '</tbody></table>';
+    document.getElementById('history-table').innerHTML = html;
+  } catch(e) {}
+}
+
+function toast(msg, err) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = err ? 'var(--red)' : 'var(--green)';
+  t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 3000);
+}
+
+loadAll();
+</script>
+</body>
+</html>
