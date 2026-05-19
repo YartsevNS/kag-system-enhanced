@@ -433,6 +433,24 @@ function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t
 function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
 function toast(msg,err) { const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'var(--red)':'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000); }
 
+async function diffVersions(docId) {
+  const div = document.getElementById('diff-result-' + docId);
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Сравниваю версии...</span>';
+  try {
+    const r = await fetch(API + '/upload/' + docId + '/diff');
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    div.innerHTML = '<div style="padding:8px 12px;background:var(--surface);border-radius:var(--radius);margin-top:6px">' +
+      '<strong>📊 Сравнение версий v' + d.version + '</strong><br>' +
+      '<span style="font-size:11px;color:var(--text4)">SHA-256 текущ: ' + (d.current_hash||'?').substring(0,12) + '...</span><br>' +
+      '<span style="font-size:11px;color:var(--text4)">SHA-256 пред.: ' + (d.previous_hash||'?').substring(0,12) + '...</span><br>' +
+      '<span style="color:' + (d.has_changes ? 'var(--amber)' : 'var(--emerald)') + '">' + d.diff_summary + '</span>' +
+      '</div>';
+  } catch(e) {
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+  }
+}
+
 setInterval(loadAll, 15000);
 </script>
 </body>
