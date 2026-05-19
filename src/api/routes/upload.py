@@ -221,23 +221,37 @@ async def list_documents(
                 if d.group_ids is None or not d.group_ids
             ]
     
+    # Enrich with config_store metadata (document_type, title, etc.)
+    enriched = []
+    for d in documents:
+        item = {
+            "document_id": d.document_id,
+            "filename": d.filename,
+            "file_type": d.file_type,
+            "file_size": d.file_size,
+            "status": d.status,
+            "progress": d.progress,
+            "chunks_count": d.chunks_count,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+            "uploaded_by": d.uploaded_by
+        }
+        # Merge config_store metadata
+        try:
+            from src.api.services.config_store import config_store
+            meta = config_store.get("documents", d.document_id)
+            if meta:
+                item["document_type"] = meta.get("document_type", "")
+                item["recognized_title"] = meta.get("recognized_title", "")
+                item["summary"] = meta.get("summary", "")
+                item["topics"] = meta.get("topics", [])
+        except Exception:
+            pass
+        enriched.append(item)
+    
     return {
-        "total": len(documents),
-        "documents": [
-            {
-                "document_id": d.document_id,
-                "filename": d.filename,
-                "file_type": d.file_type,
-                "file_size": d.file_size,
-                "status": d.status,
-                "progress": d.progress,
-                "chunks_count": d.chunks_count,
-                "created_at": d.created_at.isoformat() if d.created_at else None,
-                "updated_at": d.updated_at.isoformat() if d.updated_at else None,
-                "uploaded_by": d.uploaded_by
-            }
-            for d in documents
-        ]
+        "total": len(enriched),
+        "documents": enriched
     }
 
 
