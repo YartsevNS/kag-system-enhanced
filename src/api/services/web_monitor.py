@@ -445,8 +445,9 @@ class WebMonitorService:
                     elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
                         pub_date = datetime(*entry.updated_parsed[:6])
 
-                    # Пропускаем старые записи
-                    if pub_date and pub_date < cutoff:
+                    # Пропускаем только ОЧЕНЬ старые записи (старше 30 дней),
+                    # если нет даты — не пропускаем (считаем новыми)
+                    if pub_date and pub_date < cutoff - timedelta(days=23):
                         continue
 
                     title = entry.get('title', '')
