@@ -545,6 +545,54 @@ async def get_document_preview(document_id: str):
     raise HTTPException(status_code=404, detail="Файл не найден")
 
 
+@router.post("/reanalyze-all", summary="Переанализировать все документы")
+async def reanalyze_all_documents():
+    """
+    Фоновый переанализ всех completed-документов через LLM.
+    Определяет document_type, recognized_title, summary, topics.
+    """
+    import asyncio
+    try:
+        from src.api.services.document_analyzer import document_analyzer
+        from src.api.services.config_store import config_store
+        from src.api.services.document_service import document_service
+        
+        all_docs = config_store.get_all("documents") or {}
+        to_analyze = []
+        for did, doc in all_docs.items():
+            if not isinstance(doc, dict) or doc.get("status") != "completed":
+                continue
+            # Skip if already has a proper type
+            dt = doc.get("document_type", "")
+            if dt and dt not in ("unknown", "other", ""):
+                continue
+            to_analyze.append((did, doc))
+        
+        async def analyze_one(did, doc):
+            try:
+                # Get first chunk text
+                from src.indexing.embeddings_service import embeddings_service
+                if embeddings_service._qdrant_client is None:
+                    await embeddings_service.initialize()
+                chunks = await embeddings_service.get_document_chunks(did)
+                first_text = chunks[0].get("content", "") if chunks else ""
+                if first_text:
+                    await document_analyzer.analyze_and_save(did, first_text, doc.get("filename", ""))
+                    return {"id": did, "status": "ok"}
+                return {"id": did, "status": "no_chunks"}
+            except Exception as e:
+                return {"id": did, "status": "error", "error": str(e)}
+        
+        results = []
+        for did, doc in to_analyze:
+            r = await analyze_one(did, doc)
+            results.append(r)
+        
+        return {"status": "ok", "total": len(to_analyze), "results": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 async def _process_document_async(document_id: str):
     """Фоновая обработка документа"""
     try:
