@@ -213,10 +213,15 @@ async def validate_document_entities(document_id: str):
 
 @router.get("/domain-schema", summary="Доменная схема сущностей")
 async def get_domain_schema():
-    """Получить текущую доменную схему."""
+    """Получить текущую доменную схему + список доступных пресетов."""
     try:
         from src.indexing.entity_extractor import entity_extractor
-        return {"schema": entity_extractor._domain_config}
+        from src.indexing.entity_extractor import EntityExtractor
+        return {
+            "schema": entity_extractor._domain_config,
+            "active_preset": EntityExtractor.get_active_preset(),
+            "presets": EntityExtractor.get_presets()
+        }
     except Exception as e:
         return {"error": str(e)}
 
@@ -226,16 +231,30 @@ async def update_domain_schema(data: dict):
     """
     Обновить доменную схему сущностей.
     
-    Body: {"core": {...}, "relations": {...}, "extended": {...}}
+    Два режима:
+    - Переключение пресета: {"preset": "accounting"}
+    - Ручная схема: {"core": {...}, "relations": {...}, "extended": {...}}
     """
     try:
-        from src.indexing.entity_extractor import entity_extractor
+        from src.indexing.entity_extractor import entity_extractor, EntityExtractor
         from src.indexing.knowledge_graph import kg_service
+        from src.api.services.config_store import config_store
+        
+        # Режим 1: переключение пресета
+        if "preset" in data:
+            preset_name = data["preset"]
+            result = EntityExtractor.switch_preset(preset_name)
+            if "error" in result:
+                return {"status": "error", "message": result["error"]}
+            # Обновляем активную схему в экстракторе
+            entity_extractor._domain_config = dict(EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"])
+            kg_service.set_domain_schema(EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"].get("core", {}))
+            return {"status": "ok", "preset": preset_name, "message": f"Пресет переключён на «{EntityExtractor.SCHEMA_PRESETS[preset_name]['name']}»"}
+        
+        # Режим 2: ручная схема
         entity_extractor.set_domain_schema(data)
         kg_service.set_domain_schema(data.get("core", {}))
-        # Сохраняем в config_store
-        from src.api.services.config_store import config_store
         config_store.set("kg_config", "domain_schema", data)
-        return {"status": "ok", "message": "Доменная схема обновлена"}
+        return {"status": "ok", "message": "Доменная схема обновлена вручную"}
     except Exception as e:
         return {"status": "error", "message": str(e)}

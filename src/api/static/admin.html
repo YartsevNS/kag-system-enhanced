@@ -464,6 +464,25 @@
                 <button class="btn btn-primary" onclick="saveGraphModel()">💾 Сохранить</button>
                 <span id="graph-model-status" style="font-size:13px"></span>
             </div>
+            </div>
+        </div>
+
+        <!-- Доменная схема сущностей -->
+        <div class="section">
+            <h2 class="section-title">🎯 Доменная схема сущностей</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:12px">
+                <strong>Доменная схема</strong> — какие типы сущностей и связей извлекать из документов.
+                Выберите пресет под ваш тип документов. Для старых — «Перестроить граф» на странице Графа знаний.
+            </p>
+            <select id="domain-preset-select" onchange="previewDomainPreset()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;margin-bottom:10px">
+                <option value="">⏳ Загрузка...</option>
+            </select>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="switchDomainPreset()">🔄 Применить схему</button>
+                <span id="domain-preset-status" style="font-size:13px"></span>
+            </div>
+            <div id="domain-preset-info" style="font-size:12px;color:var(--text3);margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--radius);display:none"></div>
+            <div id="domain-preset-detail" style="font-size:12px;margin-top:8px;display:none"></div>
         </div>
     </main>
 
@@ -752,7 +771,8 @@
                 loadModels(),
                 loadSshConfig(),
                 loadChunkingSettings(),
-                loadUploadFormats()
+                loadUploadFormats(),
+                loadDomainPresets()
             ]);
             // Загружаем модель графа после того, как заполнился селект
             await loadGraphModel();
@@ -1137,6 +1157,66 @@
                 status.innerHTML = r.ok 
                     ? '<span style="color:#10b981">✅ ' + (d.message || 'Сохранено') + '</span>'
                     : '<span style="color:#ef4444">❌ Ошибка</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        // === Доменные схемы (пресеты) ===
+        let domainPresets = [];
+
+        async function loadDomainPresets() {
+            try {
+                const r = await fetch('/api/v1/kg/domain-schema');
+                if (!r.ok) return;
+                const d = await r.json();
+                domainPresets = d.presets || [];
+                const active = d.active_preset || 'universal';
+                const sel = document.getElementById('domain-preset-select');
+                sel.innerHTML = domainPresets.map(function(p) {
+                    return '<option value="' + p.id + '"' + (p.id === active ? ' selected' : '') + '>'
+                        + p.name + ' — ' + p.entity_count + ' типов, ' + p.relation_count + ' связей</option>';
+                }).join('');
+                // Показать инфо о активном пресете
+                showPresetInfo(active);
+            } catch(e) { console.error('Domain presets:', e); }
+        }
+
+        function previewDomainPreset() {
+            var id = document.getElementById('domain-preset-select').value;
+            if (id) showPresetInfo(id);
+        }
+
+        function showPresetInfo(id) {
+            var p = domainPresets.find(function(x) { return x.id === id; });
+            var info = document.getElementById('domain-preset-info');
+            if (!p) { info.style.display = 'none'; return; }
+            info.style.display = 'block';
+            info.innerHTML = '<strong>' + p.name + '</strong><br>'
+                + p.description + '<br>'
+                + '<span style="color:var(--text4)">Применение: ' + p.use_cases + '</span><br>'
+                + '<span style="color:var(--text4)">Типов сущностей: ' + p.entity_count + ' | Типов связей: ' + p.relation_count + '</span>'
+                + (p.is_active ? ' <span style="color:var(--emerald);font-weight:600">✓ Активна</span>' : '');
+        }
+
+        async function switchDomainPreset() {
+            var id = document.getElementById('domain-preset-select').value;
+            if (!id) return;
+            var status = document.getElementById('domain-preset-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Переключаю схему...</span>';
+            try {
+                var r = await fetch('/api/v1/kg/domain-schema', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({preset: id})
+                });
+                var d = await r.json();
+                if (r.ok && d.status === 'ok') {
+                    status.innerHTML = '<span style="color:#10b981">✅ ' + d.message + '</span>';
+                    loadDomainPresets(); // обновить активный
+                } else {
+                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                }
             } catch(e) {
                 status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
             }
