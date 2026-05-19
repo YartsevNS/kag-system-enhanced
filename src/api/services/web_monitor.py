@@ -470,6 +470,21 @@ class WebMonitorService:
                         if not any(u['url'] == url for u in new_urls):
                             new_urls.append({'url': url, 'title': title, 'source': source.name})
 
+                    # 3. Если нет вложений — сохраняем саму новость как текстовый документ
+                    #    (для новостных RSS типа ЦБ РФ, где нет PDF, но есть ценный текст)
+                    if not new_urls:
+                        link = entry.get('link', '')
+                        summary = entry.get('summary', entry.get('description', ''))
+                        # Сохраняем как текстовый документ: заголовок + описание + ссылка
+                        text_content = f"{title}\n\n{summary}\n\nИсточник: {link}"
+                        new_urls.append({
+                            'url': link or f"rss://{source.id}/{hash(title)}",
+                            'title': title,
+                            'source': source.name,
+                            'is_rss_text': True,  # Флаг: сохранить как текст, а не скачивать
+                            'text_content': text_content
+                        })
+
                 result.items = new_urls
 
                 # Загружаем найденные документы
@@ -745,6 +760,39 @@ class WebMonitorService:
                     # Пауза между файлами внутри партии (кроме первого)
                     if idx > 0:
                         await _asyncio.sleep(item_delay + _random.uniform(0, 1))
+
+                    # Если это RSS-текст (новость без вложений) — сохраняем напрямую
+                    if item.get('is_rss_text'):
+                        text_content = item.get('text_content', '')
+                        content = text_content.encode('utf-8')
+                        filename = (item.get('title', 'rss_entry')[:80] + '.txt').replace('/', '_')
+                        file_hash = hashlib.sha256(content).hexdigest()
+
+                        # Проверка дубликата
+                        try:
+                            from src.api.services.document_service import document_service
+                            existing = document_service._find_by_hash(file_hash)
+                            if existing:
+                                skip_count += 1
+                                continue
+                        except Exception:
+                            pass
+
+                        # Загружаем как текстовый документ
+                        try:
+                            record = await document_service.upload_document(
+                                filename=filename,
+                                file_content=content,
+                                file_type='text/plain'
+                            )
+                            from src.api.routes.upload import _process_document_async
+                            await _process_document_async(record.document_id)
+                            new_count += 1
+                            logger.info(f"📰 [{new_count}/{total}] RSS-новость: {filename[:50]}")
+                        except Exception as e:
+                            logger.warning(f"Ошибка сохранения RSS-новости {filename[:50]}: {e}")
+                            skip_count += 1
+                        continue  # Переходим к следующему элементу
 
                     async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                         # Обработка rate limiting
