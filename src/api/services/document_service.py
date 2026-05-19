@@ -2,19 +2,22 @@
 Document Service для KAG
 
 Отвечает за:
-- Загрузку документов
+- Загрузку документов (с хешированием SHA-256 для контроля дубликатов)
 - Парсинг и чанкинг
 - Векторизацию через Embeddings
 - Сохранение в Qdrant
 - Отслеживание статуса обработки
+- Версионность: хранение оригиналов и бэкапов при замене
+- Дедупликацию по хешу: одинаковый файл → предложение заменить
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime
-import uuid
-import os
-import shutil
 from pathlib import Path
+import uuid
+import time
+import hashlib  # SHA-256 для контроля дубликатов и версионности
+from dataclasses import dataclass, field
+from datetime import datetime
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -40,6 +43,11 @@ class DocumentRecord(BaseModel):
     recognized_title: Optional[str] = Field(default=None, description="Распознанное название")
     summary: Optional[str] = Field(default=None, description="Краткое описание")
     topics: Optional[List[str]] = Field(default=None, description="Ключевые темы")
+    # Контроль дубликатов и версионность
+    file_hash: Optional[str] = Field(default=None, description="SHA-256 хеш содержимого файла")
+    version: int = Field(default=1, description="Версия документа (1 = оригинал)")
+    previous_hash: Optional[str] = Field(default=None, description="Хеш предыдущей версии (если была замена)")
+    original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -161,51 +169,212 @@ class DocumentService:
         file_content: bytes,
         file_type: Optional[str] = None,
         uploaded_by: Optional[str] = None,
-        group_ids: Optional[List[str]] = None
+        group_ids: Optional[List[str]] = None,
+        force_new: bool = False  # True = всегда создавать новый документ, игнорируя дубликаты
     ) -> DocumentRecord:
         """
-        Загрузить документ.
+        Загрузить документ с контролем дубликатов и версионностью.
+
+        Логика:
+        1. Вычисляется SHA-256 хеш содержимого файла
+        2. Если хеш СОВПАДАЕТ с существующим документом → возвращается существующий (не дублируется)
+        3. Если force_new=True → старая копия бэкапится как .v{N}.bak, создаётся новая версия
+        4. Файл сохраняется как {doc_id}_{filename}
 
         Args:
             filename: Имя файла
-            file_content: Содержимое файла
+            file_content: Содержимое файла (байты)
             file_type: MIME тип (опционально)
             uploaded_by: ID пользователя, загрузившего документ
             group_ids: Список group_id для контроля доступа
+            force_new: Принудительно создать новый документ, даже если хеш совпадает
 
         Returns:
-            Запись о документе
+            Запись о документе (новая или существующая)
         """
+        # Этап 1: вычисляем SHA-256 хеш содержимого
+        file_hash = hashlib.sha256(file_content).hexdigest()
+
+        # Этап 2: проверяем — нет ли уже документа с таким же хешем?
+        if not force_new:
+            existing = self._find_by_hash(file_hash)
+            if existing:
+                logger.info(
+                    f"🔁 Дубликат обнаружен: {filename} (хеш {file_hash[:12]}...) "
+                    f"уже существует как {existing.document_id} (v{existing.version})"
+                )
+                return existing  # Возвращаем существующий — не создаём дубликат
+
+        # Этап 3: если force_new и есть документ с таким хешем — делаем бэкап
         doc_id = str(uuid.uuid4())
-        
-        # Определяем тип файла
+        version = 1
+        previous_hash = None
+        original_text = None
+
+        if force_new:
+            prev = self._find_by_hash(file_hash)
+            if prev:
+                # Бэкапим старый файл
+                prev_path = self._find_file(prev.document_id, prev.filename)
+                if prev_path:
+                    backup_path = prev_path.with_suffix(prev_path.suffix + f'.v{prev.version}.bak')
+                    try:
+                        import shutil
+                        shutil.copy2(prev_path, backup_path)
+                        logger.info(f"📦 Бэкап создан: {backup_path.name}")
+                    except Exception as e:
+                        logger.warning(f"Не удалось создать бэкап: {e}")
+
+                # Наследуем версию и текст оригинала
+                version = prev.version + 1
+                previous_hash = prev.file_hash
+                original_text = prev.original_text or self._load_original_text(prev.document_id)
+
+        # Этап 4: определяем тип файла
         if not file_type:
             ext = Path(filename).suffix.lower()
             file_type = ext
-        
-        # Сохраняем файл
+
+        # Этап 5: сохраняем файл на диск
         file_path = self._upload_dir / f"{doc_id}_{filename}"
         with open(file_path, 'wb') as f:
             f.write(file_content)
-        
-        # Создаём запись
+
+        # Этап 6: создаём запись о документе
         record = DocumentRecord(
             document_id=doc_id,
             filename=filename,
             file_type=file_type,
             file_size=len(file_content),
+            file_hash=file_hash,
+            version=version,
+            previous_hash=previous_hash,
+            original_text=original_text,
             status="pending",
             uploaded_by=uploaded_by,
             group_ids=group_ids or []
         )
-        
-        self._documents[doc_id] = record
-        logger.info(f"Документ загружен: {doc_id}, {filename}, groups={group_ids}")
 
-        # Сохраняем метаданные в БД
+        self._documents[doc_id] = record
+        logger.info(
+            f"📄 Документ загружен: {doc_id[:12]}... v{version} | "
+            f"хеш {file_hash[:12]}... | {filename}"
+        )
+
+        # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
         self._save_document_to_db(doc_id)
 
         return record
+
+    def _find_by_hash(self, file_hash: str) -> Optional[DocumentRecord]:
+        """Найти документ по SHA-256 хешу содержимого.
+        
+        Сначала ищем в оперативной памяти (быстро), затем в БД.
+        Используется для обнаружения дубликатов при загрузке.
+        """
+        # Поиск в памяти
+        for record in self._documents.values():
+            if record.file_hash == file_hash:
+                return record
+        # Поиск в БД (если документ не в кэше)
+        try:
+            from src.api.services.config_store import config_store
+            all_docs = config_store.get_all("documents") or {}
+            for did, data in all_docs.items():
+                if isinstance(data, dict) and data.get("file_hash") == file_hash:
+                    return DocumentRecord(
+                        document_id=did,
+                        filename=data.get("filename", "unknown"),
+                        file_hash=file_hash,
+                        version=int(data.get("version", 1)),
+                        status=data.get("status", "completed")
+                    )
+        except Exception:
+            pass
+        return None
+
+    def _load_original_text(self, document_id: str) -> Optional[str]:
+        """Загрузить извлечённый текст оригинала документа для сравнения версий.
+        
+        Собирает текст всех чанков документа из Qdrant.
+        """
+        try:
+            import asyncio
+            from src.indexing.embeddings_service import embeddings_service
+
+            async def _get():
+                if embeddings_service._qdrant_client is None:
+                    await embeddings_service.initialize()
+                chunks = await embeddings_service.get_document_chunks(document_id)
+                return "\n\n".join([c.get("content", "") for c in chunks])
+
+            # Запускаем асинхронно (если уже в event loop) или создаём новый
+            try:
+                loop = asyncio.get_running_loop()
+                # Уже в event loop — используем create_task
+                import concurrent.futures
+                future = asyncio.run_coroutine_threadsafe(_get(), loop)
+                return future.result(timeout=30)
+            except RuntimeError:
+                # Нет event loop — создаём
+                return asyncio.run(_get())
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить текст оригинала {document_id}: {e}")
+            return None
+
+    def compare_versions(self, document_id: str) -> Dict[str, Any]:
+        """Сравнить версии документа: текущую и предыдущую.
+        
+        Returns:
+            {
+                "current_hash": "...",
+                "previous_hash": "...", 
+                "version": N,
+                "original_text": "текст предыдущей версии",
+                "current_text": "текст текущей версии" (если уже обработан),
+                "has_changes": True/False,
+                "diff_summary": "краткое описание изменений"
+            }
+        """
+        record = self._documents.get(document_id)
+        if not record:
+            return {"error": "Документ не найден"}
+
+        result = {
+            "document_id": document_id,
+            "filename": record.filename,
+            "version": record.version,
+            "current_hash": record.file_hash,
+            "previous_hash": record.previous_hash,
+            "original_text": record.original_text,
+            "current_text": None,
+            "has_changes": False,
+            "diff_summary": ""
+        }
+
+        # Загружаем текущий текст
+        current_text = self._load_original_text(document_id)
+        if current_text:
+            result["current_text"] = current_text[:10000]  # первые 10К символов
+
+        # Сравниваем с оригиналом
+        if current_text and record.original_text:
+            result["has_changes"] = current_text != record.original_text
+            if result["has_changes"]:
+                # Простой diff: что добавилось/удалилось
+                orig_words = set(record.original_text.split())
+                curr_words = set(current_text.split())
+                added = curr_words - orig_words
+                removed = orig_words - curr_words
+                result["diff_summary"] = (
+                    f"Добавлено слов: {len(added)}, "
+                    f"Удалено слов: {len(removed)}, "
+                    f"Изменений: {abs(len(current_text) - len(record.original_text))} символов"
+                )
+            else:
+                result["diff_summary"] = "Текст не изменился"
+
+        return result
 
     async def process_document(self, document_id: str) -> Dict[str, Any]:
         """

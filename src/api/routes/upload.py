@@ -614,3 +614,98 @@ async def _process_document_async(document_id: str):
         logger.info(f"Документ обработан: {document_id}, результат: {result}")
     except Exception as e:
         logger.error(f"Ошибка обработки документа {document_id}: {e}")
+
+
+# ============================================================
+# Версионность и контроль дубликатов
+# ============================================================
+
+@router.get("/{document_id}/versions", summary="История версий документа")
+async def get_document_versions(document_id: str):
+    """
+    Получить информацию о версиях документа.
+    
+    Возвращает текущую версию, хеш, хеш предыдущей версии,
+    и флаг has_previous указывающий, есть ли с чем сравнивать.
+    """
+    try:
+        from src.api.services.document_service import document_service
+        from src.api.services.config_store import config_store
+
+        # Получаем из кэша или БД
+        record = document_service._documents.get(document_id)
+        if not record:
+            meta = config_store.get("documents", document_id)
+            if not meta:
+                raise HTTPException(status_code=404, detail="Документ не найден")
+            return {
+                "document_id": document_id,
+                "version": int(meta.get("version", 1)),
+                "file_hash": meta.get("file_hash", ""),
+                "previous_hash": meta.get("previous_hash", ""),
+                "has_previous": bool(meta.get("previous_hash")),
+                "has_original_text": bool(meta.get("original_text")),
+            }
+
+        return {
+            "document_id": document_id,
+            "version": record.version,
+            "file_hash": record.file_hash,
+            "previous_hash": record.previous_hash,
+            "has_previous": bool(record.previous_hash),
+            "has_original_text": bool(record.original_text),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/{document_id}/diff", summary="Сравнение версий документа")
+async def diff_document_versions(document_id: str):
+    """
+    Сравнить текущую версию документа с предыдущей.
+    
+    Возвращает diff: что изменилось в тексте между версиями.
+    Полезно при повторной загрузке обновлённого документа.
+    """
+    try:
+        from src.api.services.document_service import document_service
+        result = document_service.compare_versions(document_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/check-duplicate", summary="Проверить файл на дубликат")
+async def check_duplicate(hash: str = ""):
+    """
+    Проверить, существует ли уже документ с таким SHA-256 хешем.
+    
+    Используется на фронтенде перед загрузкой: если хеш совпадает,
+    показываем предупреждение «Этот документ уже загружен».
+    
+    Args:
+        hash: SHA-256 хеш файла (64 символа hex)
+    """
+    if not hash or len(hash) != 64:
+        return {"duplicate": False, "message": "Невалидный хеш"}
+    try:
+        from src.api.services.document_service import document_service
+        existing = document_service._find_by_hash(hash)
+        if existing:
+            return {
+                "duplicate": True,
+                "document_id": existing.document_id,
+                "filename": existing.filename,
+                "version": existing.version,
+                "status": existing.status,
+                "message": f"Документ уже загружен: {existing.filename} (v{existing.version})"
+            }
+        return {"duplicate": False, "message": "Документ не найден — можно загружать"}
+    except Exception as e:
+        return {"duplicate": False, "error": str(e)}
