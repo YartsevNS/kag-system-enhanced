@@ -176,3 +176,66 @@ async def rebuild_graph(
     except Exception as e:
         logger.error(f"Rebuild graph error: {e}")
         return {"status": "error", "message": str(e)}
+
+
+# ============================================================
+# Пост-обработка и валидация (Neo4j Best Practices)
+# ============================================================
+
+@router.post("/post-process", summary="Пост-обработка графа")
+async def post_process_graph(document_id: Optional[str] = None):
+    """
+    Запустить пост-обработку графа: dedup, entity linking.
+    
+    Опционально: только для одного документа.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        result = kg_service.post_process_entities(document_id)
+        # Также простой dedup для Community Edition
+        dedup_count = kg_service.deduplicate_entities_by_name()
+        result["dedup_count"] = dedup_count
+        return {"status": "ok", **result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/validate/{document_id}", summary="Валидация сущностей документа")
+async def validate_document_entities(document_id: str):
+    """Проверить качество извлечённых сущностей."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        result = kg_service.validate_entities(document_id)
+        return result
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+
+@router.get("/domain-schema", summary="Доменная схема сущностей")
+async def get_domain_schema():
+    """Получить текущую доменную схему."""
+    try:
+        from src.indexing.entity_extractor import entity_extractor
+        return {"schema": entity_extractor._domain_config}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/domain-schema", summary="Обновить доменную схему")
+async def update_domain_schema(data: dict):
+    """
+    Обновить доменную схему сущностей.
+    
+    Body: {"core": {...}, "relations": {...}, "extended": {...}}
+    """
+    try:
+        from src.indexing.entity_extractor import entity_extractor
+        from src.indexing.knowledge_graph import kg_service
+        entity_extractor.set_domain_schema(data)
+        kg_service.set_domain_schema(data.get("core", {}))
+        # Сохраняем в config_store
+        from src.api.services.config_store import config_store
+        config_store.set("kg_config", "domain_schema", data)
+        return {"status": "ok", "message": "Доменная схема обновлена"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -1,13 +1,12 @@
 """
-Entity Extractor — извлечение сущностей и фактов из чанков через LLM.
+Entity Extractor v2.0 — извлечение сущностей через LLM (Neo4j Best Practices).
 
-После чанкинга каждый чанк анализируется для извлечения:
-- Сущностей (люди, организации, даты, суммы, места, термины)
-- Связей между сущностями
-- Фактов (ключевые утверждения)
-
-Результаты сохраняются в Knowledge Graph (Neo4j) и config_store.
-Работает асинхронно в фоне, не блокирует обработку.
+Ключевые улучшения:
+1. Двухпроходное извлечение: быстрый проход (ключевые сущности) + глубокий (связи)
+2. Доменная схема: настраиваемые типы сущностей под предметную область
+3. Не перегруженные промпты: один проход = одна группа типов сущностей
+4. Валидация результатов: проверка качества перед сохранением
+5. Контекст-менеджмент: правильный размер чанка для LLM
 """
 
 from typing import Dict, Any, List, Optional
@@ -15,25 +14,54 @@ from loguru import logger
 import json
 import re
 
-from src.api.services.config_store import config_store
-
 
 class EntityExtractor:
-    """Извлекает сущности и факты из чанков через LLM."""
+    """Извлекает сущности и факты из чанков через LLM.
+    
+    Реализует итеративную стратегию Neo4j:
+    - Pass 1: Извлечение КЛЮЧЕВЫХ сущностей (имена, названия, даты, суммы)
+    - Pass 2: Извлечение СВЯЗЕЙ между сущностями
+    - Опциональный Pass 3: Извлечение ДОПОЛНИТЕЛЬНЫХ типов сущностей
+    
+    Каждый проход использует ОТДЕЛЬНЫЙ промпт — не перегружаем LLM.
+    """
+
+    # Доменная схема: группы типов для итеративного извлечения
+    DOMAIN_SCHEMA = {
+        # Pass 1: Ключевые сущности — извлекаются ВСЕГДА
+        "core": {
+            "person": "Человек (ФИО, должность)",
+            "organization": "Организация (компания, банк, госорган)",
+            "date": "Дата (любого формата)",
+            "money": "Денежная сумма с валютой",
+        },
+        # Pass 2: Связи между сущностями
+        "relations": {
+            "SIGNED_BY": "Документ подписан человеком",
+            "BELONGS_TO": "Объект принадлежит организации/человеку",
+            "DATED": "Событие датировано",
+            "AMOUNT": "Сумма относится к операции",
+            "LOCATED_AT": "Организация/человек находится по адресу",
+        },
+        # Pass 3: Дополнительные типы (опционально, если заданы)
+        "extended": {
+            "location": "Адрес, местонахождение",
+            "document_ref": "Ссылка на документ (номер, серия)",
+            "legal_term": "Юридический термин или статья",
+        }
+    }
 
     def __init__(self):
-        self._model = "phi4-mini"
         self._llm_url = "http://192.168.50.41:11434"
+        self._model = "phi4-mini"
+        self._domain_config = dict(self.DOMAIN_SCHEMA)  # Копия, можно менять
 
-    def _get_config(self):
-        try:
-            from src.api.routes.admin_models import _ext_llm_config
-            return _ext_llm_config
-        except Exception:
-            return None
+    # ============================================================
+    # Конфигурация
+    # ============================================================
 
     def _get_graph_config(self):
-        """Get graph model config: first try config_store (persistent), then in-memory."""
+        """Получить конфигурацию модели графа из админки/config_store."""
         try:
             from src.api.services.config_store import config_store
             saved = config_store.get("graph_model", "default")
@@ -47,189 +75,386 @@ class EntityExtractor:
         except Exception:
             return None
 
+    def set_domain_schema(self, schema: Dict):
+        """Установить пользовательскую доменную схему."""
+        self._domain_config = dict(schema)
+
+    # ============================================================
+    # Основной метод: двухпроходное извлечение
+    # ============================================================
+
     async def extract_from_chunk(
-        self, 
-        chunk_text: str, 
+        self,
+        chunk_text: str,
         chunk_id: str,
         document_id: str,
         filename: str = ""
     ) -> Dict[str, Any]:
-        """Извлечь сущности из одного чанка."""
+        """Извлечь сущности из чанка — итеративно, по группам типов.
+        
+        Pass 1 — Core entities: всегда извлекаем ключевые типы.
+        Pass 2 — Relations: связи между найденными сущностями.
+        Pass 3 — Extended: дополнительные типы (если есть в схеме).
+        
+        Returns:
+            {"entities": [...], "relations": [...], "facts": [...], "warnings": [...]}
+        """
         if not chunk_text or len(chunk_text.strip()) < 20:
+            return {"entities": [], "relations": [], "facts": [], "warnings": ["Chunk too short"]}
+
+        cfg = self._get_graph_config()
+        model = cfg.get("model", self._model) if cfg else self._model
+        llm_url = cfg.get("url", self._llm_url) if cfg else self._llm_url
+
+        all_entities = []
+        all_relations = []
+        all_facts = []
+        warnings = []
+
+        # --- Pass 1: Core entities ---
+        core_result = await self._extract_core_entities(
+            chunk_text, chunk_id, document_id, filename, model, llm_url
+        )
+        all_entities.extend(core_result.get("entities", []))
+        all_facts.extend(core_result.get("facts", []))
+        if core_result.get("warnings"):
+            warnings.extend(core_result["warnings"])
+
+        # --- Pass 2: Relations (только если есть сущности) ---
+        if all_entities:
+            rel_result = await self._extract_relations(
+                chunk_text, all_entities, document_id, model, llm_url
+            )
+            all_relations.extend(rel_result.get("relations", []))
+            if rel_result.get("warnings"):
+                warnings.extend(rel_result["warnings"])
+
+        # --- Pass 3: Extended entities (опционально) ---
+        extended_types = self._domain_config.get("extended", {})
+        if extended_types:
+            ext_result = await self._extract_extended_entities(
+                chunk_text, extended_types, document_id, model, llm_url
+            )
+            all_entities.extend(ext_result.get("entities", []))
+            if ext_result.get("warnings"):
+                warnings.extend(ext_result["warnings"])
+
+        # Валидация
+        validation_warnings = self._validate_extraction(all_entities, all_relations)
+        warnings.extend(validation_warnings)
+
+        return {
+            "entities": all_entities,
+            "relations": all_relations,
+            "facts": all_facts,
+            "warnings": warnings
+        }
+
+    # ============================================================
+    # Pass 1: Ключевые сущности
+    # ============================================================
+
+    async def _extract_core_entities(
+        self, text: str, chunk_id: str, doc_id: str, filename: str,
+        model: str, llm_url: str
+    ) -> Dict[str, Any]:
+        """Извлечение ключевых сущностей — лёгкий промпт, быстрый ответ.
+        
+        Neo4j Best Practice: не перегружаем промпт всеми типами сразу.
+        Только person, organization, date, money.
+        """
+        core_types = self._domain_config.get("core", {})
+        if not core_types:
             return {"entities": [], "relations": [], "facts": []}
 
-        graph_cfg = self._get_graph_config()
-        if graph_cfg and graph_cfg.get('model'):
-            model = graph_cfg['model']
-            # Use URL from graph config, fallback to default Ollama
-            llm_url = graph_cfg.get('url') or self._llm_url
-        else:
-            cfg = self._get_config()
-            llm_url = cfg.url if cfg else self._llm_url
-            model = cfg.model if cfg else self._model
+        type_desc = "\n".join([f"  - {t}: {d}" for t, d in core_types.items()])
+        sample = text[:1500]  # Берём первые 1500 символов для контекста
 
-        prompt = self._build_extraction_prompt(chunk_text, filename)
+        prompt = f"""Извлеки КЛЮЧЕВЫЕ сущности из текста. Верни ТОЛЬКО JSON.
 
-        try:
-            import aiohttp
-            # Build request payload based on provider
-            provider = (graph_cfg or {}).get('provider', 'ollama')
-            api_key = (graph_cfg or {}).get('api_key', '')
-            
-            if provider == 'ollama':
-                req_url = f"{llm_url}/api/generate"
-                req_json = {
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.05, "max_tokens": 500}
-                }
-                req_headers = {}
-            else:
-                # OpenAI-compatible API (OpenAI, DeepSeek, OpenRouter)
-                req_url = f"{llm_url}/v1/chat/completions"
-                req_json = {
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.05,
-                    "max_tokens": 500
-                }
-                req_headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    req_url,
-                    json=req_json,
-                    headers=req_headers,
-                    timeout=aiohttp.ClientTimeout(total=180)
-                ) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"LLM вернул {resp.status} для {chunk_id} (модель {model}, provider {provider})")
-                        return {"entities": [], "relations": [], "facts": []}
-                    data = await resp.json()
-                    # Parse response based on provider
-                    if provider == 'ollama':
-                        response_text = data.get("response", "")
-                    else:
-                        response_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                    result = self._parse_response(response_text)
-                    if not result.get("entities") and not result.get("relations"):
-                        logger.warning(f"Не удалось извлечь сущности из {chunk_id}: модель {model} ({provider}), ответ: {response_text[:200]}")
-                    return result
-        except Exception as e:
-            logger.warning(f"Ошибка извлечения сущностей из {chunk_id}: {type(e).__name__}: {e}")
-            return {"entities": [], "relations": [], "facts": []}
+Типы сущностей:
+{type_desc}
 
-    def _build_extraction_prompt(self, text: str, filename: str) -> str:
-        sample = text[:1500]
-        return f"""Извлеки из текста сущности и факты. Верни ТОЛЬКО валидный JSON (без markdown).
-
-Документ: {filename}
-
-Текст:
+Текст (первые 1500 символов):
 ---
 {sample}
 ---
 
-Формат ответа (строго JSON):
-{{
-  "entities": [
-    {{"name": "имя или название", "type": "тип", "properties": {{"ключ": "значение"}}}}
-  ],
-  "relations": [
-    {{"source": "сущность1", "target": "сущность2", "type": "тип связи"}}
-  ],
-  "facts": ["факт 1", "факт 2"]
-}}
+Верни СТРОГО такой JSON без markdown:
+{{"entities":[{{"name":"точное имя","type":"тип","confidence":0.0-1.0}}],"facts":["краткий факт"]}}
 
-Типы сущностей (entity.type): person, organization, date, money, location, document_ref, legal_term, amount, phone, email
-Типы связей (relation.type): SIGNED_BY, DATED, AMOUNT, BELONGS_TO, MENTIONS, RELATED_TO, WORKS_AT, LOCATED_IN
+Правила:
+- name: точное значение из текста (не придумывай)
+- type: только из списка выше
+- confidence: 0.9 если явно указано, 0.7 если косвенно, 0.5 если предположительно
+- facts: 1-3 ключевых утверждения из текста
+- Если сущностей нет — верни {{"entities":[],"facts":[]}}"""
 
-Пиши на русском. Не выдумывай — только то, что явно есть в тексте."""
+        return await self._call_llm(prompt, model, llm_url, chunk_id, "core")
+
+    # ============================================================
+    # Pass 2: Связи между сущностями
+    # ============================================================
+
+    async def _extract_relations(
+        self, text: str, existing_entities: List[Dict], doc_id: str,
+        model: str, llm_url: str
+    ) -> Dict[str, Any]:
+        """Извлечение связей между уже найденными сущностями.
+        
+        Neo4j Best Practice: связи извлекаются ОТДЕЛЬНО от сущностей.
+        LLM получает список уже найденных сущностей и ищет связи между ними.
+        """
+        if not existing_entities:
+            return {"relations": [], "warnings": []}
+
+        entity_names = list(set(e["name"] for e in existing_entities))[:30]
+        rel_types = self._domain_config.get("relations", {})
+        rel_desc = "\n".join([f"  - {t}: {d}" for t, d in rel_types.items()])
+
+        prompt = f"""Найди СВЯЗИ между сущностями в тексте. Верни ТОЛЬКО JSON.
+
+Типы связей:
+{rel_desc}
+
+Уже найденные сущности:
+{json.dumps(entity_names, ensure_ascii=False)}
+
+Текст:
+---
+{text[:1000]}
+---
+
+Верни СТРОГО такой JSON без markdown:
+{{"relations":[{{"source":"сущность1","target":"сущность2","type":"тип связи"}}]}}
+
+Правила:
+- source и target ДОЛЖНЫ быть из списка найденных сущностей
+- type только из списка типов связей
+- Если связей нет — верни {{"relations":[]}}"""
+
+        result = await self._call_llm(prompt, model, llm_url, "relations", "relations")
+        return result
+
+    # ============================================================
+    # Pass 3: Расширенные сущности (опционально)
+    # ============================================================
+
+    async def _extract_extended_entities(
+        self, text: str, extended_types: Dict, doc_id: str,
+        model: str, llm_url: str
+    ) -> Dict[str, Any]:
+        """Извлечение дополнительных типов сущностей."""
+        type_desc = "\n".join([f"  - {t}: {d}" for t, d in extended_types.items()])
+
+        prompt = f"""Найди ДОПОЛНИТЕЛЬНЫЕ сущности в тексте. Верни ТОЛЬКО JSON.
+
+Типы:
+{type_desc}
+
+Текст:
+---
+{text[:1200]}
+---
+
+Верни СТРОГО: {{"entities":[{{"name":"...","type":"...","confidence":0.0-1.0}}]}}
+Если нет — {{"entities":[]}}"""
+
+        return await self._call_llm(prompt, model, llm_url, "extended", "extended")
+
+    # ============================================================
+    # LLM вызов
+    # ============================================================
+
+    async def _call_llm(
+        self, prompt: str, model: str, llm_url: str,
+        chunk_id: str = "", pass_name: str = ""
+    ) -> Dict[str, Any]:
+        """Вызвать LLM и распарсить JSON-ответ."""
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{llm_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.05, "max_tokens": 400}
+                    },
+                    timeout=aiohttp.ClientTimeout(total=180)
+                ) as resp:
+                    if resp.status != 200:
+                        warning = f"LLM вернул {resp.status} (pass={pass_name})"
+                        logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
+                        return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+
+                    data = await resp.json()
+                    response = data.get("response", "")
+                    result = self._parse_response(response)
+                    
+                    if not result.get("entities") and not result.get("relations") and not result.get("facts"):
+                        logger.debug(f"Пустой ответ LLM для {chunk_id} (pass={pass_name}): {response[:120]}")
+                    
+                    return result
+
+        except Exception as e:
+            warning = f"{type(e).__name__}: {e}"
+            logger.warning(f"Ошибка извлечения ({pass_name}) из {chunk_id}: {warning}")
+            return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+
+    # ============================================================
+    # Парсинг ответа LLM
+    # ============================================================
 
     def _parse_response(self, response: str) -> Dict[str, Any]:
+        """Распарсить JSON из ответа LLM.
+        
+        Устойчив к markdown-обёртке, лишним символам.
+        """
+        import json as _json
+        
         text = response.strip()
+        # Убираем markdown-код
         if text.startswith("```"):
             lines = text.split("\n")
             text = "\n".join(lines[1:]) if len(lines) > 1 else text
         if text.endswith("```"):
             text = text[:-3].strip()
+
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            match = re.search(r'\{[\s\S]*\}', text)
+            data = _json.loads(text)
+        except (_json.JSONDecodeError, ValueError):
+            # Ищем JSON в тексте
+            match = re.search(r'\{[^{}]*\}', text)
             if match:
                 try:
-                    return json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
-        return {"entities": [], "relations": [], "facts": []}
+                    data = _json.loads(match.group())
+                except (_json.JSONDecodeError, ValueError):
+                    return {}
+            else:
+                return {}
+
+        result = {}
+        if "entities" in data:
+            result["entities"] = [
+                {
+                    "name": str(e.get("name", ""))[:200],
+                    "type": str(e.get("type", "unknown")),
+                    "confidence": min(1.0, max(0.0, float(e.get("confidence", 0.7))))
+                }
+                for e in data["entities"]
+                if e.get("name") and len(str(e["name"]).strip()) > 1
+            ]
+        if "relations" in data:
+            result["relations"] = [
+                {
+                    "source": str(r.get("source", "")),
+                    "target": str(r.get("target", "")),
+                    "type": str(r.get("type", "RELATED_TO"))
+                }
+                for r in data["relations"]
+                if r.get("source") and r.get("target")
+            ]
+        if "facts" in data:
+            result["facts"] = [str(f)[:300] for f in data["facts"] if f]
+
+        return result
+
+    # ============================================================
+    # Валидация
+    # ============================================================
+
+    def _validate_extraction(
+        self, entities: List[Dict], relations: List[Dict]
+    ) -> List[str]:
+        """Проверить качество извлечённых данных перед сохранением.
+        
+        Neo4j Best Practice: валидация на этапе extraction,
+        а не post-hoc исправление ошибок в графе.
+        """
+        warnings = []
+        valid_types = set()
+        for group in self._domain_config.values():
+            valid_types.update(group.keys())
+
+        for e in entities:
+            name = e.get("name", "")
+            etype = e.get("type", "")
+            # Слишком короткое имя — вероятно, мусор
+            if len(name.strip()) < 2:
+                warnings.append(f"Слишком короткое имя сущности: '{name}'")
+            # Неизвестный тип
+            if valid_types and etype not in valid_types and etype != "unknown":
+                warnings.append(f"Неизвестный тип сущности: '{etype}' для '{name}'")
+
+        return warnings
+
+    # ============================================================
+    # Сохранение в граф
+    # ============================================================
 
     async def extract_and_store(
-        self,
-        document_id: str,
-        chunk_id: str,
-        chunk_text: str,
-        chunk_seq: int = 0,
-        filename: str = ""
+        self, document_id: str, chunk_id: str, chunk_text: str,
+        chunk_seq: int = 0, filename: str = ""
     ):
-        """Извлечь и сохранить в граф знаний."""
+        """Извлечь сущности из чанка и сохранить в Knowledge Graph.
+        
+        Полный пайплайн:
+        1. Извлечение (итеративное, pass 1-3)
+        2. Валидация
+        3. Сохранение в Neo4j (Domain Graph)
+        4. Сохранение в config_store (для UI)
+        """
         try:
+            from src.indexing.knowledge_graph import kg_service, Entity, Relation
+
             result = await self.extract_from_chunk(chunk_text, chunk_id, document_id, filename)
 
-            if not result.get("entities") and not result.get("relations"):
+            entities = result.get("entities", [])
+            relations = result.get("relations", [])
+
+            if not entities:
                 return
 
-            from src.indexing.knowledge_graph import kg_service
-
-            # Сохраняем сущности
-            for ent in result.get("entities", []):
-                if not ent.get("name"):
-                    continue
-                try:
-                    from src.indexing.knowledge_graph import Entity
-                    entity = Entity(
-                        name=str(ent["name"])[:200],
-                        type=str(ent.get("type", "unknown"))[:50],
-                        chunk_id=chunk_id,
-                        document_id=document_id,
-                        confidence=0.8,
-                        properties=ent.get("properties", {})
-                    )
-                    kg_service.create_entity(entity)
-                except Exception as e:
-                    logger.debug(f"Ошибка сохранения сущности {ent.get('name')}: {e}")
+            # Сохраняем сущности в Domain Graph
+            for e in entities:
+                entity = Entity(
+                    name=e["name"],
+                    type=e["type"],
+                    chunk_id=chunk_id,
+                    document_id=document_id,
+                    confidence=e["confidence"],
+                    properties=e.get("properties", {})
+                )
+                kg_service.create_entity(entity)
 
             # Сохраняем связи
-            for rel in result.get("relations", []):
-                if not rel.get("source") or not rel.get("target"):
-                    continue
-                try:
-                    from src.indexing.knowledge_graph import Relation
-                    relation = Relation(
-                        source=str(rel["source"])[:200],
-                        target=str(rel["target"])[:200],
-                        type=str(rel.get("type", "RELATED_TO"))[:50],
-                        document_id=document_id
-                    )
-                    kg_service.create_relation(relation)
-                except Exception as e:
-                    logger.debug(f"Ошибка сохранения связи: {e}")
+            for r in relations:
+                rel = Relation(
+                    source=r["source"],
+                    target=r["target"],
+                    type=r["type"],
+                    document_id=document_id
+                )
+                kg_service.create_relation(rel)
 
-            # Сохраняем факты в config_store
-            facts = result.get("facts", [])
-            if facts:
-                doc_data = config_store.get("documents", document_id)
-                if doc_data:
-                    existing_facts = doc_data.get("extracted_facts", [])
-                    existing_facts.extend(facts)
-                    doc_data["extracted_facts"] = existing_facts[:50]  # макс 50 фактов
-                    config_store.set("documents", document_id, doc_data)
+            # Сохраняем в config_store для быстрого доступа из UI
+            from src.api.services.config_store import config_store
+            key = f"entities_{document_id}"
+            existing = config_store.get("entity_cache", key) or {"entities": [], "relations": []}
+            existing["entities"].extend(entities)
+            existing["relations"].extend(relations)
+            config_store.set("entity_cache", key, existing)
 
-            logger.debug(f"Извлечено из {chunk_id}: {len(result.get('entities',[]))} сущностей, {len(facts)} фактов")
+            logger.debug(
+                f"Извлечено из {chunk_id}: {len(entities)} сущностей, "
+                f"{len(relations)} связей"
+                + (f", предупреждений: {len(result.get('warnings',[]))}" if result.get("warnings") else "")
+            )
 
         except Exception as e:
-            logger.warning(f"Ошибка extract_and_store для {chunk_id}: {e}")
+            logger.error(f"Ошибка extract_and_store для {chunk_id}: {e}")
 
 
 # Глобальный экземпляр
