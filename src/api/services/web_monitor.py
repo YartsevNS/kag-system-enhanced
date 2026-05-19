@@ -75,7 +75,7 @@ class MonitorSource:
     check_interval_minutes: int = 360  # 6 часов по умолчанию
     keywords: List[str] = field(default_factory=list)  # фильтр по словам
     file_types: List[str] = field(default_factory=lambda: [".pdf", ".docx"])  # какие файлы скачивать
-    css_selector: str = "a[href$='.pdf'], a[href$='.docx']"  # CSS для поиска ссылок
+    css_selector: str = "a[href*='file/load'], a[href*='download'], a[href$='.pdf'], a[href$='.docx'], a[href$='.xlsx']"  # CSS для поиска ссылок
     last_check: Optional[datetime] = None
     last_etag: Optional[str] = None
     last_modified: Optional[str] = None
@@ -158,6 +158,14 @@ class WebMonitorService:
             "css_selector": "a[href$='.pdf'], a[href$='.docx'], a[href$='.doc']",
             "keywords": ["приказ", "требования", "сертификация", "СКЗИ"],
             "description": "Нормативные правовые акты ФСБ по криптографии и сертификации СКЗИ"
+        },
+        {
+            "name": "ГОСТ Р — Информационная безопасность",
+            "url": "https://www.gost.ru/portal/gost/home/standarts/InformationSecurity",
+            "type": "scrape",
+            "css_selector": "a[href*='file/load']",
+            "keywords": ["безопасность", "криптографическая", "защита", "информация", "стандарт", "ГОСТ"],
+            "description": "Действующие стандарты ГОСТ Р по информационной безопасности: криптография, защита информации, ЭЦП"
         },
     ]
 
@@ -568,10 +576,39 @@ class WebMonitorService:
     # ============================================================
 
     def _is_document_url(self, url: str, file_types: List[str]) -> bool:
-        """Проверить, ведёт ли URL на документ нужного типа."""
+        """Проверить, ведёт ли URL на документ нужного типа.
+        
+        Проверяет:
+        1. Расширение файла (.pdf, .docx, ...)
+        2. Паттерны file-service (rst.gov.ru/file-service/file/load/...)
+        3. Паттерны download (скачивание без расширения в URL)
+        """
         parsed = urlparse(url)
         path = parsed.path.lower()
-        return any(path.endswith(ext) for ext in file_types)
+        
+        # Проверка 1: расширение файла
+        if any(path.endswith(ext) for ext in file_types):
+            return True
+        
+        # Проверка 2: file-service паттерны (ГОСТ, ведомственные порталы)
+        file_service_patterns = [
+            '/file-service/file/load/',   # rst.gov.ru — ГОСТы
+            '/file/load/',                 # общий
+            '/files/download/',            # скачивание
+            '/download/file/',             # ещё вариант
+            '/api/files/',                 # API файлов
+        ]
+        if any(pattern in path for pattern in file_service_patterns):
+            return True
+        
+        # Проверка 3: query-параметры указывают на файл
+        query = parsed.query.lower()
+        if any(ext in query for ext in file_types):
+            return True
+        if any(kw in query for kw in ['download', 'file=', 'getfile', 'attachment']):
+            return True
+        
+        return False
 
     def _extract_document_links(self, html_text: str, file_types: List[str]) -> List[str]:
         """Извлечь ссылки на документы из HTML-текста."""
@@ -613,6 +650,34 @@ class WebMonitorService:
                         continue
 
                     content = await resp.read()
+                    
+                    # Определяем тип файла по Content-Type (важно для file-service URL без расширения)
+                    content_type = resp.headers.get('Content-Type', '')
+                    content_disposition = resp.headers.get('Content-Disposition', '')
+                    
+                    # Извлекаем имя файла из Content-Disposition если есть
+                    import re as _re
+                    cd_match = _re.search(r'filename[^;=\n]*=[\"\']?([^\"\';\n]*)', content_disposition, _re.IGNORECASE)
+                    if cd_match:
+                        filename = cd_match.group(1).strip() or filename
+                    
+                    # Если тип файла не определён по расширению — берём из Content-Type
+                    if not any(filename.lower().endswith(ext) for ext in source.file_types):
+                        mime_to_ext = {
+                            'application/pdf': '.pdf',
+                            'application/msword': '.doc',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                            'application/vnd.ms-excel': '.xls',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+                            'text/plain': '.txt',
+                            'text/csv': '.csv',
+                            'text/html': '.html',
+                        }
+                        for mime, ext in mime_to_ext.items():
+                            if mime in content_type:
+                                filename = filename.rsplit('.', 1)[0] + ext
+                                break
+                    
                     if len(content) < 100:  # Слишком маленький файл — не документ
                         skip_count += 1
                         continue
