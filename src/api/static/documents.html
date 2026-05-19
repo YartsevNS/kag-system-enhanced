@@ -149,6 +149,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="report">Отчёт</option><option value="letter">Письмо</option>
       <option value="form">Форма</option><option value="identity">Удостоверение</option>
       <option value="legal">Юридический</option><option value="medical">Медицинский</option>
+      <option value="financial">Финансовый</option><option value="technical">Технический</option>
+      <option value="unknown">Неизвестно</option>
     </select>
     <select id="status-filter" onchange="applyFilters()">
       <option value="">Все статусы</option>
@@ -157,6 +159,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
+    <select id="count-filter" onchange="applyFilters()" title="Количество на странице">
+      <option value="20">20 шт</option>
+      <option value="50" selected>50 шт</option>
+      <option value="100">100 шт</option>
+      <option value="200">200 шт</option>
+      <option value="500">500 шт</option>
+      <option value="0">Все</option>
+    </select>
+    <span id="filter-info" style="font-size:11px;color:var(--text4)"></span>
     <button class="btn-outline" id="btn-table" onclick="setView('table')">📋 Таблица</button>
     <button class="btn-outline active" id="btn-cards" onclick="setView('cards')">🖼️ Карточки</button>
     <button class="btn" onclick="loadAll()">🔄 Обновить</button>
@@ -317,8 +328,15 @@ function getFiltered() {
 
 function renderAll() {
   const docs = getFiltered();
-  renderCards(docs);
-  renderTable(docs);
+  const total = docs.length;
+  // Лимит по количеству (0 = все)
+  const limit = parseInt(document.getElementById('count-filter')?.value || '50');
+  const shown = limit > 0 ? docs.slice(0, limit) : docs;
+  // Счётчик: показано N из M
+  const info = document.getElementById('filter-info');
+  if (info) info.textContent = limit > 0 && total > limit ? 'Показано ' + shown.length + ' из ' + total : 'Всего: ' + total;
+  renderCards(shown);
+  renderTable(shown);
 }
 
 function renderCards(docs) {
