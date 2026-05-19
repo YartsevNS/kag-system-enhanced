@@ -72,7 +72,7 @@ class DocumentAnalyzer:
                         "stream": False,
                         "options": {"temperature": 0.1, "max_tokens": 300}
                     },
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    timeout=aiohttp.ClientTimeout(total=120)
                 ) as resp:
                     if resp.status != 200:
                         logger.warning(f"LLM недоступен для анализа: {resp.status}")
@@ -81,10 +81,13 @@ class DocumentAnalyzer:
                     data = await resp.json()
                     response = data.get("response", "")
                     
-                    return self._parse_response(response, filename)
+                    result = self._parse_response(response, filename)
+                    if not result:
+                        logger.warning(f"Анализ {document_id}: LLM вернул невалидный JSON, ответ: {response[:200]}")
+                    return result
                     
         except Exception as e:
-            logger.warning(f"Ошибка анализа документа {document_id}: {e}")
+            logger.warning(f"Ошибка анализа документа {document_id}: {type(e).__name__}: {e}")
             return {}
 
     def _build_prompt(self, text: str, filename: str) -> str:
