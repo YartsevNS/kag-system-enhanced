@@ -92,6 +92,7 @@ async def add_source(data: dict = Body(...)):
             batch_size=data.get("batch_size", 5),
             batch_delay=float(data.get("batch_delay", 15.0)),
             item_delay=float(data.get("item_delay", 2.0)),
+            batch_jitter=float(data.get("batch_jitter", 5.0)),
         )
 
         if not source.url:

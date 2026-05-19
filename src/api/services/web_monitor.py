@@ -86,6 +86,7 @@ class MonitorSource:
     batch_size: int = 5       # Файлов в одной партии
     batch_delay: float = 15.0  # Секунд между партиями
     item_delay: float = 2.0    # Секунд между файлами внутри партии
+    batch_jitter: float = 5.0  # Случайная добавка к паузе (0..N секунд)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -417,7 +418,8 @@ class WebMonitorService:
                         session, new_urls, source,
                         batch_size=source.batch_size,
                         batch_delay=source.batch_delay,
-                        item_delay=source.item_delay
+                        item_delay=source.item_delay,
+                        batch_jitter=source.batch_jitter
                     )
 
                 result.status = "ok"
@@ -509,7 +511,8 @@ class WebMonitorService:
                         session, new_urls, source,
                         batch_size=source.batch_size,
                         batch_delay=source.batch_delay,
-                        item_delay=source.item_delay
+                        item_delay=source.item_delay,
+                        batch_jitter=source.batch_jitter
                     )
 
                 result.status = "ok"
@@ -634,7 +637,8 @@ class WebMonitorService:
         self, session, items: List[Dict], source: MonitorSource,
         batch_size: int = 5,       # Сколько файлов за раз
         batch_delay: float = 15.0,  # Пауза между партиями (сек)
-        item_delay: float = 2.0     # Пауза между файлами внутри партии (сек)
+        item_delay: float = 2.0,    # Пауза между файлами внутри партии (сек)
+        batch_jitter: float = 5.0   # Случайная добавка к паузе (0..N сек)
     ) -> tuple:
         """Скачать найденные документы партиями и загрузить в KAG Pipeline.
         
@@ -777,7 +781,7 @@ class WebMonitorService:
 
             # Пауза между партиями (кроме последней)
             if batch_num < batches - 1:
-                delay = batch_delay + _random.uniform(0, 5)
+                delay = batch_delay + _random.uniform(0, batch_jitter)
                 logger.info(f"⏸ Пауза {delay:.0f}с перед следующей партией...")
                 await _asyncio.sleep(delay)
 

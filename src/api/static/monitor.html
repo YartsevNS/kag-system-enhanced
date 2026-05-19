@@ -127,6 +127,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="form-group"><label>Партия (файлов)</label><input type="number" id="add-batch-size" value="5" min="1" max="50" style="width:70px" title="Сколько файлов скачивать за раз"></div>
       <div class="form-group"><label>Пауза между партиями (сек)</label><input type="number" id="add-batch-delay" value="15" min="1" max="300" style="width:70px" title="Пауза между партиями, чтобы не блокировал сервер"></div>
       <div class="form-group"><label>Пауза между файлами (сек)</label><input type="number" id="add-item-delay" value="2" min="0" max="30" style="width:70px" title="Пауза между файлами внутри партии"></div>
+      <div class="form-group"><label>Случ. разброс (сек)</label><input type="number" id="add-batch-jitter" value="5" min="0" max="30" style="width:70px" title="Случайная добавка 0..N к паузе между партиями"></div>
       <button class="btn" onclick="addSource()">✅ Добавить</button>
     </div>
     <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить все встроенные источники (5 федеральных RSS)</button>
@@ -224,7 +225,8 @@ async function addSource() {
         keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
         batch_size: parseInt(document.getElementById('add-batch-size').value) || 5,
         batch_delay: parseFloat(document.getElementById('add-batch-delay').value) || 15,
-        item_delay: parseFloat(document.getElementById('add-item-delay').value) || 2
+        item_delay: parseFloat(document.getElementById('add-item-delay').value) || 2,
+        batch_jitter: parseFloat(document.getElementById('add-batch-jitter').value) || 5
       })
     });
     var d = await r.json();
