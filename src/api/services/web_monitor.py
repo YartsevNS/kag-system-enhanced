@@ -238,6 +238,7 @@ class WebMonitorService:
         """Инициализация монитора. Загружает историю и кэш хешей."""
         self._hash_cache: Dict[str, str] = {}  # url → sha256 (для change detection)
         self._seen_urls: set = set()  # уже обработанные URL
+        self._news_keys: set = set()  # ключи новостей (title[:80] + date) — дедупликация
         self._load_state()
 
     def _load_state(self):
@@ -247,6 +248,7 @@ class WebMonitorService:
             state = config_store.get("web_monitor", "state") or {}
             self._hash_cache = state.get("hash_cache", {})
             self._seen_urls = set(state.get("seen_urls", []))
+            self._news_keys = set(state.get("news_keys", []))
         except Exception:
             pass
 
@@ -256,7 +258,8 @@ class WebMonitorService:
             from src.api.services.config_store import config_store
             config_store.set("web_monitor", "state", {
                 "hash_cache": self._hash_cache,
-                "seen_urls": list(self._seen_urls)[-10000:],  # Ограничиваем 10К записей
+                "seen_urls": list(self._seen_urls)[-10000:],
+                "news_keys": list(self._news_keys)[-20000:],  # Последние 20К ключей
                 "last_save": datetime.utcnow().isoformat()
             })
         except Exception as e:
@@ -476,14 +479,17 @@ class WebMonitorService:
                     if not new_urls:
                         link = entry.get('link', '')
                         summary = entry.get('summary', entry.get('description', ''))
-                        # Сохраняем как текстовый документ: заголовок + описание + ссылка
                         text_content = f"{title}\n\n{summary}\n\nИсточник: {link}"
+                        # Ключ дедупликации: title[:80] + дата публикации (YYYY-MM-DD)
+                        date_str = pub_date.strftime('%Y-%m-%d') if pub_date else entry.get('published', '')[:10]
+                        news_key = self._news_key(title, date_str)
                         new_urls.append({
                             'url': link or f"rss://{source.id}/{hash(title)}",
                             'title': title,
                             'source': source.name,
-                            'is_rss_text': True,  # Флаг: сохранить как текст, а не скачивать
-                            'text_content': text_content
+                            'is_rss_text': True,
+                            'text_content': text_content,
+                            'news_key': news_key  # Для дедупликации по названию+дате
                         })
 
                 result.items = new_urls
@@ -664,6 +670,17 @@ class WebMonitorService:
     # Вспомогательные методы
     # ============================================================
 
+    @staticmethod
+    def _news_key(title: str, date_str: str) -> str:
+        """Создать ключ дедупликации новости: название[:80] + дата (YYYY-MM-DD).
+        
+        Используется чтобы не загружать одну и ту же новость дважды.
+        Ключ стабилен: одна и та же новость с одного источника всегда даст одинаковый ключ.
+        """
+        clean_title = (title or '').strip()[:80].lower()
+        clean_date = (date_str or '')[:10]  # YYYY-MM-DD
+        return f"{clean_title}|{clean_date}"
+
     def _is_document_url(self, url: str, file_types: List[str]) -> bool:
         """Проверить, ведёт ли URL на документ нужного типа.
         
@@ -764,17 +781,25 @@ class WebMonitorService:
 
                     # Если это RSS-текст (новость без вложений) — сохраняем напрямую
                     if item.get('is_rss_text'):
+                        # Дедупликация по ключу новости (название + дата)
+                        news_key = item.get('news_key', '')
+                        if news_key and news_key in self._news_keys:
+                            skip_count += 1
+                            continue  # Уже есть такая новость — пропускаем
+
                         text_content = item.get('text_content', '')
                         content = text_content.encode('utf-8')
                         filename = (item.get('title', 'rss_entry')[:80] + '.txt').replace('/', '_')
                         file_hash = hashlib.sha256(content).hexdigest()
 
-                        # Проверка дубликата
+                        # Дополнительная проверка: SHA-256 дубликат
                         try:
                             from src.api.services.document_service import document_service
                             existing = document_service._find_by_hash(file_hash)
                             if existing:
                                 skip_count += 1
+                                if news_key:
+                                    self._news_keys.add(news_key)  # Запоминаем что видели
                                 continue
                         except Exception:
                             pass
@@ -789,6 +814,9 @@ class WebMonitorService:
                             from src.api.routes.upload import _process_document_async
                             await _process_document_async(record.document_id)
                             new_count += 1
+                            if news_key:
+                                self._news_keys.add(news_key)  # Запоминаем ключ после успешной загрузки
+                            self._save_state()  # Сохраняем состояние сразу
                             logger.info(f"📰 [{new_count}/{total}] RSS-новость: {filename[:50]}")
                         except Exception as e:
                             logger.warning(f"Ошибка сохранения RSS-новости {filename[:50]}: {e}")
