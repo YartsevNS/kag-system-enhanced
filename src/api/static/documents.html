@@ -159,7 +159,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
-    <select id="count-filter" onchange="applyFilters()" title="Количество на странице">
+    <select id="count-filter" onchange="resetPage();applyFilters()" title="Количество на странице">
       <option value="20">20 шт</option>
       <option value="50" selected>50 шт</option>
       <option value="100">100 шт</option>
@@ -167,7 +167,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="500">500 шт</option>
       <option value="0">Все</option>
     </select>
+    <button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button>
     <span id="filter-info" style="font-size:11px;color:var(--text4)"></span>
+    <button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button>
     <button class="btn-outline" id="btn-table" onclick="setView('table')">📋 Таблица</button>
     <button class="btn-outline active" id="btn-cards" onclick="setView('cards')">🖼️ Карточки</button>
     <button class="btn" onclick="loadAll()">🔄 Обновить</button>
@@ -326,17 +328,49 @@ function getFiltered() {
   });
 }
 
+var currentPage = 0;  // Текущая страница (0-based)
+
+function getPageSlice(docs) {
+  const limit = parseInt(document.getElementById('count-filter')?.value || '50');
+  if (limit <= 0) return { shown: docs, page: 0, totalPages: 1 };
+  const totalPages = Math.ceil(docs.length / limit);
+  // Корректируем currentPage если вышли за границы
+  if (currentPage >= totalPages) currentPage = Math.max(0, totalPages - 1);
+  const start = currentPage * limit;
+  const shown = docs.slice(start, start + limit);
+  return { shown, page: currentPage, totalPages };
+}
+
+function updatePager(page, totalPages, total, shown) {
+  var info = document.getElementById('filter-info');
+  var prev = document.getElementById('btn-prev');
+  var next = document.getElementById('btn-next');
+  var limit = parseInt(document.getElementById('count-filter')?.value || '50');
+  
+  if (limit <= 0 || totalPages <= 1) {
+    if (info) info.textContent = 'Всего: ' + total;
+    if (prev) prev.style.opacity = '0.3';
+    if (next) next.style.opacity = '0.3';
+  } else {
+    var from = page * limit + 1;
+    var to = Math.min(from + shown.length - 1, total);
+    if (info) info.textContent = from + '–' + to + ' из ' + total + '  (стр. ' + (page + 1) + '/' + totalPages + ')';
+    if (prev) prev.style.opacity = page > 0 ? '1' : '0.3';
+    if (next) next.style.opacity = page < totalPages - 1 ? '1' : '0.3';
+  }
+}
+
+function nextPage() { currentPage++; applyFilters(); }
+function prevPage() { if (currentPage > 0) { currentPage--; applyFilters(); } }
+function resetPage() { currentPage = 0; }
+
 function renderAll() {
   const docs = getFiltered();
   const total = docs.length;
-  // Лимит по количеству (0 = все)
-  const limit = parseInt(document.getElementById('count-filter')?.value || '50');
-  const shown = limit > 0 ? docs.slice(0, limit) : docs;
-  // Счётчик: показано N из M
-  const info = document.getElementById('filter-info');
-  if (info) info.textContent = limit > 0 && total > limit ? 'Показано ' + shown.length + ' из ' + total : 'Всего: ' + total;
-  renderCards(shown);
-  renderTable(shown);
+  var slice = getPageSlice(docs);
+  updatePager(slice.page, slice.totalPages, total, slice.shown);
+  renderCards(slice.shown);
+  renderTable(slice.shown);
 }
 
 function renderCards(docs) {
