@@ -124,6 +124,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       </select></div>
       <div class="form-group"><label>Интервал (мин)</label><input type="number" id="add-interval" value="360" min="60" max="10080" style="width:100px"></div>
       <div class="form-group"><label>Ключевые слова</label><input type="text" id="add-keywords" placeholder="через запятую"></div>
+      <div class="form-group"><label>Партия (файлов)</label><input type="number" id="add-batch-size" value="5" min="1" max="50" style="width:70px" title="Сколько файлов скачивать за раз"></div>
+      <div class="form-group"><label>Пауза между партиями (сек)</label><input type="number" id="add-batch-delay" value="15" min="1" max="300" style="width:70px" title="Пауза между партиями, чтобы не блокировал сервер"></div>
+      <div class="form-group"><label>Пауза между файлами (сек)</label><input type="number" id="add-item-delay" value="2" min="0" max="30" style="width:70px" title="Пауза между файлами внутри партии"></div>
       <button class="btn" onclick="addSource()">✅ Добавить</button>
     </div>
     <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить все встроенные источники (5 федеральных RSS)</button>
@@ -218,7 +221,10 @@ async function addSource() {
         name: name, url: url,
         type: document.getElementById('add-type').value,
         check_interval_minutes: parseInt(document.getElementById('add-interval').value) || 360,
-        keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean)
+        keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+        batch_size: parseInt(document.getElementById('add-batch-size').value) || 5,
+        batch_delay: parseFloat(document.getElementById('add-batch-delay').value) || 15,
+        item_delay: parseFloat(document.getElementById('add-item-delay').value) || 2
       })
     });
     var d = await r.json();

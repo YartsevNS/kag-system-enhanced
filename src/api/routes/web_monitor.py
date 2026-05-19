@@ -89,6 +89,9 @@ async def add_source(data: dict = Body(...)):
             keywords=data.get("keywords", []),
             file_types=data.get("file_types", [".pdf", ".docx"]),
             css_selector=data.get("css_selector", "a[href$='.pdf'], a[href$='.docx']"),
+            batch_size=data.get("batch_size", 5),
+            batch_delay=float(data.get("batch_delay", 15.0)),
+            item_delay=float(data.get("item_delay", 2.0)),
         )
 
         if not source.url:

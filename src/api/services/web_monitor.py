@@ -82,6 +82,10 @@ class MonitorSource:
     last_hash: Optional[str] = None  # SHA-256 содержимого страницы
     items_found: int = 0
     items_uploaded: int = 0
+    # Настройки скорости скачивания (чтобы не блокировал сервер-источник)
+    batch_size: int = 5       # Файлов в одной партии
+    batch_delay: float = 15.0  # Секунд между партиями
+    item_delay: float = 2.0    # Секунд между файлами внутри партии
     created_at: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -410,7 +414,10 @@ class WebMonitorService:
                 # Загружаем найденные документы
                 if new_urls:
                     result.new_items, result.skipped_items = await self._download_and_upload(
-                        session, new_urls, source
+                        session, new_urls, source,
+                        batch_size=source.batch_size,
+                        batch_delay=source.batch_delay,
+                        item_delay=source.item_delay
                     )
 
                 result.status = "ok"
@@ -499,7 +506,10 @@ class WebMonitorService:
 
                 if new_urls:
                     result.new_items, result.skipped_items = await self._download_and_upload(
-                        session, new_urls, source
+                        session, new_urls, source,
+                        batch_size=source.batch_size,
+                        batch_delay=source.batch_delay,
+                        item_delay=source.item_delay
                     )
 
                 result.status = "ok"
@@ -621,105 +631,157 @@ class WebMonitorService:
         return list(set(urls))  # Убираем дубликаты
 
     async def _download_and_upload(
-        self, session, items: List[Dict], source: MonitorSource
+        self, session, items: List[Dict], source: MonitorSource,
+        batch_size: int = 5,       # Сколько файлов за раз
+        batch_delay: float = 15.0,  # Пауза между партиями (сек)
+        item_delay: float = 2.0     # Пауза между файлами внутри партии (сек)
     ) -> tuple:
-        """Скачать найденные документы и загрузить в KAG Pipeline.
+        """Скачать найденные документы партиями и загрузить в KAG Pipeline.
+        
+        Чтобы не перегружать сервер-источник и не попадать под блокировку:
+        - Файлы скачиваются ПАРТИЯМИ по batch_size штук
+        - Между партиями пауза batch_delay секунд
+        - Между файлами внутри партии пауза item_delay секунд
+        - При получении 429 (Too Many Requests) пауза увеличивается автоматически
         
         Returns:
             (new_items: int, skipped_items: int)
         """
-        import aiohttp
+        import asyncio as _asyncio
+        import random as _random
 
         new_count = 0
         skip_count = 0
+        total = len(items)
+        batches = (total + batch_size - 1) // batch_size  # Округление вверх
 
-        for item in items:
-            url = item['url']
-            filename = item.get('title', Path(urlparse(url).path).name)
+        logger.info(
+            f"📥 Скачивание {total} файлов из {source.name}: "
+            f"{batches} партий по {batch_size}, "
+            f"пауза {batch_delay}с между партиями, {item_delay}с между файлами"
+        )
 
-            # Пропускаем уже обработанные URL
-            if url in self._seen_urls:
-                skip_count += 1
-                continue
+        for batch_num in range(batches):
+            start = batch_num * batch_size
+            end = min(start + batch_size, total)
+            batch_items = items[start:end]
+            
+            logger.info(f"📦 Партия {batch_num + 1}/{batches}: файлы {start + 1}–{end} из {total}")
 
-            try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"Не удалось скачать {url}: HTTP {resp.status}")
-                        skip_count += 1
-                        continue
+            for idx, item in enumerate(batch_items):
+                url = item['url']
+                filename = item.get('title', Path(urlparse(url).path).name)
 
-                    content = await resp.read()
-                    
-                    # Определяем тип файла по Content-Type (важно для file-service URL без расширения)
-                    content_type = resp.headers.get('Content-Type', '')
-                    content_disposition = resp.headers.get('Content-Disposition', '')
-                    
-                    # Извлекаем имя файла из Content-Disposition если есть
-                    import re as _re
-                    cd_match = _re.search(r'filename[^;=\n]*=[\"\']?([^\"\';\n]*)', content_disposition, _re.IGNORECASE)
-                    if cd_match:
-                        filename = cd_match.group(1).strip() or filename
-                    
-                    # Если тип файла не определён по расширению — берём из Content-Type
-                    if not any(filename.lower().endswith(ext) for ext in source.file_types):
-                        mime_to_ext = {
-                            'application/pdf': '.pdf',
-                            'application/msword': '.doc',
-                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-                            'application/vnd.ms-excel': '.xls',
-                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
-                            'text/plain': '.txt',
-                            'text/csv': '.csv',
-                            'text/html': '.html',
-                        }
-                        for mime, ext in mime_to_ext.items():
-                            if mime in content_type:
-                                filename = filename.rsplit('.', 1)[0] + ext
-                                break
-                    
-                    if len(content) < 100:  # Слишком маленький файл — не документ
-                        skip_count += 1
-                        continue
+                # Пропускаем уже обработанные URL
+                if url in self._seen_urls:
+                    skip_count += 1
+                    continue
 
-                    # SHA-256 для дедупликации
-                    file_hash = hashlib.sha256(content).hexdigest()
+                try:
+                    # Пауза между файлами внутри партии (кроме первого)
+                    if idx > 0:
+                        await _asyncio.sleep(item_delay + _random.uniform(0, 1))
 
-                    # Проверяем — нет ли уже такого документа в KAG?
-                    try:
-                        from src.api.services.document_service import document_service
-                        existing = document_service._find_by_hash(file_hash)
-                        if existing:
-                            logger.info(f"🔁 Дубликат: {filename} уже существует как {existing.document_id}")
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                        # Обработка rate limiting
+                        if resp.status == 429:
+                            retry_after = int(resp.headers.get('Retry-After', '30'))
+                            logger.warning(f"⏳ Rate limited ({url[:60]}), жду {retry_after}с...")
+                            await _asyncio.sleep(retry_after)
                             skip_count += 1
-                            self._seen_urls.add(url)
                             continue
-                    except Exception:
-                        pass
 
-                    # Загружаем в KAG Pipeline
-                    try:
-                        record = await document_service.upload_document(
-                            filename=filename,
-                            file_content=content,
-                            file_type=None  # Определится автоматически
-                        )
-                        # Запускаем фоновую обработку
-                        from src.api.routes.upload import _process_document_async
-                        await _process_document_async(record.document_id)
+                        if resp.status == 503:
+                            logger.warning(f"🔌 Сервер недоступен ({url[:60]}), пропускаю")
+                            skip_count += 1
+                            continue
 
-                        new_count += 1
-                        self._seen_urls.add(url)
-                        logger.info(f"📥 Загружен: {filename} (из {source.name})")
+                        if resp.status != 200:
+                            logger.warning(f"Не удалось скачать {url[:60]}: HTTP {resp.status}")
+                            skip_count += 1
+                            continue
 
-                    except Exception as e:
-                        logger.warning(f"Ошибка загрузки {filename}: {e}")
-                        skip_count += 1
+                        content = await resp.read()
 
-            except Exception as e:
-                logger.warning(f"Ошибка скачивания {url}: {e}")
-                skip_count += 1
+                        # Определяем тип файла по Content-Type
+                        content_type = resp.headers.get('Content-Type', '')
+                        content_disposition = resp.headers.get('Content-Disposition', '')
 
+                        # Извлекаем имя файла из Content-Disposition если есть
+                        import re as _re
+                        cd_match = _re.search(r'filename[^;=\n]*=["\']?([^"\';\\n]*)', content_disposition, _re.IGNORECASE)
+                        if cd_match:
+                            filename = cd_match.group(1).strip() or filename
+
+                        # Если тип файла не определён по расширению — берём из Content-Type
+                        if not any(filename.lower().endswith(ext) for ext in source.file_types):
+                            mime_to_ext = {
+                                'application/pdf': '.pdf',
+                                'application/msword': '.doc',
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                                'application/vnd.ms-excel': '.xls',
+                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+                                'text/plain': '.txt',
+                                'text/csv': '.csv',
+                                'text/html': '.html',
+                            }
+                            for mime, ext in mime_to_ext.items():
+                                if mime in content_type:
+                                    filename = filename.rsplit('.', 1)[0] + ext
+                                    break
+
+                        if len(content) < 100:  # Слишком маленький — не документ
+                            skip_count += 1
+                            continue
+
+                        # SHA-256 для дедупликации
+                        file_hash = hashlib.sha256(content).hexdigest()
+
+                        # Проверяем — нет ли уже такого документа в KAG?
+                        try:
+                            from src.api.services.document_service import document_service
+                            existing = document_service._find_by_hash(file_hash)
+                            if existing:
+                                logger.info(f"🔁 Дубликат: {filename[:50]} уже существует как {existing.document_id[:12]}...")
+                                skip_count += 1
+                                self._seen_urls.add(url)
+                                continue
+                        except Exception:
+                            pass
+
+                        # Загружаем в KAG Pipeline
+                        try:
+                            record = await document_service.upload_document(
+                                filename=filename,
+                                file_content=content,
+                                file_type=None
+                            )
+                            # Запускаем фоновую обработку
+                            from src.api.routes.upload import _process_document_async
+                            await _process_document_async(record.document_id)
+
+                            new_count += 1
+                            self._seen_urls.add(url)
+                            logger.info(f"📥 [{new_count}/{total}] Загружен: {filename[:50]} (из {source.name})")
+
+                        except Exception as e:
+                            logger.warning(f"Ошибка загрузки {filename[:50]}: {e}")
+                            skip_count += 1
+
+                except aiohttp.ClientError as e:
+                    logger.warning(f"Сетевая ошибка {url[:60]}: {e}")
+                    skip_count += 1
+                except Exception as e:
+                    logger.warning(f"Ошибка скачивания {url[:60]}: {e}")
+                    skip_count += 1
+
+            # Пауза между партиями (кроме последней)
+            if batch_num < batches - 1:
+                delay = batch_delay + _random.uniform(0, 5)
+                logger.info(f"⏸ Пауза {delay:.0f}с перед следующей партией...")
+                await _asyncio.sleep(delay)
+
+        logger.info(f"📊 Итого: {new_count} новых, {skip_count} пропущено из {total}")
         return new_count, skip_count
 
     def get_history(self, limit: int = 50) -> List[Dict]:
