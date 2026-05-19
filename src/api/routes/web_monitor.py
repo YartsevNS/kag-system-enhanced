@@ -145,15 +145,21 @@ async def delete_source(source_id: str):
 # ============================================================
 
 @router.post("/check", summary="Запустить проверку источников")
-async def run_check(source_id: Optional[str] = None):
+async def run_check(
+    source_id: Optional[str] = None,
+    body: dict = Body(default={})
+):
     """
     Запустить проверку источников мониторинга.
     
     Если source_id не указан — проверяются все активные источники.
+    Можно передать source_id в query-параметре (?source_id=...) или в теле JSON.
     """
+    # Берём source_id из тела если не передан как query-параметр
+    sid = source_id or body.get("source_id")
     try:
         from src.api.services.web_monitor import web_monitor
-        results = await web_monitor.run_check(source_id)
+        results = await web_monitor.run_check(sid)
         return {
             "status": "ok",
             "checked": len(results),

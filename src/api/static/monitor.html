@@ -72,6 +72,45 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="stat-card"><div class="stat-num" id="stat-last">—</div><div class="stat-label">Последняя проверка</div></div>
   </div>
 
+  <!-- Управление расписанием -->
+  <div class="panel" style="border:1px solid var(--accent);background:rgba(94,106,210,0.04)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2 style="margin-bottom:4px">⏱ Расписание проверок</h2>
+        <span style="font-size:12px;color:var(--text4)">Автоматическая проверка всех источников по расписанию</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="sched-interval" onchange="updateSchedule()" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:13px;outline:none">
+          <option value="0">Выключено</option>
+          <option value="30">Каждые 30 минут</option>
+          <option value="60">Каждый час</option>
+          <option value="360" selected>Каждые 6 часов</option>
+          <option value="720">Каждые 12 часов</option>
+          <option value="1440">Раз в сутки</option>
+        </select>
+        <span id="sched-status" style="font-size:12px;color:var(--text4)"></span>
+        <span id="sched-countdown" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Быстрая проверка URL -->
+  <div class="panel">
+    <h2>🔍 Быстрая проверка страницы</h2>
+    <p style="font-size:12px;color:var(--text4);margin-bottom:10px">Проверить конкретный URL без добавления в список источников. Документ будет обработан и загружен в KAG.</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:1"><label>URL страницы или документа</label><input type="text" id="quick-url" placeholder="https://..."></div>
+      <div class="form-group"><label>Режим</label><select id="quick-mode">
+        <option value="scrape">Scrape — найти ссылки на странице</option>
+        <option value="direct">Direct — загрузить как документ</option>
+        <option value="rss">RSS — проверить ленту</option>
+      </select></div>
+      <div class="form-group"><label>Типы файлов</label><input type="text" id="quick-types" value=".pdf,.docx,.xlsx" style="width:180px"></div>
+      <button class="btn" onclick="quickCheck()" id="quick-btn">⚡ Проверить</button>
+    </div>
+    <div id="quick-result" style="margin-top:10px;font-size:13px"></div>
+  </div>
+
   <!-- Добавление источника -->
   <div class="panel">
     <h2>➕ Добавить источник</h2>
@@ -266,6 +305,156 @@ function toast(msg, err) {
   setTimeout(function() { t.style.display = 'none'; }, 3000);
 }
 
+// ============================================================
+// Управление расписанием (встроенный cron со страницы)
+// ============================================================
+var schedTimer = null;        // ID таймера
+var schedIntervalMs = 0;      // Интервал в миллисекундах
+var schedNextRun = null;      // Время следующего запуска
+var schedRunning = false;     // Флаг: проверка в процессе
+
+function updateSchedule() {
+  // Очистить старый таймер
+  if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
+  
+  var mins = parseInt(document.getElementById('sched-interval').value) || 0;
+  schedIntervalMs = mins * 60 * 1000;
+  
+  var statusEl = document.getElementById('sched-status');
+  var countdownEl = document.getElementById('sched-countdown');
+  
+  if (mins === 0) {
+    // Расписание выключено
+    schedNextRun = null;
+    statusEl.innerHTML = '<span style=\"color:var(--text4)\">⏸ Выключено</span>';
+    countdownEl.textContent = '';
+    // Сохраняем состояние
+    localStorage.setItem('monitor_schedule', '0');
+    return;
+  }
+  
+  // Включено — устанавливаем таймер
+  schedNextRun = new Date(Date.now() + schedIntervalMs);
+  statusEl.innerHTML = '<span style=\"color:var(--emerald)\">▶ Активно</span>';
+  updateCountdown();
+  
+  // Обновляем обратный отсчёт каждую секунду
+  schedTimer = setInterval(function() {
+    updateCountdown();
+    // Если время пришло — запускаем проверку
+    if (schedNextRun && Date.now() >= schedNextRun.getTime() && !schedRunning) {
+      runAutoCheck();
+      schedNextRun = new Date(Date.now() + schedIntervalMs);
+    }
+  }, 1000);
+  
+  // Сохраняем состояние в localStorage (переживает перезагрузку страницы)
+  localStorage.setItem('monitor_schedule', String(mins));
+  localStorage.setItem('monitor_next_run', schedNextRun.toISOString());
+}
+
+function updateCountdown() {
+  if (!schedNextRun) return;
+  var remaining = Math.max(0, schedNextRun.getTime() - Date.now());
+  var h = Math.floor(remaining / 3600000);
+  var m = Math.floor((remaining % 3600000) / 60000);
+  var s = Math.floor((remaining % 60000) / 1000);
+  document.getElementById('sched-countdown').textContent = 
+    '⏳ Следующая: ' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+async function runAutoCheck() {
+  schedRunning = true;
+  document.getElementById('sched-status').innerHTML = '<span style=\"color:var(--amber)\">🔄 Проверка...</span>';
+  try {
+    var r = await fetch(API + '/check', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    var found = d.results ? d.results.reduce(function(s,r){return s+(r.new_items||0)},0) : 0;
+    document.getElementById('sched-status').innerHTML = 
+      '<span style=\"color:var(--emerald)\">▶ Активно</span> <span style=\"font-size:11px;color:var(--text4)\">(найдено: ' + found + ')</span>';
+    loadAll();
+  } catch(e) {}
+  schedRunning = false;
+}
+
+// Восстановить расписание при загрузке страницы
+function restoreSchedule() {
+  var saved = localStorage.getItem('monitor_schedule');
+  if (saved && saved !== '0') {
+    document.getElementById('sched-interval').value = saved;
+    updateSchedule();
+  }
+}
+
+// ============================================================
+// Быстрая проверка конкретного URL (ad-hoc)
+// ============================================================
+async function quickCheck() {
+  var url = document.getElementById('quick-url').value.trim();
+  if (!url) { toast('Введите URL', true); return; }
+  
+  var mode = document.getElementById('quick-mode').value;
+  var fileTypes = document.getElementById('quick-types').value.split(',').map(function(s){return s.trim()}).filter(Boolean);
+  var btn = document.getElementById('quick-btn');
+  var div = document.getElementById('quick-result');
+  
+  btn.disabled = true;
+  btn.textContent = '⏳ Проверяю...';
+  div.innerHTML = '<span style=\"color:var(--amber)\">⏳ Анализирую ' + url.substring(0,60) + '... (режим: ' + mode + ')</span>';
+  
+  try {
+    // Создаём временный источник для ad-hoc проверки
+    var tempId = 'quick_' + Date.now();
+    var r1 = await fetch(API + '/sources', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({
+        name: '🔍 Ad-hoc: ' + url.substring(0,40),
+        url: url,
+        type: mode === 'direct' ? 'scrape' : mode,
+        file_types: fileTypes,
+        check_interval_minutes: 0,
+        enabled: true
+      })
+    });
+    var d1 = await r1.json();
+    
+    if (d1.status !== 'ok') throw new Error(d1.message || 'Не удалось создать источник');
+    
+    // Запускаем проверку этого источника
+    var r2 = await fetch(API + '/check', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ source_id: d1.source.id })
+    });
+    var d2 = await r2.json();
+    
+    // Удаляем временный источник
+    await fetch(API + '/sources/' + d1.source.id, { method: 'DELETE', headers: authHeaders() });
+    
+    // Показываем результат
+    var result = (d2.results || [])[0] || {};
+    if (result.status === 'ok') {
+      div.innerHTML = '<div style=\"padding:10px;background:rgba(16,185,129,0.08);border-radius:var(--radius);color:var(--emerald)\">' +
+        '✅ Проверено: ' + url.substring(0,60) + '<br>' +
+        'Найдено документов: <strong>' + (result.new_items||0) + '</strong>, ' +
+        'пропущено (дубликаты): ' + (result.skipped_items||0) + '</div>';
+      toast('✅ Найдено: ' + (result.new_items||0) + ' документов');
+    } else if (result.status === 'no_changes') {
+      div.innerHTML = '<div style=\"padding:10px;background:rgba(245,158,11,0.08);border-radius:var(--radius);color:var(--amber)\">' +
+        '📭 Изменений не обнаружено — страница не обновлялась</div>';
+    } else {
+      div.innerHTML = '<div style=\"padding:10px;background:rgba(220,38,38,0.08);border-radius:var(--radius);color:var(--red)\">' +
+        '❌ Ошибка: ' + (result.error || 'Неизвестная ошибка') + '</div>';
+    }
+    loadSources();
+  } catch(e) {
+    div.innerHTML = '<div style=\"color:var(--red)\">❌ ' + e.message + '</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = '⚡ Проверить';
+}
+
+// Инициализация
+restoreSchedule();
 loadAll();
 </script>
 </body>
