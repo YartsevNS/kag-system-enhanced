@@ -174,6 +174,66 @@ class WebMonitorService:
         },
     ]
 
+    # Отдельный набор: RSS-каналы Центрального Банка РФ
+    CBR_SOURCES = [
+        {
+            "name": "ЦБ РФ — Новое на сайте",
+            "url": "http://www.cbr.ru/rss/RssNews",
+            "type": "rss",
+            "keywords": ["нормативный", "акт", "положение", "указание", "приказ", "письмо"],
+            "description": "Новые материалы на сайте Банка России: нормативные акты, статистика, обзоры"
+        },
+        {
+            "name": "ЦБ РФ — Новости, интервью, выступления",
+            "url": "http://www.cbr.ru/rss/eventrss",
+            "type": "rss",
+            "keywords": ["ставка", "инфляция", "кредит", "регулирование", "банк"],
+            "description": "Новости, интервью и выступления руководства Банка России"
+        },
+        {
+            "name": "ЦБ РФ — Пресс-релизы",
+            "url": "http://www.cbr.ru/rss/RssPress",
+            "type": "rss",
+            "keywords": ["ключевая ставка", "отзыв лицензии", "решение", "совет директоров"],
+            "description": "Официальные пресс-релизы Банка России"
+        },
+        {
+            "name": "ЦБ РФ — Курсы валют",
+            "url": "http://www.cbr.ru/rss/RssCurrency",
+            "type": "rss",
+            "keywords": ["доллар", "евро", "юань", "рубль", "USD", "EUR", "CNY"],
+            "description": "Ежедневные курсы валют, устанавливаемые Банком России"
+        },
+        {
+            "name": "ЦБ РФ — Регламент обработки электронных документов (МЦИ)",
+            "url": "http://www.cbr.ru/rss/nregimr2",
+            "type": "rss",
+            "keywords": ["регламент", "МЦИ", "электронный документ", "обработка"],
+            "description": "Информация о выполнении регламента обработки электронных документов (МЦИ)"
+        },
+        {
+            "name": "ЦБ РФ — News (English)",
+            "url": "http://www.cbr.ru/rss/EngRssNews",
+            "type": "rss",
+            "keywords": ["bank", "regulation", "policy", "rate", "statement"],
+            "description": "Bank of Russia news in English"
+        },
+        {
+            "name": "ЦБ РФ — Events (English)",
+            "url": "http://www.cbr.ru/rss/engeventrss",
+            "type": "rss",
+            "keywords": ["speech", "interview", "conference", "forum"],
+            "description": "Bank of Russia events, interviews, speeches in English"
+        },
+        {
+            "name": "ЦБ РФ — Press Releases (English)",
+            "url": "http://www.cbr.ru/rss/EngRssPress",
+            "type": "rss",
+            "keywords": ["key rate", "license", "board", "inflation"],
+            "description": "Bank of Russia press releases in English"
+        },
+    ]
+
     def __init__(self):
         """Инициализация монитора. Загружает историю и кэш хешей."""
         self._hash_cache: Dict[str, str] = {}  # url → sha256 (для change detection)

@@ -235,3 +235,36 @@ async def add_builtin_sources():
         return {"status": "ok", "message": f"Добавлено {added} встроенных источников"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.post("/add-cbr", summary="Добавить RSS-каналы ЦБ РФ")
+async def add_cbr_sources():
+    """Добавить все 8 RSS-каналов Центрального Банка РФ."""
+    try:
+        from src.api.services.web_monitor import web_monitor, MonitorSource, WebMonitorService
+
+        existing = {s.url for s in web_monitor.get_sources()}
+        added = 0
+
+        for src in WebMonitorService.CBR_SOURCES:
+            if src["url"] in existing:
+                continue
+            source = MonitorSource(
+                id=str(uuid.uuid4()),
+                name=src["name"],
+                url=src["url"],
+                type=src["type"],
+                keywords=src.get("keywords", []),
+                css_selector=src.get("css_selector", "a[href*='file/load'], a[href$='.pdf'], a[href$='.docx']"),
+                file_types=src.get("file_types", [".pdf", ".docx"]),
+                batch_size=5,
+                batch_delay=15.0,
+                item_delay=2.0,
+                batch_jitter=5.0,
+            )
+            web_monitor.save_source(source)
+            added += 1
+
+        return {"status": "ok", "message": f"Добавлено {added} RSS-каналов ЦБ РФ"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -130,7 +130,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="form-group"><label>Случ. разброс (сек)</label><input type="number" id="add-batch-jitter" value="5" min="0" max="30" style="width:70px" title="Случайная добавка 0..N к паузе между партиями"></div>
       <button class="btn" onclick="addSource()">✅ Добавить</button>
     </div>
-    <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить все встроенные источники (5 федеральных RSS)</button>
+    <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить встроенные (6 федеральных)</button>
+    <button class="btn-outline" onclick="addCbrSources()" style="margin-top:6px">🏦 Добавить RSS-каналы ЦБ РФ (8)</button>
   </div>
 
   <!-- Список источников -->
@@ -245,6 +246,15 @@ async function addSource() {
 async function addBuiltinSources() {
   try {
     var r = await fetch(API + '/add-builtin', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function addCbrSources() {
+  try {
+    var r = await fetch(API + '/add-cbr', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
     toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
     loadSources();
