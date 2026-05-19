@@ -295,3 +295,30 @@ async def add_rkn_sources():
         return {"status": "ok", "message": f"Добавлен {added} канал Роскомнадзора"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.post("/add-secnews", summary="Добавить RSS SecurityNews")
+async def add_secnews_sources():
+    """Добавить 5 RSS-каналов SecurityNews (ИБ-новости)."""
+    try:
+        from src.api.services.web_monitor import web_monitor, MonitorSource, WebMonitorService
+
+        existing = {s.url for s in web_monitor.get_sources()}
+        added = 0
+
+        for src in WebMonitorService.SECNEWS_SOURCES:
+            if src["url"] in existing:
+                continue
+            source = MonitorSource(
+                id=str(uuid.uuid4()),
+                name=src["name"],
+                url=src["url"],
+                type=src["type"],
+                keywords=src.get("keywords", []),
+            )
+            web_monitor.save_source(source)
+            added += 1
+
+        return {"status": "ok", "message": f"Добавлено {added} каналов SecurityNews"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

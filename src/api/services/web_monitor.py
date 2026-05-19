@@ -245,6 +245,45 @@ class WebMonitorService:
         },
     ]
 
+    # SecurityNews — агрегатор новостей по информационной безопасности
+    SECNEWS_SOURCES = [
+        {
+            "name": "SecurityNews — Все публикации",
+            "url": "http://feeds.feedburner.com/security_news_ru",
+            "type": "rss",
+            "keywords": ["уязвимость", "атака", "взлом", "утечка", "CVE", "патч"],
+            "description": "Все публикации SecurityNews: ИБ-новости, статьи, дайджесты"
+        },
+        {
+            "name": "SecurityNews — Статьи",
+            "url": "http://feeds.feedburner.com/secnews/articles",
+            "type": "rss",
+            "keywords": ["анализ", "исследование", "методика", "обзор", "практика"],
+            "description": "Аналитические статьи по информационной безопасности"
+        },
+        {
+            "name": "SecurityNews — Зарубежные новости",
+            "url": "http://feeds.feedburner.com/secnews/foreign",
+            "type": "rss",
+            "keywords": ["vulnerability", "breach", "ransomware", "zero-day", "patch", "exploit"],
+            "description": "Зарубежные новости ИБ: уязвимости, атаки, инциденты"
+        },
+        {
+            "name": "SecurityNews — Российские новости",
+            "url": "http://feeds.feedburner.com/secnews/news",
+            "type": "rss",
+            "keywords": ["ФСТЭК", "ФСБ", "импортозамещение", "сертификация", "ГосСОПКА", "НКЦКИ"],
+            "description": "Российские новости ИБ: регуляторы, сертификация, импортозамещение"
+        },
+        {
+            "name": "SecurityNews — Дайджест СМИ",
+            "url": "http://feeds.feedburner.com/secnews/digest",
+            "type": "rss",
+            "keywords": ["СМИ", "обзор", "дайджест", "пресса", "публикация"],
+            "description": "Дайджест СМИ по информационной безопасности"
+        },
+    ]
+
     def __init__(self):
         """Инициализация монитора. Загружает историю и кэш хешей."""
         self._hash_cache: Dict[str, str] = {}  # url → sha256 (для change detection)

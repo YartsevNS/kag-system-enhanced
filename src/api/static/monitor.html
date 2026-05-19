@@ -133,6 +133,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <button class="btn-outline" onclick="addBuiltinSources()" style="margin-top:6px">📦 Добавить встроенные (6 федеральных)</button>
     <button class="btn-outline" onclick="addCbrSources()" style="margin-top:6px">🏦 Добавить RSS-каналы ЦБ РФ (8)</button>
     <button class="btn-outline" onclick="addRknSources()" style="margin-top:6px">🛡 Добавить RSS Роскомнадзора (1)</button>
+    <button class="btn-outline" onclick="addSecnewsSources()" style="margin-top:6px">🔐 Добавить RSS SecurityNews (5)</button>
   </div>
 
   <!-- Список источников -->
@@ -265,6 +266,15 @@ async function addCbrSources() {
 async function addRknSources() {
   try {
     var r = await fetch(API + '/add-rkn', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function addSecnewsSources() {
+  try {
+    var r = await fetch(API + '/add-secnews', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
     toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
     loadSources();
