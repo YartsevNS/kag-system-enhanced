@@ -296,9 +296,9 @@ async def monitor_page():
     return {"error": "Monitor page not found"}
 
 
-@app.get("/banks", summary="Аналитика: рынок алюминиевых банок")
-async def banks_page():
-    banks_path = os.path.join(static_path, "banks.html")
-    if os.path.exists(banks_path):
-        return FileResponse(banks_path)
-    return {"error": "Banks page not found"}
+@app.get("/news", summary="Лента новостей")
+async def news_page():
+    news_path = os.path.join(static_path, "news.html")
+    if os.path.exists(news_path):
+        return FileResponse(news_path)
+    return {"error": "News page not found"}
