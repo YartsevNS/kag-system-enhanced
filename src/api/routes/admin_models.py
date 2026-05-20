@@ -1228,6 +1228,20 @@ class ExtLLMConfig(BaseModel):
 
 _ext_llm_config: ExtLLMConfig = ExtLLMConfig()
 
+# Инициализация из БД при старте модуля
+try:
+    from src.api.services.config_store import config_store
+    saved = config_store.get("ext_llm", "default")
+    if saved and (saved.get("model") or saved.get("api_key")):
+        _ext_llm_config = ExtLLMConfig(
+            url=saved.get("url", ""),
+            model=saved.get("model", ""),
+            provider=saved.get("provider", "ollama"),
+            api_key=saved.get("api_key", "")
+        )
+except Exception:
+    pass
+
 
 @router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
 async def save_ext_llm(config: ExtLLMConfig):
@@ -1251,22 +1265,25 @@ async def save_ext_llm(config: ExtLLMConfig):
 
 @router.get("/ext-llm", summary="Получить настройки внешнего LLM")
 async def get_ext_llm():
-    """Получить текущие настройки внешнего LLM."""
-    # Загружаем из БД если в памяти пусто
+    """Получить текущие настройки внешнего LLM.
+    
+    ВСЕГДА загружает из config_store (PostgreSQL) приоритетно.
+    Глобальная переменная — только fallback если БД недоступна.
+    """
     global _ext_llm_config
-    if not _ext_llm_config.model and not _ext_llm_config.api_key:
-        try:
-            from src.api.services.config_store import config_store
-            saved = config_store.get("ext_llm", "default")
-            if saved:
-                _ext_llm_config = ExtLLMConfig(
-                    url=saved.get("url", ""),
-                    model=saved.get("model", ""),
-                    provider=saved.get("provider", "ollama"),
-                    api_key=saved.get("api_key", "")
-                )
-        except Exception:
-            pass
+    # Всегда пробуем загрузить из БД
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("ext_llm", "default")
+        if saved and (saved.get("model") or saved.get("api_key")):
+            _ext_llm_config = ExtLLMConfig(
+                url=saved.get("url", ""),
+                model=saved.get("model", ""),
+                provider=saved.get("provider", "ollama"),
+                api_key=saved.get("api_key", "")
+            )
+    except Exception:
+        pass
     return {
         "url": _ext_llm_config.url,
         "model": _ext_llm_config.model,
@@ -1452,6 +1469,15 @@ async def check_ext_llm_balance():
 
 
 _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
+
+# Инициализация из БД при старте
+try:
+    from src.api.services.config_store import config_store
+    saved = config_store.get("graph_model", "default")
+    if saved and saved.get("model"):
+        _graph_model_config = saved
+except Exception:
+    pass
 
 @router.get("/graph", summary="Получить модель для графа")
 async def get_graph_model():
