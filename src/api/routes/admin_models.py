@@ -1357,6 +1357,100 @@ async def list_ext_llm_models(provider: str = "ollama"):
         return {"models": [], "error": str(e)}
 
 
+@router.get("/ext-llm/balance", summary="Проверить баланс провайдера")
+async def check_ext_llm_balance():
+    """Проверить состояние баланса/кредитов внешнего провайдера.
+    
+    Поддерживает:
+    - OpenAI: GET /v1/dashboard/billing/subscription (остаток кредитов)
+    - DeepSeek: GET /v1/user/balance (баланс в токенах)
+    - OpenRouter: GET /api/v1/credits (оставшиеся кредиты)
+    - Ollama: всегда возвращает ok (локальный — безлимитный)
+    """
+    import aiohttp
+    prov = _ext_llm_config.provider
+    api_key = _ext_llm_config.api_key
+    
+    try:
+        if prov == "ollama":
+            return {"provider": "ollama", "balance_ok": True, "message": "Локальный сервер — без ограничений"}
+        
+        if not api_key:
+            return {"provider": prov, "balance_ok": False, "message": "API ключ не указан", "balance": 0}
+        
+        headers = {"Authorization": f"Bearer {api_key}"}
+        
+        if prov == "openrouter":
+            # OpenRouter: GET /api/v1/credits
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/api/v1/credits",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        credits = data.get("data", {}).get("total_credits", 0)
+                        used = data.get("data", {}).get("total_usage", 0)
+                        remaining = credits - used
+                        return {
+                            "provider": prov,
+                            "balance_ok": remaining > 0,
+                            "balance": round(remaining, 4),
+                            "total_credits": credits,
+                            "total_usage": round(used, 4),
+                            "message": f"Остаток: ${remaining:.4f} из ${credits:.2f}"
+                        }
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        elif prov == "openai":
+            # OpenAI: пробуем usage endpoint
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.openai.com/v1/usage?date=" + __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d'),
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        return {"provider": prov, "balance_ok": True, "message": "API доступен"}
+                    # Fallback: проверяем просто доступность
+                    if resp.status in (401, 403):
+                        return {"provider": prov, "balance_ok": False, "message": "API ключ недействителен", "balance": 0}
+                # Простой тест — список моделей
+                async with session.get(
+                    f"{_ext_llm_config.url}/v1/models",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        return {"provider": prov, "balance_ok": True, "message": "API доступен (проверьте баланс в панели OpenAI)"}
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        elif prov == "deepseek":
+            # DeepSeek: GET /v1/user/balance
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/v1/user/balance",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        balance = data.get("balance", data.get("data", {}).get("balance", 0))
+                        return {
+                            "provider": prov,
+                            "balance_ok": float(balance) > 0 if balance else True,
+                            "balance": balance,
+                            "message": f"Баланс: {balance} токенов"
+                        }
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка баланса не реализована"}
+    
+    except Exception as e:
+        return {"provider": prov, "balance_ok": False, "message": str(e), "balance": 0}
+
+
 _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 @router.get("/graph", summary="Получить модель для графа")

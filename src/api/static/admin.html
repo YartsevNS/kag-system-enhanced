@@ -438,8 +438,10 @@
             <div style="display:flex;gap:10px;align-items:center">
                 <button class="btn btn-primary" onclick="saveExtLLM()">💾 Сохранить</button>
                 <button class="btn btn-outline" onclick="testExtLLM()">🧪 Тест</button>
+                <button class="btn btn-outline" onclick="checkBalance()" title="Проверить баланс провайдера">💰 Баланс</button>
                 <span id="ext-llm-status" style="font-size:13px"></span>
             </div>
+            <div id="ext-llm-balance" style="margin-top:8px;display:none"></div>
         </div>
         <div class="section">
             <h2 class="section-title">🕸 Модель для построения графа (Neo4j)</h2>
@@ -1072,8 +1074,30 @@
                 status.innerHTML = d.ok 
                     ? '<span style="color:#10b981">✅ OK — ' + (d.response || '').substring(0, 60) + '</span>'
                     : '<span style="color:#ef4444">❌ ' + (d.error || 'Ошибка') + '</span>';
+                // Авто-проверка баланса после теста
+                checkBalance();
             } catch(e) {
                 status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+        
+        async function checkBalance() {
+            const div = document.getElementById('ext-llm-balance');
+            if (!div) return;
+            div.innerHTML = '<span style="color:var(--text4);font-size:12px">⏳ Проверка баланса...</span>';
+            div.style.display = 'block';
+            try {
+                const r = await fetch('/api/v1/admin/models/ext-llm/balance');
+                const d = await r.json();
+                if (d.balance_ok === true) {
+                    div.innerHTML = '<span style="color:var(--emerald);font-size:12px">💰 ' + d.message + '</span>';
+                } else if (d.balance_ok === false) {
+                    div.innerHTML = '<span style="color:var(--red);font-size:12px">⚠️ ' + d.message + '</span>';
+                } else {
+                    div.innerHTML = '<span style="color:var(--amber);font-size:12px">❓ ' + d.message + '</span>';
+                }
+            } catch(e) {
+                div.innerHTML = '<span style="color:var(--red);font-size:12px">❌ ' + e.message + '</span>';
             }
         }
 
