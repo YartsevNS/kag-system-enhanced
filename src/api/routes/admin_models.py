@@ -1276,6 +1276,61 @@ async def test_ext_llm():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+
+@router.get("/ext-llm/models", summary="Список моделей внешнего провайдера")
+async def list_ext_llm_models(provider: str = "ollama"):
+    """Получить список доступных моделей для указанного провайдера.
+    
+    Для Ollama — возвращает локально загруженные модели.
+    Для OpenAI/DeepSeek/OpenRouter — обращается к API провайдера с сохранённым ключом.
+    """
+    import aiohttp
+    try:
+        if provider == "ollama":
+            # Локальные модели
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/api/tags",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        models = [{"id": m.get("name", m.get("model", "")), "name": m.get("name", "")}
+                                  for m in data.get("models", [])]
+                        return {"models": models, "provider": "ollama"}
+                    return {"models": [], "error": f"Ollama: HTTP {resp.status}"}
+        
+        # Внешние провайдеры — OpenAI-совместимый API
+        api_key = _ext_llm_config.api_key
+        if not api_key:
+            return {"models": [], "error": "API ключ не указан. Сохраните ключ в настройках."}
+        
+        headers = {"Authorization": f"Bearer {api_key}"}
+        # OpenRouter и OpenAI используют /v1/models
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{_ext_llm_config.url}/v1/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    # OpenAI формат: {"data": [{"id": "gpt-4", ...}, ...]}
+                    # OpenRouter: {"data": [{"id": "openai/gpt-4o", "name": "GPT-4o", ...}, ...]}
+                    models = []
+                    for m in data.get("data", []):
+                        models.append({
+                            "id": m.get("id", ""),
+                            "name": m.get("name", m.get("id", ""))
+                        })
+                    return {"models": models, "provider": provider}
+                else:
+                    text = await resp.text()
+                    return {"models": [], "error": f"HTTP {resp.status}: {text[:200]}"}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+
 _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 @router.get("/graph", summary="Получить модель для графа")

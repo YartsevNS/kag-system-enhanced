@@ -1134,12 +1134,62 @@
         function onExtProviderChange() {
             const prov = document.getElementById('ext-llm-provider').value;
             const keyField = document.getElementById('ext-llm-key');
-            keyField.style.display = (prov === 'ollama') ? 'none' : 'block';
-            keyField.parentElement.querySelector('label').style.display = keyField.style.display;
-            // При переключении на ollama очищаем поле с текстом
+            const keyLabel = keyField.parentElement.querySelector('label');
+            const urlField = document.getElementById('ext-llm-url');
+            
+            // Показать/скрыть API ключ
+            keyField.style.display = (prov === 'ollama') ? 'none' : '';
+            keyLabel.style.display = keyField.style.display;
+            
+            // Авто-URL для известных провайдеров
             if (prov === 'ollama') {
-                document.getElementById('ext-llm-url').value = 'http://192.168.50.41:11434';
+                urlField.value = 'http://192.168.50.41:11434';
+            } else if (prov === 'openai') {
+                urlField.value = 'https://api.openai.com';
+            } else if (prov === 'deepseek') {
+                urlField.value = 'https://api.deepseek.com';
+            } else if (prov === 'openrouter') {
+                urlField.value = 'https://openrouter.ai/api';
             }
+            
+            // Перезагрузить список моделей под провайдера
+            loadExtModels();
+        }
+        
+        async function loadExtModels() {
+            const prov = document.getElementById('ext-llm-provider').value;
+            const sel = document.getElementById('ext-llm-select');
+            
+            if (prov === 'ollama') {
+                // Локальные модели Ollama — уже в llmModels
+                populateExtSelect();
+                return;
+            }
+            
+            // Внешний провайдер — фетчим список моделей через API
+            sel.innerHTML = '<option value="">⏳ Загрузка моделей ' + prov + '...</option>';
+            sel.disabled = true;
+            
+            try {
+                const r = await fetch('/api/v1/admin/models/ext-llm/models?provider=' + prov, {
+                    headers: authHeaders ? authHeaders() : {}
+                });
+                if (r.ok) {
+                    const d = await r.json();
+                    sel.innerHTML = '<option value="">— Выбрать модель ' + prov + ' —</option>';
+                    (d.models || []).forEach(function(m) {
+                        sel.innerHTML += '<option value="' + m.id + '">' + m.id + (m.name ? ' — ' + m.name : '') + '</option>';
+                    });
+                    if (d.models && d.models.length === 0) {
+                        sel.innerHTML = '<option value="">⚠️ Нет моделей (проверьте API ключ)</option>';
+                    }
+                } else {
+                    sel.innerHTML = '<option value="">❌ Ошибка: ' + r.status + '</option>';
+                }
+            } catch(e) {
+                sel.innerHTML = '<option value="">❌ ' + e.message + '</option>';
+            }
+            sel.disabled = false;
         }
         async function saveGraphModel() {
             const status = document.getElementById('graph-model-status');
