@@ -1229,24 +1229,50 @@ class ExtLLMConfig(BaseModel):
 _ext_llm_config: ExtLLMConfig = ExtLLMConfig()
 
 
+@router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
+async def save_ext_llm(config: ExtLLMConfig):
+    """Сохранить настройки внешнего LLM в config_store (PostgreSQL)."""
+    global _ext_llm_config
+    _ext_llm_config = config
+    # Персистентное сохранение в БД
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("ext_llm", "default", {
+            "url": config.url,
+            "model": config.model,
+            "provider": config.provider,
+            "api_key": config.api_key
+        })
+    except Exception as e:
+        logger.warning(f"Не удалось сохранить ext_llm в config_store: {e}")
+    logger.info(f"Внешний LLM настроен: {config.provider}/{config.model} @ {config.url}")
+    return {"status": "ok", "message": "Настройки сохранены"}
+
+
 @router.get("/ext-llm", summary="Получить настройки внешнего LLM")
 async def get_ext_llm():
-    """Вернуть текущие настройки внешнего LLM для анализа документов."""
+    """Получить текущие настройки внешнего LLM."""
+    # Загружаем из БД если в памяти пусто
+    global _ext_llm_config
+    if not _ext_llm_config.model and not _ext_llm_config.api_key:
+        try:
+            from src.api.services.config_store import config_store
+            saved = config_store.get("ext_llm", "default")
+            if saved:
+                _ext_llm_config = ExtLLMConfig(
+                    url=saved.get("url", ""),
+                    model=saved.get("model", ""),
+                    provider=saved.get("provider", "ollama"),
+                    api_key=saved.get("api_key", "")
+                )
+        except Exception:
+            pass
     return {
         "url": _ext_llm_config.url,
         "model": _ext_llm_config.model,
         "provider": _ext_llm_config.provider,
         "api_key": _ext_llm_config.api_key
     }
-
-
-@router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
-async def save_ext_llm(config: ExtLLMConfig):
-    """Сохранить настройки внешнего LLM."""
-    global _ext_llm_config
-    _ext_llm_config = config
-    logger.info(f"Внешний LLM настроен: {config.provider}/{config.model} @ {config.url}")
-    return {"status": "ok", "message": "Настройки сохранены"}
 
 
 @router.post("/ext-llm/test", summary="Тест подключения к внешнему LLM")

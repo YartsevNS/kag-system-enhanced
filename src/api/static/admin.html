@@ -1089,9 +1089,12 @@
                     }
                     if (d.provider) {
                         document.getElementById('ext-llm-provider').value = d.provider;
-                        onExtProviderChange();
                     }
-                    if (d.api_key) document.getElementById('ext-llm-key').value = d.api_key;
+                    if (d.api_key) {
+                        document.getElementById('ext-llm-key').value = d.api_key;
+                    }
+                    // Применить видимость полей под провайдера
+                    onExtProviderChange();
                     // Показать карточку активной модели
                     showActiveExtLLM(d);
                 }
