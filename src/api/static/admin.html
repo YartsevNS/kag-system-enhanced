@@ -40,14 +40,14 @@
         nav .logo span { color: var(--accent-h); }
         nav .nav-items { flex: 1; padding: 12px 8px; }
         nav .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 8px 12px; border-radius: var(--radius-sm);
-            color: var(--text3); font-size: 14px; font-weight: 500;
-            text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+        nav a { flex: 1; padding: 12px 8px; }
+        nav a {
+            display: flex; align-items: center; gap: 10px; padding: 8px 24px; color: var(--text3);
+            font-size: 14px; font-weight: 500; text-decoration: none; transition: all 0.15s;
         }
-        nav .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text2); }
-        nav .nav-item.active { background: rgba(255,255,255,0.06); color: var(--text); }
-        nav .nav-item .icon { width: 18px; text-align: center; font-size: 15px; }
+        nav a:hover { background: rgba(255,255,255,0.04); color: var(--text2); }
+        nav a.active { background: rgba(255,255,255,0.06); color: var(--text); }
+        nav a .icon { width: 18px; text-align: center; font-size: 15px; }
 
         /* ---- Main ---- */
         main {
@@ -208,7 +208,7 @@
         @media(max-width:900px) {
             nav { width: 60px; }
             nav .logo { font-size: 0; padding: 20px 16px; }
-            nav .nav-item span { display: none; }
+            nav a span { display: none; }
             main { margin-left: 60px; padding: 24px 20px; }
             .status-grid { grid-template-columns: repeat(2, 1fr); }
         }
@@ -222,15 +222,17 @@
     <!-- Sidebar Navigation -->
     <nav>
         <div class="logo">🎯 <span>KAG</span></div>
-        <div class="nav-items">
-            <a href="/" class="nav-item"><span class="icon">⬡</span> <span>Дашборд</span></a>
-            <a href="/chat" class="nav-item"><span class="icon">💬</span> <span>Чат с AI</span></a>
-            <a href="/documents" class="nav-item"><span class="icon">📄</span> <span>Документы</span></a>
-            <a href="/ocr" class="nav-item"><span class="icon">🔍</span> <span>OCR-демо</span></a>
-            <a href="/monitoring" class="nav-item"><span class="icon">📡</span> <span>Мониторинг</span></a>
-            <a href="/users" class="nav-item"><span class="icon">👥</span> <span>Пользователи</span></a>
-            <a href="/admin" class="nav-item active"><span class="icon">⚙️</span> <span>Админ</span></a>
-        </div>
+        <a href="/">⬡ Дашборд</a>
+        <a href="/chat">💬 Чат с AI</a>
+        <a href="/documents">📄 Документы</a>
+        <a href="/chunks">🧩 Чанки</a>
+        <a href="/search">🔎 Поиск</a>
+        <a href="/kg">🕸️ Граф знаний</a>
+        <a href="/monitor">🌐 Веб-монитор</a>
+        <a href="/news">📰 Новости</a>
+        <a href="/know">📚 Know</a>
+        <a href="/logs">📋 Логи</a>
+        <a href="/admin">⚙️ Админ</a>
         <div style="padding:16px 24px;border-top:1px solid var(--border-s)">
             <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
         </div>
