@@ -274,6 +274,8 @@ class EntityExtractor:
         cfg = self._get_graph_config()
         model = cfg.get("model", self._model) if cfg else self._model
         llm_url = cfg.get("url", self._llm_url) if cfg else self._llm_url
+        api_key = cfg.get("api_key", "") if cfg else ""
+        provider = cfg.get("provider", "ollama") if cfg else "ollama"
 
         all_entities = []
         all_relations = []
@@ -282,7 +284,7 @@ class EntityExtractor:
 
         # --- Pass 1: Core entities ---
         core_result = await self._extract_core_entities(
-            chunk_text, chunk_id, document_id, filename, model, llm_url
+            chunk_text, chunk_id, document_id, filename, model, llm_url, api_key, provider
         )
         all_entities.extend(core_result.get("entities", []))
         all_facts.extend(core_result.get("facts", []))
@@ -292,7 +294,7 @@ class EntityExtractor:
         # --- Pass 2: Relations (только если есть сущности) ---
         if all_entities:
             rel_result = await self._extract_relations(
-                chunk_text, all_entities, document_id, model, llm_url
+                chunk_text, all_entities, document_id, model, llm_url, api_key, provider
             )
             all_relations.extend(rel_result.get("relations", []))
             if rel_result.get("warnings"):
@@ -302,7 +304,7 @@ class EntityExtractor:
         extended_types = self._domain_config.get("extended", {})
         if extended_types:
             ext_result = await self._extract_extended_entities(
-                chunk_text, extended_types, document_id, model, llm_url
+                chunk_text, extended_types, document_id, model, llm_url, api_key, provider
             )
             all_entities.extend(ext_result.get("entities", []))
             if ext_result.get("warnings"):
@@ -325,7 +327,7 @@ class EntityExtractor:
 
     async def _extract_core_entities(
         self, text: str, chunk_id: str, doc_id: str, filename: str,
-        model: str, llm_url: str
+        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
     ) -> Dict[str, Any]:
         """Извлечение ключевых сущностей — лёгкий промпт, быстрый ответ.
         
@@ -359,25 +361,25 @@ class EntityExtractor:
 - facts: 1-3 ключевых утверждения из текста
 - Если сущностей нет — верни {{"entities":[],"facts":[]}}"""
 
-        return await self._call_llm(prompt, model, llm_url, chunk_id, "core")
+        return await self._call_llm(prompt, model, llm_url, chunk_id, "core", api_key, provider)
 
     # ============================================================
     # Pass 2: Связи между сущностями
     # ============================================================
 
     async def _extract_relations(
-        self, text: str, existing_entities: List[Dict], doc_id: str,
-        model: str, llm_url: str
+        self, text: str, entities: List[Dict], doc_id: str,
+        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
     ) -> Dict[str, Any]:
         """Извлечение связей между уже найденными сущностями.
         
         Neo4j Best Practice: связи извлекаются ОТДЕЛЬНО от сущностей.
         LLM получает список уже найденных сущностей и ищет связи между ними.
         """
-        if not existing_entities:
+        if not entities:
             return {"relations": [], "warnings": []}
 
-        entity_names = list(set(e["name"] for e in existing_entities))[:30]
+        entity_names = list(set(e["name"] for e in entities))[:30]
         rel_types = self._domain_config.get("relations", {})
         rel_desc = "\n".join([f"  - {t}: {d}" for t, d in rel_types.items()])
 
@@ -402,7 +404,7 @@ class EntityExtractor:
 - type только из списка типов связей
 - Если связей нет — верни {{"relations":[]}}"""
 
-        result = await self._call_llm(prompt, model, llm_url, "relations", "relations")
+        result = await self._call_llm(prompt, model, llm_url, "relations", "relations", api_key, provider)
         return result
 
     # ============================================================
@@ -429,7 +431,7 @@ class EntityExtractor:
 Верни СТРОГО: {{"entities":[{{"name":"...","type":"...","confidence":0.0-1.0}}]}}
 Если нет — {{"entities":[]}}"""
 
-        return await self._call_llm(prompt, model, llm_url, "extended", "extended")
+        return await self._call_llm(prompt, model, llm_url, "extended", "extended", api_key, provider)
 
     # ============================================================
     # LLM вызов
@@ -437,35 +439,70 @@ class EntityExtractor:
 
     async def _call_llm(
         self, prompt: str, model: str, llm_url: str,
-        chunk_id: str = "", pass_name: str = ""
+        chunk_id: str = "", pass_name: str = "",
+        api_key: str = "", provider: str = "ollama"
     ) -> Dict[str, Any]:
-        """Вызвать LLM и распарсить JSON-ответ."""
+        """Вызвать LLM и распарсить JSON-ответ.
+        
+        Поддерживает провайдеров:
+        - ollama (по умолчанию): POST /api/generate
+        - openai / deepseek / openrouter: POST /v1/chat/completions
+        """
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{llm_url}/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.05, "max_tokens": 400}
-                    },
-                    timeout=aiohttp.ClientTimeout(total=180)
-                ) as resp:
-                    if resp.status != 200:
-                        warning = f"LLM вернул {resp.status} (pass={pass_name})"
-                        logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
-                        return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
-
-                    data = await resp.json()
-                    response = data.get("response", "")
-                    result = self._parse_response(response)
-                    
-                    if not result.get("entities") and not result.get("relations") and not result.get("facts"):
-                        logger.debug(f"Пустой ответ LLM для {chunk_id} (pass={pass_name}): {response[:120]}")
-                    
-                    return result
+            
+            if provider in ("openai", "deepseek", "openrouter"):
+                # OpenAI-совместимый API (chat/completions)
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.05,
+                    "max_tokens": 800
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{llm_url}/v1/chat/completions",
+                        json=payload,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=180)
+                    ) as resp:
+                        if resp.status != 200:
+                            text = await resp.text()
+                            warning = f"LLM {provider} вернул {resp.status}: {text[:200]}"
+                            logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
+                            return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+                        data = await resp.json()
+                        response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            else:
+                # Ollama API
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{llm_url}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": prompt,
+                            "stream": False,
+                            "options": {"temperature": 0.05, "max_tokens": 400}
+                        },
+                        timeout=aiohttp.ClientTimeout(total=180)
+                    ) as resp:
+                        if resp.status != 200:
+                            warning = f"LLM вернул {resp.status} (pass={pass_name})"
+                            logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
+                            return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+                        data = await resp.json()
+                        response = data.get("response", "")
+            
+            result = self._parse_response(response)
+            if not result.get("entities") and not result.get("relations") and not result.get("facts"):
+                logger.debug(f"Пустой ответ LLM для {chunk_id} (pass={pass_name}): {response[:120]}")
+            return result
 
         except Exception as e:
             warning = f"{type(e).__name__}: {e}"

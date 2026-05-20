@@ -78,15 +78,19 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <div class="panel" id="rebuild-panel" style="border:1px solid var(--amber);background:rgba(245,158,11,0.04);display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <h2 style="margin-bottom:0">🔄 Перестроение графа знаний</h2>
-      <span id="rebuild-status" style="font-size:12px;color:var(--amber)">⏳ Идёт...</span>
-      <button class="btn-sm" id="rebuild-stop-btn" onclick="stopRebuild()" style="color:var(--red);border-color:rgba(220,38,38,0.3);display:none">⏹ Стоп</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="rebuild-status" style="font-size:12px;color:var(--amber)">⏳ Идёт...</span>
+        <span id="rebuild-error" style="font-size:11px;color:var(--red);display:none"></span>
+        <button class="btn-sm" id="rebuild-start-btn" onclick="startRebuild()" style="color:var(--emerald);border-color:rgba(16,185,129,0.3);display:none">▶ Запустить</button>
+        <button class="btn-sm" id="rebuild-stop-btn" onclick="stopRebuild()" style="color:var(--red);border-color:rgba(220,38,38,0.3);display:none">⏹ Стоп</button>
+      </div>
     </div>
     <div style="background:var(--elevated);border-radius:4px;height:8px;margin-bottom:8px;overflow:hidden">
       <div id="rebuild-bar" style="height:100%;background:linear-gradient(90deg,var(--amber),var(--accent-h));width:0%;transition:width 0.5s"></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text4);flex-wrap:wrap;gap:8px">
-      <span id="rebuild-progress">0 / 130 документов</span>
-      <span id="rebuild-eta">Расчёт времени...</span>
+      <span id="rebuild-progress">Ожидание запуска</span>
+      <span id="rebuild-eta"></span>
     </div>
   </div>
 
@@ -288,26 +292,59 @@ setInterval(loadStats, 30000);
 var rebuildWatchTimer = null;
 var rebuildStartCount = 0;
 var rebuildStartTime = null;
+var rebuildRunning = false;
+var totalDocs = 0;
+
+async function startRebuild() {
+  var panel = document.getElementById('rebuild-panel');
+  document.getElementById('rebuild-start-btn').style.display = 'none';
+  document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
+  document.getElementById('rebuild-error').style.display = 'none';
+  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Запуск...</span>';
+  document.getElementById('rebuild-progress').textContent = 'Запуск перестроения...';
+  panel.style.display = 'block';
+  
+  try {
+    var r = await fetch(API + '/rebuild-graph', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт...</span>';
+      rebuildRunning = true;
+      rebuildStartCount = 0;
+      rebuildStartTime = null;
+      totalDocs = (d.total_stats || {}).documents || 130;
+      watchRebuild();
+    } else {
+      showRebuildError(d.message || 'Ошибка запуска');
+    }
+  } catch(e) {
+    showRebuildError(e.message);
+  }
+}
+
+function showRebuildError(msg) {
+  document.getElementById('rebuild-error').textContent = '❌ ' + msg;
+  document.getElementById('rebuild-error').style.display = 'inline-block';
+  document.getElementById('rebuild-stop-btn').style.display = 'none';
+  document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+  document.getElementById('rebuild-start-btn').textContent = '▶ Перезапустить';
+  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">Ошибка</span>';
+  document.getElementById('rebuild-bar').style.background = 'var(--red)';
+  rebuildRunning = false;
+}
 
 async function watchRebuild() {
   try {
     const r = await fetch(API + '/stats', { headers: authHeaders() });
     const d = await r.json();
     const docs = d.documents || 0;
-    const totalDocs = 130;  // Всего документов для перестроения
-    
-    if (docs === 0) {
-      // Ещё не началось
-      setTimeout(watchRebuild, 5000);
-      return;
-    }
+    if (totalDocs === 0) totalDocs = Math.max(docs, 1);
     
     if (rebuildStartCount === 0) {
       rebuildStartCount = docs;
       rebuildStartTime = Date.now();
     }
     
-    // Показываем панель
     var panel = document.getElementById('rebuild-panel');
     var bar = document.getElementById('rebuild-bar');
     var prog = document.getElementById('rebuild-progress');
@@ -316,34 +353,41 @@ async function watchRebuild() {
     
     panel.style.display = 'block';
     document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
+    document.getElementById('rebuild-start-btn').style.display = 'none';
     
     var pct = Math.min(100, Math.round(docs / totalDocs * 100));
     bar.style.width = pct + '%';
+    bar.style.background = 'linear-gradient(90deg,var(--amber),var(--accent-h))';
     prog.textContent = docs + ' / ' + totalDocs + ' документов (' + pct + '%)';
     
-    // Расчёт оставшегося времени
-    var elapsed = (Date.now() - rebuildStartTime) / 1000; // секунд
+    var elapsed = (Date.now() - rebuildStartTime) / 1000;
     var docsSince = docs - rebuildStartCount;
     if (docsSince > 0 && elapsed > 30) {
-      var rate = docsSince / elapsed;  // доков в секунду
-      var remaining = (totalDocs - docs) / rate;  // секунд до конца
+      var rate = docsSince / elapsed;
+      var remaining = (totalDocs - docs) / rate;
       var minutes = Math.ceil(remaining / 60);
       if (minutes < 120) {
         eta.textContent = '≈ ' + minutes + ' мин до завершения';
-        status.innerHTML = '<span style="color:var(--amber)">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
       } else {
         var hours = Math.floor(minutes / 60);
-        eta.textContent = '≈ ' + hours + ' ч ' + (minutes % 60) + ' мин до завершения';
-        status.innerHTML = '<span style="color:var(--amber)">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+        eta.textContent = '≈ ' + hours + ' ч ' + (minutes % 60) + ' мин';
+        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
       }
     } else if (elapsed > 30) {
-      eta.textContent = 'Расчёт времени... (ждём данных)';
+      eta.textContent = 'Расчёт времени...';
     }
     
-    if (docs >= totalDocs) {
-      status.innerHTML = '<span style="color:var(--emerald)">✅ Завершено!</span>';
-      eta.textContent = 'Все документы обработаны';
-      bar.style.background = 'var(--emerald)';
+    if (docs >= totalDocs || totalDocs === 0 || !rebuildRunning) {
+      if (docs >= totalDocs) {
+        status.innerHTML = '<span style=\"color:var(--emerald)\">✅ Завершено!</span>';
+        bar.style.background = 'var(--emerald)';
+      }
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      eta.textContent = docs >= totalDocs ? 'Все документы обработаны' : '';
+      rebuildRunning = false;
       clearTimeout(rebuildWatchTimer);
       rebuildWatchTimer = setTimeout(function() { panel.style.display = 'none'; }, 10000);
       loadStats();
@@ -352,39 +396,72 @@ async function watchRebuild() {
     
     rebuildWatchTimer = setTimeout(watchRebuild, 5000);
   } catch(e) {
-    rebuildWatchTimer = setTimeout(watchRebuild, 10000);
+    showRebuildError(e.message);
+    clearTimeout(rebuildWatchTimer);
   }
 }
 
-// Запускаем мониторинг только если есть незавершённое перестроение
+async function stopRebuild() {
+  var btn = document.getElementById('rebuild-stop-btn');
+  btn.disabled = true;
+  btn.textContent = '⏹ Стоп...';
+  try {
+    var r = await fetch(API + '/stop-rebuild', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">⏹ Остановлено</span>';
+      document.getElementById('rebuild-bar').style.background = 'var(--red)';
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      document.getElementById('rebuild-eta').textContent = 'Остановлено пользователем';
+      rebuildRunning = false;
+      clearTimeout(rebuildWatchTimer);
+    }
+  } catch(e) {
+    showRebuildError(e.message);
+  }
+}
+
+// Авто-определение: если граф пуст — показать кнопку Старт
 async function checkAndWatch() {
   try {
     const r = await fetch(API + '/stats', { headers: authHeaders() });
     const d = await r.json();
-    if ((d.documents || 0) > 0 && (d.documents || 0) < 100) {
-      // Идёт перестроение
+    totalDocs = d.documents || 0;
+    if (totalDocs === 0 || totalDocs > 100) totalDocs = 130;
+    
+    if (totalDocs > 0 && totalDocs < 100) {
+      // Идёт перестроение — подключаемся
+      rebuildRunning = true;
       watchRebuild();
+    } else {
+      // Показать панель с кнопкой Старт
+      var panel = document.getElementById('rebuild-panel');
+      panel.style.display = 'block';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--text4)\">Ожидание</span>';
+      document.getElementById('rebuild-progress').textContent = 'Нажмите «Запустить» для перестроения графа';
     }
   } catch(e) {}
 }
 checkAndWatch();
 
-// === Инструменты графа (Neo4j Best Practices) ===
-
 async function postProcess() {
   const div = document.getElementById('tools-result');
-  div.innerHTML = '<span style=\"color:var(--amber)\">⏳ Пост-обработка графа...</span>';
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Пост-обработка графа...</span>';
   try {
     const r = await fetch(API + '/post-process', { method: 'POST', headers: authHeaders() });
     const d = await r.json();
     if (d.status === 'ok') {
-      div.innerHTML = '<span style=\"color:var(--emerald)\">✅ Слито: ' + (d.dedup_count||0) + ' дубликатов, связано: ' + (d.linked||0) + ' связей</span>';
+      div.innerHTML = '<span style="color:var(--emerald)">✅ Слито: ' + (d.dedup_count||0) + ' дубликатов, связано: ' + (d.linked||0) + ' связей</span>';
       loadStats();
     } else {
-      div.innerHTML = '<span style=\"color:var(--red)\">❌ ' + (d.message || 'Ошибка') + '</span>';
+      div.innerHTML = '<span style="color:var(--red)">❌ ' + (d.message || 'Ошибка') + '</span>';
     }
   } catch(e) {
-    div.innerHTML = '<span style=\"color:var(--red)\">❌ ' + e.message + '</span>';
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
   }
 }
 
@@ -392,24 +469,24 @@ async function showDomainSchema() {
   const div = document.getElementById('domain-schema-display');
   if (div.style.display === 'block') { div.style.display = 'none'; return; }
   div.style.display = 'block';
-  div.innerHTML = '<span style=\"color:var(--text4)\">⏳ Загрузка схемы...</span>';
+  div.innerHTML = '<span style="color:var(--text4)">⏳ Загрузка...</span>';
   try {
     const r = await fetch(API + '/domain-schema', { headers: authHeaders() });
     const d = await r.json();
     const schema = d.schema || {};
-    let html = '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px\">';
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">';
     for (const [group, types] of Object.entries(schema)) {
-      html += '<div style=\"background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px\">';
-      html += '<div style=\"font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)\">' + (group === 'core' ? '🎯 Core' : group === 'relations' ? '🔗 Relations' : '📎 Extended') + '</div>';
+      html += '<div style="background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px">';
+      html += '<div style="font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)">' + (group === 'core' ? '🎯 Core' : group === 'relations' ? '🔗 Relations' : '📎 Extended') + '</div>';
       for (const [type, desc] of Object.entries(types)) {
-        html += '<div style=\"padding:4px 0;font-size:12px\"><span style=\"color:var(--text2);font-family:JetBrains Mono,monospace\">' + type + '</span> <span style=\"color:var(--text4)\">— ' + desc + '</span></div>';
+        html += '<div style="font-size:12px;padding:4px 0"><code style="background:var(--elevated);padding:1px 6px;border-radius:3px;color:var(--accent-h)">' + type + '</code> <span style="color:var(--text4)">' + desc + '</span></div>';
       }
       html += '</div>';
     }
     html += '</div>';
     div.innerHTML = html;
   } catch(e) {
-    div.innerHTML = '<span style=\"color:var(--red)\">❌ ' + e.message + '</span>';
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
   }
 }
 
@@ -417,24 +494,24 @@ async function validateDoc() {
   const docId = document.getElementById('validate-doc-id').value.trim();
   if (!docId) return;
   const div = document.getElementById('tools-result');
-  div.innerHTML = '<span style=\"color:var(--amber)\">⏳ Валидация...</span>';
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Валидация...</span>';
   try {
     const r = await fetch(API + '/validate/' + encodeURIComponent(docId), { headers: authHeaders() });
     const d = await r.json();
-    let html = '<div style=\"background:var(--panel);border-radius:var(--radius);padding:12px;margin-top:8px\">';
-    html += '<div style=\"font-weight:600;margin-bottom:6px\">Документ: ' + docId.substring(0, 12) + '...</div>';
+    let html = '<div style="background:var(--panel);border-radius:var(--radius);padding:12px;margin-top:8px">';
+    html += '<div style="font-weight:600;margin-bottom:6px">Документ: ' + docId.substring(0, 12) + '...</div>';
     html += '<div>Всего сущностей: <strong>' + (d.total || 0) + '</strong></div>';
-    html += '<div>Качество: <strong style=\"color:' + (d.quality_score >= 80 ? 'var(--emerald)' : d.quality_score >= 50 ? 'var(--amber)' : 'var(--red)') + '\">' + (d.quality_score || 0) + '%</strong></div>';
+    html += '<div>Качество: <strong style="color:' + (d.quality_score >= 80 ? 'var(--emerald)' : d.quality_score >= 50 ? 'var(--amber)' : 'var(--red)') + '">' + (d.quality_score || 0) + '%</strong></div>';
     if (d.warnings && d.warnings.length) {
-      html += '<div style=\"margin-top:8px;color:var(--amber)\">⚠️ Предупреждения:</div>';
-      d.warnings.forEach(function(w) { html += '<div style=\"font-size:12px;color:var(--text4);padding:2px 0\">• ' + w + '</div>'; });
+      html += '<div style="margin-top:8px;color:var(--amber)">⚠️ Предупреждения:</div>';
+      d.warnings.forEach(function(w) { html += '<div style="font-size:12px;color:var(--text4);padding:2px 0">• ' + w + '</div>'; });
     } else {
-      html += '<div style=\"margin-top:8px;color:var(--emerald)\">✅ Всё чисто</div>';
+      html += '<div style="margin-top:8px;color:var(--emerald)">✅ Всё чисто</div>';
     }
     html += '</div>';
     div.innerHTML = html;
   } catch(e) {
-    div.innerHTML = '<span style=\"color:var(--red)\">❌ ' + e.message + '</span>';
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
   }
 }
 </script>
