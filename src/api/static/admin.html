@@ -402,14 +402,23 @@
                 Используется при фоновом анализе первого чанка — определение типа, темы, краткого содержания.
             </p>
             
+            <div id="active-ext-llm" style="margin-bottom:14px">
+                <span style="color:var(--text4)">Загрузка...</span>
+            </div>
+            
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div class="form-group">
                     <label>URL API</label>
                     <input type="text" id="ext-llm-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
                 </div>
                 <div class="form-group">
-                    <label>Модель</label>
-                    <input type="text" id="ext-llm-model" placeholder="phi4-mini" value="phi4-mini">
+                    <label>Модель (выбрать из загруженных или вписать)</label>
+                    <div style="display:flex;gap:8px">
+                        <select id="ext-llm-select" style="flex:1" onchange="document.getElementById('ext-llm-model').value = this.value">
+                            <option value="">— Выбрать из загруженных —</option>
+                        </select>
+                        <input type="text" id="ext-llm-model" placeholder="или впишите название" style="flex:0.7">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>API ключ (если нужен)</label>
@@ -417,7 +426,7 @@
                 </div>
                 <div class="form-group">
                     <label>Провайдер</label>
-                    <select id="ext-llm-provider">
+                    <select id="ext-llm-provider" onchange="onExtProviderChange()">
                         <option value="ollama">Ollama (локальный)</option>
                         <option value="openai">OpenAI</option>
                         <option value="deepseek">DeepSeek</option>
@@ -540,12 +549,17 @@
             }
         }
 
+        var llmModels = [];
+        var loadedModels = [];
+
         async function loadActiveModels() {
             try {
-                const [llmModels, embModels] = await Promise.all([
+                const [lm, embModels] = await Promise.all([
                     fetch(`${API_URL}/llm`).then(r => r.json()),
                     fetch(`${API_URL}/embeddings`).then(r => r.json())
                 ]);
+                llmModels = lm;
+                loadedModels = lm.filter(function(m) { return m.backend === 'ollama'; }).map(function(m) { return m.name; });
 
                 // Активная LLM модель
                 const activeLlm = llmModels.find(m => m.is_active);
@@ -596,6 +610,8 @@
                 if (graphSelect) {
                     graphSelect.innerHTML = llmModels.map(m => `<option value="${m.name}">${m.name} (${m.backend})</option>`).join('');
                 }
+                // Заполнить выпадающий список внешних LLM
+                populateExtSelect();
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
@@ -1067,11 +1083,63 @@
                 if (r.ok) {
                     const d = await r.json();
                     if (d.url) document.getElementById('ext-llm-url').value = d.url;
-                    if (d.model) document.getElementById('ext-llm-model').value = d.model;
-                    if (d.provider) document.getElementById('ext-llm-provider').value = d.provider;
+                    if (d.model) {
+                        document.getElementById('ext-llm-model').value = d.model;
+                        document.getElementById('ext-llm-select').value = d.model;
+                    }
+                    if (d.provider) {
+                        document.getElementById('ext-llm-provider').value = d.provider;
+                        onExtProviderChange();
+                    }
                     if (d.api_key) document.getElementById('ext-llm-key').value = d.api_key;
+                    // Показать карточку активной модели
+                    showActiveExtLLM(d);
                 }
             } catch(e) {}
+            // Заполнить выпадающий список загруженными моделями
+            populateExtSelect();
+        }
+        
+        function populateExtSelect() {
+            // Берём модели из глобального llmModels (загружается в loadActiveModels)
+            const sel = document.getElementById('ext-llm-select');
+            if (!sel || typeof llmModels === 'undefined') return;
+            const current = document.getElementById('ext-llm-model').value;
+            sel.innerHTML = '<option value="">— Выбрать из загруженных (' + llmModels.length + ' моделей) —</option>';
+            llmModels.forEach(function(m) {
+                const sel_attr = m.name === current ? ' selected' : '';
+                sel.innerHTML += '<option value="' + m.name + '"' + sel_attr + '>' + m.name + ' (' + m.backend + ')</option>';
+            });
+        }
+        
+        function showActiveExtLLM(cfg) {
+            const div = document.getElementById('active-ext-llm');
+            if (!cfg || !cfg.model) {
+                div.innerHTML = '<div style="padding:10px;background:var(--elevated);border-radius:8px;color:var(--text4);font-size:13px">⚠️ Внешний LLM не настроен</div>';
+                return;
+            }
+            const prov = cfg.provider || 'ollama';
+            const provLabel = prov === 'ollama' ? 'Ollama (локальный)' : prov === 'openai' ? 'OpenAI' : prov === 'deepseek' ? 'DeepSeek' : 'OpenRouter';
+            const inMemory = typeof loadedModels !== 'undefined' && loadedModels.includes(cfg.model);
+            div.innerHTML = '<div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--elevated);border-radius:8px">' +
+                '<div style="font-size:2rem">🔗</div>' +
+                '<div style="flex:1">' +
+                    '<div style="font-weight:600;font-size:1.125rem">' + cfg.model + '</div>' +
+                    '<div style="color:var(--text4);font-size:0.875rem">' + provLabel + (inMemory ? ' • ✅ в памяти' : '') + '</div>' +
+                '</div>' +
+                '<span class="badge badge-success">Активна</span>' +
+            '</div>';
+        }
+        
+        function onExtProviderChange() {
+            const prov = document.getElementById('ext-llm-provider').value;
+            const keyField = document.getElementById('ext-llm-key');
+            keyField.style.display = (prov === 'ollama') ? 'none' : 'block';
+            keyField.parentElement.querySelector('label').style.display = keyField.style.display;
+            // При переключении на ollama очищаем поле с текстом
+            if (prov === 'ollama') {
+                document.getElementById('ext-llm-url').value = 'http://192.168.50.41:11434';
+            }
         }
         async function saveGraphModel() {
             const status = document.getElementById('graph-model-status');
