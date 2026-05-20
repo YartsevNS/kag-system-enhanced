@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — База знаний (Know)</title>
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:24px 32px;max-width:1300px}
+h1{font-size:24px;font-weight:600;margin-bottom:4px}
+.sub{font-size:12px;color:var(--text4);margin-bottom:20px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:10px 14px}
+.stat-num{font-size:18px;font-weight:700;color:var(--text)}
+.stat-label{font-size:9px;color:var(--text4);text-transform:uppercase;margin-top:2px}
+
+/* Date section */
+.date-section{margin-bottom:24px}
+.date-header{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border-s);display:flex;align-items:center;gap:8px}
+.date-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-h)}
+
+/* Q&A layout */
+.qa-list{display:flex;flex-direction:column;gap:14px}
+.qa-item{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.qa-q,.qa-a{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;position:relative}
+.qa-q{border-left:3px solid var(--accent-h)}
+.qa-a{border-left:3px solid var(--emerald)}
+.qa-label{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;font-weight:600}
+.qa-q .qa-label{color:var(--accent-h)}
+.qa-a .qa-label{color:var(--emerald)}
+.qa-text{font-size:13px;color:var(--text2);line-height:1.65}
+.qa-text strong{color:var(--text)}
+.qa-text code{background:var(--elevated);padding:1px 5px;border-radius:4px;font-size:11px;color:var(--accent-h);font-family:'JetBrains Mono',monospace}
+.qa-text ul{margin:6px 0 0 16px}
+.qa-text li{margin:2px 0;color:var(--text3)}
+.qa-meta{font-size:10px;color:var(--text4);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap}
+.qa-meta span{display:flex;align-items:center;gap:4px}
+
+/* Tag chips */
+.tags-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.tag{background:rgba(94,106,210,0.08);color:var(--accent-h);padding:2px 8px;border-radius:9999px;font-size:9px;font-weight:500}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:12px}.stats-row{grid-template-columns:repeat(2,1fr)}.qa-item{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+<main>
+  <h1>📚 База знаний (Know)</h1>
+  <div class="sub">Все сессии, диалоги и решения. Вопросы слева, ответы справа. Хронология по датам.</div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num">8+</div><div class="stat-label">Сессий</div></div>
+    <div class="stat-card"><div class="stat-num">~45</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num">19</div><div class="stat-label">Дней работы</div></div>
+    <div class="stat-card"><div class="stat-num">20+</div><div class="stat-label">Файлов изменено</div></div>
+  </div>
+
+  <!-- May 19, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8 (текущая)</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Перестройка графа — визуализация и расчёт времени</strong><br>Нужно визуализировать процесс перестроения графа знаний и рассчитать сколько времени займёт.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена панель визуализации на <code>/kg</code>: прогресс-бар с процентами, счётчик «N / 130 документов», ETA с расчётом скорости (~1.5 док/мин). При завершении панель становится зелёной и скрывается через 10 сек. <strong>Время:</strong> ~3-5 часов на 130 документов × 3 чанка.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Баг: общие сущности — всего 3 при 130 документах</strong><br>Почему так мало cross-doc entities?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Найден критический баг: <code>chunk_id = "chunk_00001"</code> был одинаковым для ВСЕХ документов. <code>MATCH (c:Chunk {id: "chunk_00001"})</code> цеплял чанки всех документов → сущность «EUR/USD» была связана со 113 документами. <strong>Исправлено:</strong> <code>chunk_id = "{document_id}_chunk_{i}"</code>. Старые сущности удалены, граф перестраивается.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Лента новостей — отдельная страница</strong><br>Нужна страница с блоками новостей в реальном времени, с раскрытием по клику.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/news</code>: сетка блоков 280px, клик — раскрытие на всю ширину, панель источников с чипсами (вкл/выкл), тестовый источник Securelist. Дедупликация по тексту.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>SecurityNews RSS — добавить как источник</strong><br>5 RSS-каналов secnews.ru по ИБ.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены 5 каналов SecurityNews: все публикации, статьи, зарубежные, российские, дайджест СМИ. Кнопка «🔐 SecurityNews (5)» на <code>/monitor</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Роскомнадзор RSS</strong><br>Изучить и добавить.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен RSS РКН: <code>rkn.gov.ru/_services/rss/</code>. Новости по надзору в сфере связи, ИТ, СМИ, защите ПДн.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация новостей</strong><br>Нужна логика: вычитывать название+дату, если есть — не загружать.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Два уровня дедупликации: 1) <strong>Ключ новости</strong> <code>title[:80]|YYYY-MM-DD</code> в <code>_news_keys</code> set → config_store; 2) <strong>SHA-256</strong> контента. Каждая новость — 1 экземпляр в KAG.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>RSS не скачиваются</strong><br>Почему новости ЦБ не попадают в KAG?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">RSS-парсер искал только <strong>вложения</strong> (enclosures с PDF). В новостных RSS их нет. Добавлен шаг 3: если нет вложений → сохраняем саму новость как <code>.txt</code> документ (заголовок + описание + ссылка).</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ЦБ РФ RSS — добавить набор источников</strong><br>Изучить cbr.ru/development/rss/.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлено 8 RSS-каналов ЦБ РФ отдельным набором: новое на сайте, новости/интервью, пресс-релизы, курсы валют, регламент МЦИ, +3 English. Кнопка «🏦 ЦБ РФ (8)».</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Настройка скорости скачивания</strong><br>Сервер блокирует. Нужны партии и паузы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены настройки: <strong>Партия</strong> (файлов за раз), <strong>Пауза между партиями</strong> (сек), <strong>Пауза между файлами</strong> (сек), <strong>Случ. разброс</strong> (0..N сек). Обработка 429 (Retry-After), 503. Настраивается для каждого источника.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ГОСТы — страница не парсится</strong><br>gost.ru/standarts/InformationSecurity — ссылки есть, система не видит.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Ссылки вели на <code>rst.gov.ru:8443/file-service/file/load/...</code> без расширения <code>.pdf</code>. Добавлены: паттерны file-service в <code>_is_document_url</code>, Content-Type → расширение, Content-Disposition → имя файла. <strong>115 ГОСТов найдено.</strong></div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Веб-мониторинг — RSS + scrape + change detection</strong><br>Нужна страница для мониторинга внешних сайтов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/monitor</code>: RSS-парсер (feedparser), веб-скрапер (BeautifulSoup4), change detection (SHA-256). 6 встроенных источников. Интеграция с KAG Pipeline: Download → SHA-256 → Dedup → Upload → Parse → Qdrant → Neo4j.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Пагинация на странице документов</strong><br>Добавить кнопки «следующие N» с прокруткой.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены кнопки ◀/▶ с перелистыванием страниц, счётчик «1–50 из 100 (стр. 1/2)», селектор количества (20/50/100/200/500/Все). При смене фильтра — сброс на первую страницу.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Доменные схемы — множественные пресеты</strong><br>Переключение между схемами сущностей.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">5 доменных пресетов: 🌐 Универсальная, 💰 Бухгалтерия, ⚖️ Юридическая, 🏥 Медицинская, 🔐 <strong>Инфобез</strong> (ГОСТ Р 56545/56546). Настраиваются в админке и на <code>/kg</code>. Схема ИБ включает: asset, vulnerability, threat, incident, control, risk_level, classification, regulation.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Neo4j best practices — анализ и реализация</strong><br>Сравнить с neo4j.com/blog/knowledge-graph-generation.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Реализованы все лучшие практики Neo4j: двухпроходное извлечение (core → relations → extended), MERGE вместо CREATE (авто-дедупликация), пост-обработка (entity linking), валидация качества, разделение Lexical/Domain Graph, индексы и constraints. Всё с русскими комментариями.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Code Review страницы логов</strong><br>Профессиональное ревью с делегированием.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Суб-агент провёл ревью: найдены XSS (innerHTML), отсутствие auth на эндпоинтах, инъекция в docker logs. Исправлено: DOM-создание вместо innerHTML, authHeaders на все fetch, санитайз container_name, хеш-дедупликация логов.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Миниатюры — белый фон</strong><br>И админка: чекбоксы форматов + бейджи на странице загрузки.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Миниатюры: белый фон, чёрный/серый текст. Админка: 12 чекбоксов в алфавитном порядке. Документы: цветные/серые бейджи над зоной загрузки, accept у input динамически.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Просмотр текстовых документов</strong><br>Ошибка «Файл повреждён или не является PDF» для txt/md.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">viewer.html теперь определяет тип: PDF → PDF.js, текст → рендеринг содержимого белым текстом на тёмном фоне. Скрываются PDF-элементы для текстовых.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Авто-классификация типов документов</strong><br>Тип не появляется на миниатюрах.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Исправлен document_analyzer: таймаут увеличен до 120с, синхронизация config_store с API списка. 15 из 16 документов получили типы (contract, invoice, letter, form, legal, technical, financial). Endpoint <code>POST /api/v1/upload/reanalyze-all</code>.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- May 18, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>18 мая 2026 — Сессии #6-7</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Гибридный поиск не работает</strong><br>На странице /kg гибридный поиск (граф + вектор) ничего не ищет.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Entity extraction падал молча: <code>mistral:7b</code> не генерировал валидный JSON на русском. Заменён на <code>phi4-mini</code>. Добавлен WARNING-лог при неудаче парсинга. Исправлена сериализация свойств в JSON. Endpoint rebuild-graph.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /search не работает</strong><br>Никакой поиск не функционирует.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Три проблемы: 1) Нет auth-заголовков в fetch; 2) Нет функций getToken()/authHeaders(); 3) Эндпоинт <code>/api/v1/chat/search</code> не существовал. Добавлен endpoint, authHeaders, getToken. Все 3 режима поиска работают.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /logs пустая</strong><br>Ничего не отображается.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены эндпоинты: system/info, docker/stats, docker/{name}/logs. Исправлен JS: убран show-system, updateSystemPanel всегда активна. Системные метрики через psutil.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- May 17, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>17 мая 2026 — Сессии #4-5</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Граф знаний — поиск и Cypher</strong><br>Добавить прямой запрос Neo4j и entity search.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен endpoint <code>/api/v1/kg/cypher</code> с защитой от модификации данных. UI на /kg: textarea для Cypher, отображение в таблице. Entity search с фильтром по типу и поиском CONTAINS.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- May 14, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>14 мая 2026 — Сессии #1-3</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>PDF viewer не работает</strong><br>Документ не отображается, ошибка pdfjsLib is not defined.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Две проблемы: 1) /details endpoint читал из пустой таблицы documents вместо config_store (system_configs). 2) PDF.js грузился с недоступного CDN. Исправлено: endpoint → config_store, PDF.js → локальные файлы <code>/static/pdf.min.js</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Мониторинг Docker и системы</strong><br>Обзор существующих страниц мониторинга.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Изучены: логи, Docker dashboard, Qdrant мониторинг. OpenTelemetry + Prometheus. Документы: загрузка, чанки, статусы. Система имеет полный мониторинговый стек.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>Архитектурные решения (сквозные)</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Duplicates & Versioning</strong><br>Храним ли оригиналы для сравнения при повторной загрузке?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">SHA-256 при загрузке, проверка дубликата по хешу, бэкап <code>.v{N}.bak</code>, сравнение версий (diff по словам), endpoint <code>/upload/{id}/diff</code>. Всё с русскими комментариями.</div></div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>
