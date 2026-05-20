@@ -93,12 +93,38 @@ async def hybrid_search(
     doc_id: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Гибридный поиск: граф + вектор."""
+    """Гибридный поиск: граф (Neo4j) + вектор (Qdrant).
+    
+    Если сущности не найдены в графе — ищет похожие чанки через Qdrant.
+    """
     try:
         from src.indexing.knowledge_graph import kg_service
+        from src.indexing.embeddings_service import embeddings_service
+        
         entities = [e.strip() for e in q.split(",") if e.strip()]
         doc_ids = [doc_id] if doc_id else None
-        results = kg_service.hybrid_search(entities, doc_ids)
+        
+        # 1. Поиск в графе Neo4j
+        results = kg_service.hybrid_search(entities, doc_ids) if entities else []
+        
+        # 2. Если граф ничего не нашёл — ищем через Qdrant (векторный поиск по смыслу)
+        if not results:
+            try:
+                await embeddings_service.initialize()
+                qdrant_results = await embeddings_service.search(q, limit=20)
+                for point in (qdrant_results or []):
+                    payload = point.get("payload", {})
+                    results.append({
+                        "chunk_id": payload.get("chunk_id", ""),
+                        "text": payload.get("content", "")[:300],
+                        "doc_id": payload.get("document_id", ""),
+                        "filename": payload.get("file_type", ""),
+                        "entity_count": 0,
+                        "source": "qdrant"  # Маркер что результат из Qdrant
+                    })
+            except Exception as e:
+                logger.warning(f"Qdrant fallback failed: {e}")
+        
         return {"query": q, "results": results, "total": len(results)}
     except Exception as e:
         return {"query": q, "results": [], "total": 0, "error": str(e)}

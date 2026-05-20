@@ -600,31 +600,43 @@ class KnowledgeGraphService:
         """Гибридный поиск: найти чанки, связанные с заданными сущностями.
         
         Чем больше искомых сущностей в чанке — тем выше ранк.
+        Использует CONTAINS для частичного совпадения (найдёт «криптография» даже если сущность называется «ГОСТ Р криптозащита»).
         """
         if not self.driver or not query_entities:
             return []
         try:
+            # Строим WHERE с CONTAINS для каждого термина
+            where_clauses = []
+            params = {}
+            for i, term in enumerate(query_entities):
+                param_name = f"term_{i}"
+                where_clauses.append(f"e.name CONTAINS ${param_name}")
+                params[param_name] = term
+            
+            where_str = " OR ".join(where_clauses)
+            query = f"""
+                MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
+                WHERE {where_str}
+                RETURN DISTINCT c.id as chunk_id, c.text_preview as text,
+                       d.id as doc_id, d.filename as filename,
+                       count(e) as entity_count
+                ORDER BY entity_count DESC
+                LIMIT 20
+            """
+            
             with self.driver.session() as session:
                 if doc_ids:
-                    result = session.run("""
+                    params["doc_ids"] = doc_ids
+                    query = f"""
                         MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
-                        WHERE e.name IN $entities AND d.id IN $doc_ids
+                        WHERE ({where_str}) AND d.id IN $doc_ids
                         RETURN DISTINCT c.id as chunk_id, c.text_preview as text,
                                d.id as doc_id, d.filename as filename,
                                count(e) as entity_count
                         ORDER BY entity_count DESC
                         LIMIT 20
-                    """, entities=query_entities, doc_ids=doc_ids)
-                else:
-                    result = session.run("""
-                        MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
-                        WHERE e.name IN $entities
-                        RETURN DISTINCT c.id as chunk_id, c.text_preview as text,
-                               d.id as doc_id, d.filename as filename,
-                               count(e) as entity_count
-                        ORDER BY entity_count DESC
-                        LIMIT 20
-                    """, entities=query_entities)
+                    """
+                result = session.run(query, **params)
                 return [dict(r) for r in result]
         except Exception as e:
             logger.warning(f"Ошибка гибридного поиска: {e}")
