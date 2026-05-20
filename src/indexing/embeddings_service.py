@@ -211,7 +211,7 @@ class EmbeddingsService:
 
             payload = {
                 "document_id": document_id,
-                "chunk_id": chunk.get("chunk_id", f"chunk_{i}"),
+                "chunk_id": chunk.get("chunk_id", f"{document_id}_chunk_{i}"),
                 "content": chunk.get("content", ""),
                 "file_type": metadata.get("file_type", "unknown") if metadata else "unknown",
                 "group_ids": group_ids or [],
@@ -442,7 +442,7 @@ class EmbeddingsService:
                 })
 
             # Сортируем по chunk_seq (из metadata), fallback на chunk_id
-            chunks.sort(key=lambda x: x.get("metadata", {}).get("chunk_seq", 0) or int(x.get("chunk_id", "chunk_00000").split("_")[-1]))
+            chunks.sort(key=lambda x: x.get("metadata", {}).get("chunk_seq", 0) or 0)
 
             return chunks
 

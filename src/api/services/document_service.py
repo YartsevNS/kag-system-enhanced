@@ -712,7 +712,7 @@ class DocumentService:
             
             # Обрабатываем чанки (первые 10 для скорости, остальные в фоне)
             for i, chunk in enumerate(chunks[:10]):
-                chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+                chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
                 chunk_text = chunk.get("content", "")
                 chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
                 
