@@ -56,10 +56,11 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <a href="/chunks">🧩 Чанки</a>
   <a href="/search">🔎 Поиск</a>
   <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
-  <a href="/api">🔧 API</a>
-  <a href="/docs">📖 Документация</a>
 </nav>
 <main>
   <h1>🕸️ Граф знаний</h1>
@@ -78,6 +79,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <h2 style="margin-bottom:0">🔄 Перестроение графа знаний</h2>
       <span id="rebuild-status" style="font-size:12px;color:var(--amber)">⏳ Идёт...</span>
+      <button class="btn-sm" id="rebuild-stop-btn" onclick="stopRebuild()" style="color:var(--red);border-color:rgba(220,38,38,0.3);display:none">⏹ Стоп</button>
     </div>
     <div style="background:var(--elevated);border-radius:4px;height:8px;margin-bottom:8px;overflow:hidden">
       <div id="rebuild-bar" style="height:100%;background:linear-gradient(90deg,var(--amber),var(--accent-h));width:0%;transition:width 0.5s"></div>
@@ -313,6 +315,7 @@ async function watchRebuild() {
     var eta = document.getElementById('rebuild-eta');
     
     panel.style.display = 'block';
+    document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
     
     var pct = Math.min(100, Math.round(docs / totalDocs * 100));
     bar.style.width = pct + '%';

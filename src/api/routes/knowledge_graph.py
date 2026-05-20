@@ -200,6 +200,17 @@ async def post_process_graph(document_id: Optional[str] = None):
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/stop-rebuild", summary="Остановить перестроение графа")
+async def stop_rebuild():
+    """Установить флаг остановки перестроения графа знаний."""
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("kg_config", "rebuild_stop", True)
+        return {"status": "ok", "message": "Сигнал остановки отправлен. Текущий документ будет последним."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/validate/{document_id}", summary="Валидация сущностей документа")
 async def validate_document_entities(document_id: str):
     """Проверить качество извлечённых сущностей."""
@@ -258,3 +269,4 @@ async def update_domain_schema(data: dict):
         return {"status": "ok", "message": "Доменная схема обновлена вручную"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
