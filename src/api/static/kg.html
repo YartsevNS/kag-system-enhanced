@@ -126,6 +126,12 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 
   <div class="panel">
     <h2>🔗 Гибридный поиск (граф + вектор)</h2>
+    <p style="font-size:10px;color:var(--text4);margin-bottom:10px;line-height:1.5">
+      Ищет одновременно в двух пространствах: <strong style="color:var(--text3)">Neo4j</strong> (граф — сущности и их связи) и <strong style="color:var(--text3)">Qdrant</strong> (векторы — смысловая близость чанков).
+      Результат — чанки документов, где встречаются указанные сущности <em>или</em> похожий по смыслу текст.
+      Примеры: <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">Иванов, ООО Ромашка</code> найдёт все документы где есть эти организация и человек;
+      <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">криптография, ГОСТ</code> — документы по теме криптозащиты.
+    </p>
     <div class="search-row">
       <input type="text" id="hybrid-query" placeholder="Сущности через запятую: Иванов, ООО Ромашка, 2024..." onkeydown="if(event.key==='Enter')hybridSearch()">
       <button class="btn" onclick="hybridSearch()">Искать</button>
