@@ -113,14 +113,13 @@ async def hybrid_search(
                 await embeddings_service.initialize()
                 qdrant_results = await embeddings_service.search(q, limit=20)
                 for point in (qdrant_results or []):
-                    payload = point.get("payload", {})
                     results.append({
-                        "chunk_id": payload.get("chunk_id", ""),
-                        "text": payload.get("content", "")[:300],
-                        "doc_id": payload.get("document_id", ""),
-                        "filename": payload.get("file_type", ""),
+                        "chunk_id": point.get("chunk_id", ""),
+                        "text": point.get("content", "")[:300],
+                        "doc_id": point.get("document_id", ""),
+                        "filename": point.get("file_type", ""),
                         "entity_count": 0,
-                        "source": "qdrant"  # Маркер что результат из Qdrant
+                        "source": "qdrant"
                     })
             except Exception as e:
                 logger.warning(f"Qdrant fallback failed: {e}")
