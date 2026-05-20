@@ -73,6 +73,21 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     <div class="stat-card" style="border:1px solid var(--accent);background:rgba(94,106,210,0.06)"><div class="stat-num" id="stat-cross" style="color:var(--accent-h)">—</div><div class="stat-label">Общих сущностей</div></div>
   </div>
 
+  <!-- Перестроение графа -->
+  <div class="panel" id="rebuild-panel" style="border:1px solid var(--amber);background:rgba(245,158,11,0.04);display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <h2 style="margin-bottom:0">🔄 Перестроение графа знаний</h2>
+      <span id="rebuild-status" style="font-size:12px;color:var(--amber)">⏳ Идёт...</span>
+    </div>
+    <div style="background:var(--elevated);border-radius:4px;height:8px;margin-bottom:8px;overflow:hidden">
+      <div id="rebuild-bar" style="height:100%;background:linear-gradient(90deg,var(--amber),var(--accent-h));width:0%;transition:width 0.5s"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text4);flex-wrap:wrap;gap:8px">
+      <span id="rebuild-progress">0 / 130 документов</span>
+      <span id="rebuild-eta">Расчёт времени...</span>
+    </div>
+  </div>
+
   <div class="panel">
     <h2>🛠 Инструменты графа (Neo4j Best Practices)</h2>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -266,6 +281,90 @@ async function runCypher() {
 
 loadStats();
 setInterval(loadStats, 30000);
+
+// === Мониторинг перестроения графа ===
+var rebuildWatchTimer = null;
+var rebuildStartCount = 0;
+var rebuildStartTime = null;
+
+async function watchRebuild() {
+  try {
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const d = await r.json();
+    const docs = d.documents || 0;
+    const totalDocs = 130;  // Всего документов для перестроения
+    
+    if (docs === 0) {
+      // Ещё не началось
+      setTimeout(watchRebuild, 5000);
+      return;
+    }
+    
+    if (rebuildStartCount === 0) {
+      rebuildStartCount = docs;
+      rebuildStartTime = Date.now();
+    }
+    
+    // Показываем панель
+    var panel = document.getElementById('rebuild-panel');
+    var bar = document.getElementById('rebuild-bar');
+    var prog = document.getElementById('rebuild-progress');
+    var status = document.getElementById('rebuild-status');
+    var eta = document.getElementById('rebuild-eta');
+    
+    panel.style.display = 'block';
+    
+    var pct = Math.min(100, Math.round(docs / totalDocs * 100));
+    bar.style.width = pct + '%';
+    prog.textContent = docs + ' / ' + totalDocs + ' документов (' + pct + '%)';
+    
+    // Расчёт оставшегося времени
+    var elapsed = (Date.now() - rebuildStartTime) / 1000; // секунд
+    var docsSince = docs - rebuildStartCount;
+    if (docsSince > 0 && elapsed > 30) {
+      var rate = docsSince / elapsed;  // доков в секунду
+      var remaining = (totalDocs - docs) / rate;  // секунд до конца
+      var minutes = Math.ceil(remaining / 60);
+      if (minutes < 120) {
+        eta.textContent = '≈ ' + minutes + ' мин до завершения';
+        status.innerHTML = '<span style="color:var(--amber)">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+      } else {
+        var hours = Math.floor(minutes / 60);
+        eta.textContent = '≈ ' + hours + ' ч ' + (minutes % 60) + ' мин до завершения';
+        status.innerHTML = '<span style="color:var(--amber)">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+      }
+    } else if (elapsed > 30) {
+      eta.textContent = 'Расчёт времени... (ждём данных)';
+    }
+    
+    if (docs >= totalDocs) {
+      status.innerHTML = '<span style="color:var(--emerald)">✅ Завершено!</span>';
+      eta.textContent = 'Все документы обработаны';
+      bar.style.background = 'var(--emerald)';
+      clearTimeout(rebuildWatchTimer);
+      rebuildWatchTimer = setTimeout(function() { panel.style.display = 'none'; }, 10000);
+      loadStats();
+      return;
+    }
+    
+    rebuildWatchTimer = setTimeout(watchRebuild, 5000);
+  } catch(e) {
+    rebuildWatchTimer = setTimeout(watchRebuild, 10000);
+  }
+}
+
+// Запускаем мониторинг только если есть незавершённое перестроение
+async function checkAndWatch() {
+  try {
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const d = await r.json();
+    if ((d.documents || 0) > 0 && (d.documents || 0) < 100) {
+      // Идёт перестроение
+      watchRebuild();
+    }
+  } catch(e) {}
+}
+checkAndWatch();
 
 // === Инструменты графа (Neo4j Best Practices) ===
 
