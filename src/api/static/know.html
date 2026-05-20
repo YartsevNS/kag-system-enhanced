@@ -80,6 +80,14 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8 (текущая)</div>
     <div class="qa-list">
       <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация сущностей — зачем и как работает</strong><br>Расскажи подробнее о реальной дедупликации, так ли она нужна или это что-то технологическое ускоряет или улучшает работу?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Дедупликация через MERGE вместо CREATE</strong> — это не косметика, а архитектурное решение:<br>• <strong>Граф становится связным</strong> — через общие сущности можно перейти между документами<br>• <strong>Экономия памяти</strong> — 1000 доков с «Ивановым» = 1 узел, не 1000<br>• <strong>Быстрее поиск</strong> — <code>MATCH (e:Entity {name: "Иванов"})</code> возвращает 1 запись<br>• <strong>Аналитика</strong> — видно что «Иванов» в 150 документах (важный контрагент)<br><strong>Баг с chunk_id:</strong> раньше <code>chunk_id = "chunk_00001"</code> для всех доков → MERGE склеивал всё подряд. Исправлено на <code>"{doc_id}_chunk_{i}"</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Skill know-updater — автообновление страницы Know</strong><br>Сделай скилл, который будет дописывать каждый диалог на страницу know после ответа.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан skill <code>know-updater</code> (<code>productivity/know-updater/SKILL.md</code>). После существенного ответа читает <code>know.html</code>, добавляет Q&A блок в начало секции текущей даты, коммитит и пушит. Формат: вопрос слева (синяя полоса), ответ справа (зелёная). <strong>Правила:</strong> не дублировать, не на каждый чих, технические детали с code-ссылками.</div></div>
+      </div>
+      <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Перестройка графа — визуализация и расчёт времени</strong><br>Нужно визуализировать процесс перестроения графа знаний и рассчитать сколько времени займёт.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена панель визуализации на <code>/kg</code>: прогресс-бар с процентами, счётчик «N / 130 документов», ETA с расчётом скорости (~1.5 док/мин). При завершении панель становится зелёной и скрывается через 10 сек. <strong>Время:</strong> ~3-5 часов на 130 документов × 3 чанка.</div></div>
       </div>
