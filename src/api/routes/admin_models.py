@@ -1732,3 +1732,34 @@ async def get_container_logs(container_name: str, lines: int = 30):
         return {"container": container_name, "logs": out[-10000:]}
     except Exception as e:
         return {"container": container_name, "logs": "", "error": str(e)}
+
+
+# ============================================================
+# Системный промпт для чата
+# ============================================================
+
+@router.get("/chat-prompt", summary="Получить системный промпт чата")
+async def get_chat_prompt():
+    """Получить текущий системный промпт для чата."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("llm", "default") or {}
+        prompt = saved.get("system_prompt", "")
+        return {"prompt": prompt}
+    except Exception as e:
+        return {"prompt": "", "error": str(e)}
+
+
+@router.post("/chat-prompt", summary="Сохранить системный промпт чата")
+async def save_chat_prompt(data: dict):
+    """Сохранить системный промпт для чата в config_store."""
+    try:
+        from src.api.services.config_store import config_store
+        prompt = data.get("prompt", "")
+        existing = config_store.get("llm", "default") or {}
+        existing["system_prompt"] = prompt
+        config_store.set("llm", "default", existing)
+        logger.info(f"Системный промпт чата сохранён ({len(prompt)} символов)")
+        return {"status": "ok", "message": "Промпт сохранён"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

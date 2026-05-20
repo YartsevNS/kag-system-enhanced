@@ -334,6 +334,22 @@
             <div id="chunking-status" style="margin-top: 1rem;"></div>
         </div>
 
+        <!-- Системный промпт для чата -->
+        <div class="section">
+            <h2 class="section-title">💬 Системный промпт для чата</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Промпт, который задаёт поведение AI-ассистента в чате. Определяет как нейросеть работает с базами Qdrant (векторный поиск) и Neo4j (граф знаний).
+                <strong>AI получает контекст из обеих баз автоматически</strong> — промпт лишь указывает как его интерпретировать.
+            </p>
+            <textarea id="chat-system-prompt" style="width:100%;min-height:320px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;resize:vertical;line-height:1.6"
+                placeholder="Введите системный промпт...">Загрузка...</textarea>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+                <button class="btn btn-primary" onclick="saveChatPrompt()">💾 Сохранить промпт</button>
+                <button class="btn btn-outline" onclick="resetChatPrompt()">↩ Сбросить на умолчание</button>
+                <span id="chat-prompt-status" style="font-size:13px"></span>
+            </div>
+        </div>
+
         <!-- Разрешённые форматы загрузки -->
         <div class="section">
             <h2 class="section-title">📎 Разрешённые форматы загрузки</h2>
@@ -1041,6 +1057,93 @@
         loadAll();
         setInterval(loadStatus, 30000);
         loadExtLLM();
+
+        // === Системный промпт для чата ===
+        var DEFAULT_CHAT_PROMPT = `Ты — AI-ассистент с доступом к гибридной базе знаний KAG.
+Ты работаешь с ДВУМЯ источниками данных одновременно:
+
+1. Qdrant (векторная БД) — находит документы по смысловой близости. Контекст из Qdrant помечен как [Источник N] с doc:ID и score:релевантность.
+2. Neo4j (граф знаний) — содержит сущности, их типы, связи между ними и документы-источники. Контекст из Neo4j помечен как [Граф] с именами сущностей и количеством связей.
+
+## Правила работы
+
+### 1. Приоритет источников
+- ВСЕГДА начинай с анализа контекста из Qdrant и Neo4j
+- Если граф (Neo4j) показывает связи между документами — укажи ЭТО ЯВНО: «Согласно графу знаний, сущность X связана с документами A, B, C»
+- Если векторный поиск (Qdrant) дал высокий score (>0.7) — это сильный сигнал релевантности
+
+### 2. Извлечение информации
+- Читай ВЕСЬ предоставленный контекст перед ответом
+- Если сущность найдена в графе — проверь её source_docs (из каких документов она извлечена)
+- Если один и тот же факт подтверждается из Qdrant И Neo4j — это максимально надёжная информация
+- Указывай источник: «Согласно [Источник 1] (документ X, score 0.85)...»
+
+### 3. Метаданные
+- Обращай внимание на типы сущностей в графе: person (человек), organization (организация), date (дата), money (сумма), legal_term (юридический термин) и др.
+- Если сущность имеет высокий confidence (>0.8) — она точно извлечена
+- Если несколько документов ссылаются на одну сущность — это важный перекрёстный факт
+
+### 4. Ответы
+- Структурируй ответ: сначала КЛЮЧЕВОЙ ВЫВОД, затем детали
+- Если информация есть в нескольких документах — перечисли их
+- Если контекст не содержит ответа — скажи: «В загруженных документах информация не найдена» и предложи поискать в других источниках
+- НИКОГДА не выдумывай факты, не присутствующие в контексте
+
+### 5. Стиль
+- Профессиональный, точный, на русском языке
+- Используй термины из документов
+- При цитировании указывай источник
+
+## Формат контекста
+Контекст будет передан в формате:
+[Источник 1] (doc:abc123, score:0.923): текст чанка...
+...
+--- ГРАФ ЗНАНИЙ (Neo4j) ---
+[Граф] Документ: filename.pdf | Связанных сущностей: 5`;
+
+        async function saveChatPrompt() {
+            const prompt = document.getElementById('chat-system-prompt').value;
+            const status = document.getElementById('chat-prompt-status');
+            status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю...</span>';
+            try {
+                const r = await fetch('/api/v1/admin/models/chat-prompt', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: prompt})
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style=\"color:#10b981\">✅ Сохранено</span>';
+                    setTimeout(function() { status.innerHTML = ''; }, 3000);
+                } else {
+                    status.innerHTML = '<span style=\"color:#ef4444\">❌ Ошибка сохранения</span>';
+                }
+            } catch(e) {
+                status.innerHTML = '<span style=\"color:#ef4444\">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function loadChatPrompt() {
+            try {
+                const r = await fetch('/api/v1/admin/models/chat-prompt');
+                if (r.ok) {
+                    const d = await r.json();
+                    document.getElementById('chat-system-prompt').value = d.prompt || DEFAULT_CHAT_PROMPT;
+                } else {
+                    document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+                }
+            } catch(e) {
+                document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+            }
+        }
+
+        async function resetChatPrompt() {
+            document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+            var status = document.getElementById('chat-prompt-status');
+            status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю умолчание...</span>';
+            await saveChatPrompt();
+        }
+
+        loadChatPrompt();
 
         // === Внешние LLM ===
         async function saveExtLLM() {

@@ -80,7 +80,7 @@ class ChatService:
         if use_rag:
             try:
                 logger.debug("Выполняю RAG поиск...")
-                # Use embeddings_service.search with group filtering
+                # 1a. Векторный поиск в Qdrant
                 from src.indexing.embeddings_service import embeddings_service
                 search_results = await embeddings_service.search(
                     query=user_message,
@@ -90,16 +90,35 @@ class ChatService:
                 )
 
                 if search_results:
-                    # Формируем контекст из найденных документов
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
+                        doc_id = result.get('document_id', '?')[:12]
                         context_parts.append(
-                            f"[Источник {i}] (score: {result['score']:.3f}):\n{result['content']}"
+                            f"[Источник {i}] (doc:{doc_id}, score:{result['score']:.3f}):\n{result['content']}"
                         )
-
                     context = "\n\n".join(context_parts)
                     sources = search_results
-                    logger.info(f"Найдено {len(sources)} источников для контекста")
+                    logger.info(f"Qdrant: найдено {len(sources)} чанков")
+                
+                # 1b. Поиск в графе Neo4j — сущности и связи
+                try:
+                    from src.indexing.knowledge_graph import kg_service
+                    entities = [user_message]  # CONTAINS поиск
+                    graph_results = kg_service.hybrid_search(entities)
+                    if graph_results:
+                        graph_context = []
+                        for r in graph_results[:5]:
+                            fid = r.get('filename', '?')[:50]
+                            gcnt = r.get('entity_count', 0)
+                            graph_context.append(
+                                f"[Граф] Документ: {fid} | Связанных сущностей: {gcnt}"
+                            )
+                        context += "\n\n--- ГРАФ ЗНАНИЙ (Neo4j) ---\n"
+                        context += "\n".join(graph_context)
+                        logger.info(f"Neo4j: найдено {len(graph_results)} связей в графе")
+                except Exception as e:
+                    logger.debug(f"Neo4j поиск пропущен: {e}")
+                    
             except Exception as e:
                 logger.warning(f"RAG поиск не выполнен: {e}")
                 sources = []
@@ -230,7 +249,12 @@ class ChatService:
             Системный промпт
         """
         # Пробуем загрузить из настроек
-        default_prompt = "Ты - AI-ассистент. Отвечай на вопросы точно и по существу."
+        default_prompt = (
+            "Ты — AI-ассистент с доступом к гибридной базе знаний KAG.\n"
+            "Ты работаешь с ДВУМЯ источниками данных: Qdrant (векторы — поиск по смыслу) и Neo4j (граф — сущности и связи).\n"
+            "Начинай с анализа контекста из обеих баз. Если граф показывает связи — укажи это явно.\n"
+            "Не выдумывай факты. Указывай источники. Структурируй ответ."
+        )
         
         try:
             from src.api.services.config_store import config_store
