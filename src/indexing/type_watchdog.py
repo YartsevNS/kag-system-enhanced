@@ -22,7 +22,7 @@ class TypeWatchdog:
             logger.info("TypeWatchdog уже запущен")
             return
         from src.api.services.config_store import config_store
-        config_store.set("kg_config", "type_watch_status", "running")
+        config_store.set("kg_config", "type_watch_status", {"state": "running"})
         self._task = asyncio.create_task(self._run())
         logger.info("🏷️ TypeWatchdog запущен — определяю типы документов")
     
@@ -34,13 +34,14 @@ class TypeWatchdog:
             await embeddings_service.initialize()
         except Exception as e:
             logger.warning(f"TypeWatchdog: Qdrant недоступен: {e}")
+            config_store.set("kg_config", "type_watch_status", {"state": "error", "error": str(e)})
             return
         
         docs = config_store.get_all("documents") or {}
         self._total = sum(1 for d in docs.values() if isinstance(d, dict) and d.get('status') == 'completed')
         self._processed = 0
         
-        config_store.set("kg_config", "type_watch_status", "running")
+        config_store.set("kg_config", "type_watch_status", {"state": "running"})
         
         for did, doc in docs.items():
             # Проверка сигнала остановки
@@ -110,7 +111,7 @@ class TypeWatchdog:
                 logger.debug(f"TypeWatchdog: ошибка {fn[:30]}: {e}")
                 continue
         
-        config_store.set("kg_config", "type_watch_status", "completed")
+        config_store.set("kg_config", "type_watch_status", {"state": "completed"})
         config_store.set("kg_config", "type_watch_progress", {
             "processed": self._processed,
             "total": self._total

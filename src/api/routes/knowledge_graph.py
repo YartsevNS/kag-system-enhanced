@@ -358,7 +358,8 @@ async def start_type_watchdog():
 async def type_watchdog_status():
     try:
         from src.api.services.config_store import config_store
-        status = config_store.get("kg_config", "type_watch_status") or "idle"
+        status_raw = config_store.get("kg_config", "type_watch_status") or {}
+        status = status_raw.get("state", "idle") if isinstance(status_raw, dict) else "idle"
         progress = config_store.get("kg_config", "type_watch_progress") or {}
         # Count docs without type
         docs = config_store.get_all("documents") or {}
