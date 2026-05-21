@@ -21,6 +21,8 @@ class TypeWatchdog:
         if self._task and not self._task.done():
             logger.info("TypeWatchdog уже запущен")
             return
+        from src.api.services.config_store import config_store
+        config_store.set("kg_config", "type_watch_status", "running")
         self._task = asyncio.create_task(self._run())
         logger.info("🏷️ TypeWatchdog запущен — определяю типы документов")
     
