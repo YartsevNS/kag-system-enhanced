@@ -1789,3 +1789,44 @@ async def save_chat_prompt(data: dict):
         return {"status": "ok", "message": "Промпт сохранён"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+
+# ============================================================
+# Типы документов (авто-пополняемый список)
+# ============================================================
+
+@router.get("/doc-types", summary="Получить список типов документов")
+async def get_doc_types():
+    try:
+        from src.api.services.config_store import config_store
+        type_list = config_store.get("kg_config", "doc_types") or {}
+        types = type_list.get("types", []) if isinstance(type_list, dict) else []
+        return {"types": types}
+    except Exception as e:
+        return {"types": [], "error": str(e)}
+
+
+@router.post("/doc-types", summary="Изменить список типов")
+async def update_doc_types(data: dict):
+    try:
+        from src.api.services.config_store import config_store
+        action = data.get("action", "add")
+        name = data.get("name", "").strip().lower()
+        if not name:
+            return {"status": "error", "message": "Имя типа не указано"}
+        
+        type_list = config_store.get("kg_config", "doc_types") or {}
+        types = type_list.get("types", []) if isinstance(type_list, dict) else []
+        
+        if action == "add" and name not in types:
+            types.append(name)
+        elif action == "remove" and name in types:
+            types.remove(name)
+        else:
+            return {"status": "ok", "message": "Без изменений"}
+        
+        config_store.set("kg_config", "doc_types", {"types": types})
+        return {"status": "ok", "message": f"Тип '{name}' {'добавлен' if action == 'add' else 'удалён'}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

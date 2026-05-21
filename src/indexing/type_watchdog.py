@@ -120,9 +120,25 @@ class TypeWatchdog:
     
     async def _detect_type(self, sample_texts: list, filename: str) -> str | None:
         """Определить тип документа по первым чанкам через LLM."""
+        from src.api.services.config_store import config_store
         from src.indexing.entity_extractor import entity_extractor
         
-        # Используем тот же LLM что и для entity extraction
+        # Загружаем список типов из БД (авто-пополняемый)
+        type_list = config_store.get("kg_config", "doc_types") or {}
+        if isinstance(type_list, dict):
+            known_types = type_list.get("types", [])
+        else:
+            known_types = []
+        
+        # Дефолтный список если пусто
+        if not known_types:
+            known_types = ['contract','report','invoice','letter','form','certificate',
+                          'legal','medical','financial','technical','order','policy',
+                          'standard','news','other']
+            config_store.set("kg_config", "doc_types", {"types": known_types})
+        
+        type_list_str = ", ".join(known_types)
+        
         cfg = entity_extractor._get_graph_config()
         model = cfg.get("model", "phi4-mini:latest")
         llm_url = cfg.get("url", "http://192.168.50.41:11434")
@@ -130,9 +146,10 @@ class TypeWatchdog:
         api_key = cfg.get("api_key", "")
         
         prompt = f"""Определи ТОЧНЫЙ тип документа по его содержимому. Верни только одно слово из списка.
+Если документ не подходит ни под один тип из списка — предложи НОВЫЙ тип (одно слово на английском).
 
-СПИСОК ТИПОВ:
-contract, report, invoice, letter, form, certificate, legal, medical, financial, technical, order, policy, standard, news, other
+СПИСОК ИЗВЕСТНЫХ ТИПОВ:
+{type_list_str}
 
 Имя файла: {filename}
 
@@ -142,7 +159,7 @@ contract, report, invoice, letter, form, certificate, legal, medical, financial,
 ---FRAGMENT 2---
 {sample_texts[1][:600] if len(sample_texts) > 1 else '—'}
 
-Верни СТРОГО одно слово из списка (без кавычек, без пояснений):"""
+Верни СТРОГО одно слово (без кавычек, без пояснений):"""
         
         try:
             result = await entity_extractor._call_llm(
@@ -153,10 +170,18 @@ contract, report, invoice, letter, form, certificate, legal, medical, financial,
             entities = result.get("entities", [])
             if entities:
                 raw = entities[0].get("name", "").strip().lower()
-                valid_types = {'contract','report','invoice','letter','form','certificate',
-                              'legal','medical','financial','technical','order','policy',
-                              'standard','news','other'}
-                return raw if raw in valid_types else 'other'
+                # Очищаем от мусора
+                raw = raw.split()[0] if raw else ""
+                if len(raw) < 2 or len(raw) > 30:
+                    return 'other'
+                
+                # Если тип новый — добавляем в список
+                if raw not in known_types and raw != 'other':
+                    known_types.append(raw)
+                    config_store.set("kg_config", "doc_types", {"types": known_types})
+                    logger.info(f"🏷️ Новый тип документа: {raw} (добавлен в список)")
+                
+                return raw if raw in known_types else 'other'
         except Exception as e:
             logger.debug(f"TypeWatchdog: LLM ошибка: {e}")
         

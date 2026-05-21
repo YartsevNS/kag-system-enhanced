@@ -350,6 +350,20 @@
             </div>
         </div>
 
+        <!-- Типы документов -->
+        <div class="section">
+            <h2 class="section-title">🏷️ Типы документов</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Список типов для классификации документов. <strong>Авто-пополняется</strong> при типизации (TypeWatchdog).
+                Можно редактировать вручную — добавлять, удалять, переименовывать.
+            </p>
+            <div style="display:flex;gap:10px;margin-bottom:12px">
+                <input type="text" id="new-doc-type" placeholder="Новый тип (на англ.)" style="flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px">
+                <button class="btn btn-sm" onclick="addDocType()">➕ Добавить</button>
+            </div>
+            <div id="doc-types-list" style="display:flex;flex-wrap:wrap;gap:6px">Загрузка...</div>
+        </div>
+
         <!-- Разрешённые форматы загрузки -->
         <div class="section">
             <h2 class="section-title">📎 Разрешённые форматы загрузки</h2>
@@ -1057,6 +1071,60 @@
         loadAll();
         setInterval(loadStatus, 30000);
         loadExtLLM();
+
+        // === Типы документов ===
+        async function loadDocTypes() {
+            try {
+                const r = await fetch('/api/v1/admin/models/doc-types');
+                if (r.ok) {
+                    const d = await r.json();
+                    renderDocTypes(d.types || []);
+                }
+            } catch(e) {}
+        }
+
+        function renderDocTypes(types) {
+            const div = document.getElementById('doc-types-list');
+            div.innerHTML = types.map(t => 
+                `<span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;font-size:11px">
+                    🏷️ ${t}
+                    <span onclick="removeDocType('${t}')" style="cursor:pointer;color:var(--red);margin-left:2px;font-weight:bold">×</span>
+                </span>`
+            ).join('');
+            if (!types.length) div.innerHTML = '<span style="color:var(--text4);font-size:12px">Нет типов</span>';
+        }
+
+        async function addDocType() {
+            const inp = document.getElementById('new-doc-type');
+            const name = inp.value.trim().toLowerCase();
+            if (!name) return;
+            try {
+                const r = await fetch('/api/v1/admin/models/doc-types', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'add', name: name})
+                });
+                if (r.ok) {
+                    inp.value = '';
+                    loadDocTypes();
+                }
+            } catch(e) {}
+        }
+
+        async function removeDocType(name) {
+            if (!confirm('Удалить тип ' + name + '?')) return;
+            try {
+                const r = await fetch('/api/v1/admin/models/doc-types', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'remove', name: name})
+                });
+                if (r.ok) loadDocTypes();
+            } catch(e) {}
+        }
+
+        loadDocTypes();
+
 
         // === Системный промпт для чата ===
         var DEFAULT_CHAT_PROMPT = `Ты — AI-ассистент с доступом к гибридной базе знаний KAG.
