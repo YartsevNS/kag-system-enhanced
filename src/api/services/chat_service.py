@@ -100,11 +100,23 @@ class ChatService:
                     sources = search_results
                     logger.info(f"Qdrant: найдено {len(sources)} чанков")
                 
-                # 1b. Поиск в графе Neo4j — сущности и связи
+                # 1b. Поиск в графе Neo4j — сущности, их типы и связи
                 try:
                     from src.indexing.knowledge_graph import kg_service
-                    entities = [user_message]  # CONTAINS поиск
-                    graph_results = kg_service.hybrid_search(entities)
+                    # Разбиваем сообщение на слова-кандидаты (>=3 букв) + entities из Qdrant
+                    import re
+                    words = re.findall(r'[A-ZА-ЯЁ]{2,}|[A-Za-z]{3,}|[а-яё]{4,}', user_message)
+                    # Добавляем ID документов из Qdrant для контекстного поиска
+                    doc_ids_from_qdrant = list(set(
+                        r.get('document_id') for r in (search_results or []) if r.get('document_id')
+                    ))[:5]
+                    entities_for_search = list(set(words))[:5]  # До 5 ключевых слов
+                    
+                    graph_results = kg_service.hybrid_search(entities_for_search, doc_ids_from_qdrant) if entities_for_search else []
+                    if not graph_results:
+                        # Fallback: поиск всех сущностей из найденных Qdrant-документов
+                        graph_results = kg_service.hybrid_search([user_message], doc_ids_from_qdrant)
+                    
                     if graph_results:
                         graph_context = []
                         for r in graph_results[:5]:
