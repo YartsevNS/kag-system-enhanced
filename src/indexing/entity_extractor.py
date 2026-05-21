@@ -413,7 +413,7 @@ class EntityExtractor:
 
     async def _extract_extended_entities(
         self, text: str, extended_types: Dict, doc_id: str,
-        model: str, llm_url: str
+        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
     ) -> Dict[str, Any]:
         """Извлечение дополнительных типов сущностей."""
         type_desc = "\n".join([f"  - {t}: {d}" for t, d in extended_types.items()])
