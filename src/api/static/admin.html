@@ -543,11 +543,16 @@
             return {};
         }
         
-        // Patch fetch to include credentials
+        // Patch fetch to include credentials + auth
         const _origFetch = window.fetch;
         window.fetch = function(url, opts = {}) {
+            opts = opts || {};
             opts.credentials = 'include';
-            opts.headers = { ...(opts.headers || {}), ...authHeaders() };
+            // Merge headers safely
+            var h = new Headers(opts.headers || {});
+            var ah = authHeaders();
+            for (var k in ah) h.set(k, ah[k]);
+            opts.headers = h;
             return _origFetch(url, opts);
         };
 
