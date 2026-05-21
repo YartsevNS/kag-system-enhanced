@@ -295,3 +295,44 @@ async def update_domain_schema(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+
+# ============================================================
+# Watchdog — сторож перестроения графа
+# ============================================================
+
+@router.post("/watchdog/start", summary="Запустить сторожа перестроения")
+async def start_watchdog():
+    try:
+        from src.indexing.rebuild_watchdog import rebuild_watchdog
+        rebuild_watchdog.start()
+        return {"status": "ok", "message": "Watchdog запущен"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/watchdog/stop", summary="Остановить сторожа")
+async def stop_watchdog():
+    try:
+        from src.indexing.rebuild_watchdog import rebuild_watchdog
+        await rebuild_watchdog.stop()
+        return {"status": "ok", "message": "Watchdog остановлен"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/watchdog/status", summary="Статус сторожа")
+async def watchdog_status():
+    try:
+        from src.api.services.config_store import config_store
+        status = config_store.get("kg_config", "rebuild_status") or "idle"
+        stats = config_store.get("kg_config", "rebuild_stats") or {}
+        return {
+            "status": status,
+            "entities": stats.get("entities", 0),
+            "relations": stats.get("relations", 0),
+            "last_update": stats.get("last_update", 0),
+            "watchdog_run": stats.get("watchdog_run", 0)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
