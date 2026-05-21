@@ -130,14 +130,28 @@ class TypeWatchdog:
         else:
             known_types = []
         
-        # Дефолтный список если пусто
+        # Дефолтный список если пусто (русские типы)
         if not known_types:
-            known_types = ['contract','report','invoice','letter','form','certificate',
-                          'legal','medical','financial','technical','order','policy',
-                          'standard','news','other']
+            known_types = [
+                {"key": "contract", "label": "Договор"},
+                {"key": "report", "label": "Отчёт"},
+                {"key": "invoice", "label": "Счёт"},
+                {"key": "letter", "label": "Письмо"},
+                {"key": "form", "label": "Форма"},
+                {"key": "certificate", "label": "Удостоверение"},
+                {"key": "legal", "label": "Юридический"},
+                {"key": "medical", "label": "Медицинский"},
+                {"key": "financial", "label": "Финансовый"},
+                {"key": "technical", "label": "Технический"},
+                {"key": "standard", "label": "Стандарт (ГОСТ)"},
+                {"key": "policy", "label": "Политика/Регламент"},
+                {"key": "order", "label": "Приказ"},
+                {"key": "news", "label": "Новость"},
+                {"key": "other", "label": "Прочее"},
+            ]
             config_store.set("kg_config", "doc_types", {"types": known_types})
         
-        type_list_str = ", ".join(known_types)
+        type_labels = ", ".join(t["label"] for t in known_types)
         
         cfg = entity_extractor._get_graph_config()
         model = cfg.get("model", "phi4-mini:latest")
@@ -145,14 +159,12 @@ class TypeWatchdog:
         provider = cfg.get("provider", "ollama")
         api_key = cfg.get("api_key", "")
         
-        prompt = f"""Твоя задача — определить тип документа. Верни JSON в формате:
-{{"entities":[{{"name":"ТИП_ДОКУМЕНТА","type":"document_type","confidence":0.9}}]}}
+        prompt = f"""Твоя задача — определить тип документа на РУССКОМ языке. Верни JSON:
+{{"entities":[{{"name":"ТИП","type":"document_type","confidence":0.9}}]}}
 
-Где ТИП_ДОКУМЕНТА — одно слово из списка ниже.
-Если документ не подходит ни под один тип — используй "other".
-Если нужен новый тип — предложи его И добавь "type":"new_type".
-
-ИЗВЕСТНЫЕ ТИПЫ: {type_list_str}
+Где ТИП — одно из: {type_labels}
+Если документ не подходит — используй "Прочее".
+Если нужен новый тип — предложи его на русском + type:"new_type".
 
 Имя файла: {filename}
 
@@ -162,7 +174,7 @@ class TypeWatchdog:
 ---FRAGMENT 2---
 {sample_texts[1][:500] if len(sample_texts) > 1 else '—'}
 
-Верни СТРОГО JSON (без markdown, без пояснений):"""
+Верни СТРОГО JSON (без markdown):"""
         
         try:
             result = await entity_extractor._call_llm(
@@ -172,19 +184,34 @@ class TypeWatchdog:
             )
             entities = result.get("entities", [])
             if entities:
-                raw = entities[0].get("name", "").strip().lower()
-                # Очищаем от мусора
-                raw = raw.split()[0] if raw else ""
-                if len(raw) < 2 or len(raw) > 30:
+                raw = entities[0].get("name", "").strip()
+                # Очищаем
+                raw = raw.split('\n')[0].strip().rstrip('.,;:')
+                if len(raw) < 2 or len(raw) > 40:
                     return 'other'
                 
-                # Если тип новый — добавляем в список
-                if raw not in known_types and raw != 'other':
-                    known_types.append(raw)
-                    config_store.set("kg_config", "doc_types", {"types": known_types})
-                    logger.info(f"🏷️ Новый тип документа: {raw} (добавлен в список)")
+                # Ищем совпадение с известными типами (по label)
+                type_keys = {t["label"].lower(): t["key"] for t in known_types}
+                type_labels_lower = {t["label"].lower() for t in known_types}
                 
-                return raw if raw in known_types else 'other'
+                raw_lower = raw.lower()
+                if raw_lower in type_keys:
+                    return type_keys[raw_lower]
+                
+                # Похож на существующий?
+                for label_lower, key in type_keys.items():
+                    if label_lower in raw_lower or raw_lower in label_lower:
+                        return key
+                
+                # Новый тип — добавляем
+                if raw_lower not in type_labels_lower:
+                    new_key = raw_lower.replace(' ', '_')[:20]
+                    known_types.append({"key": new_key, "label": raw})
+                    config_store.set("kg_config", "doc_types", {"types": known_types})
+                    logger.info(f"🏷️ Новый тип: {raw} (key={new_key})")
+                    return new_key
+                
+                return 'other'
         except Exception as e:
             logger.debug(f"TypeWatchdog: LLM ошибка: {e}")
         

@@ -1085,11 +1085,14 @@
 
         function renderDocTypes(types) {
             const div = document.getElementById('doc-types-list');
-            div.innerHTML = types.map(t => 
-                `<span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;font-size:11px">
-                    🏷️ ${t}
-                    <span onclick="removeDocType('${t}')" style="cursor:pointer;color:var(--red);margin-left:2px;font-weight:bold">×</span>
-                </span>`
+            div.innerHTML = types.map(t => {
+                const label = typeof t === 'object' ? t.label : t;
+                const key = typeof t === 'object' ? t.key : t;
+                return `<span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;font-size:11px">
+                    🏷️ ${label}
+                    <span onclick="removeDocType('${key}')" style="cursor:pointer;color:var(--red);margin-left:2px;font-weight:bold">×</span>
+                </span>`;
+            })
             ).join('');
             if (!types.length) div.innerHTML = '<span style="color:var(--text4);font-size:12px">Нет типов</span>';
         }
