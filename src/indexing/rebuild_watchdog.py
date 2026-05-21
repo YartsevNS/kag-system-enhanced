@@ -63,6 +63,13 @@ class RebuildWatchdog:
         self._last_entity_count = 0
         self._run_count += 1
         
+        # Первый запуск перестроения
+        logger.info("Watchdog: первый запуск перестроения")
+        config_store.set("kg_config", "rebuild_status", "restarting")
+        await self._restart_rebuild()
+        config_store.set("kg_config", "rebuild_status", "running")
+        self._stall_counter = 0
+        
         while True:
             try:
                 await asyncio.sleep(30)  # Проверка каждые 30 секунд

@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
         from src.indexing.knowledge_graph import kg_service
         kg_stats = kg_service.get_stats()
         kg_docs = kg_stats.get("documents", 0)
-        if completed > 0 and kg_docs < completed * 0.8:
+        if completed > 0 and (kg_docs < completed * 0.8 or kg_stats.get("entities", 0) < 10):
             logger.info(f"Запуск Watchdog: {kg_docs}/{completed} документов в графе")
             from src.indexing.rebuild_watchdog import rebuild_watchdog
             rebuild_watchdog.start()
