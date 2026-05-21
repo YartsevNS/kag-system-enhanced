@@ -33,6 +33,8 @@ class PostgresConfigStore:
 
         if db_url:
             self._db_url = db_url
+        elif settings.KAG_DB_URL:
+            self._db_url = settings.KAG_DB_URL
         else:
             # Строим URL из настроек Settings
             self._db_url = (

@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     KC_DB_PORT: int = 5432
     KC_DB_NAME: str = "keycloak"
 
+    # KAG собственная БД (не Keycloak!)
+    KAG_DB_URL: str = ""  # Если задана — config_store использует её приоритетно
+
     # Casbin
     CASBIN_MODEL_PATH: str = "/app/src/auth/rbac_model.conf"
     CASBIN_POLICY_FILE: str = "/app/src/auth/rbac_policy.csv"
