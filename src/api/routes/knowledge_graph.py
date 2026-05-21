@@ -336,3 +336,43 @@ async def watchdog_status():
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+
+
+# ============================================================
+# Type Watchdog — сторож типизации документов
+# ============================================================
+
+@router.post("/type-watchdog/start", summary="Запустить сторожа типизации")
+async def start_type_watchdog():
+    try:
+        from src.indexing.type_watchdog import type_watchdog
+        type_watchdog.start()
+        return {"status": "ok", "message": "TypeWatchdog запущен"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/type-watchdog/status", summary="Статус типизации")
+async def type_watchdog_status():
+    try:
+        from src.api.services.config_store import config_store
+        status = config_store.get("kg_config", "type_watch_status") or "idle"
+        progress = config_store.get("kg_config", "type_watch_progress") or {}
+        # Count docs without type
+        docs = config_store.get_all("documents") or {}
+        total = sum(1 for d in docs.values() if isinstance(d, dict) and d.get('status') == 'completed')
+        with_type = sum(1 for d in docs.values() 
+                       if isinstance(d, dict) and d.get('document_type') 
+                       and d['document_type'] not in ('unknown', None, ''))
+        return {
+            "status": status,
+            "total": total,
+            "with_type": with_type,
+            "without_type": total - with_type,
+            "processed": progress.get("processed", 0),
+            "total_progress": progress.get("total", 0)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

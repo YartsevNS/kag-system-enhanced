@@ -126,7 +126,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div></div>
+    <div class="stat-card" id="stat-types-card"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div></div>
     <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
   </div>
 
@@ -295,9 +295,33 @@ async function loadAll() {
     await enrichDocs();
     updateStats();
     renderAll();
+    checkTypeWatchdog();
   } catch(e) {
     document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
   }
+}
+
+async function checkTypeWatchdog() {
+  try {
+    const r = await fetch(`${API}/kg/type-watchdog/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const badge = document.getElementById('type-watch-badge');
+    if (!badge) return;
+    if (d.status === 'running') {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--amber)';
+      badge.textContent = `⏳ ${d.processed}/${d.total_progress || d.total}`;
+    } else if (d.status === 'completed') {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--emerald)';
+      badge.textContent = `✅ ${d.with_type}/${d.total}`;
+    } else if (d.without_type > 0) {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--text4)';
+      badge.textContent = `⚠️ ${d.without_type} без типа`;
+    }
+  } catch(e) {}
 }
 
 async function enrichDocs() {
