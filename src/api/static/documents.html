@@ -183,8 +183,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Table -->
   <div id="docs-table" style="display:none">
+    <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
+      <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
+      <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
+    </div>
     <table>
-      <thead><tr><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
+      <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
       <tbody id="table-body"></tbody>
     </table>
     <div class="empty" id="table-empty" style="display:none">Нет документов</div>
@@ -409,12 +413,18 @@ function renderTable(docs) {
   if (!docs.length) {
     tbody.innerHTML = '';
     document.getElementById('table-empty').style.display = 'block';
+    document.getElementById('bulk-actions').style.display = 'none';
     return;
   }
   document.getElementById('table-empty').style.display = 'none';
   const statusMap = {completed:'<span class="status-badge s-ready">✅ Готово</span>',processing:'<span class="status-badge s-proc">⚙️ Обработка</span>',pending:'<span class="status-badge s-pend">⏳ Ожидает</span>',failed:'<span class="status-badge s-fail">❌ Ошибка</span>'};
+  // Сброс select-all при перерисовке
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = false;
+  document.getElementById('bulk-actions').style.display = 'none';
   tbody.innerHTML = docs.map(d => `
     <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="doc-check" value="${d.document_id}" onchange="updateSelectAll()"></td>
       <td><strong>${d.recognized_title||d.filename}</strong></td>
       <td><span class="tag tag-type" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
       <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
@@ -507,6 +517,49 @@ async function diffVersions(docId) {
 }
 
 setInterval(loadAll, 15000);
+
+
+// === Bulk delete ===
+function toggleAll(cb) {
+  document.querySelectorAll('.doc-check').forEach(c => c.checked = cb.checked);
+  updateBulkBar();
+}
+
+function updateSelectAll() {
+  const all = document.querySelectorAll('.doc-check');
+  const checked = document.querySelectorAll('.doc-check:checked');
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = all.length > 0 && checked.length === all.length;
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.doc-check:checked');
+  const bar = document.getElementById('bulk-actions');
+  const cnt = document.getElementById('bulk-count');
+  if (checked.length > 0) {
+    bar.style.display = 'block';
+    cnt.textContent = 'Выбрано: ' + checked.length;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function bulkDelete() {
+  const checked = document.querySelectorAll('.doc-check:checked');
+  if (!checked.length) return;
+  if (!confirm('Удалить ' + checked.length + ' документов? Это действие необратимо.')) return;
+  let deleted = 0, failed = 0;
+  for (const cb of checked) {
+    try {
+      const r = await fetch(API + '/upload/' + cb.value, { method: 'DELETE' });
+      if (r.ok) deleted++; else failed++;
+    } catch(e) { failed++; }
+  }
+  toast('🗑️ Удалено: ' + deleted + (failed ? ', ошибок: ' + failed : ''));
+  loadAll();
+}
+
 </script>
 </body>
 </html>
