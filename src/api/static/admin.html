@@ -535,6 +535,21 @@
 
     <script>
         const API_URL = '/api/v1/admin/models';
+        
+        // Auth helper — cookie-based
+        function authHeaders() {
+            const t = document.cookie.split('; ').find(r => r.startsWith('kag_token='));
+            if (t) return { 'Authorization': 'Bearer ' + t.split('=')[1] };
+            return {};
+        }
+        
+        // Patch fetch to include credentials
+        const _origFetch = window.fetch;
+        window.fetch = function(url, opts = {}) {
+            opts.credentials = 'include';
+            opts.headers = { ...(opts.headers || {}), ...authHeaders() };
+            return _origFetch(url, opts);
+        };
 
         async function loadStatus() {
             try {
