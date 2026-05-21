@@ -162,7 +162,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
-    <select id="count-filter" onchange="resetPage();applyFilters()" title="Количество на странице">
+    <select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице">
       <option value="20">20 шт</option>
       <option value="50" selected>50 шт</option>
       <option value="100">100 шт</option>
@@ -212,6 +212,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
   document.getElementById('file-input').onchange = (e) => uploadFiles(Array.from(e.target.files));
   setupDragDrop();
+  // Восстановить сохранённое количество документов на странице
+  const savedCount = localStorage.getItem('docs-count');
+  if (savedCount) {
+    const sel = document.getElementById('count-filter');
+    if (sel) sel.value = savedCount;
+  }
 });
 
 async function loadFormatsBar() {
