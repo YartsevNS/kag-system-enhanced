@@ -81,7 +81,44 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8 (текущая)</div>
     <div class="qa-list">
+      
       <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Навигация — единое меню на всех страницах</strong><br>Переделай меню слева. На всех страницах кроме чата должно быть одинаковое меню из 11 пунктов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Унифицирована навигация на 14 страницах: Дашборд → Чат с AI → Документы → Чанки → Поиск → Граф знаний → Веб-монитор → Новости → Know → Логи → Админ. Дашборд получил <code>.nav-item</code> CSS-классы. Админка сохранила оригинальную структуру.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Выбор нейросетей — API-ключи теряются при смене провайдера</strong><br>Где сохраняется API-ключ? Почему не видно после повторного выбора провайдера?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Баг:</strong> <code>_ext_llm_config</code> — глобальная переменная в памяти. <strong>Fix:</strong> сохранение в <code>config_store.set("ext_llm", "default", {...})</code> → PostgreSQL. Загрузка при старте модуля. Условие <code>if not model AND not api_key</code> заменено на безусловную загрузку из БД. <strong>Баланс-проверка:</strong> OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (тест доступности). Endpoint: <code>GET /api/v1/admin/models/ext-llm/balance</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Гибридный поиск — только Neo4j, нет Qdrant</strong><br>Вбиваю «криптография» — ничего не найдено. Нужен fallback на Qdrant.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Fix:</strong> Гибридный поиск теперь двухэтапный: (1) Neo4j через <code>CONTAINS</code> (не <code>IN</code>), (2) Если пусто — fallback на <code>embeddings_service.search()</code> в Qdrant. Пояснение мелким шрифтом на странице /kg.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Системный промпт для чата — RAG из Neo4j+Qdrant</strong><br>Нужен промпт для AI-чата, чтобы работал с обеими базами. Создай поле в админке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> секция «💬 Системный промпт для чата» в админке с textarea 320px. API: <code>GET/POST /api/v1/admin/models/chat-prompt</code>. Сохранение в <code>config_store("llm", "default")</code>. Дефолтный промпт: работает с Qdrant (векторы) и Neo4j (граф). Чат-сервис обогащает контекст из обеих баз: <code>[Источник N]</code> + <code>[Граф]</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>QA тестирование — профессиональный прогон</strong><br>Занимайся автотестами как профессиональный тестировщик. Изучи методики, проведи полное тестирование.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Загружены скиллы:</strong> systematic-debugging, test-driven-development, dogfood. <strong>3 делегата параллельно:</strong> (1) Smoke — 11 страниц, FAIL: меню неконсистентно (только /admin 11 пунктов). (2) API — 10 эндпоинтов, PASS: все 200 OK. (3) Admin — FAIL: промпт и форматы не персистят. <strong>Исправлено:</strong> навигация 9 страниц + дашборд; промпт сохранение в config_store; chunk_id уникальные.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Тестирование AI-чата</strong><br>Тестируй ответы чата. Проверяй нейросети, строй предположения и проверяй.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Проблема:</strong> активная модель <code>phi4-mini-reasoning:latest</code> — reasoning-модель с китайскими <code>&lt;think&gt;</code> тегами. Ответы пустые или нерелевантные. <strong>Fix:</strong> переключено на <code>phi4-mini:latest</code> — ответы на русском, ссылается на документы. <strong>Mistral:7b</strong> — более развёрнутые ответы, медленнее. <strong>Neo4j-поиск:</strong> улучшен — извлечение ключевых слов из сообщения вместо полного предложения. 4 теста пройдено.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Сторож перестроения графа</strong><br>Нужен сторож процесса. Перезапускать при необходимости вручную или сторожем.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/rebuild_watchdog.py</code> — asyncio-задача внутри uvicorn. <strong>API:</strong> <code>POST /api/v1/kg/watchdog/start</code>, <code>POST .../stop</code>, <code>GET .../status</code>. <strong>Алгоритм:</strong> каждые 30 сек проверяет рост сущностей. При зависании (5 циклов) — авто-перезапуск с очисткой. Авто-старт при запуске контейнера если entities &lt; 10.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Bulk delete документов</strong><br>На странице документов в таблице сделать чекбоксы для группового удаления.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> чекбокс «Выбрать все» в шапке таблицы, индивидуальные чекбоксы у каждой строки, панель «🗑️ Удалить выбранные» с подсчётом. Количество сохраняется в <code>localStorage</code>. Подтверждение перед удалением.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Сторож типизации документов</strong><br>Сторож должен проверять наличие тегов и типов. При отсутствии — перезапускать распознавание первых 2 чанков. Показывать статус на странице документов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/type_watchdog.py</code> — определяет тип документа по первым 2 чанкам через LLM. API: <code>POST /api/v1/kg/type-watchdog/start</code>, <code>GET .../status</code>. <strong>15 русских типов:</strong> Договор, Отчёт, Счёт, Стандарт (ГОСТ), etc. <strong>Авто-пополнение:</strong> LLM предлагает новый тип → добавляется в список. Редактирование в админке: ➕ добавить / ✕ удалить. Статус на странице /documents: ⏳ идёт / ✅ завершено / ⚠️ без типа. Клик по «Типов» → админка.</div></div>
+      </div>
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация сущностей — зачем и как работает</strong><br>Расскажи подробнее о реальной дедупликации, так ли она нужна или это что-то технологическое ускоряет или улучшает работу?</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Дедупликация через MERGE вместо CREATE</strong> — это не косметика, а архитектурное решение:<br>• <strong>Граф становится связным</strong> — через общие сущности можно перейти между документами<br>• <strong>Экономия памяти</strong> — 1000 доков с «Ивановым» = 1 узел, не 1000<br>• <strong>Быстрее поиск</strong> — <code>MATCH (e:Entity {name: "Иванов"})</code> возвращает 1 запись<br>• <strong>Аналитика</strong> — видно что «Иванов» в 150 документах (важный контрагент)<br><strong>Баг с chunk_id:</strong> раньше <code>chunk_id = "chunk_00001"</code> для всех доков → MERGE склеивал всё подряд. Исправлено на <code>"{doc_id}_chunk_{i}"</code>.</div></div>
       </div>
