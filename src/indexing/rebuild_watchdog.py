@@ -139,6 +139,13 @@ class RebuildWatchdog:
         
         try:
             await embeddings_service.initialize()
+            
+            # Очищаем старые сущности и чанки (оставляем документы)
+            with kg_service.driver.session() as s:
+                s.run("MATCH (e:Entity) DETACH DELETE e")
+                s.run("MATCH (c:Chunk) DETACH DELETE c")
+            logger.info("Watchdog: старые сущности и чанки удалены")
+            
             docs = config_store.get_all("documents") or {}
             
             for did, doc in docs.items():
