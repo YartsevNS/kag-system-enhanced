@@ -145,21 +145,24 @@ class TypeWatchdog:
         provider = cfg.get("provider", "ollama")
         api_key = cfg.get("api_key", "")
         
-        prompt = f"""Определи ТОЧНЫЙ тип документа по его содержимому. Верни только одно слово из списка.
-Если документ не подходит ни под один тип из списка — предложи НОВЫЙ тип (одно слово на английском).
+        prompt = f"""Твоя задача — определить тип документа. Верни JSON в формате:
+{{"entities":[{{"name":"ТИП_ДОКУМЕНТА","type":"document_type","confidence":0.9}}]}}
 
-СПИСОК ИЗВЕСТНЫХ ТИПОВ:
-{type_list_str}
+Где ТИП_ДОКУМЕНТА — одно слово из списка ниже.
+Если документ не подходит ни под один тип — используй "other".
+Если нужен новый тип — предложи его И добавь "type":"new_type".
+
+ИЗВЕСТНЫЕ ТИПЫ: {type_list_str}
 
 Имя файла: {filename}
 
-Содержимое (первые фрагменты):
+Содержимое:
 ---FRAGMENT 1---
-{sample_texts[0][:600]}
+{sample_texts[0][:500]}
 ---FRAGMENT 2---
-{sample_texts[1][:600] if len(sample_texts) > 1 else '—'}
+{sample_texts[1][:500] if len(sample_texts) > 1 else '—'}
 
-Верни СТРОГО одно слово (без кавычек, без пояснений):"""
+Верни СТРОГО JSON (без markdown, без пояснений):"""
         
         try:
             result = await entity_extractor._call_llm(
