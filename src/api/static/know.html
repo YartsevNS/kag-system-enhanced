@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">10</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">63</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">65</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">30+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -82,6 +82,16 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>22 мая 2026 — Сессия #9 (текущая)</div>
     <div class="qa-list">
+
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№63. Порядок задач на Know — от новых к старым</strong><br>Задачи должны располагаться от последней с наибольшим номером к первой с наименьшим номером и рядом соответствующие ответы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Реверс qa-item блоков</strong> внутри каждого <code>qa-list</code>. Секция 22 мая: №62→№57. Май 19: №56→№46. Использован regex для извлечения и переворота блоков.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№64. Активная LLM — модель не сохраняется при обновлении</strong><br>После обновления страницы опять выбирается ollama и phi4-mini, хотя ранее был сохранён DeepSeek.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен <code>loadActiveLlmConfig()</code></strong> — читает <code>GET /llm-config</code>, восстанавливает provider, model, url, api_key. Вызывается в <code>loadAll()</code>. Эндпоинт <code>config_store("llm_config","active")</code>. При сохранении пишет все поля в PostgreSQL.</div></div>
+      </div>
+
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№62. Активная LLM модель — провайдеры, модели, баланс</strong><br>Сделать по аналогии с граф-моделью: выбор провайдера, API-ключ, баланс, сохранение в PostgreSQL.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Полная переработка секции.</strong> Статический HTML с provider-select, model-select, api-key, url. JS: <code>onActiveLlmProviderChange()</code>, <code>saveActiveLlm()</code> → <code>POST /switch-llm</code> с полями <code>backend_type, model_name, url, api_key, provider</code>. <code>config_store("llm_config","active")</code> — переживает рестарт. <code>loadActiveLlmConfig()</code> восстанавливает при загрузке. <code>LLMBackendType</code> расширен: DEEPSEEK, OPENROUTER.</div></div>
