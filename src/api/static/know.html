@@ -71,15 +71,49 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="sub">Все сессии, диалоги и решения. Вопросы слева, ответы справа. Хронология по датам.</div>
 
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-num" id="stat-sessions">9</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">57</div><div class="stat-label">Решённых задач</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-days">20</div><div class="stat-label">Дней работы</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-sessions">10</div><div class="stat-label">Сессий</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">63</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">30+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
 
-  <!-- May 19, 2026 -->
+  
+  <!-- May 22, 2026 -->
   <div class="date-section">
-    <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8 (текущая)</div>
+    <div class="date-header"><span class="dot"></span>22 мая 2026 — Сессия #9 (текущая)</div>
+    <div class="qa-list">
+
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№57. Восстановление после сбоя — Keycloak realm, PostgreSQL, Qdrant</strong><br>Проект был полностью уничтожен после перезагрузки контейнеров. Восстанови наработки, чтобы не потерять при следующей перезагрузке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Аудит и восстановление.</strong> Код сохранён в git. Создан отдельный <code>kag-pg</code> PostgreSQL с bind-mount <code>/home/yartsevn/kag-system/data/pg</code>. Qdrant на <code>data/qdrant</code>. Загрузки на <code>data/uploads</code>. 68 файлов переимпортированы. Keycloak realm <code>kag</code> пересоздан через REST API. Setup-флаг сброшен в <code>config_store("setup","status",{"configured":True})</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№58. Админка не грузит данные — все секции «Загрузка...»</strong><br>На странице /admin статус системы, типы, модели — всё показывает «Загрузка...». Раньше работало без авторизации.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Откат к рабочей версии <code>b857ccf</code></strong> — админка использовала простые <code>fetch()</code> без auth. Добавлен <code>apiFetch()</code> с <code>localStorage.getItem('kag_token')</code> — 31 вызов заменил на <code>apiFetch</code>. <code>LLMBackendType</code> enum расширен: deepseek, openrouter. Настройки сохраняются в PostgreSQL через <code>config_store("llm_config","active")</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№59. Статус системы — Ollama ❌ недоступен</strong><br>Хотя тест перезагрузки проходит, статус показывает красные крестики.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Два бага:</strong> (1) health-check использовал <code>GET /</code> вместо <code>/api/tags</code> — исправлено. (2) <code>config_store.get("llm","default")</code> возвращал <code>{"system_prompt":"..."}</code> без host — model_manager брал <code>localhost</code>. Добавлены поля <code>host: 192.168.50.41, port: 11434</code>. Embedding: создан отдельный <code>config_store("embedding","default")</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№60. Внешние LLM — нет выбора моделей, теста, баланса</strong><br>При выборе провайдера DeepSeek и вводе API-ключа нет возможности протестировать, запросить баланс и выбрать модель.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Расширен test_ext_llm()</strong> — поддержка OpenAI/DeepSeek/OpenRouter через <code>/v1/chat/completions</code>. <code>loadExtModels()</code> фетчит модели через <code>GET /ext-llm/models?provider=</code>. Баланс: OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (проверка ключа). <code>populateExtSelect()</code> вызывается в <code>loadAll()</code>.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№61. Модель графа (Neo4j) — только Ollama, нет выбора провайдера</strong><br>При выборе DeepSeek дропдаун моделей не обновляется. Баланс в долларах/юанях.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлены:</strong> <code>onGraphProviderChange()</code>, <code>loadGraphModels()</code> — фетчат модели провайдера. Кнопка 💰 Баланс с <code>checkGraphBalance()</code>. Эндпоинт <code>GET /graph/balance</code> — OpenRouter ($), DeepSeek (¥/CNY), OpenAI (✅ ключ активен).</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№62. Активная LLM модель — провайдеры, модели, баланс</strong><br>Сделать по аналогии с граф-моделью: выбор провайдера, API-ключ, баланс, сохранение в PostgreSQL.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Полная переработка секции.</strong> Статический HTML с provider-select, model-select, api-key, url. JS: <code>onActiveLlmProviderChange()</code>, <code>saveActiveLlm()</code> → <code>POST /switch-llm</code> с полями <code>backend_type, model_name, url, api_key, provider</code>. <code>config_store("llm_config","active")</code> — переживает рестарт. <code>loadActiveLlmConfig()</code> восстанавливает при загрузке. <code>LLMBackendType</code> расширен: DEEPSEEK, OPENROUTER.</div></div>
+      </div>
+
+    </div>
+  </div>
+
+<!-- May 19, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8</div>
     <div class="qa-list">
       
       <div class="qa-item">
