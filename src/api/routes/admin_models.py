@@ -1480,6 +1480,61 @@ async def check_ext_llm_balance():
         return {"provider": prov, "balance_ok": False, "message": str(e), "balance": 0}
 
 
+
+
+
+@router.get("/graph/balance", summary="Проверить баланс провайдера граф-модели")
+async def check_graph_balance():
+    """Проверить баланс провайдера граф-модели (OpenAI/DeepSeek/OpenRouter).
+    Возвращает баланс в долларах или юанях."""
+    import aiohttp
+    prov = _graph_model_config.get("provider", "ollama")
+    api_key = _graph_model_config.get("api_key", "")
+    
+    if prov == "ollama":
+        return {"provider": "ollama", "balance_ok": True, "message": "Локальный — безлимитный", "display": "∞"}
+    
+    if not api_key:
+        return {"provider": prov, "balance_ok": False, "message": "API ключ не указан"}
+    
+    try:
+        if prov == "openrouter":
+            url = "https://openrouter.ai/api/v1/credits"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        credits = data.get("data", {}).get("total_credits", 0)
+                        used = data.get("data", {}).get("total_usage", 0)
+                        remaining = credits - used
+                        return {"provider": "openrouter", "balance_ok": True, "balance_usd": remaining, "display": f"${remaining:.2f} (из ${credits:.2f})"}
+        
+        elif prov == "deepseek":
+            url = f"{_graph_model_config.get('url', 'https://api.deepseek.com')}/v1/user/balance"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        bal = data.get("balance_infos", data.get("data", []))
+                        if isinstance(bal, list) and bal:
+                            b = bal[0]
+                            currency = b.get("currency", "USD")
+                            amount = float(b.get("total_balance", b.get("balance", 0)))
+                            return {"provider": "deepseek", "balance_ok": True, "balance_usd": amount, "display": f"{currency} {amount:.2f}"}
+        
+        elif prov == "openai":
+            # OpenAI не отдаёт баланс напрямую — просто проверяем доступность ключа
+            url = f"{_graph_model_config.get('url', 'https://api.openai.com')}/v1/models"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        return {"provider": "openai", "balance_ok": True, "display": "✅ API ключ активен", "message": "OpenAI не предоставляет баланс через API"}
+                    return {"provider": "openai", "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка не реализована"}
+    except Exception as e:
+        return {"provider": prov, "balance_ok": False, "message": str(e)}
+
 _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 # Инициализация из БД при старте

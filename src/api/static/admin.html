@@ -508,6 +508,7 @@
             </div>
             <div style="display:flex;gap:10px;align-items:center">
                 <button class="btn btn-primary" onclick="saveGraphModel()">💾 Сохранить</button>
+                <button class="btn btn-outline" onclick="checkGraphBalance()" title="Проверить баланс">💰 Баланс</button>
                 <span id="graph-model-status" style="font-size:13px"></span>
             </div>
             </div>
@@ -1420,6 +1421,24 @@
                 status.innerHTML = r.ok 
                     ? '<span style="color:#10b981">✅ Сохранено</span>'
                     : '<span style="color:#ef4444">❌ ' + (d.detail || 'Ошибка') + '</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function checkGraphBalance() {
+            const status = document.getElementById('graph-model-status');
+            status.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю...</span>';
+            try {
+                const r = await apiFetch('/api/v1/admin/models/graph/balance');
+                const d = await r.json();
+                if (r.ok && d.balance_ok) {
+                    const bal = d.balance_usd || d.balance || 0;
+                    const msg = d.display || ('$' + Number(bal).toFixed(2));
+                    status.innerHTML = '<span style="color:#10b981">💰 ' + msg + '</span>';
+                } else {
+                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                }
             } catch(e) {
                 status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
             }
