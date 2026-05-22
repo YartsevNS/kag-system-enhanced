@@ -404,6 +404,9 @@ class SwitchModelRequest(BaseModel):
     """Запрос на переключение модели"""
     backend_type: LLMBackendType = Field(..., description="Тип бэкенда")
     model_name: str = Field(..., description="Название модели")
+    url: Optional[str] = Field(default=None, description="URL API")
+    api_key: Optional[str] = Field(default=None, description="API ключ")
+    provider: Optional[str] = Field(default=None, description="Провайдер")
 
 
 class SwitchEmbeddingRequest(BaseModel):
@@ -1118,10 +1121,13 @@ async def list_ollama_models():
 @router.post("/switch-llm", summary="Переключить активную LLM модель")
 async def switch_llm_model(request: SwitchModelRequest):
     """
-    Переключить активную LLM модель.
+    Переключить активную LLM модель и сохранить настройки в PostgreSQL.
 
-    - **backend_type**: Тип бэкенда (ollama, vllm, openai)
+    - **backend_type**: Тип бэкенда (ollama, vllm, openai, deepseek, openrouter)
     - **model_name**: Название модели
+    - **url**: URL API (опционально)
+    - **api_key**: API ключ (опционально)
+    - **provider**: Провайдер (опционально)
     """
     try:
         success = await model_manager.switch_llm_model(
@@ -1129,10 +1135,21 @@ async def switch_llm_model(request: SwitchModelRequest):
             request.model_name
         )
         
+        # Сохраняем настройки в PostgreSQL
+        cfg = {
+            "backend_type": request.backend_type.value if hasattr(request.backend_type, 'value') else str(request.backend_type),
+            "model_name": request.model_name,
+            "url": request.url or "",
+            "api_key": request.api_key or "",
+            "provider": request.provider or "",
+        }
+        config_store.set("llm_config", "active", cfg)
+        
         if success:
             return {
                 "status": "success",
-                "message": f"Модель переключена на {request.model_name}"
+                "message": f"Модель переключена на {request.model_name}",
+                "config": cfg
             }
         else:
             raise HTTPException(status_code=400, detail="Не удалось переключить модель")
