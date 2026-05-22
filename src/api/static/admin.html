@@ -536,10 +536,21 @@
 
     <script>
         const API_URL = '/api/v1/admin/models';
+        
+        // Обёртка fetch с токеном из localStorage
+        function apiFetch(url, opts) {
+            opts = opts || {};
+            opts.credentials = 'include';
+            var h = new Headers(opts.headers || {});
+            var t = localStorage.getItem('kag_token');
+            if (t) h.set('Authorization', 'Bearer ' + t);
+            opts.headers = h;
+            return fetch(url, opts);
+        }
 
         async function loadStatus() {
             try {
-                const response = await fetch(`${API_URL}/status`);
+                const response = await apiFetch(`${API_URL}/status`);
                 const data = await response.json();
                 
                 const llmStatus = data.llm_backends?.ollama || {};
@@ -588,8 +599,8 @@
         async function loadActiveModels() {
             try {
                 const [lm, embModels] = await Promise.all([
-                    fetch(`${API_URL}/llm`).then(r => r.json()),
-                    fetch(`${API_URL}/embeddings`).then(r => r.json())
+                    apiFetch(`${API_URL}/llm`).then(r => r.json()),
+                    apiFetch(`${API_URL}/embeddings`).then(r => r.json())
                 ]);
                 llmModels = lm;
                 loadedModels = lm.filter(function(m) { return m.backend === 'ollama'; }).map(function(m) { return m.name; });
@@ -652,7 +663,7 @@
 
         async function loadModels() {
             try {
-                const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
+                const models = await apiFetch(`${API_URL}/ollama-models`).then(r => r.json());
                 
                 if (models.length === 0) {
                     document.getElementById('ollama-models').innerHTML = '<div style="color: var(--text4); padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
@@ -705,7 +716,7 @@
             showNotification(`Переключение на ${modelName}...`);
             
             try {
-                const response = await fetch(`${API_URL}/switch-llm`, {
+                const response = await apiFetch(`${API_URL}/switch-llm`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ backend_type: backend, model_name: modelName })
@@ -730,7 +741,7 @@
             showNotification(`Переключение embedding на ${modelName}...`);
             
             try {
-                const response = await fetch(`${API_URL}/switch-embedding`, {
+                const response = await apiFetch(`${API_URL}/switch-embedding`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ model_name: modelName })
@@ -767,7 +778,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/pull`, {
+                const response = await apiFetch(`${API_URL}/pull`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ model_name: modelName })
@@ -791,7 +802,7 @@
             if (!confirm(`Удалить модель ${modelName}?`)) return;
 
             try {
-                const response = await fetch(`${API_URL}/delete/${modelName}`, {
+                const response = await apiFetch(`${API_URL}/delete/${modelName}`, {
                     method: 'DELETE'
                 });
 
@@ -836,7 +847,7 @@
         
         async function loadChunkingSettings() {
             try {
-                const response = await fetch(`${API_URL}/chunking-config`);
+                const response = await apiFetch(`${API_URL}/chunking-config`);
                 const config = await response.json();
                 
                 document.getElementById('chunk-size').value = config.chunk_size || 1000;
@@ -851,7 +862,7 @@
             const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
             
             try {
-                const response = await fetch(`${API_URL}/chunking-config`, {
+                const response = await apiFetch(`${API_URL}/chunking-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -880,7 +891,7 @@
         async function loadSshConfig() {
             try {
                 console.log('Загрузка SSH конфигурации из БД...');
-                const response = await fetch(`${API_URL}/ssh-config`);
+                const response = await apiFetch(`${API_URL}/ssh-config`);
                 
                 if (!response.ok) {
                     console.error('API вернул ошибку:', response.status);
@@ -966,7 +977,7 @@
 
                 console.log('Отправка payload:', JSON.stringify(payload));
 
-                const response = await fetch(`${API_URL}/ssh-config`, {
+                const response = await apiFetch(`${API_URL}/ssh-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
@@ -1011,7 +1022,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/ssh-test`, {
+                const response = await apiFetch(`${API_URL}/ssh-test`, {
                     method: 'POST'
                 });
 
@@ -1049,7 +1060,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/restart-ollama`, {
+                const response = await apiFetch(`${API_URL}/restart-ollama`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -1076,7 +1087,7 @@
         // === Типы документов ===
         async function loadDocTypes() {
             try {
-                var r = await fetch('/api/v1/admin/models/doc-types');
+                var r = await apiFetch('/api/v1/admin/models/doc-types');
                 if (r.ok) {
                     var d = await r.json();
                     renderDocTypes(d.types || []);
@@ -1102,7 +1113,7 @@
             var name = inp.value.trim();
             if (!name) return;
             try {
-                var r = await fetch('/api/v1/admin/models/doc-types', {
+                var r = await apiFetch('/api/v1/admin/models/doc-types', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action: 'add', name: name})
@@ -1114,7 +1125,7 @@
         async function removeDocType(name) {
             if (!confirm('Удалить тип ' + name + '?')) return;
             try {
-                var r = await fetch('/api/v1/admin/models/doc-types', {
+                var r = await apiFetch('/api/v1/admin/models/doc-types', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action: 'remove', name: name})
@@ -1177,7 +1188,7 @@
             const status = document.getElementById('chat-prompt-status');
             status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю...</span>';
             try {
-                const r = await fetch('/api/v1/admin/models/chat-prompt', {
+                const r = await apiFetch('/api/v1/admin/models/chat-prompt', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({prompt: prompt})
@@ -1195,7 +1206,7 @@
 
         async function loadChatPrompt() {
             try {
-                const r = await fetch('/api/v1/admin/models/chat-prompt');
+                const r = await apiFetch('/api/v1/admin/models/chat-prompt');
                 if (r.ok) {
                     const d = await r.json();
                     document.getElementById('chat-system-prompt').value = d.prompt || DEFAULT_CHAT_PROMPT;
@@ -1225,7 +1236,7 @@
                 provider: document.getElementById('ext-llm-provider').value
             };
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm', {
+                const r = await apiFetch('/api/v1/admin/models/ext-llm', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config)
@@ -1243,7 +1254,7 @@
             const status = document.getElementById('ext-llm-status');
             status.innerHTML = '<span style="color:#f59e0b">⏳ Тестирую...</span>';
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
+                const r = await apiFetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
                 const d = await r.json();
                 status.innerHTML = d.ok 
                     ? '<span style="color:#10b981">✅ OK — ' + (d.response || '').substring(0, 60) + '</span>'
@@ -1261,7 +1272,7 @@
             div.innerHTML = '<span style="color:var(--text4);font-size:12px">⏳ Проверка баланса...</span>';
             div.style.display = 'block';
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm/balance');
+                const r = await apiFetch('/api/v1/admin/models/ext-llm/balance');
                 const d = await r.json();
                 if (d.balance_ok === true) {
                     div.innerHTML = '<span style="color:var(--emerald);font-size:12px">💰 ' + d.message + '</span>';
@@ -1277,7 +1288,7 @@
 
         async function loadExtLLM() {
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm');
+                const r = await apiFetch('/api/v1/admin/models/ext-llm');
                 if (r.ok) {
                     const d = await r.json();
                     if (d.url) document.getElementById('ext-llm-url').value = d.url;
@@ -1372,7 +1383,7 @@
             sel.disabled = true;
             
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
+                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
                 if (r.ok) {
                     const d = await r.json();
                     sel.innerHTML = '<option value="">— Выбрать модель ' + prov + ' —</option>';
@@ -1400,7 +1411,7 @@
                 api_key: document.getElementById('graph-api-key').value
             };
             try {
-                const r = await fetch('/api/v1/admin/models/graph', {
+                const r = await apiFetch('/api/v1/admin/models/graph', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config)
@@ -1416,7 +1427,7 @@
 
         async function loadGraphModel() {
             try {
-                const r = await fetch('/api/v1/admin/models/graph');
+                const r = await apiFetch('/api/v1/admin/models/graph');
                 if (r.ok) {
                     const d = await r.json();
                     if (d.model) {
@@ -1440,7 +1451,7 @@
         // === Разрешённые форматы загрузки ===
         async function loadUploadFormats() {
             try {
-                const r = await fetch('/api/v1/admin/models/upload-config');
+                const r = await apiFetch('/api/v1/admin/models/upload-config');
                 if (!r.ok) return;
                 const d = await r.json();
                 const formats = d.all_formats || {};
@@ -1469,7 +1480,7 @@
                 allowed[cb.dataset.ext] = cb.checked;
             });
             try {
-                const r = await fetch('/api/v1/admin/models/upload-config', {
+                const r = await apiFetch('/api/v1/admin/models/upload-config', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ allowed })
@@ -1488,7 +1499,7 @@
 
         async function loadDomainPresets() {
             try {
-                const r = await fetch('/api/v1/kg/domain-schema');
+                const r = await apiFetch('/api/v1/kg/domain-schema');
                 if (!r.ok) return;
                 const d = await r.json();
                 domainPresets = d.presets || [];
@@ -1526,7 +1537,7 @@
             var status = document.getElementById('domain-preset-status');
             status.innerHTML = '<span style="color:#f59e0b">⏳ Переключаю схему...</span>';
             try {
-                var r = await fetch('/api/v1/kg/domain-schema', {
+                var r = await apiFetch('/api/v1/kg/domain-schema', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({preset: id})
