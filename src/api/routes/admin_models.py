@@ -1118,6 +1118,21 @@ async def list_ollama_models():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+
+@router.get("/llm-config", summary="Получить сохранённые настройки активной LLM")
+async def get_llm_config():
+    """Вернуть сохранённые настройки активной LLM из PostgreSQL."""
+    cfg = config_store.get("llm_config", "active") or {}
+    return {
+        "backend_type": cfg.get("backend_type", "ollama"),
+        "model_name": cfg.get("model_name", "phi4-mini:latest"),
+        "url": cfg.get("url", "http://192.168.50.41:11434"),
+        "api_key": cfg.get("api_key", ""),
+        "provider": cfg.get("provider", "ollama"),
+    }
+
 @router.post("/switch-llm", summary="Переключить активную LLM модель")
 async def switch_llm_model(request: SwitchModelRequest):
     """

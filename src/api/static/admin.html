@@ -623,6 +623,35 @@
         var llmModels = [];
         var loadedModels = [];
 
+
+        async function loadActiveLlmConfig() {
+            try {
+                const r = await apiFetch('/api/v1/admin/models/llm-config');
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.url) document.getElementById('active-llm-url').value = d.url;
+                    if (d.provider) {
+                        document.getElementById('active-llm-provider').value = d.provider;
+                        onActiveLlmProviderChange();
+                    }
+                    if (d.api_key) document.getElementById('active-llm-key').value = d.api_key;
+                    // Set model after provider selects load
+                    if (d.model_name && d.backend_type) {
+                        setTimeout(function() {
+                            const sel = document.getElementById('active-llm-select');
+                            const targetVal = d.backend_type + '|' + d.model_name;
+                            for (let i = 0; i < sel.options.length; i++) {
+                                if (sel.options[i].value === targetVal || sel.options[i].value === d.model_name) {
+                                    sel.selectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }, 500);
+                    }
+                }
+            } catch(e) {}
+        }
+
         async function loadActiveModels() {
             try {
                 const [lm, embModels] = await Promise.all([
@@ -941,6 +970,7 @@
             await loadGraphModel();
             // Заполняем дропдаун внешних LLM
             loadExtLLM();
+            loadActiveLlmConfig();
             populateExtSelect();
         }
         
