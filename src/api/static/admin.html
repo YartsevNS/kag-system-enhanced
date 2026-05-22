@@ -1372,9 +1372,7 @@
             sel.disabled = true;
             
             try {
-                const r = await fetch('/api/v1/admin/models/ext-llm/models?provider=' + prov, {
-                    headers: authHeaders ? authHeaders() : {}
-                });
+                const r = await fetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
                 if (r.ok) {
                     const d = await r.json();
                     sel.innerHTML = '<option value="">— Выбрать модель ' + prov + ' —</option>';
