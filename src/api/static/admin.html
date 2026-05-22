@@ -350,20 +350,6 @@
             </div>
         </div>
 
-        <!-- Типы документов -->
-        <div class="section">
-            <h2 class="section-title">🏷️ Типы документов</h2>
-            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
-                Список типов для классификации документов. <strong>Авто-пополняется</strong> при типизации (TypeWatchdog).
-                Можно редактировать вручную — добавлять, удалять, переименовывать.
-            </p>
-            <div style="display:flex;gap:10px;margin-bottom:12px">
-                <input type="text" id="new-doc-type" placeholder="Новый тип (на англ.)" style="flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px">
-                <button class="btn btn-sm" onclick="addDocType()">➕ Добавить</button>
-            </div>
-            <div id="doc-types-list" style="display:flex;flex-wrap:wrap;gap:6px">Загрузка...</div>
-        </div>
-
         <!-- Разрешённые форматы загрузки -->
         <div class="section">
             <h2 class="section-title">📎 Разрешённые форматы загрузки</h2>
@@ -535,20 +521,10 @@
 
     <script>
         const API_URL = '/api/v1/admin/models';
-        
-        function authFetch(url, opts) {
-            opts = opts || {};
-            opts.credentials = 'include';
-            var h = new Headers(opts.headers);
-            var t = document.cookie.split('; ').find(function(r) { return r.startsWith('kag_token='); });
-            if (t) h.set('Authorization', 'Bearer ' + t.split('=')[1]);
-            opts.headers = h;
-            return fetch(url, opts);
-        }
 
         async function loadStatus() {
             try {
-                const response = await authFetch(`${API_URL}/status`);
+                const response = await fetch(`${API_URL}/status`);
                 const data = await response.json();
                 
                 const llmStatus = data.llm_backends?.ollama || {};
@@ -597,8 +573,8 @@
         async function loadActiveModels() {
             try {
                 const [lm, embModels] = await Promise.all([
-                    authFetch(`${API_URL}/llm`).then(r => r.json()),
-                    authFetch(`${API_URL}/embeddings`).then(r => r.json())
+                    fetch(`${API_URL}/llm`).then(r => r.json()),
+                    fetch(`${API_URL}/embeddings`).then(r => r.json())
                 ]);
                 llmModels = lm;
                 loadedModels = lm.filter(function(m) { return m.backend === 'ollama'; }).map(function(m) { return m.name; });
@@ -661,7 +637,7 @@
 
         async function loadModels() {
             try {
-                const models = await authFetch(`${API_URL}/ollama-models`).then(r => r.json());
+                const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
                 
                 if (models.length === 0) {
                     document.getElementById('ollama-models').innerHTML = '<div style="color: var(--text4); padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
@@ -714,7 +690,7 @@
             showNotification(`Переключение на ${modelName}...`);
             
             try {
-                const response = await authFetch(`${API_URL}/switch-llm`, {
+                const response = await fetch(`${API_URL}/switch-llm`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ backend_type: backend, model_name: modelName })
@@ -739,7 +715,7 @@
             showNotification(`Переключение embedding на ${modelName}...`);
             
             try {
-                const response = await authFetch(`${API_URL}/switch-embedding`, {
+                const response = await fetch(`${API_URL}/switch-embedding`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ model_name: modelName })
@@ -776,7 +752,7 @@
             `;
 
             try {
-                const response = await authFetch(`${API_URL}/pull`, {
+                const response = await fetch(`${API_URL}/pull`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ model_name: modelName })
@@ -800,7 +776,7 @@
             if (!confirm(`Удалить модель ${modelName}?`)) return;
 
             try {
-                const response = await authFetch(`${API_URL}/delete/${modelName}`, {
+                const response = await fetch(`${API_URL}/delete/${modelName}`, {
                     method: 'DELETE'
                 });
 
@@ -842,7 +818,7 @@
         
         async function loadChunkingSettings() {
             try {
-                const response = await authFetch(`${API_URL}/chunking-config`);
+                const response = await fetch(`${API_URL}/chunking-config`);
                 const config = await response.json();
                 
                 document.getElementById('chunk-size').value = config.chunk_size || 1000;
@@ -857,7 +833,7 @@
             const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
             
             try {
-                const response = await authFetch(`${API_URL}/chunking-config`, {
+                const response = await fetch(`${API_URL}/chunking-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -886,7 +862,7 @@
         async function loadSshConfig() {
             try {
                 console.log('Загрузка SSH конфигурации из БД...');
-                const response = await authFetch(`${API_URL}/ssh-config`);
+                const response = await fetch(`${API_URL}/ssh-config`);
                 
                 if (!response.ok) {
                     console.error('API вернул ошибку:', response.status);
@@ -972,7 +948,7 @@
 
                 console.log('Отправка payload:', JSON.stringify(payload));
 
-                const response = await authFetch(`${API_URL}/ssh-config`, {
+                const response = await fetch(`${API_URL}/ssh-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
@@ -1017,7 +993,7 @@
             `;
 
             try {
-                const response = await authFetch(`${API_URL}/ssh-test`, {
+                const response = await fetch(`${API_URL}/ssh-test`, {
                     method: 'POST'
                 });
 
@@ -1055,7 +1031,7 @@
             `;
 
             try {
-                const response = await authFetch(`${API_URL}/restart-ollama`, {
+                const response = await fetch(`${API_URL}/restart-ollama`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -1082,72 +1058,55 @@
         setInterval(loadStatus, 30000);
         loadExtLLM();
 
-        // === Типы документов ===
-        async function loadDocTypes() {
-            try {
-                const r = await authFetch('/api/v1/admin/models/doc-types');
-                if (r.ok) {
-                    const d = await r.json();
-                    renderDocTypes(d.types || []);
-                }
-            } catch(e) {}
-        }
-
-        function renderDocTypes(types) {
-            const div = document.getElementById('doc-types-list');
-            div.innerHTML = types.map(t => {
-                const label = typeof t === 'object' ? t.label : t;
-                const key = typeof t === 'object' ? t.key : t;
-                return `<span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;font-size:11px">
-                    🏷️ ${label}
-                    <span onclick="removeDocType('${key}')" style="cursor:pointer;color:var(--red);margin-left:2px;font-weight:bold">×</span>
-                </span>`;
-            })
-            ).join('');
-            if (!types.length) div.innerHTML = '<span style="color:var(--text4);font-size:12px">Нет типов</span>';
-        }
-
-        async function addDocType() {
-            const inp = document.getElementById('new-doc-type');
-            const name = inp.value.trim().toLowerCase();
-            if (!name) return;
-            try {
-                const r = await authFetch('/api/v1/admin/models/doc-types', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: 'add', name: name})
-                });
-                if (r.ok) {
-                    inp.value = '';
-                    loadDocTypes();
-                }
-            } catch(e) {}
-        }
-
-        async function removeDocType(name) {
-            if (!confirm('Удалить тип ' + name + '?')) return;
-            try {
-                const r = await authFetch('/api/v1/admin/models/doc-types', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: 'remove', name: name})
-                });
-                if (r.ok) loadDocTypes();
-            } catch(e) {}
-        }
-
-        loadDocTypes();
-
-
         // === Системный промпт для чата ===
-        var DEFAULT_CHAT_PROMPT = 'Ты — AI-ассистент с доступом к гибридной базе знаний KAG.\nРаботаешь с ДВУМЯ источниками: Qdrant и Neo4j.\nНачинай с анализа контекста. Не выдумывай факты. Указывай источники.';
+        var DEFAULT_CHAT_PROMPT = `Ты — AI-ассистент с доступом к гибридной базе знаний KAG.
+Ты работаешь с ДВУМЯ источниками данных одновременно:
+
+1. Qdrant (векторная БД) — находит документы по смысловой близости. Контекст из Qdrant помечен как [Источник N] с doc:ID и score:релевантность.
+2. Neo4j (граф знаний) — содержит сущности, их типы, связи между ними и документы-источники. Контекст из Neo4j помечен как [Граф] с именами сущностей и количеством связей.
+
+## Правила работы
+
+### 1. Приоритет источников
+- ВСЕГДА начинай с анализа контекста из Qdrant и Neo4j
+- Если граф (Neo4j) показывает связи между документами — укажи ЭТО ЯВНО: «Согласно графу знаний, сущность X связана с документами A, B, C»
+- Если векторный поиск (Qdrant) дал высокий score (>0.7) — это сильный сигнал релевантности
+
+### 2. Извлечение информации
+- Читай ВЕСЬ предоставленный контекст перед ответом
+- Если сущность найдена в графе — проверь её source_docs (из каких документов она извлечена)
+- Если один и тот же факт подтверждается из Qdrant И Neo4j — это максимально надёжная информация
+- Указывай источник: «Согласно [Источник 1] (документ X, score 0.85)...»
+
+### 3. Метаданные
+- Обращай внимание на типы сущностей в графе: person (человек), organization (организация), date (дата), money (сумма), legal_term (юридический термин) и др.
+- Если сущность имеет высокий confidence (>0.8) — она точно извлечена
+- Если несколько документов ссылаются на одну сущность — это важный перекрёстный факт
+
+### 4. Ответы
+- Структурируй ответ: сначала КЛЮЧЕВОЙ ВЫВОД, затем детали
+- Если информация есть в нескольких документах — перечисли их
+- Если контекст не содержит ответа — скажи: «В загруженных документах информация не найдена» и предложи поискать в других источниках
+- НИКОГДА не выдумывай факты, не присутствующие в контексте
+
+### 5. Стиль
+- Профессиональный, точный, на русском языке
+- Используй термины из документов
+- При цитировании указывай источник
+
+## Формат контекста
+Контекст будет передан в формате:
+[Источник 1] (doc:abc123, score:0.923): текст чанка...
+...
+--- ГРАФ ЗНАНИЙ (Neo4j) ---
+[Граф] Документ: filename.pdf | Связанных сущностей: 5`;
 
         async function saveChatPrompt() {
             const prompt = document.getElementById('chat-system-prompt').value;
             const status = document.getElementById('chat-prompt-status');
             status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю...</span>';
             try {
-                const r = await authFetch('/api/v1/admin/models/chat-prompt', {
+                const r = await fetch('/api/v1/admin/models/chat-prompt', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({prompt: prompt})
@@ -1165,7 +1124,7 @@
 
         async function loadChatPrompt() {
             try {
-                const r = await authFetch('/api/v1/admin/models/chat-prompt');
+                const r = await fetch('/api/v1/admin/models/chat-prompt');
                 if (r.ok) {
                     const d = await r.json();
                     document.getElementById('chat-system-prompt').value = d.prompt || DEFAULT_CHAT_PROMPT;
@@ -1195,7 +1154,7 @@
                 provider: document.getElementById('ext-llm-provider').value
             };
             try {
-                const r = await authFetch('/api/v1/admin/models/ext-llm', {
+                const r = await fetch('/api/v1/admin/models/ext-llm', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config)
@@ -1213,7 +1172,7 @@
             const status = document.getElementById('ext-llm-status');
             status.innerHTML = '<span style="color:#f59e0b">⏳ Тестирую...</span>';
             try {
-                const r = await authFetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
+                const r = await fetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
                 const d = await r.json();
                 status.innerHTML = d.ok 
                     ? '<span style="color:#10b981">✅ OK — ' + (d.response || '').substring(0, 60) + '</span>'
@@ -1231,7 +1190,7 @@
             div.innerHTML = '<span style="color:var(--text4);font-size:12px">⏳ Проверка баланса...</span>';
             div.style.display = 'block';
             try {
-                const r = await authFetch('/api/v1/admin/models/ext-llm/balance');
+                const r = await fetch('/api/v1/admin/models/ext-llm/balance');
                 const d = await r.json();
                 if (d.balance_ok === true) {
                     div.innerHTML = '<span style="color:var(--emerald);font-size:12px">💰 ' + d.message + '</span>';
@@ -1247,7 +1206,7 @@
 
         async function loadExtLLM() {
             try {
-                const r = await authFetch('/api/v1/admin/models/ext-llm');
+                const r = await fetch('/api/v1/admin/models/ext-llm');
                 if (r.ok) {
                     const d = await r.json();
                     if (d.url) document.getElementById('ext-llm-url').value = d.url;
@@ -1342,7 +1301,7 @@
             sel.disabled = true;
             
             try {
-                const r = await authFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov, {
+                const r = await fetch('/api/v1/admin/models/ext-llm/models?provider=' + prov, {
                     headers: authHeaders ? authHeaders() : {}
                 });
                 if (r.ok) {
@@ -1372,7 +1331,7 @@
                 api_key: document.getElementById('graph-api-key').value
             };
             try {
-                const r = await authFetch('/api/v1/admin/models/graph', {
+                const r = await fetch('/api/v1/admin/models/graph', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config)
@@ -1388,7 +1347,7 @@
 
         async function loadGraphModel() {
             try {
-                const r = await authFetch('/api/v1/admin/models/graph');
+                const r = await fetch('/api/v1/admin/models/graph');
                 if (r.ok) {
                     const d = await r.json();
                     if (d.model) {
@@ -1412,7 +1371,7 @@
         // === Разрешённые форматы загрузки ===
         async function loadUploadFormats() {
             try {
-                const r = await authFetch('/api/v1/admin/models/upload-config');
+                const r = await fetch('/api/v1/admin/models/upload-config');
                 if (!r.ok) return;
                 const d = await r.json();
                 const formats = d.all_formats || {};
@@ -1441,7 +1400,7 @@
                 allowed[cb.dataset.ext] = cb.checked;
             });
             try {
-                const r = await authFetch('/api/v1/admin/models/upload-config', {
+                const r = await fetch('/api/v1/admin/models/upload-config', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ allowed })
@@ -1460,7 +1419,7 @@
 
         async function loadDomainPresets() {
             try {
-                const r = await authFetch('/api/v1/kg/domain-schema');
+                const r = await fetch('/api/v1/kg/domain-schema');
                 if (!r.ok) return;
                 const d = await r.json();
                 domainPresets = d.presets || [];
@@ -1498,7 +1457,7 @@
             var status = document.getElementById('domain-preset-status');
             status.innerHTML = '<span style="color:#f59e0b">⏳ Переключаю схему...</span>';
             try {
-                var r = await authFetch('/api/v1/kg/domain-schema', {
+                var r = await fetch('/api/v1/kg/domain-schema', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({preset: id})
