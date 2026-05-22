@@ -368,11 +368,37 @@
         <!-- Активная LLM модель -->
         <div class="section">
             <h2 class="section-title">🤖 Активная LLM модель</h2>
-            <div id="active-llm">
-                <div class="loading">
-                    <div class="loading-dots"><span></span><span></span><span></span></div>
-                    Загрузка...
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Основная модель для чата, поиска и генерации ответов.
+            </p>
+            <div id="active-llm-card" style="margin-bottom:14px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div class="form-group">
+                    <label>URL API</label>
+                    <input type="text" id="active-llm-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
                 </div>
+                <div class="form-group">
+                    <label>Модель</label>
+                    <select id="active-llm-select" style="width:100%;padding:8px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></select>
+                </div>
+                <div class="form-group">
+                    <label>API ключ (если нужен)</label>
+                    <input type="password" id="active-llm-key" placeholder="sk-...">
+                </div>
+                <div class="form-group">
+                    <label>Провайдер</label>
+                    <select id="active-llm-provider" onchange="onActiveLlmProviderChange()">
+                        <option value="ollama">Ollama (локальный)</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="saveActiveLlm()">💾 Сохранить</button>
+                <button class="btn btn-outline" onclick="checkActiveLlmBalance()" title="Проверить баланс">💰 Баланс</button>
+                <span id="active-llm-status" style="font-size:13px"></span>
             </div>
         </div>
 
@@ -606,27 +632,16 @@
                 llmModels = lm;
                 loadedModels = lm.filter(function(m) { return m.backend === 'ollama'; }).map(function(m) { return m.name; });
 
-                // Активная LLM модель
+                                // Активная LLM модель — карточка
                 const activeLlm = llmModels.find(m => m.is_active);
-                document.getElementById('active-llm').innerHTML = activeLlm ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
-                        <div style="font-size: 2rem;">🤖</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeLlm.name}</div>
-                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="llm-select" style="flex: 1;">
-                                ${llmModels.map(m => `<option value="${m.backend}|${m.name}" ${m.is_active ? 'selected' : ''}>${m.name} (${m.backend})</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchLlmModel()">Применить</button>
-                        </div>
-                    </div>
-                ` : '<div style="color: var(--text4);">Нет доступных LLM моделей</div>';
+                if (activeLlm) {
+                    document.getElementById('active-llm-card').innerHTML = '<div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--elevated);border-radius:8px"><div style="font-size:2rem">🤖</div><div style="flex:1"><div style="font-weight:600;font-size:1.125rem">' + activeLlm.name + '</div><div style="color:var(--text4);font-size:0.875rem">Бэкенд: ' + activeLlm.backend + '</div></div><span class="badge badge-success">Активна</span></div>';
+                }
+                // Populate Active LLM select
+                const als = document.getElementById('active-llm-select');
+                als.innerHTML = llmModels.map(m => '<option value="' + m.backend + '|' + m.name + '" ' + (m.is_active ? 'selected' : '') + '>' + m.name + ' (' + m.backend + ')</option>').join('');
+                // If no active model, show N/A
+                if (!activeLlm) document.getElementById('active-llm-card').innerHTML = '<div style="color:var(--text4)">Нет активной LLM</div>';
 
                 // Активная Embedding модель
                 const activeEmb = embModels.find(m => m.is_active);
@@ -661,6 +676,83 @@
                 console.error('Ошибка загрузки активных моделей:', error);
             }
         }
+
+
+        // === Активная LLM модель — провайдер, баланс, модели ===
+
+        function onActiveLlmProviderChange() {
+            const prov = document.getElementById('active-llm-provider').value;
+            const keyDiv = document.getElementById('active-llm-key').parentElement;
+            const urlField = document.getElementById('active-llm-url');
+            keyDiv.style.display = (prov === 'ollama') ? 'none' : '';
+            if (prov === 'ollama') urlField.value = 'http://192.168.50.41:11434';
+            else if (prov === 'openai') urlField.value = 'https://api.openai.com';
+            else if (prov === 'deepseek') urlField.value = 'https://api.deepseek.com';
+            else if (prov === 'openrouter') urlField.value = 'https://openrouter.ai/api';
+            loadActiveLlmModels();
+        }
+
+        async function loadActiveLlmModels() {
+            const prov = document.getElementById('active-llm-provider').value;
+            const sel = document.getElementById('active-llm-select');
+            if (prov === 'ollama') {
+                sel.innerHTML = typeof llmModels !== 'undefined' ? llmModels.map(m => '<option value="ollama|' + m + '">' + m + ' (ollama)</option>').join('') : '';
+                return;
+            }
+            sel.innerHTML = '<option value="">Loading ' + prov + '...</option>';
+            try {
+                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
+                if (r.ok) {
+                    const d = await r.json();
+                    sel.innerHTML = '<option value="">-- ' + prov + ' --</option>';
+                    (d.models || []).forEach(function(m) {
+                        sel.innerHTML += '<option value="' + prov + '|' + m.id + '">' + m.id + '</option>';
+                    });
+                }
+            } catch(e) {}
+        }
+
+        async function saveActiveLlm() {
+            const status = document.getElementById('active-llm-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
+            const val = document.getElementById('active-llm-select').value;
+            const parts = val.split('|');
+            const config = {
+                backend: parts[0] || 'ollama',
+                model: parts[1] || val,
+                url: document.getElementById('active-llm-url').value.trim(),
+                api_key: document.getElementById('active-llm-key').value,
+                provider: document.getElementById('active-llm-provider').value
+            };
+            try {
+                const r = await apiFetch('/api/v1/admin/models/switch-llm', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                status.innerHTML = r.ok ? '<span style="color:#10b981">✅ Сохранено</span>' : '<span style="color:#ef4444">❌ Ошибка</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+        }
+
+        async function checkActiveLlmBalance() {
+            const status = document.getElementById('active-llm-status');
+            status.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю...</span>';
+            try {
+                const r = await apiFetch('/api/v1/admin/models/graph/balance');
+                const d = await r.json();
+                if (r.ok && d.balance_ok) {
+                    status.innerHTML = '<span style="color:#10b981">💰 ' + (d.display || d.message || 'OK') + '</span>';
+                } else {
+                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                }
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+        }
+
+        loadActiveLlmModels();
 
         async function loadModels() {
             try {
