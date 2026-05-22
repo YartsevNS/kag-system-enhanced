@@ -1306,16 +1306,28 @@ async def test_ext_llm():
                 "stream": False,
                 "options": {"max_tokens": 5}
             }
+            headers = {}
+        elif _ext_llm_config.provider in ("openai", "deepseek", "openrouter"):
+            # OpenAI-совместимый API
+            url = f"{_ext_llm_config.url}/v1/chat/completions"
+            payload = {
+                "model": _ext_llm_config.model,
+                "messages": [{"role": "user", "content": "Say OK"}],
+                "max_tokens": 5
+            }
+            headers = {"Authorization": f"Bearer {_ext_llm_config.api_key}"} if _ext_llm_config.api_key else {}
         else:
             return {"ok": False, "error": f"Провайдер {_ext_llm_config.provider} пока не поддерживается для теста"}
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    return {"ok": True, "response": data.get("response", "")}
+                    response_text = data.get("response") or data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return {"ok": True, "response": response_text[:100]}
                 else:
-                    return {"ok": False, "error": f"HTTP {resp.status}"}
+                    body = await resp.text()
+                    return {"ok": False, "error": f"HTTP {resp.status}: {body[:100]}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
