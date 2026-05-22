@@ -725,10 +725,16 @@
                 provider: document.getElementById('active-llm-provider').value
             };
             try {
+                // Отправляем поля которые ждёт API
                 const r = await apiFetch('/api/v1/admin/models/switch-llm', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(config)
+                    body: JSON.stringify({
+                        backend_type: config.backend,
+                        model_name: config.model,
+                        url: config.url,
+                        api_key: config.api_key
+                    })
                 });
                 status.innerHTML = r.ok ? '<span style="color:#10b981">✅ Сохранено</span>' : '<span style="color:#ef4444">❌ Ошибка</span>';
             } catch(e) {
