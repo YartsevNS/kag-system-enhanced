@@ -829,6 +829,9 @@
             ]);
             // Загружаем модель графа после того, как заполнился селект
             await loadGraphModel();
+            // Заполняем дропдаун внешних LLM
+            loadExtLLM();
+            populateExtSelect();
         }
         
         async function loadChunkingSettings() {
