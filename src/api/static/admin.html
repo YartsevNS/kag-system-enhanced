@@ -498,7 +498,7 @@
                 </div>
                 <div class="form-group">
                     <label>Провайдер</label>
-                    <select id="graph-provider">
+                    <select id="graph-provider" onchange="onGraphProviderChange()">
                         <option value="ollama">Ollama (локальный)</option>
                         <option value="openai">OpenAI</option>
                         <option value="deepseek">DeepSeek</option>
@@ -1441,6 +1441,59 @@
                 }
             } catch(e) {
                 status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+
+        function onGraphProviderChange() {
+            const prov = document.getElementById('graph-provider').value;
+            const keyField = document.getElementById('graph-api-key');
+            const urlField = document.getElementById('graph-api-url');
+            
+            // API ключ только для внешних провайдеров
+            keyField.parentElement.style.display = (prov === 'ollama') ? 'none' : '';
+            
+            // Авто-URL
+            if (prov === 'ollama') urlField.value = 'http://192.168.50.41:11434';
+            else if (prov === 'openai') urlField.value = 'https://api.openai.com';
+            else if (prov === 'deepseek') urlField.value = 'https://api.deepseek.com';
+            else if (prov === 'openrouter') urlField.value = 'https://openrouter.ai/api';
+            
+            loadGraphModels();
+        }
+
+        async function loadGraphModels() {
+            const prov = document.getElementById('graph-provider').value;
+            const sel = document.getElementById('graph-model-select');
+            
+            if (prov === 'ollama') {
+                // Локальные — уже в llmModels
+                sel.innerHTML = '';
+                if (typeof llmModels !== 'undefined') {
+                    llmModels.forEach(function(m) {
+                        sel.innerHTML += '<option value="' + m + '">' + m + ' (ollama)</option>';
+                    });
+                }
+                return;
+            }
+            
+            sel.innerHTML = '<option value="">Loading ' + prov + '...</option>';
+            try {
+                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
+                if (r.ok) {
+                    const d = await r.json();
+                    sel.innerHTML = '<option value="">-- ' + prov + ' models --</option>';
+                    (d.models || []).forEach(function(m) {
+                        sel.innerHTML += '<option value="' + m.id + '">' + m.id + '</option>';
+                    });
+                    if (!d.models || !d.models.length) {
+                        sel.innerHTML += '<option value="">(no models)</option>';
+                    }
+                } else {
+                    sel.innerHTML = '<option value="">Error: ' + r.status + '</option>';
+                }
+            } catch(e) {
+                sel.innerHTML = '<option value="">Error: ' + e.message + '</option>';
             }
         }
 
