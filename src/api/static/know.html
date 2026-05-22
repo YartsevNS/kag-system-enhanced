@@ -82,179 +82,170 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>22 мая 2026 — Сессия #9 (текущая)</div>
     <div class="qa-list">
-
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№57. Восстановление после сбоя — Keycloak realm, PostgreSQL, Qdrant</strong><br>Проект был полностью уничтожен после перезагрузки контейнеров. Восстанови наработки, чтобы не потерять при следующей перезагрузке.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Аудит и восстановление.</strong> Код сохранён в git. Создан отдельный <code>kag-pg</code> PostgreSQL с bind-mount <code>/home/yartsevn/kag-system/data/pg</code>. Qdrant на <code>data/qdrant</code>. Загрузки на <code>data/uploads</code>. 68 файлов переимпортированы. Keycloak realm <code>kag</code> пересоздан через REST API. Setup-флаг сброшен в <code>config_store("setup","status",{"configured":True})</code>.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№58. Админка не грузит данные — все секции «Загрузка...»</strong><br>На странице /admin статус системы, типы, модели — всё показывает «Загрузка...». Раньше работало без авторизации.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Откат к рабочей версии <code>b857ccf</code></strong> — админка использовала простые <code>fetch()</code> без auth. Добавлен <code>apiFetch()</code> с <code>localStorage.getItem('kag_token')</code> — 31 вызов заменил на <code>apiFetch</code>. <code>LLMBackendType</code> enum расширен: deepseek, openrouter. Настройки сохраняются в PostgreSQL через <code>config_store("llm_config","active")</code>.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№59. Статус системы — Ollama ❌ недоступен</strong><br>Хотя тест перезагрузки проходит, статус показывает красные крестики.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Два бага:</strong> (1) health-check использовал <code>GET /</code> вместо <code>/api/tags</code> — исправлено. (2) <code>config_store.get("llm","default")</code> возвращал <code>{"system_prompt":"..."}</code> без host — model_manager брал <code>localhost</code>. Добавлены поля <code>host: 192.168.50.41, port: 11434</code>. Embedding: создан отдельный <code>config_store("embedding","default")</code>.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№60. Внешние LLM — нет выбора моделей, теста, баланса</strong><br>При выборе провайдера DeepSeek и вводе API-ключа нет возможности протестировать, запросить баланс и выбрать модель.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Расширен test_ext_llm()</strong> — поддержка OpenAI/DeepSeek/OpenRouter через <code>/v1/chat/completions</code>. <code>loadExtModels()</code> фетчит модели через <code>GET /ext-llm/models?provider=</code>. Баланс: OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (проверка ключа). <code>populateExtSelect()</code> вызывается в <code>loadAll()</code>.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№61. Модель графа (Neo4j) — только Ollama, нет выбора провайдера</strong><br>При выборе DeepSeek дропдаун моделей не обновляется. Баланс в долларах/юанях.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлены:</strong> <code>onGraphProviderChange()</code>, <code>loadGraphModels()</code> — фетчат модели провайдера. Кнопка 💰 Баланс с <code>checkGraphBalance()</code>. Эндпоинт <code>GET /graph/balance</code> — OpenRouter ($), DeepSeek (¥/CNY), OpenAI (✅ ключ активен).</div></div>
-      </div>
-      <div class="qa-item">
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№62. Активная LLM модель — провайдеры, модели, баланс</strong><br>Сделать по аналогии с граф-моделью: выбор провайдера, API-ключ, баланс, сохранение в PostgreSQL.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Полная переработка секции.</strong> Статический HTML с provider-select, model-select, api-key, url. JS: <code>onActiveLlmProviderChange()</code>, <code>saveActiveLlm()</code> → <code>POST /switch-llm</code> с полями <code>backend_type, model_name, url, api_key, provider</code>. <code>config_store("llm_config","active")</code> — переживает рестарт. <code>loadActiveLlmConfig()</code> восстанавливает при загрузке. <code>LLMBackendType</code> расширен: DEEPSEEK, OPENROUTER.</div></div>
       </div>
-
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№61. Модель графа (Neo4j) — только Ollama, нет выбора провайдера</strong><br>При выборе DeepSeek дропдаун моделей не обновляется. Баланс в долларах/юанях.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлены:</strong> <code>onGraphProviderChange()</code>, <code>loadGraphModels()</code> — фетчат модели провайдера. Кнопка 💰 Баланс с <code>checkGraphBalance()</code>. Эндпоинт <code>GET /graph/balance</code> — OpenRouter ($), DeepSeek (¥/CNY), OpenAI (✅ ключ активен).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№60. Внешние LLM — нет выбора моделей, теста, баланса</strong><br>При выборе провайдера DeepSeek и вводе API-ключа нет возможности протестировать, запросить баланс и выбрать модель.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Расширен test_ext_llm()</strong> — поддержка OpenAI/DeepSeek/OpenRouter через <code>/v1/chat/completions</code>. <code>loadExtModels()</code> фетчит модели через <code>GET /ext-llm/models?provider=</code>. Баланс: OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (проверка ключа). <code>populateExtSelect()</code> вызывается в <code>loadAll()</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№59. Статус системы — Ollama ❌ недоступен</strong><br>Хотя тест перезагрузки проходит, статус показывает красные крестики.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Два бага:</strong> (1) health-check использовал <code>GET /</code> вместо <code>/api/tags</code> — исправлено. (2) <code>config_store.get("llm","default")</code> возвращал <code>{"system_prompt":"..."}</code> без host — model_manager брал <code>localhost</code>. Добавлены поля <code>host: 192.168.50.41, port: 11434</code>. Embedding: создан отдельный <code>config_store("embedding","default")</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№58. Админка не грузит данные — все секции «Загрузка...»</strong><br>На странице /admin статус системы, типы, модели — всё показывает «Загрузка...». Раньше работало без авторизации.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Откат к рабочей версии <code>b857ccf</code></strong> — админка использовала простые <code>fetch()</code> без auth. Добавлен <code>apiFetch()</code> с <code>localStorage.getItem('kag_token')</code> — 31 вызов заменил на <code>apiFetch</code>. <code>LLMBackendType</code> enum расширен: deepseek, openrouter. Настройки сохраняются в PostgreSQL через <code>config_store("llm_config","active")</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№57. Восстановление после сбоя — Keycloak realm, PostgreSQL, Qdrant</strong><br>Проект был полностью уничтожен после перезагрузки контейнеров. Восстанови наработки, чтобы не потерять при следующей перезагрузке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Аудит и восстановление.</strong> Код сохранён в git. Создан отдельный <code>kag-pg</code> PostgreSQL с bind-mount <code>/home/yartsevn/kag-system/data/pg</code>. Qdrant на <code>data/qdrant</code>. Загрузки на <code>data/uploads</code>. 68 файлов переимпортированы. Keycloak realm <code>kag</code> пересоздан через REST API. Setup-флаг сброшен в <code>config_store("setup","status",{"configured":True})</code>.</div></div>
+      </div>
     </div>
-  </div>
-
-<!-- May 19, 2026 -->
+  </div><!-- May 19, 2026 -->
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8</div>
     <div class="qa-list">
-      
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№48. Навигация — единое меню на всех страницах</strong><br>Переделай меню слева. На всех страницах кроме чата должно быть одинаковое меню из 11 пунктов.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Унифицирована навигация на 14 страницах: Дашборд → Чат с AI → Документы → Чанки → Поиск → Граф знаний → Веб-монитор → Новости → Know → Логи → Админ. Дашборд получил <code>.nav-item</code> CSS-классы. Админка сохранила оригинальную структуру.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Авто-классификация типов документов</strong><br>Тип не появляется на миниатюрах.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Исправлен document_analyzer: таймаут увеличен до 120с, синхронизация config_store с API списка. 15 из 16 документов получили типы (contract, invoice, letter, form, legal, technical, financial). Endpoint <code>POST /api/v1/upload/reanalyze-all</code>.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№49. Выбор нейросетей — API-ключи теряются при смене провайдера</strong><br>Где сохраняется API-ключ? Почему не видно после повторного выбора провайдера?</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Баг:</strong> <code>_ext_llm_config</code> — глобальная переменная в памяти. <strong>Fix:</strong> сохранение в <code>config_store.set("ext_llm", "default", {...})</code> → PostgreSQL. Загрузка при старте модуля. Условие <code>if not model AND not api_key</code> заменено на безусловную загрузку из БД. <strong>Баланс-проверка:</strong> OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (тест доступности). Endpoint: <code>GET /api/v1/admin/models/ext-llm/balance</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Просмотр текстовых документов</strong><br>Ошибка «Файл повреждён или не является PDF» для txt/md.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">viewer.html теперь определяет тип: PDF → PDF.js, текст → рендеринг содержимого белым текстом на тёмном фоне. Скрываются PDF-элементы для текстовых.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№50. Гибридный поиск — только Neo4j, нет Qdrant</strong><br>Вбиваю «криптография» — ничего не найдено. Нужен fallback на Qdrant.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Fix:</strong> Гибридный поиск теперь двухэтапный: (1) Neo4j через <code>CONTAINS</code> (не <code>IN</code>), (2) Если пусто — fallback на <code>embeddings_service.search()</code> в Qdrant. Пояснение мелким шрифтом на странице /kg.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Миниатюры — белый фон</strong><br>И админка: чекбоксы форматов + бейджи на странице загрузки.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Миниатюры: белый фон, чёрный/серый текст. Админка: 12 чекбоксов в алфавитном порядке. Документы: цветные/серые бейджи над зоной загрузки, accept у input динамически.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№51. Системный промпт для чата — RAG из Neo4j+Qdrant</strong><br>Нужен промпт для AI-чата, чтобы работал с обеими базами. Создай поле в админке.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> секция «💬 Системный промпт для чата» в админке с textarea 320px. API: <code>GET/POST /api/v1/admin/models/chat-prompt</code>. Сохранение в <code>config_store("llm", "default")</code>. Дефолтный промпт: работает с Qdrant (векторы) и Neo4j (граф). Чат-сервис обогащает контекст из обеих баз: <code>[Источник N]</code> + <code>[Граф]</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Code Review страницы логов</strong><br>Профессиональное ревью с делегированием.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Суб-агент провёл ревью: найдены XSS (innerHTML), отсутствие auth на эндпоинтах, инъекция в docker logs. Исправлено: DOM-создание вместо innerHTML, authHeaders на все fetch, санитайз container_name, хеш-дедупликация логов.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№52. QA тестирование — профессиональный прогон</strong><br>Занимайся автотестами как профессиональный тестировщик. Изучи методики, проведи полное тестирование.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Загружены скиллы:</strong> systematic-debugging, test-driven-development, dogfood. <strong>3 делегата параллельно:</strong> (1) Smoke — 11 страниц, FAIL: меню неконсистентно (только /admin 11 пунктов). (2) API — 10 эндпоинтов, PASS: все 200 OK. (3) Admin — FAIL: промпт и форматы не персистят. <strong>Исправлено:</strong> навигация 9 страниц + дашборд; промпт сохранение в config_store; chunk_id уникальные.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Neo4j best practices — анализ и реализация</strong><br>Сравнить с neo4j.com/blog/knowledge-graph-generation.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Реализованы все лучшие практики Neo4j: двухпроходное извлечение (core → relations → extended), MERGE вместо CREATE (авто-дедупликация), пост-обработка (entity linking), валидация качества, разделение Lexical/Domain Graph, индексы и constraints. Всё с русскими комментариями.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№53. Тестирование AI-чата</strong><br>Тестируй ответы чата. Проверяй нейросети, строй предположения и проверяй.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Проблема:</strong> активная модель <code>phi4-mini-reasoning:latest</code> — reasoning-модель с китайскими <code>&lt;think&gt;</code> тегами. Ответы пустые или нерелевантные. <strong>Fix:</strong> переключено на <code>phi4-mini:latest</code> — ответы на русском, ссылается на документы. <strong>Mistral:7b</strong> — более развёрнутые ответы, медленнее. <strong>Neo4j-поиск:</strong> улучшен — извлечение ключевых слов из сообщения вместо полного предложения. 4 теста пройдено.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Доменные схемы — множественные пресеты</strong><br>Переключение между схемами сущностей.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">5 доменных пресетов: 🌐 Универсальная, 💰 Бухгалтерия, ⚖️ Юридическая, 🏥 Медицинская, 🔐 <strong>Инфобез</strong> (ГОСТ Р 56545/56546). Настраиваются в админке и на <code>/kg</code>. Схема ИБ включает: asset, vulnerability, threat, incident, control, risk_level, classification, regulation.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№54. Сторож перестроения графа</strong><br>Нужен сторож процесса. Перезапускать при необходимости вручную или сторожем.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/rebuild_watchdog.py</code> — asyncio-задача внутри uvicorn. <strong>API:</strong> <code>POST /api/v1/kg/watchdog/start</code>, <code>POST .../stop</code>, <code>GET .../status</code>. <strong>Алгоритм:</strong> каждые 30 сек проверяет рост сущностей. При зависании (5 циклов) — авто-перезапуск с очисткой. Авто-старт при запуске контейнера если entities &lt; 10.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Пагинация на странице документов</strong><br>Добавить кнопки «следующие N» с прокруткой.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены кнопки ◀/▶ с перелистыванием страниц, счётчик «1–50 из 100 (стр. 1/2)», селектор количества (20/50/100/200/500/Все). При смене фильтра — сброс на первую страницу.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№55. Bulk delete документов</strong><br>На странице документов в таблице сделать чекбоксы для группового удаления.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> чекбокс «Выбрать все» в шапке таблицы, индивидуальные чекбоксы у каждой строки, панель «🗑️ Удалить выбранные» с подсчётом. Количество сохраняется в <code>localStorage</code>. Подтверждение перед удалением.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Веб-мониторинг — RSS + scrape + change detection</strong><br>Нужна страница для мониторинга внешних сайтов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/monitor</code>: RSS-парсер (feedparser), веб-скрапер (BeautifulSoup4), change detection (SHA-256). 6 встроенных источников. Интеграция с KAG Pipeline: Download → SHA-256 → Dedup → Upload → Parse → Qdrant → Neo4j.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№56. Сторож типизации документов</strong><br>Сторож должен проверять наличие тегов и типов. При отсутствии — перезапускать распознавание первых 2 чанков. Показывать статус на странице документов.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/type_watchdog.py</code> — определяет тип документа по первым 2 чанкам через LLM. API: <code>POST /api/v1/kg/type-watchdog/start</code>, <code>GET .../status</code>. <strong>15 русских типов:</strong> Договор, Отчёт, Счёт, Стандарт (ГОСТ), etc. <strong>Авто-пополнение:</strong> LLM предлагает новый тип → добавляется в список. Редактирование в админке: ➕ добавить / ✕ удалить. Статус на странице /documents: ⏳ идёт / ✅ завершено / ⚠️ без типа. Клик по «Типов» → админка.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ГОСТы — страница не парсится</strong><br>gost.ru/standarts/InformationSecurity — ссылки есть, система не видит.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Ссылки вели на <code>rst.gov.ru:8443/file-service/file/load/...</code> без расширения <code>.pdf</code>. Добавлены: паттерны file-service в <code>_is_document_url</code>, Content-Type → расширение, Content-Disposition → имя файла. <strong>115 ГОСТов найдено.</strong></div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Настройка скорости скачивания</strong><br>Сервер блокирует. Нужны партии и паузы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены настройки: <strong>Партия</strong> (файлов за раз), <strong>Пауза между партиями</strong> (сек), <strong>Пауза между файлами</strong> (сек), <strong>Случ. разброс</strong> (0..N сек). Обработка 429 (Retry-After), 503. Настраивается для каждого источника.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ЦБ РФ RSS — добавить набор источников</strong><br>Изучить cbr.ru/development/rss/.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлено 8 RSS-каналов ЦБ РФ отдельным набором: новое на сайте, новости/интервью, пресс-релизы, курсы валют, регламент МЦИ, +3 English. Кнопка «🏦 ЦБ РФ (8)».</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>RSS не скачиваются</strong><br>Почему новости ЦБ не попадают в KAG?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">RSS-парсер искал только <strong>вложения</strong> (enclosures с PDF). В новостных RSS их нет. Добавлен шаг 3: если нет вложений → сохраняем саму новость как <code>.txt</code> документ (заголовок + описание + ссылка).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация новостей</strong><br>Нужна логика: вычитывать название+дату, если есть — не загружать.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Два уровня дедупликации: 1) <strong>Ключ новости</strong> <code>title[:80]|YYYY-MM-DD</code> в <code>_news_keys</code> set → config_store; 2) <strong>SHA-256</strong> контента. Каждая новость — 1 экземпляр в KAG.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Роскомнадзор RSS</strong><br>Изучить и добавить.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен RSS РКН: <code>rkn.gov.ru/_services/rss/</code>. Новости по надзору в сфере связи, ИТ, СМИ, защите ПДн.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>SecurityNews RSS — добавить как источник</strong><br>5 RSS-каналов secnews.ru по ИБ.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены 5 каналов SecurityNews: все публикации, статьи, зарубежные, российские, дайджест СМИ. Кнопка «🔐 SecurityNews (5)» на <code>/monitor</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Лента новостей — отдельная страница</strong><br>Нужна страница с блоками новостей в реальном времени, с раскрытием по клику.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/news</code>: сетка блоков 280px, клик — раскрытие на всю ширину, панель источников с чипсами (вкл/выкл), тестовый источник Securelist. Дедупликация по тексту.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Баг: общие сущности — всего 3 при 130 документах</strong><br>Почему так мало cross-doc entities?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Найден критический баг: <code>chunk_id = "chunk_00001"</code> был одинаковым для ВСЕХ документов. <code>MATCH (c:Chunk {id: "chunk_00001"})</code> цеплял чанки всех документов → сущность «EUR/USD» была связана со 113 документами. <strong>Исправлено:</strong> <code>chunk_id = "{document_id}_chunk_{i}"</code>. Старые сущности удалены, граф перестраивается.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Перестройка графа — визуализация и расчёт времени</strong><br>Нужно визуализировать процесс перестроения графа знаний и рассчитать сколько времени займёт.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена панель визуализации на <code>/kg</code>: прогресс-бар с процентами, счётчик «N / 130 документов», ETA с расчётом скорости (~1.5 док/мин). При завершении панель становится зелёной и скрывается через 10 сек. <strong>Время:</strong> ~3-5 часов на 130 документов × 3 чанка.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№46. Skill know-updater — автообновление страницы Know</strong><br>Сделай скилл, который будет дописывать каждый диалог на страницу know после ответа.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан skill <code>know-updater</code> (<code>productivity/know-updater/SKILL.md</code>). После существенного ответа читает <code>know.html</code>, добавляет Q&A блок в начало секции текущей даты, коммитит и пушит. Формат: вопрос слева (синяя полоса), ответ справа (зелёная). <strong>Правила:</strong> не дублировать, не на каждый чих, технические детали с code-ссылками.</div></div>
       </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№47. Дедупликация сущностей — зачем и как работает</strong><br>Расскажи подробнее о реальной дедупликации, так ли она нужна или это что-то технологическое ускоряет или улучшает работу?</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Дедупликация через MERGE вместо CREATE</strong> — это не косметика, а архитектурное решение:<br>• <strong>Граф становится связным</strong> — через общие сущности можно перейти между документами<br>• <strong>Экономия памяти</strong> — 1000 доков с «Ивановым» = 1 узел, не 1000<br>• <strong>Быстрее поиск</strong> — <code>MATCH (e:Entity {name: "Иванов"})</code> возвращает 1 запись<br>• <strong>Аналитика</strong> — видно что «Иванов» в 150 документах (важный контрагент)<br><strong>Баг с chunk_id:</strong> раньше <code>chunk_id = "chunk_00001"</code> для всех доков → MERGE склеивал всё подряд. Исправлено на <code>"{doc_id}_chunk_{i}"</code>.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№46. Skill know-updater — автообновление страницы Know</strong><br>Сделай скилл, который будет дописывать каждый диалог на страницу know после ответа.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан skill <code>know-updater</code> (<code>productivity/know-updater/SKILL.md</code>). После существенного ответа читает <code>know.html</code>, добавляет Q&A блок в начало секции текущей даты, коммитит и пушит. Формат: вопрос слева (синяя полоса), ответ справа (зелёная). <strong>Правила:</strong> не дублировать, не на каждый чих, технические детали с code-ссылками.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№56. Сторож типизации документов</strong><br>Сторож должен проверять наличие тегов и типов. При отсутствии — перезапускать распознавание первых 2 чанков. Показывать статус на странице документов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/type_watchdog.py</code> — определяет тип документа по первым 2 чанкам через LLM. API: <code>POST /api/v1/kg/type-watchdog/start</code>, <code>GET .../status</code>. <strong>15 русских типов:</strong> Договор, Отчёт, Счёт, Стандарт (ГОСТ), etc. <strong>Авто-пополнение:</strong> LLM предлагает новый тип → добавляется в список. Редактирование в админке: ➕ добавить / ✕ удалить. Статус на странице /documents: ⏳ идёт / ✅ завершено / ⚠️ без типа. Клик по «Типов» → админка.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Перестройка графа — визуализация и расчёт времени</strong><br>Нужно визуализировать процесс перестроения графа знаний и рассчитать сколько времени займёт.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена панель визуализации на <code>/kg</code>: прогресс-бар с процентами, счётчик «N / 130 документов», ETA с расчётом скорости (~1.5 док/мин). При завершении панель становится зелёной и скрывается через 10 сек. <strong>Время:</strong> ~3-5 часов на 130 документов × 3 чанка.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№55. Bulk delete документов</strong><br>На странице документов в таблице сделать чекбоксы для группового удаления.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> чекбокс «Выбрать все» в шапке таблицы, индивидуальные чекбоксы у каждой строки, панель «🗑️ Удалить выбранные» с подсчётом. Количество сохраняется в <code>localStorage</code>. Подтверждение перед удалением.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Баг: общие сущности — всего 3 при 130 документах</strong><br>Почему так мало cross-doc entities?</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Найден критический баг: <code>chunk_id = "chunk_00001"</code> был одинаковым для ВСЕХ документов. <code>MATCH (c:Chunk {id: "chunk_00001"})</code> цеплял чанки всех документов → сущность «EUR/USD» была связана со 113 документами. <strong>Исправлено:</strong> <code>chunk_id = "{document_id}_chunk_{i}"</code>. Старые сущности удалены, граф перестраивается.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№54. Сторож перестроения графа</strong><br>Нужен сторож процесса. Перезапускать при необходимости вручную или сторожем.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/rebuild_watchdog.py</code> — asyncio-задача внутри uvicorn. <strong>API:</strong> <code>POST /api/v1/kg/watchdog/start</code>, <code>POST .../stop</code>, <code>GET .../status</code>. <strong>Алгоритм:</strong> каждые 30 сек проверяет рост сущностей. При зависании (5 циклов) — авто-перезапуск с очисткой. Авто-старт при запуске контейнера если entities &lt; 10.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Лента новостей — отдельная страница</strong><br>Нужна страница с блоками новостей в реальном времени, с раскрытием по клику.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/news</code>: сетка блоков 280px, клик — раскрытие на всю ширину, панель источников с чипсами (вкл/выкл), тестовый источник Securelist. Дедупликация по тексту.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№53. Тестирование AI-чата</strong><br>Тестируй ответы чата. Проверяй нейросети, строй предположения и проверяй.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Проблема:</strong> активная модель <code>phi4-mini-reasoning:latest</code> — reasoning-модель с китайскими <code>&lt;think&gt;</code> тегами. Ответы пустые или нерелевантные. <strong>Fix:</strong> переключено на <code>phi4-mini:latest</code> — ответы на русском, ссылается на документы. <strong>Mistral:7b</strong> — более развёрнутые ответы, медленнее. <strong>Neo4j-поиск:</strong> улучшен — извлечение ключевых слов из сообщения вместо полного предложения. 4 теста пройдено.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>SecurityNews RSS — добавить как источник</strong><br>5 RSS-каналов secnews.ru по ИБ.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены 5 каналов SecurityNews: все публикации, статьи, зарубежные, российские, дайджест СМИ. Кнопка «🔐 SecurityNews (5)» на <code>/monitor</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№52. QA тестирование — профессиональный прогон</strong><br>Занимайся автотестами как профессиональный тестировщик. Изучи методики, проведи полное тестирование.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Загружены скиллы:</strong> systematic-debugging, test-driven-development, dogfood. <strong>3 делегата параллельно:</strong> (1) Smoke — 11 страниц, FAIL: меню неконсистентно (только /admin 11 пунктов). (2) API — 10 эндпоинтов, PASS: все 200 OK. (3) Admin — FAIL: промпт и форматы не персистят. <strong>Исправлено:</strong> навигация 9 страниц + дашборд; промпт сохранение в config_store; chunk_id уникальные.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Роскомнадзор RSS</strong><br>Изучить и добавить.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен RSS РКН: <code>rkn.gov.ru/_services/rss/</code>. Новости по надзору в сфере связи, ИТ, СМИ, защите ПДн.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№51. Системный промпт для чата — RAG из Neo4j+Qdrant</strong><br>Нужен промпт для AI-чата, чтобы работал с обеими базами. Создай поле в админке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> секция «💬 Системный промпт для чата» в админке с textarea 320px. API: <code>GET/POST /api/v1/admin/models/chat-prompt</code>. Сохранение в <code>config_store("llm", "default")</code>. Дефолтный промпт: работает с Qdrant (векторы) и Neo4j (граф). Чат-сервис обогащает контекст из обеих баз: <code>[Источник N]</code> + <code>[Граф]</code>.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация новостей</strong><br>Нужна логика: вычитывать название+дату, если есть — не загружать.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Два уровня дедупликации: 1) <strong>Ключ новости</strong> <code>title[:80]|YYYY-MM-DD</code> в <code>_news_keys</code> set → config_store; 2) <strong>SHA-256</strong> контента. Каждая новость — 1 экземпляр в KAG.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№50. Гибридный поиск — только Neo4j, нет Qdrant</strong><br>Вбиваю «криптография» — ничего не найдено. Нужен fallback на Qdrant.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Fix:</strong> Гибридный поиск теперь двухэтапный: (1) Neo4j через <code>CONTAINS</code> (не <code>IN</code>), (2) Если пусто — fallback на <code>embeddings_service.search()</code> в Qdrant. Пояснение мелким шрифтом на странице /kg.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>RSS не скачиваются</strong><br>Почему новости ЦБ не попадают в KAG?</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">RSS-парсер искал только <strong>вложения</strong> (enclosures с PDF). В новостных RSS их нет. Добавлен шаг 3: если нет вложений → сохраняем саму новость как <code>.txt</code> документ (заголовок + описание + ссылка).</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№49. Выбор нейросетей — API-ключи теряются при смене провайдера</strong><br>Где сохраняется API-ключ? Почему не видно после повторного выбора провайдера?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Баг:</strong> <code>_ext_llm_config</code> — глобальная переменная в памяти. <strong>Fix:</strong> сохранение в <code>config_store.set("ext_llm", "default", {...})</code> → PostgreSQL. Загрузка при старте модуля. Условие <code>if not model AND not api_key</code> заменено на безусловную загрузку из БД. <strong>Баланс-проверка:</strong> OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (тест доступности). Endpoint: <code>GET /api/v1/admin/models/ext-llm/balance</code>.</div></div>
       </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ЦБ РФ RSS — добавить набор источников</strong><br>Изучить cbr.ru/development/rss/.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлено 8 RSS-каналов ЦБ РФ отдельным набором: новое на сайте, новости/интервью, пресс-релизы, курсы валют, регламент МЦИ, +3 English. Кнопка «🏦 ЦБ РФ (8)».</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Настройка скорости скачивания</strong><br>Сервер блокирует. Нужны партии и паузы.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены настройки: <strong>Партия</strong> (файлов за раз), <strong>Пауза между партиями</strong> (сек), <strong>Пауза между файлами</strong> (сек), <strong>Случ. разброс</strong> (0..N сек). Обработка 429 (Retry-After), 503. Настраивается для каждого источника.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ГОСТы — страница не парсится</strong><br>gost.ru/standarts/InformationSecurity — ссылки есть, система не видит.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Ссылки вели на <code>rst.gov.ru:8443/file-service/file/load/...</code> без расширения <code>.pdf</code>. Добавлены: паттерны file-service в <code>_is_document_url</code>, Content-Type → расширение, Content-Disposition → имя файла. <strong>115 ГОСТов найдено.</strong></div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Веб-мониторинг — RSS + scrape + change detection</strong><br>Нужна страница для мониторинга внешних сайтов.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/monitor</code>: RSS-парсер (feedparser), веб-скрапер (BeautifulSoup4), change detection (SHA-256). 6 встроенных источников. Интеграция с KAG Pipeline: Download → SHA-256 → Dedup → Upload → Parse → Qdrant → Neo4j.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Пагинация на странице документов</strong><br>Добавить кнопки «следующие N» с прокруткой.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены кнопки ◀/▶ с перелистыванием страниц, счётчик «1–50 из 100 (стр. 1/2)», селектор количества (20/50/100/200/500/Все). При смене фильтра — сброс на первую страницу.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Доменные схемы — множественные пресеты</strong><br>Переключение между схемами сущностей.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">5 доменных пресетов: 🌐 Универсальная, 💰 Бухгалтерия, ⚖️ Юридическая, 🏥 Медицинская, 🔐 <strong>Инфобез</strong> (ГОСТ Р 56545/56546). Настраиваются в админке и на <code>/kg</code>. Схема ИБ включает: asset, vulnerability, threat, incident, control, risk_level, classification, regulation.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Neo4j best practices — анализ и реализация</strong><br>Сравнить с neo4j.com/blog/knowledge-graph-generation.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Реализованы все лучшие практики Neo4j: двухпроходное извлечение (core → relations → extended), MERGE вместо CREATE (авто-дедупликация), пост-обработка (entity linking), валидация качества, разделение Lexical/Domain Graph, индексы и constraints. Всё с русскими комментариями.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Code Review страницы логов</strong><br>Профессиональное ревью с делегированием.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Суб-агент провёл ревью: найдены XSS (innerHTML), отсутствие auth на эндпоинтах, инъекция в docker logs. Исправлено: DOM-создание вместо innerHTML, authHeaders на все fetch, санитайз container_name, хеш-дедупликация логов.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Миниатюры — белый фон</strong><br>И админка: чекбоксы форматов + бейджи на странице загрузки.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Миниатюры: белый фон, чёрный/серый текст. Админка: 12 чекбоксов в алфавитном порядке. Документы: цветные/серые бейджи над зоной загрузки, accept у input динамически.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Просмотр текстовых документов</strong><br>Ошибка «Файл повреждён или не является PDF» для txt/md.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">viewer.html теперь определяет тип: PDF → PDF.js, текст → рендеринг содержимого белым текстом на тёмном фоне. Скрываются PDF-элементы для текстовых.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Авто-классификация типов документов</strong><br>Тип не появляется на миниатюрах.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Исправлен document_analyzer: таймаут увеличен до 120с, синхронизация config_store с API списка. 15 из 16 документов получили типы (contract, invoice, letter, form, legal, technical, financial). Endpoint <code>POST /api/v1/upload/reanalyze-all</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№48. Навигация — единое меню на всех страницах</strong><br>Переделай меню слева. На всех страницах кроме чата должно быть одинаковое меню из 11 пунктов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Унифицирована навигация на 14 страницах: Дашборд → Чат с AI → Документы → Чанки → Поиск → Граф знаний → Веб-монитор → Новости → Know → Логи → Админ. Дашборд получил <code>.nav-item</code> CSS-классы. Админка сохранила оригинальную структуру.</div></div>
       </div>
     </div>
-  </div>
-
-  <!-- May 18, 2026 -->
+  </div><!-- May 18, 2026 -->
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>18 мая 2026 — Сессии #6-7</div>
     <div class="qa-list">
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Гибридный поиск не работает</strong><br>На странице /kg гибридный поиск (граф + вектор) ничего не ищет.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Entity extraction падал молча: <code>mistral:7b</code> не генерировал валидный JSON на русском. Заменён на <code>phi4-mini</code>. Добавлен WARNING-лог при неудаче парсинга. Исправлена сериализация свойств в JSON. Endpoint rebuild-graph.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /search не работает</strong><br>Никакой поиск не функционирует.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Три проблемы: 1) Нет auth-заголовков в fetch; 2) Нет функций getToken()/authHeaders(); 3) Эндпоинт <code>/api/v1/chat/search</code> не существовал. Добавлен endpoint, authHeaders, getToken. Все 3 режима поиска работают.</div></div>
-      </div>
-      <div class="qa-item">
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /logs пустая</strong><br>Ничего не отображается.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены эндпоинты: system/info, docker/stats, docker/{name}/logs. Исправлен JS: убран show-system, updateSystemPanel всегда активна. Системные метрики через psutil.</div></div>
       </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /search не работает</strong><br>Никакой поиск не функционирует.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Три проблемы: 1) Нет auth-заголовков в fetch; 2) Нет функций getToken()/authHeaders(); 3) Эндпоинт <code>/api/v1/chat/search</code> не существовал. Добавлен endpoint, authHeaders, getToken. Все 3 режима поиска работают.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Гибридный поиск не работает</strong><br>На странице /kg гибридный поиск (граф + вектор) ничего не ищет.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Entity extraction падал молча: <code>mistral:7b</code> не генерировал валидный JSON на русском. Заменён на <code>phi4-mini</code>. Добавлен WARNING-лог при неудаче парсинга. Исправлена сериализация свойств в JSON. Endpoint rebuild-graph.</div></div>
+      </div>
     </div>
-  </div>
-
-  <!-- May 17, 2026 -->
+  </div><!-- May 17, 2026 -->
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>17 мая 2026 — Сессии #4-5</div>
     <div class="qa-list">
@@ -269,26 +260,17 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>14 мая 2026 — Сессии #1-3</div>
     <div class="qa-list">
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>PDF viewer не работает</strong><br>Документ не отображается, ошибка pdfjsLib is not defined.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Две проблемы: 1) /details endpoint читал из пустой таблицы documents вместо config_store (system_configs). 2) PDF.js грузился с недоступного CDN. Исправлено: endpoint → config_store, PDF.js → локальные файлы <code>/static/pdf.min.js</code>.</div></div>
-      </div>
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Мониторинг Docker и системы</strong><br>Обзор существующих страниц мониторинга.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Изучены: логи, Docker dashboard, Qdrant мониторинг. OpenTelemetry + Prometheus. Документы: загрузка, чанки, статусы. Система имеет полный мониторинговый стек.</div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="date-section">
-    <div class="date-header"><span class="dot"></span>Архитектурные решения (сквозные)</div>
-    <div class="qa-list">
-      <div class="qa-item">
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Duplicates & Versioning</strong><br>Храним ли оригиналы для сравнения при повторной загрузке?</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">SHA-256 при загрузке, проверка дубликата по хешу, бэкап <code>.v{N}.bak</code>, сравнение версий (diff по словам), endpoint <code>/upload/{id}/diff</code>. Всё с русскими комментариями.</div></div>
       </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Мониторинг Docker и системы</strong><br>Обзор существующих страниц мониторинга.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Изучены: логи, Docker dashboard, Qdrant мониторинг. OpenTelemetry + Prometheus. Документы: загрузка, чанки, статусы. Система имеет полный мониторинговый стек.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>PDF viewer не работает</strong><br>Документ не отображается, ошибка pdfjsLib is not defined.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Две проблемы: 1) /details endpoint читал из пустой таблицы documents вместо config_store (system_configs). 2) PDF.js грузился с недоступного CDN. Исправлено: endpoint → config_store, PDF.js → локальные файлы <code>/static/pdf.min.js</code>.</div></div>
+      </div>
     </div>
   </div>
-</main>
-</body>
-</html>
