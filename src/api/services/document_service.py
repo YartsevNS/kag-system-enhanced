@@ -480,7 +480,7 @@ class DocumentService:
 
             # Генерируем миниатюру
             try:
-                self._generate_thumbnail(document_id, file_path)
+                self._generate_thumbnail(document_id, file_path, getattr(record, 'document_type', '') or '')
             except Exception as e:
                 logger.warning(f"Миниатюра не создана: {e}")
 
@@ -585,8 +585,29 @@ class DocumentService:
         logger.info(f"Документ удален: {document_id}")
         return True
 
-    def _generate_thumbnail(self, document_id: str, file_path: Path) -> Optional[Path]:
-        """Сгенерировать WebP-миниатюру: первая страница PDF или текстовая карточка."""
+    def regenerate_thumbnail(self, document_id: str, document_type: str) -> bool:
+        """Перегенерировать миниатюру с новым типом документа."""
+        try:
+            record = self._documents.get(document_id)
+            if not record:
+                return False
+            file_path = self._find_file(document_id, record.filename)
+            if not file_path or not file_path.exists():
+                return False
+            thumb_path = self._generate_thumbnail(document_id, file_path, document_type)
+            return thumb_path is not None
+        except Exception as e:
+            logger.warning(f"Ошибка регенерации миниатюры {document_id}: {e}")
+            return False
+
+    def _generate_thumbnail(self, document_id: str, file_path: Path, document_type: str = "") -> Optional[Path]:
+        """Сгенерировать WebP-миниатюру: первая страница PDF или текстовая карточка.
+        
+        Args:
+            document_id: ID документа
+            file_path: Путь к файлу
+            document_type: Тип документа (отображается на миниатюре)
+        """
         from PIL import Image, ImageDraw, ImageFont
         
         thumb_dir = Path("/app/data/thumbnails")
@@ -617,6 +638,32 @@ class DocumentService:
             if img.width > max_width:
                 ratio = max_width / img.width
                 img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+            
+            # Отрисовываем тип документа на миниатюре
+            if document_type and document_type not in ('unknown', '', 'pending'):
+                draw = ImageDraw.Draw(img)
+                try:
+                    font_type = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+                except Exception:
+                    font_type = ImageFont.load_default()
+                # Карта русских названий типов
+                type_labels = {
+                    'invoice': 'Счёт', 'contract': 'Договор', 'report': 'Отчёт',
+                    'letter': 'Письмо', 'form': 'Форма', 'identity': 'Удостоверение',
+                    'medical': 'Медицинский', 'legal': 'Юридический', 'financial': 'Финансы',
+                    'technical': 'Технический', 'certificate': 'Сертификат',
+                    'order': 'Приказ', 'policy': 'Политика', 'standard': 'Стандарт',
+                    'news': 'Новость', 'other': 'Прочее',
+                }
+                label = type_labels.get(document_type, document_type)
+                # Прямоугольник с типом в правом верхнем углу
+                bbox = draw.textbbox((0, 0), label, font=font_type)
+                tw = bbox[2] - bbox[0] + 20
+                th = bbox[3] - bbox[1] + 12
+                x1, y1 = img.width - tw - 8, 8
+                x2, y2 = img.width - 8, 8 + th
+                draw.rectangle([x1, y1, x2, y2], fill='#5e6ad2')
+                draw.text((x1 + 10, y1 + 6), label, fill='#ffffff', font=font_type)
             
             img.save(thumb_path, format="WebP", quality=82)
             logger.info(f"Миниатюра создана: {thumb_path}")
