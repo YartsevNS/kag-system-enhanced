@@ -126,7 +126,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
-    <div class="stat-card" id="stat-types-card" onclick="window.location.href='/admin'" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div></div>
+    <div class="stat-card" id="stat-types-card" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div><div id="type-watch-btn" style="display:none;margin-top:4px"><button class="btn-outline" onclick="startTypeDetection()" style="padding:3px 8px;font-size:10px;background:var(--amber);color:#000;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔍 Типизировать</button></div></div>
     <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
   </div>
 
@@ -307,21 +307,40 @@ async function checkTypeWatchdog() {
     if (!r.ok) return;
     const d = await r.json();
     const badge = document.getElementById('type-watch-badge');
+    const btn = document.getElementById('type-watch-btn');
     if (!badge) return;
     if (d.status === 'running') {
       badge.style.display = 'block';
       badge.style.color = 'var(--amber)';
       badge.textContent = `⏳ ${d.processed}/${d.total_progress || d.total}`;
+      if (btn) btn.style.display = 'none';
     } else if (d.status === 'completed') {
       badge.style.display = 'block';
       badge.style.color = 'var(--emerald)';
       badge.textContent = `✅ ${d.with_type}/${d.total}`;
+      if (btn) btn.style.display = 'none';
     } else if (d.without_type > 0) {
       badge.style.display = 'block';
       badge.style.color = 'var(--text4)';
       badge.textContent = `⚠️ ${d.without_type} без типа`;
+      if (btn) btn.style.display = 'block';
+    } else {
+      if (btn) btn.style.display = 'none';
     }
   } catch(e) {}
+}
+
+async function startTypeDetection() {
+  const btn = document.querySelector('#type-watch-btn button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  try {
+    const r = await fetch(`${API}/kg/type-watchdog/start`, {method:'POST'});
+    const d = await r.json();
+    if (d.status === 'ok') {
+      setTimeout(checkTypeWatchdog, 2000);
+    }
+  } catch(e) {}
+  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔍 Типизировать'; } }, 5000);
 }
 
 async function enrichDocs() {
