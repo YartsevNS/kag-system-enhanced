@@ -575,35 +575,33 @@
             document.getElementById('message-input').focus();
         });
         
-        // Загрузка текущей модели из API
+        // Загрузка текущей модели из Provider Architecture
         async function loadCurrentModel() {
             const modelEl = document.getElementById('model-name');
             const indicator = document.querySelector('.status-indicator');
             
             try {
-                // Загружаем настройки LLM из сохраненных настроек
-                const response = await apiFetch(`${API_URL}/admin/models/status`);
+                // Получаем привязку функции чата
+                const fmResp = await apiFetch(`${API_URL}/admin/models/functions/chat`);
+                if (!fmResp.ok) throw new Error('Не удалось получить привязку чата');
+                const fm = await fmResp.json();
+                const modelName = fm.model || '—';
+                const providerId = fm.provider_id;
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    const modelName = data.active_config?.llm_model || 
-                                     data.llm_backends?.ollama?.model || 
-                                     'Неизвестная модель';
-                    
-                    if (modelEl) modelEl.textContent = modelName;
-                    
-                    // Обновляем индикатор статуса
-                    const healthy = data.llm_backends?.ollama?.healthy;
+                if (modelEl) modelEl.textContent = modelName;
+                
+                // Проверяем статус провайдера
+                if (providerId) {
+                    const provResp = await apiFetch(`${API_URL}/admin/models/providers/${encodeURIComponent(providerId)}/test`, {method: 'POST'});
+                    const provData = await provResp.json();
                     if (indicator) {
-                        indicator.style.background = healthy ? 'var(--green)' : '#f59e0b';
-                        indicator.title = healthy ? 'Модель активна' : 'Модель недоступна';
+                        indicator.style.background = provData.ok ? 'var(--green)' : 'var(--red)';
+                        indicator.title = provData.ok ? 'Модель активна' : 'Модель недоступна';
                     }
-                } else {
-                    if (modelEl) modelEl.textContent = 'Ошибка загрузки';
                 }
             } catch (error) {
                 console.error('Ошибка загрузки модели:', error);
-                if (modelEl) modelEl.textContent = 'Offline';
+                if (modelEl) modelEl.textContent = 'Не настроена';
                 if (indicator) indicator.style.background = 'var(--red)';
             }
         }
