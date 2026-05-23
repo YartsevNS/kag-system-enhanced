@@ -1167,6 +1167,8 @@
         }
 
         // ===========================================
+        async function loadAll() {
+            await Promise.all([
                 loadStatus(),
                 loadActiveModels(),
                 loadModels(),
