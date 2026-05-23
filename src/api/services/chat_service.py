@@ -219,9 +219,21 @@ class ChatService:
                 if search_results:
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
-                        doc_id = result.get('document_id', '?')[:12]
+                        doc_id = result.get('document_id', '?')
+                        # Получаем имя файла из document_service
+                        filename = result.get('filename', '')
+                        if not filename or filename == doc_id:
+                            try:
+                                from src.api.services.document_service import document_service
+                                record = document_service.get_document(doc_id)
+                                if record:
+                                    filename = record.filename
+                            except Exception:
+                                pass
+                        # Сохраняем filename в результат для фронта
+                        result['filename'] = filename or doc_id[:12]
                         context_parts.append(
-                            f"[Источник {i}] (doc:{doc_id}, score:{result['score']:.3f}):\n{result['content']}"
+                            f"[Источник {i}] «{filename or doc_id[:12]}» (score:{result['score']:.3f}):\n{result['content']}"
                         )
                     context = "\n\n".join(context_parts)
                     sources = search_results
