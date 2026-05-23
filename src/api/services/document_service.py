@@ -585,21 +585,6 @@ class DocumentService:
         logger.info(f"Документ удален: {document_id}")
         return True
 
-    def regenerate_thumbnail(self, document_id: str, document_type: str) -> bool:
-        """Перегенерировать миниатюру с новым типом документа."""
-        try:
-            record = self._documents.get(document_id)
-            if not record:
-                return False
-            file_path = self._find_file(document_id, record.filename)
-            if not file_path or not file_path.exists():
-                return False
-            thumb_path = self._generate_thumbnail(document_id, file_path, document_type)
-            return thumb_path is not None
-        except Exception as e:
-            logger.warning(f"Ошибка регенерации миниатюры {document_id}: {e}")
-            return False
-
     def _generate_thumbnail(self, document_id: str, file_path: Path, document_type: str = "") -> Optional[Path]:
         """Сгенерировать WebP-миниатюру: первая страница PDF или текстовая карточка.
         

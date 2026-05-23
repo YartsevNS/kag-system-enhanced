@@ -88,13 +88,6 @@ class TypeWatchdog:
                     except Exception:
                         pass
                     
-                    # Перегенерируем миниатюру с типом
-                    try:
-                        from src.api.services.document_service import document_service
-                        document_service.regenerate_thumbnail(did, detected_type)
-                    except Exception:
-                        pass
-                    
                     # Обновляем Neo4j если есть документ
                     try:
                         from src.indexing.knowledge_graph import kg_service
