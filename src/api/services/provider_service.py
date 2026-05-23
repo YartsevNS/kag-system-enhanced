@@ -348,6 +348,7 @@ class ProviderService:
     def save_function_map(self, fm: FunctionMap) -> bool:
         """Сохранить привязку функции"""
         try:
+            self._load_cache()
             # Валидация: провайдер должен существовать
             provider = self._provider_cache.get(fm.provider_id)
             if not provider:
