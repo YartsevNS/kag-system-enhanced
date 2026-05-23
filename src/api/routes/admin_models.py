@@ -10,8 +10,8 @@
 """
 
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Body
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException
+
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -419,574 +419,7 @@ class PullModelRequest(BaseModel):
     model_name: str = Field(..., description="Название модели для загрузки")
 
 
-# ===========================================
-# HTML админ-панель
-# ===========================================
 
-@router.get("/admin", response_class=HTMLResponse, summary="Админ-панель управления моделями")
-async def models_admin_page():
-    """
-    HTML страница для управления моделями.
-
-    Предоставляет веб-интерфейс для:
-    - Просмотра всех моделей
-    - Переключения между бэкендами
-    - Выбора активной модели
-    """
-    return """
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление моделями</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 2rem;
-        }
-        .container { max-width: 1400px; margin: 0 auto; }
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .subtitle { color: #94a3b8; margin-bottom: 2rem; }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        .card {
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid #334155;
-        }
-        .card h2 {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            color: #f8fafc;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .status-healthy { background: #22c55e; }
-        .status-error { background: #ef4444; }
-        .status-warning { background: #f59e0b; }
-        .status-badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #334155;
-        }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .btn-primary {
-            background: #3b82f6;
-            color: white;
-        }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-secondary {
-            background: #475569;
-            color: white;
-        }
-        .btn-secondary:hover { background: #374151; }
-        .btn-sm {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.75rem;
-        }
-        .btn-active {
-            background: #22c55e;
-            color: white;
-        }
-        select, input {
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.5rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            width: 100%;
-        }
-        .form-group { margin-bottom: 1rem; }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
-        }
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-        }
-        .info-item {
-            background: #0f172a;
-            padding: 1rem;
-            border-radius: 8px;
-        }
-        .info-item .label {
-            color: #94a3b8;
-            font-size: 0.75rem;
-            margin-bottom: 0.25rem;
-        }
-        .info-item .value {
-            color: #f8fafc;
-            font-size: 1.125rem;
-            font-weight: 600;
-        }
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #94a3b8;
-        }
-        .refresh-btn {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 1.5rem;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-            transition: all 0.2s;
-        }
-        .refresh-btn:hover {
-            transform: scale(1.1);
-            background: #2563eb;
-        }
-        #notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🎛️ Управление моделями KAG</h1>
-        <p class="subtitle">Админ-панель для конфигурации LLM и Embedding моделей</p>
-
-        <div id="notification"></div>
-
-        <!-- Статус системы -->
-        <div class="card" id="status-card">
-            <h2>📊 Статус системы</h2>
-            <div class="info-grid" id="system-status">
-                <div class="loading">Загрузка...</div>
-            </div>
-        </div>
-
-        <div class="grid">
-            <!-- LLM Модели -->
-            <div class="card">
-                <h2>🤖 LLM Модели</h2>
-                <div id="llm-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Embedding Модели -->
-            <div class="card">
-                <h2>📐 Embedding Модели</h2>
-                <div id="embedding-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Все модели Ollama -->
-            <div class="card">
-                <h2>📦 Все модели Ollama</h2>
-                <div id="all-ollama-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Загрузить модель -->
-            <div class="card">
-                <h2>⬇️ Загрузить новую модель</h2>
-                <div class="form-group">
-                    <label>Название модели (например, llama2:7b, mistral:latest)</label>
-                    <input type="text" id="model-name-input" placeholder="Введите название модели...">
-                </div>
-                <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
-            </div>
-        </div>
-    </div>
-
-    <button class="refresh-btn" onclick="loadAll()" title="Обновить">↻</button>
-
-    <script>
-        const API_BASE = '/api/v1/admin/models';
-
-        async function loadStatus() {
-            try {
-                const response = await fetch(`${API_BASE}/status`);
-                const data = await response.json();
-                
-                const statusHtml = `
-                    <div class="info-item">
-                        <div class="label">Активный бэкенд</div>
-                        <div class="value">${data.active_config.llm_backend || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">LLM модель</div>
-                        <div class="value">${data.active_config.llm_model || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">Embedding модель</div>
-                        <div class="value">${data.active_config.embedding_model || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">Размерность embedding</div>
-                        <div class="value">${data.embedding.dimensions}</div>
-                    </div>
-                `;
-                document.getElementById('system-status').innerHTML = statusHtml;
-
-                // Обновляем статусы бэкендов
-                updateBackendStatus(data.llm_backends);
-            } catch (error) {
-                console.error('Ошибка загрузки статуса:', error);
-            }
-        }
-
-        function updateBackendStatus(backends) {
-            // Добавляем индикаторы к заголовкам карточек
-        }
-
-        async function loadLlmModels() {
-            try {
-                const response = await fetch(`${API_BASE}/llm`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('llm-models').innerHTML = 
-                        '<div class="loading">Нет доступных моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Бэкенд</th>
-                                <th>Статус</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>${m.backend}</td>
-                                    <td>
-                                        <span class="status-badge ${m.is_active ? 'badge-success' : 'badge-error'}">
-                                            ${m.is_active ? 'Активна' : 'Неактивна'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        ${!m.is_active ? `
-                                            <button class="btn btn-secondary btn-sm" 
-                                                onclick="switchLlmModel('${m.backend}', '${m.name}')">
-                                                Активировать
-                                            </button>
-                                        ` : '<span class="btn-active btn btn-sm">✓ Активна</span>'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('llm-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки LLM моделей:', error);
-            }
-        }
-
-        async function loadEmbeddingModels() {
-            try {
-                const response = await fetch(`${API_BASE}/embeddings`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('embedding-models').innerHTML = 
-                        '<div class="loading">Нет доступных embedding моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Статус</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>
-                                        <span class="status-badge ${m.is_active ? 'badge-success' : 'badge-error'}">
-                                            ${m.is_active ? 'Активна' : 'Неактивна'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        ${!m.is_active ? `
-                                            <button class="btn btn-secondary btn-sm" 
-                                                onclick="switchEmbeddingModel('${m.name}')">
-                                                Активировать
-                                            </button>
-                                        ` : '<span class="btn-active btn btn-sm">✓ Активна</span>'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('embedding-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки embedding моделей:', error);
-            }
-        }
-
-        async function loadAllOllamaModels() {
-            try {
-                const response = await fetch(`${API_BASE}/ollama-models`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('all-ollama-models').innerHTML = 
-                        '<div class="loading">Нет моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Размер</th>
-                                <th>Изменена</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>${formatBytes(m.size)}</td>
-                                    <td>${new Date(m.modified_at).toLocaleDateString('ru-RU')}</td>
-                                    <td>
-                                        <button class="btn btn-secondary btn-sm" 
-                                            onclick="deleteModel('${m.name}')" 
-                                            style="background: #ef4444;">
-                                            Удалить
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('all-ollama-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки всех моделей:', error);
-            }
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        async function switchLlmModel(backend, modelName) {
-            try {
-                showNotification(`Переключение на ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/switch-llm`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        backend_type: backend,
-                        model_name: modelName
-                    })
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    const error = await response.json();
-                    showNotification(`✗ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function switchEmbeddingModel(modelName) {
-            try {
-                showNotification(`Переключение embedding на ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/switch-embedding`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Embedding модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    const error = await response.json();
-                    showNotification(`✗ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function pullModel() {
-            const modelName = document.getElementById('model-name-input').value.trim();
-            if (!modelName) {
-                showNotification('Введите название модели', true);
-                return;
-            }
-
-            try {
-                showNotification(`Загрузка ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/pull`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    showNotification(`✓ Модель ${modelName} загружена`);
-                    document.getElementById('model-name-input').value = '';
-                    setTimeout(loadAll, 500);
-                } else {
-                    showNotification(`⚠ ${result.message || result.error}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function deleteModel(modelName) {
-            if (!confirm(`Удалить модель ${modelName}?`)) return;
-
-            try {
-                showNotification(`Удаление ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/delete/${modelName}`, {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Модель ${modelName} удалена`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    showNotification('✗ Ошибка удаления', true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        function showNotification(message, isError = false) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.style.background = isError ? '#ef4444' : '#22c55e';
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 3000);
-        }
-
-        async function loadAll() {
-            await Promise.all([
-                loadStatus(),
-                loadLlmModels(),
-                loadEmbeddingModels(),
-                loadAllOllamaModels()
-            ]);
-        }
-
-        // Загрузка при старте
-        loadAll();
-        
-        // Автообновление каждые 30 секунд
-        setInterval(loadStatus, 30000);
-    </script>
-</body>
-</html>
-"""
 
 
 # ===========================================
@@ -1889,6 +1322,338 @@ async def save_chat_prompt(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+
+# ============================================================
+# Единая система управления провайдерами LLM
+# ============================================================
+# Новая архитектура: каждый провайдер (Ollama, OpenAI, DeepSeek...)
+# хранится отдельно в config_store("providers", id).
+# Каждая функция (chat, embedding, graph, doc_analysis) привязана
+# к провайдеру + модели через config_store("function_map", function).
+#
+# Провайдер — это источник LLM (credentials, URL).
+# Функция — это роль (чат, эмбеддинг, граф, анализ).
+# ============================================================
+
+from src.api.services.provider_service import (
+    provider_service, ProviderConfig, FunctionMap,
+    PROVIDER_TYPES, FUNCTION_DEFINITIONS,
+)
+
+
+@router.get("/provider-types", summary="Типы провайдеров")
+async def get_provider_types():
+    """Вернуть список поддерживаемых типов провайдеров с метаданными."""
+    return PROVIDER_TYPES
+
+
+@router.get("/function-definitions", summary="Определения функций")
+async def get_function_definitions():
+    """Вернуть список функций, которые могут использовать LLM."""
+    return FUNCTION_DEFINITIONS
+
+
+@router.get("/providers", summary="Список всех провайдеров")
+async def list_providers():
+    """Вернуть список всех провайдеров (без API-ключей)."""
+    return provider_service.list_providers()
+
+
+@router.get("/providers/{provider_id}", summary="Получить провайдера")
+async def get_provider(provider_id: str):
+    """Вернуть провайдера по ID (без API-ключа)."""
+    p = provider_service.get_provider(provider_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+    return p
+
+
+class ProviderSaveRequest(BaseModel):
+    """Запрос на сохранение провайдера"""
+    id: str = Field(default="", description="ID провайдера (пусто = создать новый)")
+    name: str = Field(default="", description="Название")
+    type: str = Field(default="ollama", description="Тип: ollama, openai, deepseek, openrouter, custom")
+    url: str = Field(default="", description="URL API")
+    api_key: str = Field(default="", description="API ключ (опционально)")
+    enabled: bool = Field(default=True, description="Включён")
+
+
+@router.post("/providers", summary="Сохранить провайдера")
+async def save_provider(req: ProviderSaveRequest):
+    """Создать или обновить провайдера."""
+    import uuid
+
+    config = ProviderConfig(
+        id=req.id or f"provider-{uuid.uuid4().hex[:8]}",
+        name=req.name,
+        type=req.type,
+        url=req.url,
+        api_key=req.api_key,
+        enabled=req.enabled,
+    )
+
+    success = provider_service.save_provider(config)
+    if not success:
+        raise HTTPException(status_code=500, detail="Ошибка сохранения провайдера")
+
+    return {
+        "status": "success",
+        "message": f"Провайдер {config.name} сохранён",
+        "provider": config.to_dict(include_secret=False),
+    }
+
+
+@router.delete("/providers/{provider_id}", summary="Удалить провайдера")
+async def delete_provider(provider_id: str):
+    """Удалить провайдера и все его привязки."""
+    success = provider_service.delete_provider(provider_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+    return {"status": "success", "message": f"Провайдер {provider_id} удалён"}
+
+
+@router.post("/providers/{provider_id}/fetch-models", summary="Запросить модели провайдера")
+async def fetch_provider_models(provider_id: str):
+    """Получить список моделей провайдера через его API и обновить кэш."""
+    models = await provider_service.fetch_provider_models(provider_id)
+    return {
+        "provider_id": provider_id,
+        "models": models,
+        "count": len(models),
+    }
+
+
+@router.post("/providers/{provider_id}/test", summary="Проверить подключение к провайдеру")
+async def test_provider_connection(provider_id: str):
+    """Проверить, что провайдер отвечает."""
+    provider = provider_service.get_provider_with_key(provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+
+    import httpx
+    try:
+        if provider.type == "ollama":
+            url = f"{provider.url}/api/tags"
+        else:
+            url = f"{provider.url.rstrip('/')}/v1/models"
+
+        headers = {}
+        if provider.api_key:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                model_count = 0
+                if provider.type == "ollama":
+                    model_count = len(data.get("models", []))
+                else:
+                    model_count = len(data.get("data", []))
+
+                return {
+                    "ok": True,
+                    "message": f"✅ Подключение успешно, {model_count} моделей",
+                    "model_count": model_count,
+                    "response_time_ms": resp.elapsed.total_seconds() * 1000,
+                }
+            else:
+                body = await resp.text()
+                return {
+                    "ok": False,
+                    "message": f"❌ HTTP {resp.status_code}: {body[:200]}",
+                }
+    except Exception as e:
+        return {"ok": False, "message": f"❌ {str(e)}"}
+
+
+# ===========================================
+# Привязка функций к провайдерам
+# ===========================================
+
+@router.get("/functions", summary="Список привязок функций")
+async def list_function_maps():
+    """Вернуть все привязки функций к провайдерам."""
+    return provider_service.list_function_maps()
+
+
+@router.get("/functions/{function_name}", summary="Получить привязку функции")
+async def get_function_map(function_name: str):
+    """Вернуть привязку функции к провайдеру."""
+    fm = provider_service.get_function_map(function_name)
+    if not fm:
+        # Возвращаем пустой шаблон для функции
+        func_def = FUNCTION_DEFINITIONS.get(function_name, {})
+        return {
+            "function": function_name,
+            "provider_id": provider_service.get_default_provider_id() or "",
+            "model": "",
+            "system_prompt": "",
+            "parameters": {"temperature": 0.7, "max_tokens": 4096},
+            "is_default": True,
+        }
+    return fm
+
+
+class FunctionMapSaveRequest(BaseModel):
+    """Запрос на сохранение привязки функции"""
+    function: str = Field(default="", description="Название функции")
+    provider_id: str = Field(default="", description="ID провайдера")
+    model: str = Field(default="", description="Модель")
+    system_prompt: str = Field(default="", description="Системный промпт")
+    parameters: dict = Field(default_factory=lambda: {"temperature": 0.7, "max_tokens": 4096})
+
+
+@router.post("/functions", summary="Сохранить привязку функции")
+async def save_function_map(req: FunctionMapSaveRequest):
+    """Сохранить привязку функции к провайдеру."""
+    # Валидация
+    if req.function not in FUNCTION_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Неизвестная функция: {req.function}")
+
+    fm = FunctionMap(
+        function=req.function,
+        provider_id=req.provider_id,
+        model=req.model,
+        system_prompt=req.system_prompt,
+        parameters=req.parameters or {"temperature": 0.7, "max_tokens": 4096},
+    )
+
+    success = provider_service.save_function_map(fm)
+    if not success:
+        raise HTTPException(status_code=500, detail="Ошибка сохранения привязки")
+
+    return {
+        "status": "success",
+        "message": f"Привязка функции {req.function} сохранена",
+        "mapping": fm.to_dict(),
+    }
+
+
+@router.post("/ensure-default-provider", summary="Создать провайдера по умолчанию")
+async def ensure_default_provider():
+    """Создать провайдера по умолчанию (Ollama) и дефолтные привязки, если пусто."""
+    success = provider_service.ensure_defaults()
+    return {
+        "status": "success" if success else "error",
+        "providers": provider_service.list_providers(),
+        "functions": provider_service.list_function_maps(),
+    }
+
+
+@router.post("/migrate-old-config", summary="Мигрировать старые настройки в новую систему")
+async def migrate_old_config():
+    """Прочитать старые конфиги (llm_config, ext_llm, graph_model, embedding)
+    и импортировать их в новую систему провайдеров."""
+    from src.api.services.config_store import config_store as cs
+    import uuid
+
+    results = {"migrated": [], "errors": []}
+    providers_map = {}  # old key -> new provider_id
+
+    # 1. LLM config (чат)
+    try:
+        llm_cfg = cs.get("llm_config", "active") or {}
+        if llm_cfg and llm_cfg.get("model_name"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = llm_cfg.get("backend_type", llm_cfg.get("provider", "ollama"))
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (чат)",
+                type=ptype,
+                url=llm_cfg.get("url", ""),
+                api_key=llm_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                providers_map["llm_config/active"] = pid
+                fm = FunctionMap(
+                    function="chat",
+                    provider_id=pid,
+                    model=llm_cfg.get("model_name", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"llm_config → провайдер {pid} (чат)")
+    except Exception as e:
+        results["errors"].append(f"llm_config: {e}")
+
+    # 2. Embedding config
+    try:
+        emb_cfg = cs.get("embedding", "default") or {}
+        emb_model = emb_cfg.get("model", "")
+        if emb_model:
+            # Используем тот же провайдер, если он уже есть
+            chat_pid = providers_map.get("llm_config/active")
+            if chat_pid:
+                fm = FunctionMap(
+                    function="embedding",
+                    provider_id=chat_pid,
+                    model=emb_model,
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"embedding → привязан к {chat_pid}")
+    except Exception as e:
+        results["errors"].append(f"embedding: {e}")
+
+    # 3. Graph model
+    try:
+        graph_cfg = cs.get("graph_model", "default") or {}
+        if graph_cfg and graph_cfg.get("model"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = graph_cfg.get("provider", "ollama")
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (граф)",
+                type=ptype,
+                url=graph_cfg.get("url", ""),
+                api_key=graph_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                providers_map["graph_model/default"] = pid
+                fm = FunctionMap(
+                    function="graph",
+                    provider_id=pid,
+                    model=graph_cfg.get("model", ""),
+                    system_prompt=graph_cfg.get("system_prompt", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"graph_model → провайдер {pid}")
+    except Exception as e:
+        results["errors"].append(f"graph_model: {e}")
+
+    # 4. Ext LLM (анализ документов)
+    try:
+        ext_cfg = cs.get("ext_llm", "default") or {}
+        if ext_cfg and ext_cfg.get("model"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = ext_cfg.get("provider", "ollama")
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (анализ доков)",
+                type=ptype,
+                url=ext_cfg.get("url", ""),
+                api_key=ext_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                fm = FunctionMap(
+                    function="doc_analysis",
+                    provider_id=pid,
+                    model=ext_cfg.get("model", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"ext_llm → провайдер {pid}")
+    except Exception as e:
+        results["errors"].append(f"ext_llm: {e}")
+
+    return {
+        "status": "ok",
+        "results": results,
+        "providers": provider_service.list_providers(),
+        "functions": provider_service.list_function_maps(),
+    }
 
 
 # ============================================================

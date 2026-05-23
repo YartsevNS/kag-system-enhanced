@@ -265,6 +265,84 @@
             <div id="restart-status" style="margin-top: 1rem;"></div>
         </div>
 
+        <!-- ========================================== -->
+        <!-- ПРОВАЙДЕРЫ LLM (новая система) -->
+        <!-- ========================================== -->
+        <div class="section">
+            <h2 class="section-title">🔌 Провайдеры LLM</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Каждый провайдер (Ollama, OpenAI, DeepSeek...) хранит свои настройки отдельно.
+                Функции (чат, embedding, граф, анализ) привязываются к нужному провайдеру + модели.
+                Настройки сохраняются в БД и не сбрасываются при перезапуске.
+            </p>
+
+            <!-- Список провайдеров -->
+            <div id="providers-list">
+                <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка провайдеров...</div>
+            </div>
+
+            <!-- Кнопка добавить провайдера -->
+            <div style="margin-top:12px">
+                <button class="btn btn-success" onclick="showAddProviderForm()">➕ Добавить провайдера</button>
+                <button class="btn btn-secondary" onclick="loadProviders()">🔄 Обновить</button>
+                <span id="providers-status" style="font-size:13px;margin-left:12px"></span>
+            </div>
+
+            <!-- Форма добавления/редактирования провайдера -->
+            <div id="provider-form" style="display:none;margin-top:16px;padding:16px;background:var(--elevated);border-radius:var(--radius);border:1px solid var(--border)">
+                <h3 style="font-size:14px;font-weight:600;margin-bottom:12px" id="provider-form-title">➕ Новый провайдер</h3>
+                <input type="hidden" id="pf-id" value="">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group">
+                        <label>Название провайдера</label>
+                        <input type="text" id="pf-name" placeholder="Локальная Ollama">
+                    </div>
+                    <div class="form-group">
+                        <label>Тип</label>
+                        <select id="pf-type" onchange="onProviderTypeChange()">
+                            <option value="ollama">Ollama (локальный)</option>
+                            <option value="openai">OpenAI API</option>
+                            <option value="deepseek">DeepSeek API</option>
+                            <option value="openrouter">OpenRouter API</option>
+                            <option value="custom">Custom (OpenAI-совместимый)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label>URL API</label>
+                        <input type="text" id="pf-url" placeholder="http://192.168.50.41:11434">
+                    </div>
+                    <div class="form-group" id="pf-key-group" style="display:none">
+                        <label>API ключ <span id="pf-key-hint" style="font-size:11px;font-weight:normal"></span></label>
+                        <input type="password" id="pf-api-key" placeholder="sk-...">
+                        <div style="font-size:11px;color:var(--text4);margin-top:4px">Оставьте пустым, чтобы сохранить существующий ключ</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:12px">
+                    <button class="btn btn-primary" onclick="saveProvider()">💾 Сохранить провайдера</button>
+                    <button class="btn btn-secondary" onclick="cancelProviderForm()">Отмена</button>
+                    <span id="pf-status" style="font-size:13px"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ПРИВЯЗКА ФУНКЦИЙ К ПРОВАЙДЕРАМ -->
+        <!-- ========================================== -->
+        <div class="section">
+            <h2 class="section-title">🎯 Привязка функций к провайдерам</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Укажите, какой провайдер и модель использует каждая функция.
+                Промпты для чата и графа настраиваются здесь же.
+            </p>
+            <div id="functions-list">
+                <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка функций...</div>
+            </div>
+            <div style="margin-top:12px">
+                <button class="btn btn-secondary" onclick="loadFunctionMaps()">🔄 Обновить</button>
+                <span id="functions-status" style="font-size:13px;margin-left:12px"></span>
+            </div>
+        </div>
+
         <!-- Настройки SSH подключения -->
         <div class="section">
             <h2 class="section-title">🔐 Настройки SSH подключения к Ollama</h2>
@@ -365,44 +443,7 @@
             </div>
         </div>
 
-        <!-- Активная LLM модель -->
-        <div class="section">
-            <h2 class="section-title">🤖 Активная LLM модель</h2>
-            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
-                Основная модель для чата, поиска и генерации ответов.
-            </p>
-            <div id="active-llm-card" style="margin-bottom:14px"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-                <div class="form-group">
-                    <label>URL API</label>
-                    <input type="text" id="active-llm-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
-                </div>
-                <div class="form-group">
-                    <label>Модель</label>
-                    <select id="active-llm-select" style="width:100%;padding:8px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)"></select>
-                </div>
-                <div class="form-group">
-                    <label>API ключ (если нужен)</label>
-                    <input type="password" id="active-llm-key" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>Провайдер</label>
-                    <select id="active-llm-provider" onchange="onActiveLlmProviderChange()">
-                        <option value="ollama">Ollama (локальный)</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
-                    </select>
-                </div>
-            </div>
-            <div style="display:flex;gap:10px;align-items:center">
-                <button class="btn btn-primary" onclick="saveActiveLlm()">💾 Сохранить</button>
-                <button class="btn btn-outline" onclick="checkActiveLlmBalance()" title="Проверить баланс">💰 Баланс</button>
-                <span id="active-llm-status" style="font-size:13px"></span>
-            </div>
-        </div>
-
-        <!-- Активная Embedding модель -->
+        <!-- Активная Embedding модель (управляется через Привязку функций) -->
         <div class="section">
             <h2 class="section-title">📐 Активная Embedding модель</h2>
             <div id="active-embedding">
@@ -436,56 +477,6 @@
             <div id="pull-status" style="margin-top: 1rem;"></div>
         </div>
 
-        <!-- Внешние LLM для анализа -->
-        <div class="section">
-            <h2 class="section-title">🔗 Внешние LLM для анализа документов</h2>
-            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
-                Подключение внешних нейросетей (OpenAI, DeepSeek, OpenRouter) для классификации и анализа документов.
-                Используется при фоновом анализе первого чанка — определение типа, темы, краткого содержания.
-            </p>
-            
-            <div id="active-ext-llm" style="margin-bottom:14px">
-                <span style="color:var(--text4)">Загрузка...</span>
-            </div>
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-                <div class="form-group">
-                    <label>URL API</label>
-                    <input type="text" id="ext-llm-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
-                </div>
-                <div class="form-group">
-                    <label>Модель (выбрать из загруженных или вписать)</label>
-                    <div style="display:flex;gap:8px">
-                        <select id="ext-llm-select" style="flex:1" onchange="document.getElementById('ext-llm-model').value = this.value">
-                            <option value="">— Выбрать из загруженных —</option>
-                        </select>
-                        <input type="text" id="ext-llm-model" placeholder="или впишите название" style="flex:0.7">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>API ключ (если нужен)</label>
-                    <input type="password" id="ext-llm-key" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>Провайдер</label>
-                    <select id="ext-llm-provider" onchange="onExtProviderChange()">
-                        <option value="ollama">Ollama (локальный)</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div style="display:flex;gap:10px;align-items:center">
-                <button class="btn btn-primary" onclick="saveExtLLM()">💾 Сохранить</button>
-                <button class="btn btn-outline" onclick="testExtLLM()">🧪 Тест</button>
-                <button class="btn btn-outline" onclick="checkBalance()" title="Проверить баланс провайдера">💰 Баланс</button>
-                <span id="ext-llm-status" style="font-size:13px"></span>
-            </div>
-            <div id="ext-llm-balance" style="margin-top:8px;display:none"></div>
-        </div>
-
         <!-- Типы документов -->
         <div class="section">
             <h2 class="section-title">🏷️ Типы документов</h2>
@@ -498,46 +489,6 @@
                 <button class="btn btn-sm" onclick="addDocType()">➕ Добавить</button>
             </div>
             <div id="doc-types-list" style="display:flex;flex-wrap:wrap;gap:6px">Загрузка...</div>
-        </div>
-
-        <div class="section">
-            <h2 class="section-title">🕸 Модель для построения графа (Neo4j)</h2>
-            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
-                Выбор модели LLM для извлечения сущностей и построения графа знаний.
-                Используется при обработке документов (Entity Extraction).
-            </p>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-                <div class="form-group">
-                    <label>URL API</label>
-                    <input type="text" id="graph-api-url" placeholder="http://192.168.50.41:11434" value="http://192.168.50.41:11434">
-                </div>
-                <div class="form-group">
-                    <label>Модель</label>
-                    <select id="graph-model-select" style="width: 100%; padding: 8px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);">
-                        <option value="mistral:7b">mistral:7b</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>API ключ (если нужен)</label>
-                    <input type="password" id="graph-api-key" placeholder="sk-...">
-                </div>
-                <div class="form-group">
-                    <label>Провайдер</label>
-                    <select id="graph-provider" onchange="onGraphProviderChange()">
-                        <option value="ollama">Ollama (локальный)</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
-                    </select>
-                </div>
-            </div>
-            <div style="display:flex;gap:10px;align-items:center">
-                <button class="btn btn-primary" onclick="saveGraphModel()">💾 Сохранить</button>
-                <button class="btn btn-outline" onclick="checkGraphBalance()" title="Проверить баланс">💰 Баланс</button>
-                <span id="graph-model-status" style="font-size:13px"></span>
-            </div>
-            </div>
         </div>
 
         <!-- Доменная схема сущностей -->
@@ -621,36 +572,7 @@
         }
 
         var llmModels = [];
-        var loadedModels = [];
 
-
-        async function loadActiveLlmConfig() {
-            try {
-                const r = await apiFetch('/api/v1/admin/models/llm-config');
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.url) document.getElementById('active-llm-url').value = d.url;
-                    if (d.provider) {
-                        document.getElementById('active-llm-provider').value = d.provider;
-                        onActiveLlmProviderChange();
-                    }
-                    if (d.api_key) document.getElementById('active-llm-key').value = d.api_key;
-                    // Set model after provider selects load
-                    if (d.model_name && d.backend_type) {
-                        setTimeout(function() {
-                            const sel = document.getElementById('active-llm-select');
-                            const targetVal = d.backend_type + '|' + d.model_name;
-                            for (let i = 0; i < sel.options.length; i++) {
-                                if (sel.options[i].value === targetVal || sel.options[i].value === d.model_name) {
-                                    sel.selectedIndex = i;
-                                    break;
-                                }
-                            }
-                        }, 500);
-                    }
-                }
-            } catch(e) {}
-        }
 
         async function loadActiveModels() {
             try {
@@ -659,18 +581,6 @@
                     apiFetch(`${API_URL}/embeddings`).then(r => r.json())
                 ]);
                 llmModels = lm;
-                loadedModels = lm.filter(function(m) { return m.backend === 'ollama'; }).map(function(m) { return m.name; });
-
-                                // Активная LLM модель — карточка
-                const activeLlm = llmModels.find(m => m.is_active);
-                if (activeLlm) {
-                    document.getElementById('active-llm-card').innerHTML = '<div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--elevated);border-radius:8px"><div style="font-size:2rem">🤖</div><div style="flex:1"><div style="font-weight:600;font-size:1.125rem">' + activeLlm.name + '</div><div style="color:var(--text4);font-size:0.875rem">Бэкенд: ' + activeLlm.backend + '</div></div><span class="badge badge-success">Активна</span></div>';
-                }
-                // Populate Active LLM select
-                const als = document.getElementById('active-llm-select');
-                als.innerHTML = llmModels.map(m => '<option value="' + m.backend + '|' + m.name + '" ' + (m.is_active ? 'selected' : '') + '>' + m.name + ' (' + m.backend + ')</option>').join('');
-                // If no active model, show N/A
-                if (!activeLlm) document.getElementById('active-llm-card').innerHTML = '<div style="color:var(--text4)">Нет активной LLM</div>';
 
                 // Активная Embedding модель
                 const activeEmb = embModels.find(m => m.is_active);
@@ -683,112 +593,11 @@
                         </div>
                         <span class="badge badge-success">Активна</span>
                     </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text4);">Сменить embedding модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="emb-select" style="flex: 1;">
-                                ${embModels.map(m => `<option value="${m.name}" ${m.is_active ? 'selected' : ''}>${m.name}</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchEmbeddingModel()">Применить</button>
-                        </div>
-                    </div>
                 ` : '<div style="color: var(--text4);">Нет доступных embedding моделей</div>';
-
-                // Модель для графа (заполняем select)
-                const graphSelect = document.getElementById('graph-model-select');
-                if (graphSelect) {
-                    graphSelect.innerHTML = llmModels.map(m => `<option value="${m.name}">${m.name} (${m.backend})</option>`).join('');
-                }
-                // Заполнить выпадающий список внешних LLM
-                populateExtSelect();
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
         }
-
-
-        // === Активная LLM модель — провайдер, баланс, модели ===
-
-        function onActiveLlmProviderChange() {
-            const prov = document.getElementById('active-llm-provider').value;
-            const keyDiv = document.getElementById('active-llm-key').parentElement;
-            const urlField = document.getElementById('active-llm-url');
-            keyDiv.style.display = (prov === 'ollama') ? 'none' : '';
-            if (prov === 'ollama') urlField.value = 'http://192.168.50.41:11434';
-            else if (prov === 'openai') urlField.value = 'https://api.openai.com';
-            else if (prov === 'deepseek') urlField.value = 'https://api.deepseek.com';
-            else if (prov === 'openrouter') urlField.value = 'https://openrouter.ai/api';
-            loadActiveLlmModels();
-        }
-
-        async function loadActiveLlmModels() {
-            const prov = document.getElementById('active-llm-provider').value;
-            const sel = document.getElementById('active-llm-select');
-            if (prov === 'ollama') {
-                sel.innerHTML = typeof llmModels !== 'undefined' ? llmModels.map(m => '<option value="ollama|' + m + '">' + m + ' (ollama)</option>').join('') : '';
-                return;
-            }
-            sel.innerHTML = '<option value="">Loading ' + prov + '...</option>';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
-                if (r.ok) {
-                    const d = await r.json();
-                    sel.innerHTML = '<option value="">-- ' + prov + ' --</option>';
-                    (d.models || []).forEach(function(m) {
-                        sel.innerHTML += '<option value="' + prov + '|' + m.id + '">' + m.id + '</option>';
-                    });
-                }
-            } catch(e) {}
-        }
-
-        async function saveActiveLlm() {
-            const status = document.getElementById('active-llm-status');
-            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
-            const val = document.getElementById('active-llm-select').value;
-            const parts = val.split('|');
-            const config = {
-                backend: parts[0] || 'ollama',
-                model: parts[1] || val,
-                url: document.getElementById('active-llm-url').value.trim(),
-                api_key: document.getElementById('active-llm-key').value,
-                provider: document.getElementById('active-llm-provider').value
-            };
-            try {
-                // Отправляем поля которые ждёт API
-                const r = await apiFetch('/api/v1/admin/models/switch-llm', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        backend_type: config.backend,
-                        model_name: config.model,
-                        url: config.url,
-                        api_key: config.api_key
-                    })
-                });
-                status.innerHTML = r.ok ? '<span style="color:#10b981">✅ Сохранено</span>' : '<span style="color:#ef4444">❌ Ошибка</span>';
-            } catch(e) {
-                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
-            }
-        }
-
-        async function checkActiveLlmBalance() {
-            const status = document.getElementById('active-llm-status');
-            status.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю...</span>';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/graph/balance');
-                const d = await r.json();
-                if (r.ok && d.balance_ok) {
-                    status.innerHTML = '<span style="color:#10b981">💰 ' + (d.display || d.message || 'OK') + '</span>';
-                } else {
-                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
-                }
-            } catch(e) {
-                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
-            }
-        }
-
-        loadActiveLlmModels();
-
         async function loadModels() {
             try {
                 const models = await apiFetch(`${API_URL}/ollama-models`).then(r => r.json());
@@ -852,7 +661,7 @@
 
                 if (response.ok) {
                     showNotification(`✅ Модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     const error = await response.json();
                     showNotification(`❌ Ошибка: ${error.detail}`, true);
@@ -877,7 +686,7 @@
 
                 if (response.ok) {
                     showNotification(`✅ Embedding модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     const error = await response.json();
                     showNotification(`❌ Ошибка: ${error.detail}`, true);
@@ -917,7 +726,7 @@
                 if (result.status === 'success') {
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ Модель ${modelName} загружена</div>`;
                     document.getElementById('model-name-input').value = '';
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message || result.error}</div>`;
                 }
@@ -936,7 +745,7 @@
 
                 if (response.ok) {
                     showNotification(`✅ Модель ${modelName} удалена`);
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     showNotification('❌ Ошибка удаления', true);
                 }
@@ -956,22 +765,418 @@
             }, 3000);
         }
 
-        async function loadAll() {
-            await Promise.all([
+        // ===========================================
+        // ПРОВАЙДЕРЫ LLM (новая система)
+        // ===========================================
+
+        async function loadProviders() {
+            try {
+                var prov = await apiFetch('/api/v1/admin/models/providers').then(function(r) { return r.json(); });
+                var list = document.getElementById('providers-list');
+
+                if (!prov || prov.length === 0) {
+                    list.innerHTML = '<div style="color:var(--text4);padding:1rem;text-align:center">Нет провайдеров. Нажмите «Добавить провайдера».</div>';
+                    return;
+                }
+
+                list.innerHTML = '<table><thead><tr><th>Название</th><th>Тип</th><th>URL</th><th>Модели</th><th>Статус</th><th>Действия</th></tr></thead><tbody>' +
+                    prov.map(function(p) {
+                        var badge = p.has_api_key
+                            ? '<span class="badge badge-success">✅ Ключ есть</span>'
+                            : (p.type === 'ollama' ? '<span class="badge badge-success">✅ Без ключа</span>' : '<span class="badge badge-warning">⚠️ Ключа нет</span>');
+                        var modelCount = (p.models || []).length;
+                        return '<tr>' +
+                            '<td><strong>' + escHtml(p.name) + '</strong></td>' +
+                            '<td><span class="badge badge-success">' + escHtml(p.type) + '</span></td>' +
+                            '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + escHtml(p.url) + '</td>' +
+                            '<td>' + modelCount + ' моделей</td>' +
+                            '<td>' + badge + '</td>' +
+                            '<td>' +
+                            '<button class="btn btn-secondary btn-sm" onclick="editProvider(\'' + escHtml(p.id) + '\')">✏️</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="testProvider(\'' + escHtml(p.id) + '\')">🔍</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="fetchProviderModels(\'' + escHtml(p.id) + '\')">📦</button> ' +
+                            '<button class="btn btn-danger btn-sm" onclick="deleteProvider(\'' + escHtml(p.id) + '\')">🗑️</button>' +
+                            '</td></tr>';
+                    }).join('') +
+                    '</tbody></table>';
+            } catch (e) {
+                console.error('Ошибка загрузки провайдеров:', e);
+                document.getElementById('providers-list').innerHTML = '<div style="color:var(--red2);padding:1rem">❌ Ошибка загрузки провайдеров</div>';
+            }
+        }
+
+        function showAddProviderForm() {
+            document.getElementById('pf-id').value = '';
+            document.getElementById('pf-name').value = '';
+            document.getElementById('pf-type').value = 'ollama';
+            document.getElementById('pf-url').value = 'http://192.168.50.41:11434';
+            document.getElementById('pf-api-key').value = '';
+            document.getElementById('pf-key-group').style.display = 'none';
+            document.getElementById('provider-form-title').textContent = '➕ Новый провайдер';
+            document.getElementById('provider-form').style.display = 'block';
+            document.getElementById('pf-status').textContent = '';
+        }
+
+        function cancelProviderForm() {
+            document.getElementById('provider-form').style.display = 'none';
+        }
+
+        function onProviderTypeChange() {
+            var type = document.getElementById('pf-type').value;
+            var keyGroup = document.getElementById('pf-key-group');
+            var urlField = document.getElementById('pf-url');
+
+            keyGroup.style.display = (type === 'ollama') ? 'none' : '';
+
+            var defaults = {
+                'ollama': 'http://192.168.50.41:11434',
+                'openai': 'https://api.openai.com',
+                'deepseek': 'https://api.deepseek.com',
+                'openrouter': 'https://openrouter.ai/api',
+                'custom': 'https://'
+            };
+            if (!document.getElementById('pf-id').value) {
+                urlField.value = defaults[type] || '';
+            }
+        }
+
+        async function saveProvider() {
+            var status = document.getElementById('pf-status');
+            status.textContent = '⏳ Сохраняю...';
+
+            var id = document.getElementById('pf-id').value;
+            var data = {
+                id: id,
+                name: document.getElementById('pf-name').value.trim(),
+                type: document.getElementById('pf-type').value,
+                url: document.getElementById('pf-url').value.trim(),
+                api_key: document.getElementById('pf-api-key').value,
+                enabled: true,
+            };
+
+            if (!data.name) { status.innerHTML = '<span style="color:var(--red2)">❌ Укажите название</span>'; return; }
+            if (!data.url) { status.innerHTML = '<span style="color:var(--red2)">❌ Укажите URL</span>'; return; }
+
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style="color:var(--green)">✅ Сохранено!</span>';
+                    cancelProviderForm();
+                    loadProviders();
+                    loadFunctionMaps();
+                    setTimeout(function() { status.textContent = ''; }, 2000);
+                } else {
+                    var err = await r.json();
+                    status.innerHTML = '<span style="color:var(--red2)">❌ ' + escHtml(err.detail || 'Ошибка') + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span style="color:var(--red2)">❌ ' + e + '</span>';
+            }
+        }
+
+        async function editProvider(providerId) {
+            try {
+                var p = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId)).then(function(r) { return r.json(); });
+                if (!p) return;
+
+                document.getElementById('pf-id').value = p.id;
+                document.getElementById('pf-name').value = p.name;
+                document.getElementById('pf-type').value = p.type;
+                document.getElementById('pf-url').value = p.url;
+                document.getElementById('pf-api-key').value = '';
+                document.getElementById('provider-form-title').textContent = '✏️ Редактировать: ' + p.name;
+                document.getElementById('pf-key-group').style.display = (p.type === 'ollama') ? 'none' : '';
+                // Показываем статус ключа
+                var keyHint = document.getElementById('pf-key-hint');
+                if (keyHint) {
+                    if (p.has_api_key) {
+                        keyHint.innerHTML = '<span style="color:var(--green)">✅ Ключ сохранён</span> — оставьте поле пустым чтобы не менять';
+                    } else {
+                        keyHint.innerHTML = '<span style="color:var(--red2)">⚠️ Ключ не указан</span> — введите API ключ';
+                    }
+                    keyHint.style.display = '';
+                }
+                document.getElementById('provider-form').style.display = 'block';
+                document.getElementById('pf-status').textContent = '';
+            } catch (e) {
+                console.error('Ошибка загрузки провайдера:', e);
+            }
+        }
+
+        async function deleteProvider(providerId) {
+            if (!confirm('Удалить провайдера "' + providerId + '"? Все привязки функций к нему тоже будут удалены.')) return;
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId), {method: 'DELETE'});
+                if (r.ok) {
+                    showNotification('✅ Провайдер удалён');
+                    loadProviders();
+                    loadFunctionMaps();
+                } else {
+                    showNotification('❌ Ошибка удаления', true);
+                }
+            } catch (e) {
+                showNotification('❌ ' + e, true);
+            }
+        }
+
+        async function testProvider(providerId) {
+            var status = document.getElementById('providers-status');
+            status.innerHTML = '<span style="color:#f59e0b">🔍 Тестирую...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/test', {method: 'POST'});
+                var d = await r.json();
+                status.innerHTML = d.ok
+                    ? '<span style="color:#10b981">✅ ' + escHtml(d.message) + '</span>'
+                    : '<span style="color:#ef4444">❌ ' + escHtml(d.message) + '</span>';
+            } catch (e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+            setTimeout(function() { status.textContent = ''; }, 5000);
+        }
+
+        async function fetchProviderModels(providerId) {
+            var status = document.getElementById('providers-status');
+            status.innerHTML = '<span style="color:#f59e0b">📦 Запрашиваю модели...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/fetch-models', {method: 'POST'});
+                var d = await r.json();
+                status.innerHTML = '<span style="color:#10b981">✅ ' + d.count + ' моделей получено</span>';
+                loadProviders();
+                loadFunctionMaps();
+            } catch (e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+            setTimeout(function() { status.textContent = ''; }, 5000);
+        }
+
+        // ===========================================
+        // ПРИВЯЗКА ФУНКЦИЙ К ПРОВАЙДЕРАМ
+        // ===========================================
+
+        var providerOptionsCache = [];
+
+        async function loadFunctionMaps() {
+            try {
+                var funcs = await apiFetch('/api/v1/admin/models/functions').then(function(r) { return r.json(); });
+                var providers = await apiFetch('/api/v1/admin/models/providers').then(function(r) { return r.json(); });
+                providerOptionsCache = providers || [];
+
+                var list = document.getElementById('functions-list');
+                if (!funcs || funcs.length === 0) {
+                    list.innerHTML = '<div style="color:var(--text4);padding:1rem;text-align:center">Нет привязок. Сначала добавьте провайдера.</div>';
+                    return;
+                }
+
+                var defs = {
+                    'chat': { icon: '💬', label: 'Чат с документами', desc: 'Основная LLM для ответов пользователю' },
+                    'embedding': { icon: '📐', label: 'Embedding (векторизация)', desc: 'Модель для векторизации текста' },
+                    'graph': { icon: '🕸️', label: 'Извлечение графа знаний', desc: 'LLM для извлечения сущностей и связей' },
+                    'doc_analysis': { icon: '📄', label: 'Анализ документов', desc: 'LLM для классификации документов' },
+                };
+
+                list.innerHTML = '<table><thead><tr><th>Функция</th><th>Провайдер</th><th>Модель</th><th>Промпт</th><th>Действия</th></tr></thead><tbody>' +
+                    funcs.map(function(f) {
+                        var d = defs[f.function] || { icon: '❓', label: f.function, desc: '' };
+                        var prov = (providers || []).find(function(p) { return p.id === f.provider_id; });
+                        var provName = prov ? prov.name : (f.provider_id || '—');
+                        var promptPreview = f.system_prompt ? f.system_prompt.substring(0, 40) + (f.system_prompt.length > 40 ? '...' : '') : '—';
+                        return '<tr>' +
+                            '<td><strong>' + d.icon + ' ' + d.label + '</strong><br><span style="font-size:11px;color:var(--text4)">' + escHtml(d.desc) + '</span></td>' +
+                            '<td><span class="badge badge-success">' + escHtml(provName) + '</span></td>' +
+                            '<td><code>' + escHtml(f.model || '—') + '</code></td>' +
+                            '<td style="font-size:12px;color:var(--text4);max-width:150px;overflow:hidden;text-overflow:ellipsis">' + escHtml(promptPreview) + '</td>' +
+                            '<td><button class="btn btn-secondary btn-sm" onclick="editFunctionMap(\'' + escHtml(f.function) + '\')">⚙️ Настроить</button></td>' +
+                            '</tr>';
+                    }).join('') +
+                    '</tbody></table>';
+            } catch (e) {
+                console.error('Ошибка загрузки функций:', e);
+                document.getElementById('functions-list').innerHTML = '<div style="color:var(--red2);padding:1rem">❌ Ошибка загрузки функций</div>';
+            }
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function editFunctionMap(functionName) {
+            var fm = await apiFetch('/api/v1/admin/models/functions/' + encodeURIComponent(functionName)).then(function(r) { return r.json(); });
+            var providers = providerOptionsCache;
+            var title = '';
+
+            var defs = {
+                'chat': { icon: '💬', label: 'Чат', prompt: true },
+                'embedding': { icon: '📐', label: 'Embedding', prompt: false },
+                'graph': { icon: '🕸️', label: 'Граф знаний', prompt: true },
+                'doc_analysis': { icon: '📄', label: 'Анализ документов', prompt: true },
+            };
+            var def = defs[functionName] || { icon: '❓', label: functionName, prompt: false };
+
+            var providerOptions = providers.map(function(p) {
+                var selected = (fm && fm.provider_id === p.id) ? 'selected' : '';
+                return '<option value="' + escHtml(p.id) + '" ' + selected + '>' + escHtml(p.name) + ' (' + p.type + ')</option>';
+            }).join('');
+
+            if (!providerOptions) {
+                providerOptions = '<option value="">— Нет провайдеров —</option>';
+            }
+
+            title = def.icon + ' Настройка: ' + def.label;
+
+            var html = '<div id="fm-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.15s">' +
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;max-width:550px;width:90%;max-height:80vh;overflow-y:auto">' +
+                '<h3 style="font-size:16px;font-weight:600;margin-bottom:16px">' + title + '</h3>' +
+                '<input type="hidden" id="fm-name" value="' + escHtml(functionName) + '">' +
+                '<div class="form-group"><label>Провайдер</label>' +
+                '<select id="fm-provider" onchange="onFmProviderChange()" style="width:100%">' + providerOptions + '</select></div>' +
+                '<div class="form-group"><label>Модель <span id="fm-model-loading" style="font-size:11px;color:var(--text4)"></span></label>' +
+                '<select id="fm-model" style="width:100%"><option value="">⏳ Загрузка моделей...</option></select></div>';
+
+            if (def.prompt) {
+                html += '<div class="form-group" id="fm-prompt-group"><label>Системный промпт</label>' +
+                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea></div>';
+            }
+
+            html += '<div class="form-group"><label>Temperature</label>' +
+                '<input type="number" id="fm-temp" value="' + ((fm.parameters && fm.parameters.temperature) || 0.7) + '" step="0.05" min="0" max="2" style="width:100px"></div>' +
+                '<div style="display:flex;gap:10px;margin-top:16px">' +
+                '<button class="btn btn-primary" onclick="saveFunctionMap()">💾 Сохранить</button>' +
+                '<button class="btn btn-secondary" onclick="closeFmModal()">Отмена</button>' +
+                '<span id="fm-status" style="font-size:13px"></span></div></div></div>';
+
+            closeFmModal();
+            var div = document.createElement('div');
+            div.id = 'fm-modal-container';
+            div.innerHTML = html;
+            document.body.appendChild(div);
+
+            // После открытия модалки — подгружаем модели, затем выбираем сохранённую
+            onFmProviderChange(function() {
+                if (fm && fm.model) {
+                    var sel = document.getElementById('fm-model');
+                    if (sel) {
+                        for (var i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === fm.model) {
+                                sel.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function onFmProviderChange(callback) {
+            var provId = document.getElementById('fm-provider').value;
+            var modelSelect = document.getElementById('fm-model');
+            var loading = document.getElementById('fm-model-loading');
+            if (!provId) { if (callback) callback(); return; }
+
+            loading.textContent = '⏳ запрос...';
+            modelSelect.innerHTML = '<option value="">⏳ Загрузка...</option>';
+
+            // ВСЕГДА запрашиваем свежий список моделей через API
+            apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(provId) + '/fetch-models', {method: 'POST'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.models && d.models.length > 0) {
+                        loading.textContent = '✅ ' + d.count + ' моделей';
+                        modelSelect.innerHTML = d.models.map(function(m) {
+                            return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                        }).join('');
+                        // Добавляем опцию для ручного ввода
+                        modelSelect.innerHTML += '<option value="__custom__" disabled>── или введите свою ──</option>';
+                        // Обновляем кэш на будущее
+                        var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                        if (prov) prov.models = d.models;
+                    } else {
+                        loading.textContent = '⚠️ нет моделей';
+                        modelSelect.innerHTML = '<option value="">— нет моделей у провайдера —</option>';
+                        // Пробуем cached модели как fallback
+                        var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                        if (prov && prov.models && prov.models.length > 0) {
+                            loading.textContent = '📦 из кэша: ' + prov.models.length;
+                            modelSelect.innerHTML = prov.models.map(function(m) {
+                                return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                            }).join('');
+                        }
+                    }
+                    if (callback) callback();
+                })
+                .catch(function() {
+                    loading.textContent = '❌ ошибка';
+                    // Fallback: cached models
+                    var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                    if (prov && prov.models && prov.models.length > 0) {
+                        modelSelect.innerHTML = prov.models.map(function(m) {
+                            return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                        }).join('');
+                    }
+                    if (callback) callback();
+                });
+        }
+
+        function closeFmModal() {
+            var el = document.getElementById('fm-modal-container');
+            if (el) el.remove();
+        }
+
+        async function saveFunctionMap() {
+            var fn = document.getElementById('fm-name').value;
+            var status = document.getElementById('fm-status');
+            status.textContent = '⏳ Сохраняю...';
+
+            var data = {
+                function: fn,
+                provider_id: document.getElementById('fm-provider').value,
+                model: document.getElementById('fm-model').value,
+                system_prompt: document.getElementById('fm-prompt') ? document.getElementById('fm-prompt').value : '',
+                parameters: {
+                    temperature: parseFloat(document.getElementById('fm-temp').value) || 0.7,
+                    max_tokens: 4096,
+                },
+            };
+
+            try {
+                var r = await apiFetch('/api/v1/admin/models/functions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data),
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style="color:var(--green)">✅ Сохранено!</span>';
+                    closeFmModal();
+                    loadFunctionMaps();
+                } else {
+                    var err = await r.json();
+                    status.innerHTML = '<span style="color:var(--red2)">❌ ' + (err.detail || 'Ошибка') + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span style="color:var(--red2)">❌ ' + e + '</span>';
+            }
+        }
+
+        // ===========================================
                 loadStatus(),
                 loadActiveModels(),
                 loadModels(),
                 loadSshConfig(),
                 loadChunkingSettings(),
                 loadUploadFormats(),
-                loadDomainPresets()
+                loadDomainPresets(),
+                loadProviders(),
+                loadFunctionMaps()
             ]);
-            // Загружаем модель графа после того, как заполнился селект
-            await loadGraphModel();
-            // Заполняем дропдаун внешних LLM
-            loadExtLLM();
-            loadActiveLlmConfig();
-            populateExtSelect();
         }
         
         async function loadChunkingSettings() {
@@ -1199,10 +1404,10 @@
                 if (result.status === 'success') {
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>`;
                     showNotification('Ollama перезапущен успешно!');
-                    setTimeout(loadAll, 3000);
+                    await loadAll();
                 } else if (result.status === 'warning') {
                     statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message}</div>`;
-                    setTimeout(loadAll, 3000);
+                    await loadAll();
                 } else {
                     statusDiv.innerHTML = `<div style="color: #ef4444;">❌ ${result.message}</div>`;
                 }
@@ -1267,7 +1472,6 @@
 
         loadAll();
         setInterval(loadStatus, 30000);
-        loadExtLLM();
 
         // === Системный промпт для чата ===
         var DEFAULT_CHAT_PROMPT = `Ты — AI-ассистент с доступом к гибридной базе знаний KAG.
@@ -1356,297 +1560,7 @@
 
         loadChatPrompt();
 
-        // === Внешние LLM ===
-        async function saveExtLLM() {
-            const config = {
-                url: document.getElementById('ext-llm-url').value.trim(),
-                model: document.getElementById('ext-llm-model').value.trim(),
-                api_key: document.getElementById('ext-llm-key').value,
-                provider: document.getElementById('ext-llm-provider').value
-            };
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(config)
-                });
-                const d = await r.json();
-                document.getElementById('ext-llm-status').innerHTML = 
-                    r.ok ? '<span style="color:#10b981">✅ Сохранено</span>' : 
-                    '<span style="color:#ef4444">❌ ' + (d.detail || 'Ошибка') + '</span>';
-            } catch(e) {
-                document.getElementById('ext-llm-status').innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
-            }
-        }
-
-        async function testExtLLM() {
-            const status = document.getElementById('ext-llm-status');
-            status.innerHTML = '<span style="color:#f59e0b">⏳ Тестирую...</span>';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm/test', {method: 'POST'});
-                const d = await r.json();
-                status.innerHTML = d.ok 
-                    ? '<span style="color:#10b981">✅ OK — ' + (d.response || '').substring(0, 60) + '</span>'
-                    : '<span style="color:#ef4444">❌ ' + (d.error || 'Ошибка') + '</span>';
-                // Авто-проверка баланса после теста
-                checkBalance();
-            } catch(e) {
-                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
-            }
-        }
-        
-        async function checkBalance() {
-            const div = document.getElementById('ext-llm-balance');
-            if (!div) return;
-            div.innerHTML = '<span style="color:var(--text4);font-size:12px">⏳ Проверка баланса...</span>';
-            div.style.display = 'block';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm/balance');
-                const d = await r.json();
-                if (d.balance_ok === true) {
-                    div.innerHTML = '<span style="color:var(--emerald);font-size:12px">💰 ' + d.message + '</span>';
-                } else if (d.balance_ok === false) {
-                    div.innerHTML = '<span style="color:var(--red);font-size:12px">⚠️ ' + d.message + '</span>';
-                } else {
-                    div.innerHTML = '<span style="color:var(--amber);font-size:12px">❓ ' + d.message + '</span>';
-                }
-            } catch(e) {
-                div.innerHTML = '<span style="color:var(--red);font-size:12px">❌ ' + e.message + '</span>';
-            }
-        }
-
-        async function loadExtLLM() {
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm');
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.url) document.getElementById('ext-llm-url').value = d.url;
-                    if (d.model) {
-                        document.getElementById('ext-llm-model').value = d.model;
-                        document.getElementById('ext-llm-select').value = d.model;
-                    }
-                    if (d.provider) {
-                        document.getElementById('ext-llm-provider').value = d.provider;
-                    }
-                    if (d.api_key) {
-                        document.getElementById('ext-llm-key').value = d.api_key;
-                    }
-                    // Применить видимость полей под провайдера
-                    onExtProviderChange();
-                    // Показать карточку активной модели
-                    showActiveExtLLM(d);
-                }
-            } catch(e) {}
-            // Заполнить выпадающий список загруженными моделями
-            populateExtSelect();
-        }
-        
-        function populateExtSelect() {
-            // Берём модели из глобального llmModels (загружается в loadActiveModels)
-            const sel = document.getElementById('ext-llm-select');
-            if (!sel || typeof llmModels === 'undefined') return;
-            const current = document.getElementById('ext-llm-model').value;
-            sel.innerHTML = '<option value="">— Выбрать из загруженных (' + llmModels.length + ' моделей) —</option>';
-            llmModels.forEach(function(m) {
-                const sel_attr = m.name === current ? ' selected' : '';
-                sel.innerHTML += '<option value="' + m.name + '"' + sel_attr + '>' + m.name + ' (' + m.backend + ')</option>';
-            });
-        }
-        
-        function showActiveExtLLM(cfg) {
-            const div = document.getElementById('active-ext-llm');
-            if (!cfg || !cfg.model) {
-                div.innerHTML = '<div style="padding:10px;background:var(--elevated);border-radius:8px;color:var(--text4);font-size:13px">⚠️ Внешний LLM не настроен</div>';
-                return;
-            }
-            const prov = cfg.provider || 'ollama';
-            const provLabel = prov === 'ollama' ? 'Ollama (локальный)' : prov === 'openai' ? 'OpenAI' : prov === 'deepseek' ? 'DeepSeek' : 'OpenRouter';
-            const inMemory = typeof loadedModels !== 'undefined' && loadedModels.includes(cfg.model);
-            div.innerHTML = '<div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--elevated);border-radius:8px">' +
-                '<div style="font-size:2rem">🔗</div>' +
-                '<div style="flex:1">' +
-                    '<div style="font-weight:600;font-size:1.125rem">' + cfg.model + '</div>' +
-                    '<div style="color:var(--text4);font-size:0.875rem">' + provLabel + (inMemory ? ' • ✅ в памяти' : '') + '</div>' +
-                '</div>' +
-                '<span class="badge badge-success">Активна</span>' +
-            '</div>';
-        }
-        
-        function onExtProviderChange() {
-            const prov = document.getElementById('ext-llm-provider').value;
-            const keyField = document.getElementById('ext-llm-key');
-            const keyLabel = keyField.parentElement.querySelector('label');
-            const urlField = document.getElementById('ext-llm-url');
-            
-            // Показать/скрыть API ключ
-            keyField.style.display = (prov === 'ollama') ? 'none' : '';
-            keyLabel.style.display = keyField.style.display;
-            
-            // Авто-URL для известных провайдеров
-            if (prov === 'ollama') {
-                urlField.value = 'http://192.168.50.41:11434';
-            } else if (prov === 'openai') {
-                urlField.value = 'https://api.openai.com';
-            } else if (prov === 'deepseek') {
-                urlField.value = 'https://api.deepseek.com';
-            } else if (prov === 'openrouter') {
-                urlField.value = 'https://openrouter.ai/api';
-            }
-            
-            // Перезагрузить список моделей под провайдера
-            loadExtModels();
-        }
-        
-        async function loadExtModels() {
-            const prov = document.getElementById('ext-llm-provider').value;
-            const sel = document.getElementById('ext-llm-select');
-            
-            if (prov === 'ollama') {
-                // Локальные модели Ollama — уже в llmModels
-                populateExtSelect();
-                return;
-            }
-            
-            // Внешний провайдер — фетчим список моделей через API
-            sel.innerHTML = '<option value="">⏳ Загрузка моделей ' + prov + '...</option>';
-            sel.disabled = true;
-            
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
-                if (r.ok) {
-                    const d = await r.json();
-                    sel.innerHTML = '<option value="">— Выбрать модель ' + prov + ' —</option>';
-                    (d.models || []).forEach(function(m) {
-                        sel.innerHTML += '<option value="' + m.id + '">' + m.id + (m.name ? ' — ' + m.name : '') + '</option>';
-                    });
-                    if (d.models && d.models.length === 0) {
-                        sel.innerHTML = '<option value="">⚠️ Нет моделей (проверьте API ключ)</option>';
-                    }
-                } else {
-                    sel.innerHTML = '<option value="">❌ Ошибка: ' + r.status + '</option>';
-                }
-            } catch(e) {
-                sel.innerHTML = '<option value="">❌ ' + e.message + '</option>';
-            }
-            sel.disabled = false;
-        }
-        async function saveGraphModel() {
-            const status = document.getElementById('graph-model-status');
-            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
-            const config = {
-                model: document.getElementById('graph-model-select').value.trim(),
-                provider: document.getElementById('graph-provider').value,
-                url: document.getElementById('graph-api-url').value.trim(),
-                api_key: document.getElementById('graph-api-key').value
-            };
-            try {
-                const r = await apiFetch('/api/v1/admin/models/graph', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(config)
-                });
-                const d = await r.json();
-                status.innerHTML = r.ok 
-                    ? '<span style="color:#10b981">✅ Сохранено</span>'
-                    : '<span style="color:#ef4444">❌ ' + (d.detail || 'Ошибка') + '</span>';
-            } catch(e) {
-                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
-            }
-        }
-
-        async function checkGraphBalance() {
-            const status = document.getElementById('graph-model-status');
-            status.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю...</span>';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/graph/balance');
-                const d = await r.json();
-                if (r.ok && d.balance_ok) {
-                    const bal = d.balance_usd || d.balance || 0;
-                    const msg = d.display || ('$' + Number(bal).toFixed(2));
-                    status.innerHTML = '<span style="color:#10b981">💰 ' + msg + '</span>';
-                } else {
-                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
-                }
-            } catch(e) {
-                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
-            }
-        }
-
-
-        function onGraphProviderChange() {
-            const prov = document.getElementById('graph-provider').value;
-            const keyField = document.getElementById('graph-api-key');
-            const urlField = document.getElementById('graph-api-url');
-            
-            // API ключ только для внешних провайдеров
-            keyField.parentElement.style.display = (prov === 'ollama') ? 'none' : '';
-            
-            // Авто-URL
-            if (prov === 'ollama') urlField.value = 'http://192.168.50.41:11434';
-            else if (prov === 'openai') urlField.value = 'https://api.openai.com';
-            else if (prov === 'deepseek') urlField.value = 'https://api.deepseek.com';
-            else if (prov === 'openrouter') urlField.value = 'https://openrouter.ai/api';
-            
-            loadGraphModels();
-        }
-
-        async function loadGraphModels() {
-            const prov = document.getElementById('graph-provider').value;
-            const sel = document.getElementById('graph-model-select');
-            
-            if (prov === 'ollama') {
-                // Локальные — уже в llmModels
-                sel.innerHTML = '';
-                if (typeof llmModels !== 'undefined') {
-                    llmModels.forEach(function(m) {
-                        sel.innerHTML += '<option value="' + m + '">' + m + ' (ollama)</option>';
-                    });
-                }
-                return;
-            }
-            
-            sel.innerHTML = '<option value="">Loading ' + prov + '...</option>';
-            try {
-                const r = await apiFetch('/api/v1/admin/models/ext-llm/models?provider=' + prov);
-                if (r.ok) {
-                    const d = await r.json();
-                    sel.innerHTML = '<option value="">-- ' + prov + ' models --</option>';
-                    (d.models || []).forEach(function(m) {
-                        sel.innerHTML += '<option value="' + m.id + '">' + m.id + '</option>';
-                    });
-                    if (!d.models || !d.models.length) {
-                        sel.innerHTML += '<option value="">(no models)</option>';
-                    }
-                } else {
-                    sel.innerHTML = '<option value="">Error: ' + r.status + '</option>';
-                }
-            } catch(e) {
-                sel.innerHTML = '<option value="">Error: ' + e.message + '</option>';
-            }
-        }
-
-        async function loadGraphModel() {
-            try {
-                const r = await apiFetch('/api/v1/admin/models/graph');
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.model) {
-                        const select = document.getElementById('graph-model-select');
-                        if (select) {
-                            for (let i = 0; i < select.options.length; i++) {
-                                if (select.options[i].value === d.model) {
-                                    select.selectedIndex = i;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (d.provider) document.getElementById('graph-provider').value = d.provider;
-                    if (d.url) document.getElementById('graph-api-url').value = d.url;
-                    if (d.api_key) document.getElementById('graph-api-key').value = d.api_key;
-                }
-            } catch(e) {}
-        }
+        // === Типы документов ===
 
         // === Разрешённые форматы загрузки ===
         async function loadUploadFormats() {
