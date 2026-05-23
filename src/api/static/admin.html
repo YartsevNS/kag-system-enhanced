@@ -317,11 +317,15 @@
                         <div style="font-size:11px;color:var(--text4);margin-top:4px">Оставьте пустым, чтобы сохранить существующий ключ</div>
                     </div>
                 </div>
-                <div style="display:flex;gap:10px;margin-top:12px">
+                <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
                     <button class="btn btn-primary" onclick="saveProvider()">💾 Сохранить провайдера</button>
+                    <button class="btn btn-secondary" onclick="fetchProviderModels(document.getElementById('pf-id').value || '__new__')" id="pf-fetch-btn" style="display:none">📦 Загрузить модели</button>
+                    <button class="btn btn-secondary" onclick="checkProviderBalance(document.getElementById('pf-id').value)" id="pf-balance-btn" style="display:none">💰 Баланс</button>
                     <button class="btn btn-secondary" onclick="cancelProviderForm()">Отмена</button>
                     <span id="pf-status" style="font-size:13px"></span>
                 </div>
+                <div id="pf-models-list" style="margin-top:12px;display:none"></div>
+                <div id="pf-balance-result" style="margin-top:8px;display:none"></div>
             </div>
         </div>
 
@@ -795,6 +799,7 @@
                             '<button class="btn btn-secondary btn-sm" onclick="editProvider(\'' + escHtml(p.id) + '\')">✏️</button> ' +
                             '<button class="btn btn-secondary btn-sm" onclick="testProvider(\'' + escHtml(p.id) + '\')">🔍</button> ' +
                             '<button class="btn btn-secondary btn-sm" onclick="fetchProviderModels(\'' + escHtml(p.id) + '\')">📦</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="checkProviderBalance(\'' + escHtml(p.id) + '\')">💰</button> ' +
                             '<button class="btn btn-danger btn-sm" onclick="deleteProvider(\'' + escHtml(p.id) + '\')">🗑️</button>' +
                             '</td></tr>';
                     }).join('') +
@@ -815,6 +820,10 @@
             document.getElementById('provider-form-title').textContent = '➕ Новый провайдер';
             document.getElementById('provider-form').style.display = 'block';
             document.getElementById('pf-status').textContent = '';
+            document.getElementById('pf-fetch-btn').style.display = 'none';
+            document.getElementById('pf-balance-btn').style.display = 'none';
+            document.getElementById('pf-models-list').style.display = 'none';
+            document.getElementById('pf-balance-result').style.display = 'none';
         }
 
         function cancelProviderForm() {
@@ -865,7 +874,14 @@
                 });
                 if (r.ok) {
                     status.innerHTML = '<span style="color:var(--green)">✅ Сохранено!</span>';
-                    cancelProviderForm();
+                    // Показываем кнопки работы с провайдером
+                    document.getElementById('pf-fetch-btn').style.display = '';
+                    document.getElementById('pf-balance-btn').style.display = '';
+                    document.getElementById('pf-models-list').style.display = 'none';
+                    document.getElementById('pf-balance-result').style.display = 'none';
+                    // Авто-загрузка моделей
+                    var savedId = document.getElementById('pf-id').value;
+                    if (savedId) await fetchProviderModels(savedId);
                     loadProviders();
                     loadFunctionMaps();
                     setTimeout(function() { status.textContent = ''; }, 2000);
@@ -902,6 +918,15 @@
                 }
                 document.getElementById('provider-form').style.display = 'block';
                 document.getElementById('pf-status').textContent = '';
+                document.getElementById('pf-models-list').style.display = 'none';
+                document.getElementById('pf-balance-result').style.display = 'none';
+                document.getElementById('pf-fetch-btn').style.display = '';
+                document.getElementById('pf-balance-btn').style.display = '';
+                // Показать модели, если есть кэш
+                if (p.models && p.models.length > 0) {
+                    document.getElementById('pf-models-list').innerHTML = '<div style="font-size:12px;color:var(--text4)">📦 ' + p.models.length + ' моделей: <code style="color:var(--text2)">' + p.models.join(', ') + '</code></div>';
+                    document.getElementById('pf-models-list').style.display = '';
+                }
             } catch (e) {
                 console.error('Ошибка загрузки провайдера:', e);
             }
@@ -938,6 +963,23 @@
             setTimeout(function() { status.textContent = ''; }, 5000);
         }
 
+        async function checkProviderBalance(providerId) {
+            if (!providerId || providerId === '__new__') { showNotification('Сначала сохраните провайдера', true); return; }
+            var el = document.getElementById('pf-balance-result') || document.getElementById('providers-status');
+            if (!el) el = document.getElementById('pf-status');
+            el.style.display = 'block';
+            el.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю баланс...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/balance', {method: 'POST'});
+                var d = await r.json();
+                el.innerHTML = d.balance_ok
+                    ? '<span style="color:#10b981">💰 ' + (d.display || d.message) + '</span>'
+                    : '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+            } catch(e) {
+                el.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+        }
+
         async function fetchProviderModels(providerId) {
             var status = document.getElementById('providers-status');
             status.innerHTML = '<span style="color:#f59e0b">📦 Запрашиваю модели...</span>';
@@ -947,6 +989,17 @@
                 status.innerHTML = '<span style="color:#10b981">✅ ' + d.count + ' моделей получено</span>';
                 loadProviders();
                 loadFunctionMaps();
+                // Обновить список моделей в форме, если форма открыта
+                if (document.getElementById('pf-id').value === providerId && document.getElementById('provider-form').style.display !== 'none') {
+                    var ml = document.getElementById('pf-models-list');
+                    if (d.models && d.models.length > 0) {
+                        ml.innerHTML = '<div style="font-size:12px;color:var(--text4)">📦 ' + d.models.length + ' моделей: <code style="color:var(--text2)">' + d.models.join(', ') + '</code></div>';
+                        ml.style.display = '';
+                    } else {
+                        ml.innerHTML = '<div style="font-size:12px;color:var(--red2)">❌ Нет моделей</div>';
+                        ml.style.display = '';
+                    }
+                }
             } catch (e) {
                 status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
             }

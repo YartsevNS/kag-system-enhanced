@@ -1468,6 +1468,54 @@ async def test_provider_connection(provider_id: str):
         return {"ok": False, "message": f"❌ {str(e)}"}
 
 
+@router.post("/providers/{provider_id}/balance", summary="Проверить баланс провайдера")
+async def check_provider_balance(provider_id: str):
+    """Проверить баланс API провайдера (OpenAI, DeepSeek, OpenRouter)."""
+    provider = provider_service.get_provider_with_key(provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+
+    if provider.type == "ollama":
+        return {"ok": True, "message": "Локальный сервер — без ограничений", "balance_ok": True, "display": "∞"}
+
+    if not provider.api_key:
+        return {"ok": False, "message": "API ключ не указан", "balance_ok": False}
+
+    import httpx
+    try:
+        base_url = provider.url.rstrip("/")
+        headers = {"Authorization": f"Bearer {provider.api_key}"}
+
+        if provider.type == "openrouter":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/api/v1/auth/key", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    credits = float(data.get("data", {}).get("credits", 0))
+                    return {"ok": True, "balance_ok": True, "balance_usd": credits, "display": f"${credits:.2f}", "message": f"Баланс OpenRouter: ${credits:.2f}"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        elif provider.type == "deepseek":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/v1/user/balance", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    bal = float(data.get("balance", data.get("data", {}).get("balance", 0)))
+                    return {"ok": True, "balance_ok": bal > 0, "balance": bal, "display": f"{bal} токенов", "message": f"Баланс DeepSeek: {bal} токенов"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        elif provider.type == "openai":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/v1/models", headers=headers)
+                if resp.status_code == 200:
+                    return {"ok": True, "balance_ok": True, "display": "✅ Ключ активен", "message": "API ключ работает"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        return {"ok": True, "balance_ok": None, "message": f"Тип {provider.type} — проверка не реализована"}
+    except Exception as e:
+        return {"ok": False, "balance_ok": False, "message": str(e)}
+
+
 # ===========================================
 # Привязка функций к провайдерам
 # ===========================================
