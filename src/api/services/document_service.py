@@ -575,6 +575,13 @@ class DocumentService:
         # Удаляем запись
         del self._documents[document_id]
         
+        # Удаляем из БД
+        try:
+            from src.api.services.config_store import config_store
+            config_store.delete("documents", document_id)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить документ {document_id} из БД: {e}")
+        
         logger.info(f"Документ удален: {document_id}")
         return True
 
