@@ -61,6 +61,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
+      - ./prompts:/app/prompts
       - ./user_data:/app/user_data
       - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
     depends_on:

@@ -159,22 +159,8 @@ class TypeWatchdog:
         provider = cfg.get("provider", "ollama")
         api_key = cfg.get("api_key", "")
         
-        prompt = f"""Твоя задача — определить тип документа на РУССКОМ языке. Верни JSON:
-{{"entities":[{{"name":"ТИП","type":"document_type","confidence":0.9}}]}}
-
-Где ТИП — одно из: {type_labels}
-Если документ не подходит — используй "Прочее".
-Если нужен новый тип — предложи его на русском + type:"new_type".
-
-Имя файла: {filename}
-
-Содержимое:
----FRAGMENT 1---
-{sample_texts[0][:500]}
----FRAGMENT 2---
-{sample_texts[1][:500] if len(sample_texts) > 1 else '—'}
-
-Верни СТРОГО JSON (без markdown):"""
+        # Загружаем промпт из файла, fallback на встроенный
+        prompt = self._load_type_prompt(filename, sample_texts, type_labels)
         
         try:
             result = await entity_extractor._call_llm(
@@ -216,6 +202,42 @@ class TypeWatchdog:
             logger.debug(f"TypeWatchdog: LLM ошибка: {e}")
         
         return None
+
+
+    def _load_type_prompt(self, filename: str, sample_texts: list, type_labels: str) -> str:
+        """Загрузить промпт из prompts/type.txt, с fallback на встроенный."""
+        prompt_path = "/app/prompts/type.txt"
+        try:
+            from pathlib import Path
+            p = Path(prompt_path)
+            if p.exists():
+                template = p.read_text(encoding="utf-8")
+                # Формируем текст фрагментов
+                fragments = "\n".join(
+                    f"---FRAGMENT {i+1}---\n{t[:500]}"
+                    for i, t in enumerate(sample_texts[:2])
+                )
+                if len(sample_texts) < 2:
+                    fragments += "\n---FRAGMENT 2---\n—"
+                return template.replace("{filename}", filename)\
+                              .replace("{sample_texts}", fragments)\
+                              .replace("{type_labels}", type_labels)
+        except Exception as e:
+            logger.debug(f"Не удалось загрузить prompts/type.txt: {e}")
+        # Fallback: встроенный промпт
+        return f"""Твоя задача — определить тип документа на РУССКОМ языке. Верни JSON:
+{{"entities":[{{"name":"ТИП","type":"document_type","confidence":0.9}}]}}
+
+Где ТИП — одно из: {type_labels}
+Если документ не подходит — используй "Прочее".
+
+Имя файла: {filename}
+
+Содержимое:
+---ФРАГМЕНТ 1---
+{sample_texts[0][:500] if sample_texts else '—'}
+
+Верни СТРОГО JSON (без markdown):"""
 
 
 type_watchdog = TypeWatchdog()
