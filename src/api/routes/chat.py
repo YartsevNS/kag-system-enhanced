@@ -44,7 +44,6 @@ async def send_message(
         formatted_messages = []
         for msg in request.messages:
             if isinstance(msg, dict):
-                # Если dict, преобразуем в ChatMessage
                 formatted_messages.append(
                     ChatMessage(
                         role=msg.get("role", "user"),
@@ -52,7 +51,6 @@ async def send_message(
                     )
                 )
             else:
-                # Уже ChatMessage
                 formatted_messages.append(msg)
 
         # Извлекаем последнее сообщение пользователя
@@ -68,7 +66,7 @@ async def send_message(
         group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
         is_admin = current_user.is_admin if current_user else False
 
-        # Генерируем ответ через chat_service
+        # Генерируем ответ через chat_service (теперь через Provider Architecture)
         response = await chat_service.generate_response(
             user_message=user_message,
             session_id=request.session_id,
@@ -101,6 +99,63 @@ async def send_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/stream", summary="Потоковый ответ чата")
+async def stream_message(
+    request: ChatRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Потоковая передача ответа от LLM (Server-Sent Events).
+
+    Принимает те же параметры что и POST /, но возвращает SSE поток.
+    """
+    try:
+        formatted_messages = []
+        for msg in request.messages:
+            if isinstance(msg, dict):
+                formatted_messages.append(
+                    ChatMessage(
+                        role=msg.get("role", "user"),
+                        content=msg.get("content", "")
+                    )
+                )
+            else:
+                formatted_messages.append(msg)
+
+        user_message = formatted_messages[-1].content if formatted_messages else ""
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in formatted_messages[:-1]
+        ] if formatted_messages else []
+
+        group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+        is_admin = current_user.is_admin if current_user else False
+
+        async def event_stream():
+            async for chunk in chat_service.generate_stream(
+                user_message=user_message,
+                session_id=request.session_id,
+                history=history,
+                group_ids=group_ids,
+                is_admin=is_admin
+            ):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка потоковой генерации: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/search", summary="Векторный поиск по чанкам")
 async def search_chunks(
     request: dict,
@@ -112,54 +167,21 @@ async def search_chunks(
     """
     try:
         from src.indexing.embeddings_service import embeddings_service
-        
+
         query = request.get("query", "")
         limit = request.get("limit", 10)
-        
+
         if not query:
             return {"chunks": [], "total": 0}
-        
-        # Initialize if needed
+
         if embeddings_service._qdrant_client is None:
             await embeddings_service.initialize()
-        
+
         chunks = await embeddings_service.search(query, limit=limit)
         return {"chunks": chunks, "total": len(chunks)}
     except Exception as e:
         logger.error(f"Search error: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}
-
-
-@router.post("/sessions/{session_id}/reset", summary="Сбросить сессию чата")
-async def reset_session(session_id: str):
-    """
-    Сбросить историю сообщений в сессии.
-    
-    - **session_id**: Идентификатор сессии
-    """
-    logger.info(f"Сброс сессии: {session_id}")
-    
-    # TODO: Реализовать сброс сессии
-    
-    return {"status": "ok", "session_id": session_id}
-
-
-@router.get("/sessions/{session_id}/history", summary="Получить историю сессии")
-async def get_session_history(
-    session_id: str,
-    limit: Optional[int] = 50
-):
-    """
-    Получить историю сообщений сессии.
-
-    - **session_id**: Идентификатор сессии
-    - **limit**: Лимит возвращаемых сообщений
-    """
-    logger.info(f"Получение истории сессии: {session_id}")
-
-    # TODO: Реализовать получение истории
-
-    return {"session_id": session_id, "messages": [], "total": 0}
 
 
 @router_export.post("/{session_id}", summary="Экспортировать диалог")
@@ -173,17 +195,16 @@ async def export_session(
 
     - **session_id**: ID сессии
     - **format**: Формат файла (docx или pdf)
-    - **messages**: Список сообщений (если не передан, используется история сессии)
+    - **messages**: Список сообщений
     """
     try:
-        # Если сообщения не переданы, используем заглушку
         if not messages:
-            messages = [
-                {"role": "user", "content": "Пример запроса"},
-                {"role": "assistant", "content": "Пример ответа от AI ассистента KAG"}
-            ]
+            return Response(
+                content="Сообщения не переданы",
+                status_code=400,
+                media_type="text/plain"
+            )
 
-        # Экспортируем
         if format.lower() == "pdf":
             doc_bytes = export_service.export_to_pdf(
                 messages=messages,

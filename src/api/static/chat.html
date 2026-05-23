@@ -542,6 +542,32 @@
         let sessions = [];
         let isLoading = false;
         
+        // Обёртка fetch с токеном из localStorage
+        function apiFetch(url, opts) {
+            opts = opts || {};
+            opts.credentials = 'include';
+            var h = new Headers(opts.headers || {});
+            var t = localStorage.getItem('kag_token');
+            if (t) h.set('Authorization', 'Bearer ' + t);
+            opts.headers = h;
+            return fetch(url, opts);
+        }
+        
+        // Уведомление
+        function showNotification(message, isError) {
+            var n = document.getElementById('notification');
+            if (!n) {
+                n = document.createElement('div');
+                n.id = 'notification';
+                n.style.cssText = 'position:fixed;top:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:500;display:none;z-index:2000;box-shadow:0 4px 24px rgba(0,0,0,0.4);animation:slideIn 0.3s ease';
+                document.body.appendChild(n);
+            }
+            n.textContent = message;
+            n.style.background = isError ? '#ef4444' : '#22c55e';
+            n.style.display = 'block';
+            setTimeout(function() { n.style.display = 'none'; }, 3000);
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             loadSessions();
@@ -556,7 +582,7 @@
             
             try {
                 // Загружаем настройки LLM из сохраненных настроек
-                const response = await fetch(`${API_URL}/admin/models/status`);
+                const response = await apiFetch(`${API_URL}/admin/models/status`);
                 
                 if (response.ok) {
                     const data = await response.json();
@@ -684,7 +710,7 @@
                     content: text
                 });
                 
-                const response = await fetch(`${API_URL}/chat/`, {
+                const response = await apiFetch(`${API_URL}/chat/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -841,7 +867,7 @@
             showNotification(`⏳ Генерация ${format.toUpperCase()}...`);
 
             try {
-                const response = await fetch(`${API_URL}/chat/export/${currentSessionId}?format=${format}`, {
+                const response = await apiFetch(`${API_URL}/chat/export/${currentSessionId}?format=${format}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
