@@ -82,6 +82,12 @@ class TypeWatchdog:
                     doc['document_type'] = detected_type
                     config_store.set("documents", did, doc)
                     
+                    # Обновляем в Qdrant (чтобы чанки знали свой тип)
+                    try:
+                        await embeddings_service.update_document_type_payload(did, detected_type)
+                    except Exception:
+                        pass
+                    
                     # Обновляем Neo4j если есть документ
                     try:
                         from src.indexing.knowledge_graph import kg_service

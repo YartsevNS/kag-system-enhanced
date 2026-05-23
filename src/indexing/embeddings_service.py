@@ -243,6 +243,49 @@ class EmbeddingsService:
         logger.info(f"Сохранено {total_saved} векторов в Qdrant")
         return total_saved
 
+    async def update_document_type_payload(self, document_id: str, document_type: str):
+        """Обновить document_type в payload всех чанков документа в Qdrant."""
+        try:
+            # Находим все точки документа
+            from qdrant_client.http import models as qmodels
+            scroll_result = self._qdrant_client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="document_id",
+                            match=qmodels.MatchValue(value=document_id)
+                        )
+                    ]
+                ),
+                limit=1000,
+                with_payload=True,
+                with_vectors=False
+            )
+            points, _ = scroll_result
+            if not points:
+                logger.debug(f"Нет чанков для обновления типа {document_id}")
+                return False
+
+            # Обновляем payload каждой точки
+            from qdrant_client.http import models as qmodels2
+            updated_points = []
+            for p in points:
+                p.payload["document_type"] = document_type
+                updated_points.append(
+                    qmodels2.PointStruct(id=p.id, vector=p.vector, payload=p.payload)
+                )
+
+            self._qdrant_client.upsert(
+                collection_name=self.collection_name,
+                points=updated_points
+            )
+            logger.info(f"Обновлён document_type={document_type} для {len(updated_points)} чанков {document_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Не удалось обновить document_type в Qdrant: {e}")
+            return False
+
     async def search(
         self,
         query: str,
