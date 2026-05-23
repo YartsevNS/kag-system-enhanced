@@ -314,16 +314,16 @@ async function checkTypeWatchdog() {
       badge.style.color = 'var(--amber)';
       badge.textContent = `⏳ ${d.processed}/${d.total_progress || d.total}`;
       if (btn) btn.style.display = 'none';
+    } else if (d.without_type > 0) {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--text4)';
+      badge.textContent = `⚠️ ${d.without_type}/${d.total} без типа`;
+      if (btn) btn.style.display = 'block';
     } else if (d.status === 'completed') {
       badge.style.display = 'block';
       badge.style.color = 'var(--emerald)';
       badge.textContent = `✅ ${d.with_type}/${d.total}`;
       if (btn) btn.style.display = 'none';
-    } else if (d.without_type > 0) {
-      badge.style.display = 'block';
-      badge.style.color = 'var(--text4)';
-      badge.textContent = `⚠️ ${d.without_type} без типа`;
-      if (btn) btn.style.display = 'block';
     } else {
       if (btn) btn.style.display = 'none';
     }
