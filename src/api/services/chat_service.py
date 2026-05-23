@@ -342,6 +342,8 @@ class ChatService:
                 "sources_count": len(sources),
                 "context_length": len(context),
                 "generated_at": datetime.utcnow().isoformat(),
+                "total_docs": self._get_total_docs(),
+                "graph_used": use_rag,
             }
         }
 
@@ -362,6 +364,14 @@ class ChatService:
             "Начинай с анализа контекста из обеих баз. Если граф показывает связи — укажи это явно.\n"
             "Не выдумывай факты. Указывай источники. Структурируй ответ."
         )
+
+    def _get_total_docs(self) -> int:
+        """Получить общее количество документов в системе."""
+        try:
+            from src.api.services.document_service import document_service
+            return len(document_service._documents)
+        except Exception:
+            return 0
 
     async def generate_stream(
         self,

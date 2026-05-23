@@ -88,7 +88,9 @@ async def send_message(
                 "backend": response["backend"],
                 "usage": response["usage"],
                 "rag_used": response["metadata"]["rag_used"],
-                "sources_count": response["metadata"]["sources_count"]
+                "sources_count": response["metadata"]["sources_count"],
+                "total_docs": response["metadata"]["total_docs"],
+                "graph_used": response["metadata"]["graph_used"]
             }
         )
 

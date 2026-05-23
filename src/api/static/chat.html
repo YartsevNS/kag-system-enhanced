@@ -757,11 +757,13 @@
             
             let sourcesHTML = '';
             if (metadata && metadata.sources_count > 0 && metadata.rag_used) {
+                const totalDocs = metadata.total_docs || '—';
+                const graphUsed = metadata.graph_used ? ' • 🕸️ Граф знаний' : '';
                 sourcesHTML = `
                     <div class="sources">
                         <div class="sources-title">📎 Источники (${metadata.sources_count})</div>
                         <div class="source-item">
-                            RAG поиск выполнен • Найдено релевантных документов: ${metadata.sources_count}
+                            📄 Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
                         </div>
                     </div>
                 `;
