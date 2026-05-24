@@ -589,15 +589,11 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
             navigator.clipboard.writeText(texts.join('\n').trim()).then(() => {
                 const st = document.getElementById('copy-status');
                 st.className = 'create-status success';
-                st.innerHTML = '✅ Скопировано в буфер! Креды больше не будут показаны.';
-                // Помечаем как показанные на сервере
-                fetch(`${API}/mark-creds-shown`, { method: 'POST' }).catch(()=>{});
-                // Скрываем карточки PG и Qdrant
-                document.querySelectorAll('.db-creds').forEach(div => {
-                    if (div.id === 'pg-creds' || div.id === 'qdrant-creds') {
-                        div.style.display = 'none';
-                        div.innerHTML = '';
-                    }
+                st.innerHTML = '✅ Скопировано в буфер!';
+                // Скрываем карточки PG и Qdrant локально
+                ['pg-creds','qdrant-creds'].forEach(id => {
+                    const div = document.getElementById(id);
+                    if (div) { div.style.display = 'none'; div.innerHTML = ''; }
                 });
                 setTimeout(() => { st.innerHTML = ''; }, 3000);
             }).catch(() => {

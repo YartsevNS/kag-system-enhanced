@@ -266,8 +266,8 @@ async def setup_status():
         }
     }
     
-    # PG — показываем креды только если auto_created и ещё не скопированы
-    if db_config.get("auto_created") and not db_config.get("creds_shown", False):
+    # PG — показываем креды если БД создана
+    if db_config.get("auto_created"):
         result["databases"] = result.get("databases", {})
         result["databases"]["postgresql"] = {
             "host": db_config.get("host", ""),
@@ -277,8 +277,8 @@ async def setup_status():
             "password": db_config.get("password", "")  # открытый текст (защищён PostgreSQL-авторизацией)
         }
     
-    # Qdrant — показываем только если ещё не скопированы
-    if qdrant_config.get("auto_created") and not qdrant_config.get("creds_shown", False):
+    # Qdrant — показываем креды если коллекция создана
+    if qdrant_config.get("auto_created"):
         result["databases"] = result.get("databases", {})
         result["databases"]["qdrant"] = {
             "host": qdrant_config.get("host", ""),
