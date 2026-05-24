@@ -133,8 +133,20 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
       Примеры: <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">Иванов, ООО Ромашка</code> найдёт все документы где есть эти организация и человек;
       <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">криптография, ГОСТ</code> — документы по теме криптозащиты.
     </p>
-    <div class="search-row">
-      <input type="text" id="hybrid-query" placeholder="Сущности через запятую: Иванов, ООО Ромашка, 2024..." onkeydown="if(event.key==='Enter')hybridSearch()">
+    <div class="search-row" style="gap:8px;flex-wrap:wrap">
+      <input type="text" id="hybrid-query" placeholder="Сущности через запятую: Иванов, ООО Ромашка, 2024..." onkeydown="if(event.key==='Enter')hybridSearch()" style="flex:1;min-width:200px">
+      <select id="hybrid-scope" style="font-size:12px;padding:8px 10px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="both">🔄 Гибрид</option>
+        <option value="neo4j">🕸️ Только граф</option>
+        <option value="qdrant">🔍 Только векторы</option>
+      </select>
+      <select id="hybrid-relevance" style="font-size:12px;padding:8px 10px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:160px">
+        <option value="0.6">Релевантность ≥ 0.6</option>
+        <option value="0.5">≥ 0.5</option>
+        <option value="0.4" selected>≥ 0.4</option>
+        <option value="0.3">≥ 0.3</option>
+        <option value="0">Без фильтра</option>
+      </select>
       <button class="btn" onclick="hybridSearch()">Искать</button>
     </div>
     <div id="hybrid-results"></div>
@@ -218,10 +230,13 @@ async function searchEntities() {
 async function hybridSearch() {
   const q = document.getElementById('hybrid-query').value.trim();
   if (!q) return;
+  const scope = document.getElementById('hybrid-scope').value;
+  const relevance = document.getElementById('hybrid-relevance').value;
   const div = document.getElementById('hybrid-results');
-  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск...</div>';
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск (scope='+scope+', rel≥'+relevance+')...</div>';
   try {
-    const r = await fetch(API + '/hybrid-search?q=' + encodeURIComponent(q), { headers: authHeaders() });
+    const params = new URLSearchParams({q, scope, relevance_score: relevance});
+    const r = await fetch(API + '/hybrid-search?' + params, { headers: authHeaders() });
     if (!r.ok) {
       const text = await r.text();
       div.innerHTML = '<div class="empty">❌ Ошибка ' + r.status + ': ' + text.substring(0, 200) + '</div>';

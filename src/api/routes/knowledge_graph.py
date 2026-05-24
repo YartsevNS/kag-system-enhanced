@@ -91,11 +91,14 @@ async def entity_graph(
 async def hybrid_search(
     q: str, 
     doc_id: Optional[str] = None,
+    scope: Optional[str] = "both",
+    relevance_score: Optional[float] = 0.4,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Гибридный поиск: граф (Neo4j) + вектор (Qdrant).
     
-    Если сущности не найдены в графе — ищет похожие чанки через Qdrant.
+    scope: "both" | "neo4j" | "qdrant"
+    relevance_score: минимальный score для Qdrant-результатов (0 = без фильтра)
     """
     try:
         from src.indexing.knowledge_graph import kg_service
@@ -103,12 +106,14 @@ async def hybrid_search(
         
         entities = [e.strip() for e in q.split(",") if e.strip()]
         doc_ids = [doc_id] if doc_id else None
+        results = []
         
         # 1. Поиск в графе Neo4j
-        results = kg_service.hybrid_search(entities, doc_ids) if entities else []
+        if scope != "qdrant":
+            results = kg_service.hybrid_search(entities, doc_ids) if entities else []
         
-        # 2. Если граф ничего не нашёл — ищем через Qdrant (векторный поиск по смыслу)
-        if not results:
+        # 2. Если граф ничего не нашёл или scope=qdrant — ищем через Qdrant
+        if not results or scope == "qdrant":
             try:
                 await embeddings_service.initialize()
                 qdrant_results = await embeddings_service.search(q, limit=20)
@@ -116,13 +121,16 @@ async def hybrid_search(
                 for point in (qdrant_results or []):
                     score = point.get("score", 0)
                     content = (point.get("content", "") or "").strip()
-                    # Фильтр: score > 0.35, нет дубликатов
-                    if score < 0.35 or not content:
+                    # Фильтр по релевантности
+                    threshold = float(relevance_score or 0)
+                    if threshold > 0 and score < threshold:
+                        continue
+                    if not content:
                         continue
                     text_key = content[:100]
                     if text_key in seen_texts:
                         continue
-                    # Буст: если query встречается в тексте — повышаем приоритет
+                    # Буст: если query встречается в тексте
                     if q.lower() in content.lower():
                         score += 0.3
                     seen_texts.add(text_key)
