@@ -204,6 +204,7 @@ body {
 .kbd-hint kbd {
   background: var(--surface); border: 1px solid var(--border-s);
   border-radius: 3px; padding: 1px 5px;
+  font-family: var(--mono); font-size: 10px;
 }
 
 /* Progress bar */
@@ -211,7 +212,6 @@ body {
   position: fixed; bottom: 0; left: 240px; right: 0;
   height: 2px; background: var(--accent);
   z-index: 100; transition: width 0.4s ease;
-}
 }
 
 @media (max-width: 768px) {
@@ -507,7 +507,31 @@ function typeLabel(t) {
 function fmtBytes(b) {
   if (!b) return '0 B';
   var k = 1024, s = ['B','KB','MB','GB'], i = Math.floor(Math.log(b) / Math.log(k));
-  return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+  return (b / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0) + ' ' + s[i];
+}
+
+function pollOcrProgress() {
+  var bar = document.getElementById('ocr-progress');
+  if (!bar) return;
+  
+  function tick() {
+    fetch('/api/v1/upload/' + docId + '/details').then(function(r) {
+      return r.json();
+    }).then(function(d) {
+      if (d.status === 'completed') {
+        bar.style.width = '100%';
+        setTimeout(function() { bar.style.width = '0%'; }, 1000);
+        return;
+      }
+      if (d.status === 'error') { bar.style.width = '0%'; return; }
+      var pct = Math.min(95, (d.chunks_count || 0) * 10);
+      bar.style.width = pct + '%';
+      setTimeout(tick, 2000);
+    }).catch(function() {
+      setTimeout(tick, 3000);
+    });
+  }
+  tick();
 }
 </script>
 </body>
