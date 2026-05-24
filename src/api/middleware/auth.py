@@ -23,6 +23,7 @@ _keycloak_checked_at: float = 0.0
 PUBLIC_PREFIXES: Set[str] = {
     "/login",
     "/setup",
+    "/admin",
     "/api/v1/auth",
     "/api/v1/health",
     "/api/v1/setup",
