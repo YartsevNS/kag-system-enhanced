@@ -276,8 +276,8 @@ async def setup_status():
                 "user": db_config.get("user", "—"),
                 "password": crypto.decrypt_from_base64(db_config.get("password", "")) if db_config.get("password") else "—"
             }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Не удалось расшифровать креды PostgreSQL: {e}")
     
     if qdrant_config.get("auto_created") and not qdrant_config.get("creds_shown", False):
         try:
@@ -289,8 +289,8 @@ async def setup_status():
                 "collection": qdrant_config.get("collection", "kag_documents"),
                 "api_key": crypto.decrypt_from_base64(qdrant_config.get("api_key", "")) if qdrant_config.get("api_key") else "—"
             }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Не удалось расшифровать креды Qdrant: {e}")
     
     # Neo4j — всегда показываем (из docker-compose)
     result["databases"] = result.get("databases", {})
