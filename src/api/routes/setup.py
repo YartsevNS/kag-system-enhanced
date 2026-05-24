@@ -137,7 +137,8 @@ async def create_pg_database():
             "user": db_user,
             "password": crypto.encrypt_to_base64(db_password),
             "saved_at": now,
-            "auto_created": True
+            "auto_created": True,
+            "creds_shown": False
         }
         config_store.set("database", "default", db_config)
         
@@ -213,7 +214,8 @@ async def create_qdrant_collection():
             "vector_size": vector_size,
             "api_key": crypto.encrypt_to_base64(api_key),
             "saved_at": now,
-            "auto_created": True
+            "auto_created": True,
+            "creds_shown": False
         }
         config_store.set("qdrant", "default", qdrant_config)
         
@@ -262,8 +264,8 @@ async def setup_status():
     
     result = {"success": True, "status": status}
     
-    # Расшифровываем и возвращаем креды (одноразово — в рамках сессии)
-    if db_config.get("auto_created"):
+    # Расшифровываем и возвращаем креды только если ещё не показаны
+    if db_config.get("auto_created") and not db_config.get("creds_shown", False):
         try:
             crypto = GOSTCrypto()
             result["databases"] = result.get("databases", {})
@@ -277,7 +279,7 @@ async def setup_status():
         except Exception:
             pass
     
-    if qdrant_config.get("auto_created"):
+    if qdrant_config.get("auto_created") and not qdrant_config.get("creds_shown", False):
         try:
             crypto = GOSTCrypto()
             result["databases"] = result.get("databases", {})
@@ -513,3 +515,19 @@ async def check_status():
     except Exception as e:
         logger.warning(f"Ошибка проверки статуса: {e}")
         return {"configured": False, "timestamp": None}
+
+
+@router.post("/mark-creds-shown")
+async def mark_creds_shown():
+    """
+    Помечает креды PG и Qdrant как показанные.
+    После вызова креды больше не возвращаются в /status.
+    Вызывается фронтендом после копирования в буфер.
+    """
+    for key in ["database", "qdrant"]:
+        cfg = config_store.get(key, "default")
+        if cfg and cfg.get("auto_created"):
+            cfg["creds_shown"] = True
+            config_store.set(key, "default", cfg)
+            logger.info(f"Креды {key} помечены как показанные")
+    return {"success": True, "message": "Креды помечены как показанные"}
