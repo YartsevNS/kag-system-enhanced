@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">83</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">84</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№83. Документ не загружается при переходе со страницы превью</strong><br>при нажатии на превью и переходе н страницу не загружается документ, уже было ищи ошибку</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Та же проблема d54cb91!</strong> Замена <code>JetBrains Mono,monospace</code> → <code>'Cascadia Code','Fira Code','Consolas',monospace</code> внутри JS-строки <code>pre.style.cssText = '...font:13px/1.7 JetBrains Mono,monospace...'</code> сломала синтаксис (кавычки внутри single-quoted строки). Весь <code>&lt;script&gt;</code> не выполнялся — ни docId, ни init, ни API. <strong>Исправлено:</strong> viewer.html восстановлен из <code>d54cb91^</code>, progress bar накатан заново без затрагивания JS-строк с фонтами. <strong>Commit:</strong> <code>96ff139</code>.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№82. Полосочка не появляется на превью, know не обновился на сайте</strong><br>на сайте не появляется полосочка на превью, после твоего ответа так и не обновилась страница know</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>1. Know:</strong> git checkout от локальных изменений + pull (сервер отставал на 2 коммита). <strong>2. Полоска:</strong> стартовая ширина 0% делала её невидимой. Заменено на 5% — видна сразу при загрузке. pollOcrProgress затем анимирует до 100% или скрывает. <strong>Commit:</strong> <code>beb3c75</code>.</div></div>
