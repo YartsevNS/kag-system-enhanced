@@ -302,6 +302,21 @@ async def setup_status():
         "name": "kag", "user": "kag", "password": "KAGpg2026!secure"
     }
     
+    # Доступы: Keycloak Admin + вход на сайт
+    result["access"] = {
+        "keycloak_admin": {
+            "url": "http://192.168.50.18:8080",
+            "user": "admin",
+            "password": "admin"
+        },
+        "site_login": {
+            "url": "http://192.168.50.18:8000/login",
+            "user": "testuser1",
+            "password": "test123456",
+            "admin_url": "http://192.168.50.18:8000/admin"
+        }
+    }
+    
     return result
 
 

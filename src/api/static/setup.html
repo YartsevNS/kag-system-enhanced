@@ -172,6 +172,24 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
             <div class="create-status" id="copy-status"></div>
         </div>
 
+        <!-- Шаг 1.5: Доступы -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">🔑</span>
+                Доступы: админка и вход на сайт
+            </div>
+            <div class="inner-card">
+                <div><strong>🛡️ Keycloak Admin</strong>
+                <div style="color:var(--text3);font-size:0.85rem);">Управление пользователями и realm</div></div>
+                <div class="db-creds" id="keycloak-admin-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+            <div class="inner-card">
+                <div><strong>🚪 Вход на сайт</strong>
+                <div style="color:var(--text3);font-size:0.85rem);">Логин и пароль пользователя</div></div>
+                <div class="db-creds" id="site-login-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+        </div>
+
         <!-- Шаг 2: LLM Бэкенд -->
         <div class="step">
             <div class="step-header">
@@ -662,6 +680,11 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                 if (dbs.neo4j) renderDbCreds('neo4j-creds', dbs.neo4j);
                 if (dbs.keycloak_db) renderDbCreds('keycloak-creds', dbs.keycloak_db);
                 if (dbs.kag_db) renderDbCreds('kagdb-creds', dbs.kag_db);
+                
+                // Доступы
+                const acc = data.access || {};
+                if (acc.keycloak_admin) renderDbCreds('keycloak-admin-creds', acc.keycloak_admin);
+                if (acc.site_login) renderDbCreds('site-login-creds', acc.site_login);
             } catch (err) {
                 console.warn('Не удалось проверить статус:', err);
             }
