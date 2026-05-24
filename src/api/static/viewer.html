@@ -204,7 +204,14 @@ body {
 .kbd-hint kbd {
   background: var(--surface); border: 1px solid var(--border-s);
   border-radius: 3px; padding: 1px 5px;
-  font-family: var(--mono); font-size: 10px;
+}
+
+/* Progress bar */
+.ocr-progress {
+  position: fixed; bottom: 0; left: 240px; right: 0;
+  height: 2px; background: var(--accent);
+  z-index: 100; transition: width 0.4s ease;
+}
 }
 
 @media (max-width: 768px) {
@@ -263,6 +270,9 @@ body {
     </div>
   </div>
 
+  <!-- Тонкая полоска прогресса OCR/обработки (2px) -->
+  <div class="ocr-progress" id="ocr-progress" style="width:0%"></div>
+
   <div class="kbd-hint" id="kbd-hint">
     <kbd>←</kbd> <kbd>→</kbd> страницы · <kbd>+</kbd> <kbd>−</kbd> зум · <kbd>W</kbd> по ширине
   </div>
@@ -300,6 +310,9 @@ async function init() {
     document.getElementById('btn-chunks').href = '/chunks?doc_id=' + docId + '&name=' + encodeURIComponent(currentDoc.filename);
     document.getElementById('btn-chunks').style.display = 'inline-flex';
     document.getElementById('btn-download').href = API + '/upload/' + docId + '/preview';
+
+    // Запускаем опрос прогресса обработки
+    pollOcrProgress();
 
     // Determine if PDF or text document
     const fname = (currentDoc.filename || '').toLowerCase();
