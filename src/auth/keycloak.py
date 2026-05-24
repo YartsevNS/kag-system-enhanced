@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from functools import lru_cache
 import httpx
 from loguru import logger
-from jose import jwt, JWTError, ExpiredSignatureError
+from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
 try:
     from jwt.exceptions import InvalidTokenError
 except ImportError:
@@ -92,6 +92,7 @@ def verify_token(token: str) -> Dict[str, Any]:
         audience = settings.KEYCLOAK_CLIENT_ID
         issuer = f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
         
+        # Сначала декодируем без проверки audience, проверим вручную
         payload = jwt.decode(
             token,
             rsa_key,
