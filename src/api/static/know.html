@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">73</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">74</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№73. Тестирование деплоя с нуля на 192.168.50.18</strong><br>Сервер очищен, проект переразвёрнут с ветки <code>kag-rusystem-allv1</code>. Проверен полный цикл: клонирование, .env, docker-compose --profile dev, создание PG/Qdrant, креды всех 5 баз.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Ключевые проблемы:</strong><br>1. Профили — <code>--profile dev</code> обязателен<br>2. kag-pg запущен вручную<br>3. GOST-ключ не персистит → креды открытым текстом в config_store<br>4. Одноразовость через <code>creds_shown</code> + <code>POST /mark-creds-shown</code><br>5. Пароль keycloak-db сброшен ALTER USER</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№72. Кнопка «Скопировать все креды» в буфер</strong><br>Нужна возможность одним кликом скопировать все данные баз (имя БД, хост, порт, логин, пароль) в буфер обмена.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлена кнопка <code>📋 Скопировать все креды в буфер</code></strong> в шаге 1. JS-функция <code>copyAllCreds()</code> собирает данные из карточек <code>.db-creds</code>, форматирует с заголовками, вызывает <code>navigator.clipboard.writeText()</code>. Статус ✅/❌ на 3 сек. <strong>Commit:</strong> <code>da93736</code> (ветка <code>kag-rusystem-allv1</code>).</div></div>
