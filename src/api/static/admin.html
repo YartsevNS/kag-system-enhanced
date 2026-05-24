@@ -423,7 +423,7 @@
                 Промпт, который задаёт поведение AI-ассистента в чате. Определяет как нейросеть работает с базами Qdrant (векторный поиск) и Neo4j (граф знаний).
                 <strong>AI получает контекст из обеих баз автоматически</strong> — промпт лишь указывает как его интерпретировать.
             </p>
-            <textarea id="chat-system-prompt" style="width:100%;min-height:320px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text);font-size:12px;font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;resize:vertical;line-height:1.6"
+            <textarea id="chat-system-prompt" style="width:100%;min-height:320px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical;line-height:1.6"
                 placeholder="Введите системный промпт...">Загрузка...</textarea>
             <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
                 <button class="btn btn-primary" onclick="saveChatPrompt()">💾 Сохранить промпт</button>
@@ -1098,7 +1098,7 @@
 
             if (def.prompt) {
                 html += '<div class="form-group" id="fm-prompt-group"><label>Системный промпт</label>' +
-                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea></div>';
+                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea></div>';
             }
 
             html += '<div class="form-group"><label>Temperature</label>' +
@@ -1635,7 +1635,7 @@
                     return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:${color};font-size:13px;">
                         <input type="checkbox" data-ext="${ext}" ${checked ? 'checked' : ''} 
                                onchange="this.parentElement.style.color=this.checked?'var(--accent-h)':'var(--text4)'">
-                        <span style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;">${ext}</span>
+                        <span style="font-family:JetBrains Mono,monospace;font-size:12px;">${ext}</span>
                         <span style="font-size:12px;">${label}</span>
                     </label>`;
                 }).join('');
