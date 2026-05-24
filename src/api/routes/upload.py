@@ -607,25 +607,30 @@ async def reanalyze_all_documents():
         return {"status": "error", "message": str(e)}
 
 
+import asyncio
+# Семафор: только 1 документ обрабатывается одновременно
+_process_sem = asyncio.Semaphore(1)
+
 async def _process_document_async(document_id: str):
-    """Фоновая обработка документа (в отдельном потоке, чтобы не блокировать API)"""
-    try:
-        import asyncio
-        def _sync_process():
-            """Синхронная обёртка — запускает async process_document в новом event loop"""
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    document_service.process_document(document_id)
-                )
-            finally:
-                loop.close()
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, _sync_process)
-        logger.info(f"Документ обработан: {document_id}, результат: {result}")
-    except Exception as e:
-        logger.error(f"Ошибка обработки документа {document_id}: {e}")
+    """Фоновая обработка документа (по одному, чтобы избежать OOM)"""
+    async with _process_sem:
+        try:
+            import asyncio
+            def _sync_process():
+                """Синхронная обёртка — запускает async process_document в новом event loop"""
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        document_service.process_document(document_id)
+                    )
+                finally:
+                    loop.close()
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _sync_process)
+            logger.info(f"Документ обработан: {document_id}, результат: {result}")
+        except Exception as e:
+            logger.error(f"Ошибка обработки документа {document_id}: {e}")
 
 
 # ============================================================
