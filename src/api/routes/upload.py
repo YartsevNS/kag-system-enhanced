@@ -63,20 +63,8 @@ async def upload_document(
             group_ids=group_ids
         )
 
-        # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
-        if background_tasks is not None:
-            logger.info(f"Планирую фоновую обработку: {record.document_id}")
-            background_tasks.add_task(_process_document_async, record.document_id)
-        else:
-            # Если BackgroundTasks недоступен, обрабатываем синхронно
-            logger.warning("BackgroundTasks недоступен, обрабатываю синхронно")
-            try:
-                result = await document_service.process_document(record.document_id)
-                logger.info(f"Документ обработан синхронно: {record.document_id}, результат: {result}")
-            except Exception as e:
-                logger.error(f"Ошибка синхронной обработки: {e}")
-                record.status = "failed"
-                record.error = str(e)
+        # Запускаем обработку строго через семафор
+        asyncio.create_task(_process_document_async(record.document_id))
 
         return DocumentStatus(
             document_id=record.document_id,
@@ -138,14 +126,8 @@ async def upload_documents_batch(
                 group_ids=group_ids
             )
 
-            # Запускаем обработку в фоне ОБЯЗАТЕЛЬНО
-            if background_tasks is not None:
-                background_tasks.add_task(_process_document_async, record.document_id)
-            else:
-                try:
-                    await document_service.process_document(record.document_id)
-                except Exception as e:
-                    logger.error(f"Ошибка обработки {file.filename}: {e}")
+            # Запускаем обработку строго через семафор
+            asyncio.create_task(_process_document_async(record.document_id))
 
             results.append({
                 "document_id": record.document_id,
@@ -612,24 +594,12 @@ import asyncio
 _process_sem = asyncio.Semaphore(1)
 
 async def _process_document_async(document_id: str):
-    """Фоновая обработка документа (строго по одному, семафор)"""
+    """Фоновая обработка документа (строго по одному, без новых event loop'ов)"""
     logger.info(f"⏳ Ожидание семафора для {document_id}...")
     async with _process_sem:
         logger.info(f"▶️ Семафор получен, начинаю обработку {document_id}")
         try:
-            import asyncio
-            def _sync_process():
-                """Синхронная обёртка — запускает async process_document в новом event loop"""
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
-                        document_service.process_document(document_id)
-                    )
-                finally:
-                    loop.close()
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, _sync_process)
+            result = await document_service.process_document(document_id)
             logger.info(f"Документ обработан: {document_id}, результат: {result}")
         except Exception as e:
             logger.error(f"Ошибка обработки документа {document_id}: {e}")
