@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">77</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">78</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№77. Сервис упал (Killed) при загрузке 3 документов — OOM</strong><br>После загрузки 3 файлов контейнер kag-api убит (Killed). Лимит памяти 2G не хватило на параллельный парсинг + LLM + entity extraction.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>OOM Kill.</strong> Лимит памяти увеличен с 2G до 4G (reservations 2G). <strong>Commit:</strong> <code>b97456c</code>. Причина: параллельная обработка документов — парсинг, LLM-вызовы, векторизация одновременно.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№76. Типизация документов идёт слишком долго</strong><br>Каждый документ обрабатывается отдельным LLM-вызовом — для 100 документов / 100 минут.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Батчинг + параллель.</strong> Новый <code>_detect_types_batch()</code> — 5 документов за один LLM-вызов. Параллельные батчи через <code>asyncio.Semaphore(2)</code> + <code>asyncio.gather</code> (до 4 одновременно). Удалён мёртвый <code>_load_type_prompt()</code> и 13KB <code>prompts/type.txt</code>. <strong>Commit:</strong> <code>03e0061</code>. Ускорение: ~×10-20.</div></div>
