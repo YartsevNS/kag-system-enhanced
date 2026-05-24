@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">75</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">76</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№75. Документ-призрак — Файл не найден на сервере (404)</strong><br>После пересоздания контейнера API документ отображается в списке, но при открытии — «Файл не найден». Загруженный файл потерян.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Причины:</strong> uploads директория была недоступна (Permission denied), DocumentService падал в fallback <code>/tmp/kag_uploads</code> (не persistent). После рестарта контейнера /tmp очищается — файл пропадает, метаданные в PostgreSQL остаются. <strong>Пермишены:</strong> <code>chmod -R 777 /app/data</code> в command docker-compose. GOST-ключ и аудит тоже починились: <code>Ключ загружен из файла</code>. <strong>Фикс:</strong> ghost-запись удалена из config_store. Новые загрузки — в <code>/app/data/uploads</code> (persistent volume).</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№74. viewer.html — документ не отображается, пустая страница</strong><br>PDF.js не рендерит PDF на qd.gostsecret.ru. API отдаёт preview (200), worker загружается — но страница пустая.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Та же причина — d54cb91.</strong> Замена Google Fonts сломала viewer.html (font-family замены затронули JS). Восстановлен откатом до <code>d54cb91^</code>. Также восстановлены admin.html и documents.html (аналогичная поломка). <strong>Правило:</strong> массовые замены в HTML утверждать с пользователем — легко сломать JS.</div></div>
