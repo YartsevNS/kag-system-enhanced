@@ -227,25 +227,7 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
             <div class="test-status" id="llm-status"></div>
         </div>
 
-        <!-- Шаг 3: Embedding -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">3</span>
-                Настройка Embedding модели
-            </div>
-            <div class="grid">
-                <div class="field full">
-                    <label>Название embedding модели</label>
-                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
-                </div>
-                <div class="field">
-                    <label>Размерность вектора</label>
-                    <input type="number" id="emb-dim" value="4096">
-                </div>
-            </div>
-        </div>
-
-        <!-- Шаг 4: SSH -->
+        <!-- Шаг 3: SSH -->
         <div class="step">
             <div class="step-header">
                 <span class="step-num">4</span>
@@ -460,10 +442,6 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                     port: parseInt(document.getElementById('llm-port').value) || 11434,
                     model: llmModel,
                     system_prompt: document.getElementById('llm-system-prompt').value.trim()
-                },
-                embedding: {
-                    model: document.getElementById('emb-model').value.trim(),
-                    dimensions: parseInt(document.getElementById('emb-dim').value) || 768
                 },
                 ssh: {
                     username: sshUser,
