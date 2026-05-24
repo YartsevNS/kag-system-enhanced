@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from functools import lru_cache
 import httpx
 from loguru import logger
-from jose import jwt, JWTError, ExpiredSignatureError, JWTClaimsError
+from jose import jwt, JWTError, ExpiredSignatureError
 try:
     from jwt.exceptions import InvalidTokenError
 except ImportError:
@@ -119,8 +119,6 @@ def verify_token(token: str) -> Dict[str, Any]:
         
     except ExpiredSignatureError:
         raise KeycloakError("Токен истёк")
-    except JWTClaimsError as e:
-        raise KeycloakError(f"Ошибка claims токена: {e}")
     except JWTError as e:
         raise KeycloakError(f"Ошибка JWT: {e}")
     except KeycloakError:
