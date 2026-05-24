@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">89</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">90</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№89. Почему админка показывает enbeddrus:v0.2, а реально используется nomic-embed-text?</strong><br>в админке Embedding (векторизация) «Модель для векторизации текста оллама evilfreelancer/enbeddrus:v0.2» — эта настройка ничего не значит? как так может быть я подключаю сеть но она не подключена???</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Три несвязанных источника:</strong> 1) Админка → <code>function_map/embedding</code> в config_store (Provider Architecture). 2) Setup Wizard → <code>embedding/default</code> в config_store. 3) Реальный <code>embeddings_service</code> → читает из <code>EMBEDDING_MODEL</code> env var. <strong>docker-compose.yml жёстко задавал</strong> <code>EMBEDDING_MODEL=nomic-embed-text:latest</code> вместо <code>${EMBEDDING_MODEL:-default}</code> — игнорировал .env и админку. <strong>Исправлено:</strong> docker-compose использует env var; .env переключён на <code>evilfreelancer/enbeddrus:v0.2</code> (768d, русский, BERT-based). Embedding убран из setup wizard (настраивается в админке или .env).</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№88. Эмбеддинг для Qdrant или Neo4j?</strong><br>это для qdrant или для neo4j?</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Для Qdrant.</strong> Чанки разбиваются → векторизуются <code>nomic-embed-text</code> → сохраняются в Qdrant. Neo4j — отдельный шаг (извлечение сущностей через LLM), идёт после векторизации и тоже медленный.</div></div>
