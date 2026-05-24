@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">86</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">89</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,18 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№88. Эмбеддинг для Qdrant или Neo4j?</strong><br>это для qdrant или для neo4j?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Для Qdrant.</strong> Чанки разбиваются → векторизуются <code>nomic-embed-text</code> → сохраняются в Qdrant. Neo4j — отдельный шаг (извлечение сущностей через LLM), идёт после векторизации и тоже медленный.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№87. Где узкое место — Occular-OCR или кодинг? Почему нет загрузки CPU?</strong><br>я не вижу загрузку процессора при использовании обработки, скажи это узкое место occularocr или ошибка в нашем кодинге, проанализируй оригинальный подход https://github.com/Bodhi42/Occular-ocr там говорится что страницу распознаёт за секунду может можно несколько потоков или многопроцессорность?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Occular-OCR — НЕ узкое место.</strong> Тест: 7 страниц PDF методом <code>text</code> (прямое извлечение, без OCR) = <strong>1.3 секунды</strong>. <code>ocr_skel</code> использует до 4 воркеров для параллельного OCR страниц. <strong>Реальное узкое место — эмбеддинг (векторизация):</strong> 21 батч × 32 текста × ~60 сек/батч через сеть на Ollama <code>nomic-embed-text</code> = <strong>~21 минута на документ</strong>. 9 pending × 21 мин ≈ 3 часа. DPI снижен до 200 (было 300). Документы реально обрабатываются — в логах видно: «Обработка батча 11/21». CPU не нагружается потому что эмбеддинг ждёт сетевых ответов от Ollama, а не считает локально.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№86. Кнопка перезапуска pending-документов + «Ожидает» статус</strong><br>сделай кнопку перезапуска не обработанных документов, у меня куча несколько висит в ожидает, что это?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Статус pending (ожидает)</strong> — документ загружен, но обработка не завершилась (OOM-падение убило фоновые задачи). <strong>Добавлено:</strong> API <code>POST /api/v1/upload/reprocess-pending</code> — находит все pending и запускает <code>_process_document_async</code>. Кнопка <strong>🔄 Переобработать</strong> на /documents в карточке «Ожидает». JS <code>reprocessPending()</code> + <code>updateStats()</code> с <code>stat-pending</code> и показом/скрытием кнопки. <strong>Commits:</strong> <code>e2e83a8, af97dec</code>. На сервере: 19 документов (8 completed, 11 pending). Обработка идёт.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№85. Scope и релевантность на странице гибридного поиска /kg</strong><br>можешь настроить так, что бы scope можно было выставлять рядом с кнопкой поиск, как и релевантность для поиска rag, жёсткое количество 10 по прежнему много мусора, scope вручную будет лучше. тебе не кажется?</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Да, согласен.</strong> Добавлены два выпадающих списка рядом с поиском: <code>hybrid-scope</code> (Гибрид / Только граф / Только векторы) и <code>hybrid-relevance</code> (score ≥ 0.6 / 0.5 / 0.4 / 0.3 / Без фильтра). Параметры передаются в API: <code>?scope=both|neo4j|qdrant&relevance_score=0.4</code>. При scope=qdrant или пустом Neo4j — Qdrant fallback. При scope=neo4j — только граф. <strong>Commits:</strong> <code>689044e, 3e27589, 63f78bc</code>.</div></div>
