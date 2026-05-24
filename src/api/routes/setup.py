@@ -249,14 +249,67 @@ async def create_qdrant_collection():
 
 @router.get("/status")
 async def setup_status():
-    """Возвращает полный статус настройки: что создано, что нет."""
+    """Возвращает полный статус настройки: что создано, что нет, и креды."""
+    db_config = config_store.get("database", "default") or {}
+    qdrant_config = config_store.get("qdrant", "default") or {}
+    
     status = {
-        "database": bool(config_store.get("database", "default")),
-        "qdrant": bool(config_store.get("qdrant", "default")),
+        "database": bool(db_config),
+        "qdrant": bool(qdrant_config),
         "llm": bool(config_store.get("llm", "default")),
         "configured": config_store.get("setup", "status", {}).get("configured", False)
     }
-    return {"success": True, "status": status}
+    
+    result = {"success": True, "status": status}
+    
+    # Расшифровываем и возвращаем креды (одноразово — в рамках сессии)
+    if db_config.get("auto_created"):
+        try:
+            crypto = GOSTCrypto()
+            result["databases"] = result.get("databases", {})
+            result["databases"]["postgresql"] = {
+                "host": db_config.get("host", "keycloak-db"),
+                "port": db_config.get("port", 5432),
+                "name": db_config.get("name", "—"),
+                "user": db_config.get("user", "—"),
+                "password": crypto.decrypt_from_base64(db_config.get("password", "")) if db_config.get("password") else "—"
+            }
+        except Exception:
+            pass
+    
+    if qdrant_config.get("auto_created"):
+        try:
+            crypto = GOSTCrypto()
+            result["databases"] = result.get("databases", {})
+            result["databases"]["qdrant"] = {
+                "host": qdrant_config.get("host", "qdrant"),
+                "port": qdrant_config.get("port", 6333),
+                "collection": qdrant_config.get("collection", "kag_documents"),
+                "api_key": crypto.decrypt_from_base64(qdrant_config.get("api_key", "")) if qdrant_config.get("api_key") else "—"
+            }
+        except Exception:
+            pass
+    
+    # Neo4j — всегда показываем (из docker-compose)
+    result["databases"] = result.get("databases", {})
+    result["databases"]["neo4j"] = {
+        "host": "neo4j",
+        "bolt_port": 7687,
+        "http_port": 7474,
+        "user": "neo4j",
+        "password": "kagneo4j2026"
+    }
+    
+    # Keycloak DB — всегда показываем (из docker-compose)
+    result["databases"]["keycloak_db"] = {
+        "host": "keycloak-db",
+        "port": 5432,
+        "name": "keycloak",
+        "user": "keycloak",
+        "password": "keycloak_password"
+    }
+    
+    return result
 
 
 # ==========================================

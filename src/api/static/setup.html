@@ -69,6 +69,11 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 .status-box{margin-top:16px;font-size:14px;padding:12px 18px;border-radius:var(--radius-sm);line-height:1.6}
 .status-box.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
 .status-box.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+.db-creds{font-size:12px;color:var(--text2)}
+.db-creds table{width:100%}
+.db-creds td{padding:3px 10px 3px 0;font-size:12px;color:var(--text2);border:none}
+.db-creds td:first-child{color:var(--text4);font-size:11px;width:80px}
+.db-creds td code{background:var(--elevated);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--accent-h)}
 @media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -108,13 +113,14 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
             <div class="inner-card">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <div>
-                        <strong>🐘 PostgreSQL</strong>
+                        <strong>🐘 PostgreSQL (KAG)</strong>
                         <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
                     </div>
                     <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
                         ⚡ Создать базу данных
                     </button>
                 </div>
+                <div class="db-creds" id="pg-creds" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
                 <div class="create-status" id="pg-status"></div>
             </div>
 
@@ -129,7 +135,26 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                         ⚡ Создать коллекцию
                     </button>
                 </div>
+                <div class="db-creds" id="qdrant-creds" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
                 <div class="create-status" id="qdrant-status"></div>
+            </div>
+
+            <!-- Neo4j -->
+            <div class="inner-card">
+                <div>
+                    <strong>🕸️ Neo4j</strong>
+                    <div style="color:var(--text3);font-size:0.85rem;">Графовая база знаний</div>
+                </div>
+                <div class="db-creds" id="neo4j-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+
+            <!-- Keycloak DB -->
+            <div class="inner-card">
+                <div>
+                    <strong>🔑 Keycloak Database</strong>
+                    <div style="color:var(--text3);font-size:0.85rem;">База для аутентификации</div>
+                </div>
+                <div class="db-creds" id="keycloak-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
             </div>
         </div>
 
@@ -466,11 +491,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
                 if (data.success) {
                     status.className = 'create-status success';
-                    status.innerHTML = '✅ ' + data.message + '<br>' +
-                        '<b>База:</b> ' + data.database.name + '<br>' +
-                        '<b>Пользователь:</b> ' + data.database.user + '<br>' +
-                        '<b>Пароль:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.database.password + '</code><br>' +
-                        '<span style="color:#fbbf24;">⚠️ Скопируйте пароль! Он больше не будет показан.</span>';
+                    status.innerHTML = '✅ ' + data.message;
+                    renderDbCreds('pg-creds', data.database);
+                    document.getElementById('pg-creds').style.display = 'block';
                     btn.textContent = '✅ Создано';
                 } else {
                     status.className = 'create-status error';
@@ -501,10 +524,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
                 if (data.success) {
                     status.className = 'create-status success';
-                    status.innerHTML = '✅ ' + data.message + '<br>' +
-                        '<b>Коллекция:</b> ' + data.qdrant.collection + '<br>' +
-                        '<b>API ключ:</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">' + data.qdrant.api_key + '</code><br>' +
-                        '<span style="color:#fbbf24;">⚠️ Скопируйте ключ! Он больше не будет показан.</span>';
+                    status.innerHTML = '✅ ' + data.message;
+                    renderDbCreds('qdrant-creds', data.qdrant);
+                    document.getElementById('qdrant-creds').style.display = 'block';
                     btn.textContent = '✅ Создано';
                 } else {
                     status.className = 'create-status error';
@@ -521,26 +543,63 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
         }
 
         // ==========================================
+        // Отображение кредов баз данных
+        // ==========================================
+        
+        function renderDbCreds(containerId, data) {
+            const el = document.getElementById(containerId);
+            if (!el || !data) return;
+            el.style.display = 'block';
+            let rows = '';
+            if (data.host) rows += `<tr><td>Хост</td><td><code>${data.host}</code></td></tr>`;
+            if (data.port) rows += `<tr><td>Порт</td><td><code>${data.port}</code></td></tr>`;
+            if (data.name) rows += `<tr><td>БД</td><td><code>${data.name}</code></td></tr>`;
+            if (data.collection) rows += `<tr><td>Коллекция</td><td><code>${data.collection}</code></td></tr>`;
+            if (data.user) rows += `<tr><td>Пользователь</td><td><code>${data.user}</code></td></tr>`;
+            if (data.password) rows += `<tr><td>Пароль</td><td><code style="color:var(--green);font-weight:600">${data.password}</code></td></tr>`;
+            if (data.api_key) rows += `<tr><td>API ключ</td><td><code style="color:var(--green);font-weight:600">${data.api_key}</code></td></tr>`;
+            if (data.http_port && data.host) rows += `<tr><td>HTTP</td><td><a href="http://${data.host}:${data.http_port}" target="_blank" style="color:var(--accent-h);font-size:11px"><code>http://${data.host}:${data.http_port}</code></a></td></tr>`;
+            if (data.bolt_port && data.host) rows += `<tr><td>Bolt</td><td><code>bolt://${data.host}:${data.bolt_port}</code></td></tr>`;
+            el.innerHTML = `<table>${rows}</table>`;
+        }
+        
+        function renderStaticDb(containerId, info) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            el.style.display = 'block';
+            el.innerHTML = '<table>' + info.map(row => 
+                `<tr><td>${row[0]}</td><td><code>${row[1]}</code></td></tr>`
+            ).join('') + '</table>';
+        }
+        
+        // ==========================================
         // Проверка при загрузке страницы
         // ==========================================
         
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Проверяем статус настройки
                 const statusRes = await fetch(`${API}/status`);
-                const status = await statusRes.json();
+                const data = await statusRes.json();
+                const st = data.status || {};
                 
-                // Если БД уже созданы — показываем кнопки как завершённые
-                if (status.status.database) {
+                // Показываем статус кнопок
+                if (st.database) {
                     const btn = document.getElementById('btn-create-pg');
                     btn.textContent = '✅ Создано';
                     btn.disabled = true;
                 }
-                if (status.status.qdrant) {
+                if (st.qdrant) {
                     const btn = document.getElementById('btn-create-qdrant');
                     btn.textContent = '✅ Создано';
                     btn.disabled = true;
                 }
+                
+                // Показываем креды из API
+                const dbs = data.databases || {};
+                if (dbs.postgresql) renderDbCreds('pg-creds', dbs.postgresql);
+                if (dbs.qdrant) renderDbCreds('qdrant-creds', dbs.qdrant);
+                if (dbs.neo4j) renderDbCreds('neo4j-creds', dbs.neo4j);
+                if (dbs.keycloak_db) renderDbCreds('keycloak-creds', dbs.keycloak_db);
             } catch (err) {
                 console.warn('Не удалось проверить статус:', err);
             }
