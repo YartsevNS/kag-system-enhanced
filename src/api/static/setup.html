@@ -530,11 +530,6 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                 const statusRes = await fetch(`${API}/status`);
                 const status = await statusRes.json();
                 
-                if (status.status.configured) {
-                    window.location.href = '/';
-                    return;
-                }
-                
                 // Если БД уже созданы — показываем кнопки как завершённые
                 if (status.status.database) {
                     const btn = document.getElementById('btn-create-pg');
