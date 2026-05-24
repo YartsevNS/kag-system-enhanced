@@ -74,6 +74,8 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 .db-creds td{padding:3px 10px 3px 0;font-size:12px;color:var(--text2);border:none}
 .db-creds td:first-child{color:var(--text4);font-size:11px;width:80px}
 .db-creds td code{background:var(--elevated);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--accent-h)}
+.btn-copy-all{background:var(--surface);color:var(--accent-h);border:1px solid var(--accent);padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-copy-all:hover{background:var(--accent);color:#fff}
 @media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -165,6 +167,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                 </div>
                 <div class="db-creds" id="kagdb-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
             </div>
+
+            <button class="btn-copy-all" onclick="copyAllCreds()" style="margin-top:12px;width:100%">📋 Скопировать все креды в буфер</button>
+            <div class="create-status" id="copy-status"></div>
         </div>
 
         <!-- Шаг 2: LLM Бэкенд -->
@@ -551,6 +556,48 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
             }
         }
 
+        function copyAllCreds() {
+            const credsDivs = document.querySelectorAll('.db-creds');
+            const texts = [];
+            const labels = {
+                'pg-creds': '🐘 PostgreSQL (KAG)',
+                'qdrant-creds': '🔍 Qdrant',
+                'neo4j-creds': '🕸️ Neo4j',
+                'keycloak-creds': '🔑 Keycloak DB',
+                'kagdb-creds': '🐘 KAG Database'
+            };
+            
+            credsDivs.forEach(div => {
+                if (div.style.display !== 'none' && div.textContent.trim()) {
+                    const label = labels[div.id] || div.id;
+                    texts.push(`\n=== ${label} ===`);
+                    const rows = div.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length === 2) {
+                            texts.push(`${cells[0].textContent}: ${cells[1].textContent}`);
+                        }
+                    });
+                }
+            });
+            
+            if (texts.length === 0) {
+                document.getElementById('copy-status').innerHTML = '⚠️ Сначала создайте базы данных или дождитесь загрузки';
+                return;
+            }
+            
+            navigator.clipboard.writeText(texts.join('\n').trim()).then(() => {
+                const st = document.getElementById('copy-status');
+                st.className = 'create-status success';
+                st.innerHTML = '✅ Скопировано в буфер обмена!';
+                setTimeout(() => { st.innerHTML = ''; }, 3000);
+            }).catch(() => {
+                const st = document.getElementById('copy-status');
+                st.className = 'create-status error';
+                st.innerHTML = '❌ Не удалось скопировать';
+            });
+        }
+        
         // ==========================================
         // Отображение кредов баз данных
         // ==========================================
