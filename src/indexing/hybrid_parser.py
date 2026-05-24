@@ -69,8 +69,8 @@ class HybridDocumentParser:
         
         # Try Occular-ocr
         try:
-            from rapidocr_onnxruntime import RapidOCR
-            self._ocular = RapidOCR()
+            from ocr_skel import OCRPipeline
+            self._ocular = OCRPipeline(onnx=True, gpu=False)
             self._ocular_available = True
             logger.info("Occular-ocr initialized (CPU, Russian-optimized)")
         except Exception as e:
@@ -175,34 +175,20 @@ class HybridDocumentParser:
         return doc
     
     def _parse_with_ocular_only(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
-        """Pure Occular-ocr parsing (RapidOCR, optimized for Russian)."""
+        """Pure Occular-ocr parsing (optimized for Russian)."""
         doc = ParsedDocument(filename=filename, parse_method="ocular_only")
         
         try:
-            is_pdf = Path(file_path).suffix.lower() == '.pdf'
-            
-            if is_pdf:
-                # PDF: конвертируем страницы в изображения и OCR каждую
-                from pdf2image import convert_from_path
-                images = convert_from_path(file_path, dpi=300, first_page=1)
-                for i, img in enumerate(images):
-                    import numpy as np
-                    import tempfile, os
-                    # Сохраняем как временный PNG для RapidOCR
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                        img.save(tmp.name, 'PNG')
-                        tmp_path = tmp.name
-                    try:
-                        result, _ = self._ocular(tmp_path)
-                        text = ' '.join(entry[1] for entry in result if len(entry) > 1)
-                        doc.pages.append(ParsedPage(page_num=i+1, text=text))
-                        doc.full_text += text + '\n\n'
-                    finally:
-                        os.unlink(tmp_path)
+            pdf = Path(file_path).suffix.lower() == '.pdf'
+            if pdf:
+                pages = self._ocular.process_pdf(file_path, dpi=300)
+                for i, page_text in enumerate(pages):
+                    text = page_text if isinstance(page_text, str) else page_text.get('text', '')
+                    doc.pages.append(ParsedPage(page_num=i+1, text=text))
+                    doc.full_text += text + '\n\n'
             else:
-                # Изображение: прямо OCR
-                result, _ = self._ocular(file_path)
-                text = ' '.join(entry[1] for entry in result if len(entry) > 1)
+                results = self._ocular.process_image(file_path)
+                text = '\n'.join(r['text'] for r in results if isinstance(r, dict))
                 doc.pages.append(ParsedPage(page_num=1, text=text))
                 doc.full_text = text
             
