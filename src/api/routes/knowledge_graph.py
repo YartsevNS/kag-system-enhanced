@@ -145,8 +145,6 @@ async def hybrid_search(
                     })
                 # Сортируем по score
                 results.sort(key=lambda r: r.get("score", 0), reverse=True)
-                # Обрезаем до 10 лучших
-                results = results[:10]
             except Exception as e:
                 logger.warning(f"Qdrant fallback failed: {e}")
         
