@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">79</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">80</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№79. Прогресс-бар на viewer — показать процент распознавания</strong><br>Тонкая 2px полоска внизу страницы просмотра, заполняется по мере обработки документа.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен в viewer.html:</strong> <code>.ocr-progress</code> — position:fixed, bottom:0, height:2px, accent-цвет. JS <code>pollOcrProgress()</code> опрашивает <code>GET /api/v1/upload/{id}/details</code> каждые 2 сек. Прогресс = chunks_count / (estimated_pages * 10). При статусе completed — заполнение до 100%, затем скрытие. Для текстовых документов — сразу 100%. <strong>Commit:</strong> <code>29bdd42</code>.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№78. Типизация — убрать паузы между батчами</strong><br>Неравномерная загрузка CPU: паузы между параллельными батчами. Нужно последовательно без ожидания.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Убран параллелизм и семафор.</strong> Простой цикл: 1 батч (5 документов) → LLM → результат → следующий. <code>process_batch</code> вынесен в отдельный метод <code>_process_batch</code>. Семафор <code>Semaphore(2)</code> удалён. <strong>Commit:</strong> <code>9e96822</code>.</div></div>
