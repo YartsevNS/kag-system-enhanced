@@ -100,7 +100,7 @@ class EmbeddingsService:
                     from src.api.services.provider_service import provider_service
                     provider = provider_service.get_provider(fm["provider_id"])
                     if provider:
-                        base_url = (provider.url or "").rstrip("/")
+                        base_url = (provider.get("url", "") or "").rstrip("/")
                         model = fm["model"]
                         logger.info(f"Embedding из админки: provider={provider.id}, model={model}, url={base_url}")
             except Exception as e:
