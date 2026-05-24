@@ -64,6 +64,9 @@ services:
       - ./prompts:/app/prompts
       - ./user_data:/app/user_data
       - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
+    # Исправление прав на /app/data (Docker создаёт от root)
+    command: >
+      sh -c "chmod -R 777 /app/data 2>/dev/null; mkdir -p /app/data/thumbnails; uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       qdrant:
         condition: service_started
