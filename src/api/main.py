@@ -138,17 +138,9 @@ if os.path.exists(static_path):
 
 @app.get("/", summary="Веб-интерфейс KAG")
 async def root_web():
-    """Главная страница - веб-интерфейс чата"""
-    index_path = os.path.join(static_path, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {
-        "service": "KAG API",
-        "version": settings.APP_VERSION,
-        "status": "running",
-        "docs": "/docs",
-        "web_ui": "/"
-    }
+    """Перенаправление на страницу настройки"""
+    from starlette.responses import RedirectResponse
+    return RedirectResponse(url="/setup")
 
 
 @app.get("/admin", summary="Админ-панель управления моделями")
