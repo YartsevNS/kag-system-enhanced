@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">81</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">82</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№81. Синяя полоска прогресса не видна на viewer</strong><br>так проверб синюю полоску, нет на сайте её и задеплой на git и сайт</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Две ошибки в viewer.html:</strong> 1) Лишняя <code>}</code> перед <code>@media</code> — ломала CSS, браузер не применял стиль <code>.ocr-progress</code>. 2) Не было JS-функции <code>pollOcrProgress()</code> — при вызове в <code>init()</code> была ошибка ReferenceError. <strong>Исправлено:</strong> убрана лишняя скобка, добавлена функция <code>pollOcrProgress</code> с опросом <code>/api/v1/upload/{id}/details</code> каждые 2 сек, прогресс = <code>min(95, chunks_count * 10)%</code>, при completed → 100% → скрытие через 1 сек. <strong>Commit:</strong> <code>0cd71cc</code>. Задеплоено на оба сервера.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№80. Пересборка скилла know-updater → know</strong><br>know, прописывай полный диалог, без сокращений и обобщений это новая часть скила и он должн отрабатывать при каждом твоём ответе запомни и пересобери скилл, теперь он называется know</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Скилл пересобран:</strong> старый <code>know-updater</code> удалён, создан новый <code>know</code> (productivity/know/SKILL.md). Правила: после КАЖДОГО ответа (без исключений), ПОЛНЫЙ текст диалога (без сокращений и обобщений), точная копия вопроса и ответа. Структура: тот же формат qa-item, сквозная нумерация, дата-секции от новых к старым. Pitfall: НИКОГДА не использовать <code>replace_all=true</code> в <code>patch()</code> для know.html.</div></div>
