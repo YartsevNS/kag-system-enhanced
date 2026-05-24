@@ -125,6 +125,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="stats-row" id="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
+    <div class="stat-card" id="stat-pending-card" style="cursor:pointer"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Ожидает</div><div id="reprocess-btn" style="display:none;margin-top:4px"><button onclick="reprocessPending()" style="padding:3px 8px;font-size:10px;background:var(--red);color:#fff;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔄 Переобработать</button></div></div>
     <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
     <div class="stat-card" id="stat-types-card" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div><div id="type-watch-btn" style="display:none;margin-top:4px"><button class="btn-outline" onclick="startTypeDetection()" style="padding:3px 8px;font-size:10px;background:var(--amber);color:#000;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔍 Типизировать</button></div></div>
     <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>

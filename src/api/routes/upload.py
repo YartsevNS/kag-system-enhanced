@@ -726,3 +726,31 @@ async def check_duplicate(hash: str = ""):
         return {"duplicate": False, "message": "Документ не найден — можно загружать"}
     except Exception as e:
         return {"duplicate": False, "error": str(e)}
+
+
+@router.post("/reprocess-pending", summary="Перезапустить обработку pending-документов")
+async def reprocess_pending_documents():
+    """
+    Найти все документы со статусом 'pending' и запустить их обработку заново.
+    Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
+    """
+    import asyncio
+    from src.api.services.config_store import config_store
+    
+    docs = config_store.get_all("documents") or {}
+    pending = [(did, doc) for did, doc in docs.items() 
+               if isinstance(doc, dict) and doc.get('status') == 'pending']
+    
+    if not pending:
+        return {"success": True, "message": "Нет pending-документов", "count": 0}
+    
+    logger.info(f"Запускаю переобработку {len(pending)} pending-документов")
+    count = 0
+    for did, doc in pending:
+        try:
+            asyncio.create_task(_process_document_async(did))
+            count += 1
+        except Exception as e:
+            logger.warning(f"Не удалось запустить {did}: {e}")
+    
+    return {"success": True, "message": f"Запущена переобработка", "count": count}
