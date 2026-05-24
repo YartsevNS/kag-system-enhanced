@@ -418,11 +418,36 @@ class DocumentService:
             logger.info(f"Парсинг документа: {document_id}")
             record.progress = 30
             self._save_document_to_db(document_id)
-            parsed_doc = document_parser.parse(str(file_path), record.file_type)
-            plog.log("parse", {
-                "segments": len(parsed_doc.get("segments", [])),
-                "parser": str(type(document_parser).__name__)
-            })
+            
+            # Пробуем гибридный парсер (Docling + Occular-ocr), fallback на DocumentParser
+            try:
+                from src.indexing.hybrid_parser import get_hybrid_parser
+                hybrid = get_hybrid_parser()
+                parsed = hybrid.parse(str(file_path))
+                # Конвертируем ParsedDocument в segments для чанкера
+                segments = []
+                for page in parsed.pages:
+                    if page.text and page.text.strip():
+                        segments.append({
+                            "type": "text",
+                            "content": page.text,
+                            "page": page.page_num,
+                            "metadata": {}
+                        })
+                parsed_metadata = parsed.metadata
+                parser_name = parsed.parse_method
+                if not segments:
+                    # Если пусто — fallback на старый парсер
+                    raise ValueError("Hybrid parser вернул пустой результат")
+                plog.log("parse", {"segments": len(segments), "parser": parser_name})
+            except Exception as e:
+                logger.warning(f"Hybrid parser failed ({e}), fallback to DocumentParser")
+                from src.indexing.parsers import document_parser
+                parsed_doc = document_parser.parse(str(file_path), record.file_type)
+                segments = parsed_doc.get("segments", [])
+                parsed_metadata = parsed_doc.get("metadata", {})
+                parser_name = "DocumentParser"
+                plog.log("parse", {"segments": len(segments), "parser": parser_name})
 
             # Шаг 2: Чанкинг (50%)
             logger.info(f"Чанкинг документа: {document_id}")
@@ -445,7 +470,6 @@ class DocumentService:
             
             logger.info(f"Чанкинг (из Redis): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
             
-            segments = parsed_doc.get("segments", [])
             chunks = chunker.chunk_document(segments)
             plog.log("chunking", {
                 "chunk_size": chunking_config.get("chunk_size", 1000),
@@ -468,7 +492,7 @@ class DocumentService:
                     "filename": record.filename,
                     "file_type": record.file_type,
                     "file_size": record.file_size,
-                    **parsed_doc.get("metadata", {})
+                    **parsed_metadata
                 },
                 group_ids=record.group_ids
             )
