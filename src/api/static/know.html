@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">85</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">86</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№85. Scope и релевантность на странице гибридного поиска /kg</strong><br>можешь настроить так, что бы scope можно было выставлять рядом с кнопкой поиск, как и релевантность для поиска rag, жёсткое количество 10 по прежнему много мусора, scope вручную будет лучше. тебе не кажется?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Да, согласен.</strong> Добавлены два выпадающих списка рядом с поиском: <code>hybrid-scope</code> (Гибрид / Только граф / Только векторы) и <code>hybrid-relevance</code> (score ≥ 0.6 / 0.5 / 0.4 / 0.3 / Без фильтра). Параметры передаются в API: <code>?scope=both|neo4j|qdrant&relevance_score=0.4</code>. При scope=qdrant или пустом Neo4j — Qdrant fallback. При scope=neo4j — только граф. <strong>Commits:</strong> <code>689044e, 3e27589, 63f78bc</code>.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№84. Как работает поиск в чате — трассировка кода и запросов</strong><br>проверь и объясни точные действия по коду и запросам как работает поиск в чате, в какие базы ходит, что куда передаёт, дай ответ и know</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Шаг 1: Qdrant (векторный поиск)</strong> — <code>embeddings_service.search(query, limit=5)</code>. Сообщение пользователя векторизуется моделью <code>nomic-embed-text:latest</code> → вектор отправляется в Qdrant → возвращаются ближайшие чанки (<code>score, content, document_id</code>). Имена файлов добираются из <code>document_service.get_document(doc_id)</code>. <strong>Шаг 2: Neo4j (граф)</strong> — из сообщения извлекаются ключевые слова (regex: 2+ заглавных, 3+ латиница, 4+ кириллица) + doc_ids из Qdrant. Вызов <code>kg_service.hybrid_search(entities, doc_ids)</code> ищет сущности и связи в Neo4j по <code>CONTAINS</code>. <strong>Шаг 3: Сборка контекста</strong> — чанки форматируются как <code>[Источник N] «имя_файла» (score): содержание</code>, граф-результаты — как <code>[Граф] сущность → связь</code>. <strong>Шаг 4: LLM</strong> — <code>chat/completions</code> через Provider Architecture: системный промпт (из function_map) + контекст + история + сообщение → ответ. Метаданные: <code>total_docs, graph_used, sources</code>.</div></div>
