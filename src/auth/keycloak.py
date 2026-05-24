@@ -68,14 +68,22 @@ def verify_token(token: str) -> Dict[str, Any]:
         # Декодируем токен без проверки подписи для получения kid
         unverified_headers = jwt.get_unverified_header(token)
         kid = unverified_headers.get("kid")
-        
-        if not kid:
-            raise KeycloakError("Токен не содержит kid заголовок")
-        
+
         # Находим соответствующий ключ в JWKS
         rsa_key = {}
         for key in jwks.get("keys", []):
-            if key.get("kid") == kid:
+            if kid:
+                if key.get("kid") == kid:
+                    rsa_key = {
+                        "kty": key.get("kty"),
+                        "kid": key.get("kid"),
+                        "use": key.get("use"),
+                        "n": key.get("n"),
+                        "e": key.get("e")
+                    }
+                    break
+            elif not rsa_key:
+                # Если kid нет в токене — берём первый ключ (Keycloak 24+)
                 rsa_key = {
                     "kty": key.get("kty"),
                     "kid": key.get("kid"),
@@ -83,10 +91,9 @@ def verify_token(token: str) -> Dict[str, Any]:
                     "n": key.get("n"),
                     "e": key.get("e")
                 }
-                break
-        
+
         if not rsa_key:
-            raise KeycloakError("Не найден соответствующий ключ в JWKS")
+            raise KeycloakError("Не найден подходящий ключ в JWKS")
         
         # Проверяем и декодируем токен
         audience = settings.KEYCLOAK_CLIENT_ID
