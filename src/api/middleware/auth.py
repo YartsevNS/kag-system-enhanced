@@ -1,11 +1,9 @@
-"""
-Middleware аутентификации через Keycloak или статический токен
-"""
+"""Middleware аутентификации через Keycloak или статический токен"""
 
 import hmac
 import os
 import time
-from typing import Optional
+from typing import Optional, Set
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -20,6 +18,19 @@ STATIC_TOKEN = os.environ.get("KAG_API_TOKEN", "")
 _KEYCLOAK_CACHE_TTL = 30
 _keycloak_available: Optional[bool] = None
 _keycloak_checked_at: float = 0.0
+
+# Пути, доступные без авторизации
+PUBLIC_PREFIXES: Set[str] = {
+    "/login",
+    "/api/v1/auth",
+    "/api/v1/health",
+    "/api/v1/setup",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/static",
+    "/favicon.ico",
+}
 
 
 def _check_keycloak_availability(keycloak_url: str, realm: str) -> bool:
@@ -53,6 +64,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if not AUTH_ENABLED:
+            return await call_next(request)
+
+        # Публичные пути — пропускаем без авторизации
+        if any(request.url.path.startswith(p) for p in PUBLIC_PREFIXES):
             return await call_next(request)
 
         from src.config import get_settings
@@ -111,12 +126,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return None
 
         parts = auth_header.split()
-
         if len(parts) != 2 or parts[0].lower() != "bearer":
             return None
 
         return parts[1]
 
-    def _check_admin_access(self, user_roles: list) -> bool:
-        """Проверить доступ к административным маршрутам"""
-        return "admin" in user_roles
+    def _check_admin_access(self, roles: list) -> bool:
+        """Проверить, есть ли у пользователя права администратора"""
+        return "admin" in roles or "kag-admin" in roles
