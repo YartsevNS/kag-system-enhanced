@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">67</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">68</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№67. Страница setup без дизайна — все элементы в потоке без CSS</strong><br>После перехода на <code>/setup</code> страница отображается без оформления: заголовки, поля, карточки, кнопки — всё в стандартном браузерном виде. Базовый CSS (nav, body, переменные) есть, но классы <code>.step</code>, <code>.field</code>, <code>.grid</code>, <code>.inner-card</code>, <code>.btn-create</code>, <code>.test-status</code> и другие не стилизованы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен полный набор CSS-стилей</strong> для setup.html в <code>&lt;style&gt;</code> секцию: <code>.main-content</code> (margin-left:240px, padding:40px), <code>.step</code> (card с border-radius-lg, padding:24px, margin-bottom:20px), <code>.step-header</code> (flex с border-bottom), <code>.step-num</code> (круглый бейдж 32px с accent-цветом), <code>.grid</code> (2 колонки, gap:12px), <code>.field</code> (flex column), <code>.field.full</code> (grid-column:1/-1), <code>.inner-card</code> (panel-style), <code>.btn-create/.btn-test/.btn-save</code> (accent-кнопки), <code>.test-status/.status-box</code> (success/error варианты). <strong>Commit:</strong> <code>737c300</code>. Перезапуск не нужен — статика через volume mount.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№66. При входе на сайт «Отсутствует токен аутентификации» вместо страницы setup</strong><br>При открытии <code>http://192.168.50.18:8000/</code> возвращается JSON с ошибкой 401, а должна открываться страница настройки системы. Страница /setup работала, а корень нет.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Две проблемы:</strong> (1) Корень <code>/</code> не был в <code>PUBLIC_PREFIXES</code> AuthMiddleware — блокировался до проверки в коде. (2) <code>root_web()</code> пытался отдать <code>index.html</code>, а не редиректить на setup. <strong>Исправлено:</strong> <code>/</code> добавлен в <code>PUBLIC_PREFIXES</code> в <code>src/api/middleware/auth.py</code>. <code>root_web()</code> в <code>src/api/main.py</code> заменён на <code>RedirectResponse(url="/setup")</code> — при входе на сайт сразу редирект на страницу настройки. <strong>Commit:</strong> <code>10c0f73</code>.</div></div>
