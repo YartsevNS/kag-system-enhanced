@@ -153,6 +153,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="form">Форма</option><option value="identity">Удостоверение</option>
       <option value="legal">Юридический</option><option value="medical">Медицинский</option>
       <option value="financial">Финансовый</option><option value="technical">Технический</option>
+      <option value="certificate">Сертификат</option><option value="standard">Стандарт</option>
+      <option value="policy">Политика</option><option value="order">Приказ</option>
+      <option value="news">Новость</option>
       <option value="unknown">Неизвестно</option>
     </select>
     <select id="status-filter" onchange="applyFilters()">
@@ -542,7 +545,7 @@ function applyFilters() { renderAll(); }
 
 // Helpers
 function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'📕';if(t.includes('doc'))return'📘';if(t.includes('txt')||t.includes('md'))return'📝';if(t.includes('csv')||t.includes('sheet'))return'📊';return'📄'; }
-function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
+function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',technical:'Технический',certificate:'Сертификат',standard:'Стандарт',policy:'Политика',order:'Приказ',news:'Новость',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
 function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
 function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
 function toast(msg,err) { const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'var(--red)':'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000); }
