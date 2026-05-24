@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Мониторинг</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -26,7 +26,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
 /* URL list */
 .url-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-s)}
 .url-row:last-child{border-bottom:none}
-.url-text{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2)}
+.url-text{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:13px;color:var(--text2)}
 .url-status{font-size:12px;padding:3px 10px;border-radius:9999px;font-weight:500}
 .url-status.ok{background:rgba(39,166,68,0.15);color:var(--green)}
 .url-status.changed{background:rgba(113,112,255,0.15);color:var(--accent-h)}
@@ -34,7 +34,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
 .url-date{font-size:11px;color:var(--text4)}
 /* Form */
 .form-row{display:flex;gap:8px;margin-top:12px}
-input,select{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;flex:1}
+input,select{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none;flex:1}
 input:focus,select:focus{border-color:var(--accent-h)}
 .btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
 .btn:hover{opacity:0.85}

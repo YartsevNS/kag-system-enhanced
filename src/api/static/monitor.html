@@ -7,7 +7,7 @@
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -92,7 +92,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <option value="1440">Раз в сутки</option>
         </select>
         <span id="sched-status" style="font-size:12px;color:var(--text4)"></span>
-        <span id="sched-countdown" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber)"></span>
+        <span id="sched-countdown" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--amber)"></span>
       </div>
     </div>
   </div>

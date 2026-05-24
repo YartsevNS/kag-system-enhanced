@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Чанки документа</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -24,17 +24,17 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:4px}
 .controls{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap}
 .limit-select{display:flex;align-items:center;gap:8px}
 .limit-select label{font-size:13px;color:var(--text4)}
-.limit-select select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.limit-select select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;font-family:system-ui, -apple-system, sans-serif;outline:none;cursor:pointer}
 .limit-select select:focus{border-color:var(--accent-h)}
 .chunk-count{font-size:13px;color:var(--text4)}
 .chunk-count strong{color:var(--text2)}
 /* Chunk card */
 .chunk-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
 .chunk-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border-s)}
-.chunk-header .chunk-id{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-l);font-weight:500}
+.chunk-header .chunk-id{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--accent-l);font-weight:500}
 .chunk-header .chunk-meta{font-size:11px;color:var(--text4)}
 .chunk-body{padding:16px 20px}
-.chunk-body pre{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto}
+.chunk-body pre{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto}
 .chunk-body pre::-webkit-scrollbar{width:6px}
 .chunk-body pre::-webkit-scrollbar-track{background:transparent}
 .chunk-body pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}

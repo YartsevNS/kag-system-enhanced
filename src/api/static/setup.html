@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KAG - Setup Wizard</title>
     
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -20,7 +20,7 @@ main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
 h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
 .sub{font-size:15px;color:var(--text3);margin-bottom:28px}
 .card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
-input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none}
 input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
 .btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
 .btn:hover{opacity:0.85}
@@ -56,7 +56,7 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 .field{display:flex;flex-direction:column;gap:4px}
 .field.full{grid-column:1/-1}
 .field label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.3px}
-.field input,.field select,.field textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;width:100%}
+.field input,.field select,.field textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none;width:100%}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
 .hint{font-size:11px;color:var(--text4);margin-top:2px}
 .btn-test,.btn-save{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;margin-top:12px}

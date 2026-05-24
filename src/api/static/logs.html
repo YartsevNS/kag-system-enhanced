@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Логи системы</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
@@ -31,13 +31,13 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
 
 /* Tabs */
 .tabs{display:flex;gap:0;margin-bottom:0;border-bottom:1px solid var(--border);flex-shrink:0}
-.tab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--text4);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'Inter',sans-serif}
+.tab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--text4);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:system-ui, -apple-system, sans-serif}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
 
 /* Controls row */
 .controls{display:flex;gap:8px;align-items:center;padding:6px 0;flex-wrap:wrap;flex-shrink:0}
-.controls input,.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
+.controls input,.controls select,.controls button{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px;font-family:system-ui, -apple-system, sans-serif;outline:none;cursor:pointer}
 .controls input:focus,.controls select:focus{border-color:var(--accent)}
 .controls input{flex:1;min-width:180px}
 .controls select{min-width:110px}
@@ -48,7 +48,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
 /* Log container */
 .log-container{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:200px}
 .log-header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border-s);font-size:11px;color:var(--text4)}
-.log-stream{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7}
+.log-stream{flex:1;overflow-y:auto;font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;line-height:1.7}
 .log-stream::-webkit-scrollbar{width:6px}
 .log-stream::-webkit-scrollbar-track{background:transparent}
 .log-stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
@@ -185,7 +185,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
   <div class="log-container">
     <div class="log-header">
       <span id="log-stats">Загрузка...</span>
-      <span id="log-time" style="font-family:'JetBrains Mono',monospace">—</span>
+      <span id="log-time" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace">—</span>
     </div>
     <div class="log-stream" id="log-stream">
       <div class="empty"><div class="spinner"></div> Загрузка логов...</div>

@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Граф знаний</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
@@ -25,7 +25,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px}
 .panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
 .search-row{display:flex;gap:10px;margin-bottom:12px}
-.search-row input{flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;font-family:'Inter',sans-serif}
+.search-row input{flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;font-family:system-ui, -apple-system, sans-serif}
 .search-row input:focus{border-color:var(--accent)}
 .search-row select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none}
 .btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
@@ -143,7 +143,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <div class="panel">
     <h2>💻 Прямой запрос Neo4j (Cypher)</h2>
     <div class="search-row" style="flex-direction: column; gap: 8px;">
-      <textarea id="cypher-query" placeholder="MATCH (n) RETURN n LIMIT 10..." style="background:var(--elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; color:var(--text); font-size:13px; outline:none; font-family:'JetBrains Mono', monospace; width:100%; height:80px; resize:vertical;"></textarea>
+      <textarea id="cypher-query" placeholder="MATCH (n) RETURN n LIMIT 10..." style="background:var(--elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; color:var(--text); font-size:13px; outline:none; font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace; width:100%; height:80px; resize:vertical;"></textarea>
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span style="font-size:11px; color:var(--text4)">* Только чтение (MATCH, RETURN)</span>
         <button class="btn" onclick="runCypher()">Выполнить Cypher</button>

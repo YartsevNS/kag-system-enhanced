@@ -23,8 +23,8 @@
   --border-s: rgba(255,255,255,0.05);
   --radius: 8px;
   --radius-sm: 6px;
-  --font: 'Inter', system-ui, -apple-system, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --font: system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
@@ -360,7 +360,7 @@ async function initTextViewer() {
     viewer.innerHTML = '';
     
     const pre = document.createElement('pre');
-    pre.style.cssText = 'width:100%;max-width:900px;margin:0 auto;padding:24px 32px;background:#fff;color:#1a1a1a;font:13px/1.7 JetBrains Mono,monospace;white-space:pre-wrap;word-wrap:break-word;border-radius:8px;min-height:400px;';
+    pre.style.cssText = 'width:100%;max-width:900px;margin:0 auto;padding:24px 32px;background:#fff;color:#1a1a1a;font:13px/1.7 'Cascadia Code','Fira Code','Consolas',monospace;white-space:pre-wrap;word-wrap:break-word;border-radius:8px;min-height:400px;';
     pre.textContent = text || '(пустой документ)';
     viewer.appendChild(pre);
     

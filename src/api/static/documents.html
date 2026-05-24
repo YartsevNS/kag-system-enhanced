@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KAG — Документы</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
@@ -27,7 +27,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .stat-card .stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
 
 .filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
-.filters input,.filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none}
+.filters input,.filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;font-family:system-ui, -apple-system, sans-serif;outline:none}
 .filters input:focus,.filters select:focus{border-color:var(--accent)}
 .filters input{flex:1;min-width:180px}
 .filters select{min-width:130px}
@@ -239,7 +239,7 @@ async function loadFormatsBar() {
       const enabled = allowed[ext] !== false;
       if (enabled) acceptExts.push(ext);
       const badge = document.createElement('span');
-      badge.style.cssText = `font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;font-family:'JetBrains Mono',monospace;${
+      badge.style.cssText = `font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;${
         enabled ? 'background:rgba(94,106,210,0.18);color:#7170ff;' : 'background:rgba(255,255,255,0.04);color:#62666d;'
       }`;
       badge.textContent = ext + ' ' + label;
@@ -446,7 +446,7 @@ function renderCards(docs) {
     return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
       <div class="thumb-wrap">
         <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" 
-             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22Inter,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22Inter,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
+             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
              style="object-fit:cover">
         <span class="type-badge tag tag-type">${typeLabel(type)}</span>
       </div>
@@ -509,7 +509,7 @@ async function showDetail(docId) {
         <div><div class="detail-label">Размер</div><div class="detail-value">${fmtBytes(d.file_size||0)}</div></div>
         <div><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
         <div><div class="detail-label">Кто загрузил</div><div class="detail-value">${d.uploaded_by_name||d.uploaded_by||'—'}</div></div>
-        <div><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'JetBrains Mono',monospace;font-size:10px;word-break:break-all">${d.file_hash||'—'}</div></div>
+        <div><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:10px;word-break:break-all">${d.file_hash||'—'}</div></div>
         <div><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
       </div>
       <div class="modal-tags">${(d.tags||[]).length ? d.tags.map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">Нет тэгов</span>'}</div>
