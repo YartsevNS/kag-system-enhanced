@@ -309,6 +309,15 @@ async def setup_status():
         "password": "keycloak_password"
     }
     
+    # KAG DB — отдельный PostgreSQL для API (из docker-compose)
+    result["databases"]["kag_db"] = {
+        "host": "kag-pg",
+        "port": 5432,
+        "name": "kag",
+        "user": "kag",
+        "password": "KAGpg2026!secure"
+    }
+    
     return result
 
 
