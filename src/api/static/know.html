@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">69</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">73</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,22 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№72. Кнопка «Скопировать все креды» в буфер</strong><br>Нужна возможность одним кликом скопировать все данные баз (имя БД, хост, порт, логин, пароль) в буфер обмена.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлена кнопка <code>📋 Скопировать все креды в буфер</code></strong> в шаге 1. JS-функция <code>copyAllCreds()</code> собирает данные из карточек <code>.db-creds</code>, форматирует с заголовками, вызывает <code>navigator.clipboard.writeText()</code>. Статус ✅/❌ на 3 сек. <strong>Commit:</strong> <code>da93736</code> (ветка <code>kag-rusystem-allv1</code>).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№71. Показать логины/пароли/названия всех баз на странице setup</strong><br>Должны отображаться креды для PostgreSQL (KAG), Qdrant, Neo4j, Keycloak DB, KAG Database.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>API:</strong> эндпоинт <code>GET /api/v1/setup/status</code> расширен — возвращает <code>databases</code> с кредами (GOST-дешифровка для PG/Qdrant, статические для остальных). <strong>Фронт:</strong> 5 карточек <code>.db-creds</code>, функция <code>renderDbCreds()</code> — таблица (Хост/Порт/БД/Пользователь/Пароль зелёным). Заполняется при загрузке и после createPgDb/createQdrant. <strong>Commit:</strong> <code>d797997</code>, <code>0d46f81</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№70. На странице постоянно моргает «прочитано» и «ожидаю ответа»</strong><br>В левом нижнем углу браузера бесконечно мигает статус-бар. Страница перезагружается в цикле.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Бесконечный цикл редиректов:</strong> <code>DOMContentLoaded</code> → configured=true → <code>location='/'</code> → / (307) → /setup → повтор. <strong>Убран блок</strong> с редиректом. <strong>Commit:</strong> <code>b8b01b3</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№69. Шрифты загружаются из интернета (Google Fonts)</strong><br>Все страницы используют <code>fonts.googleapis.com</code>. Нужно убрать CDN.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Удалены ссылки из 15 файлов.</strong> Inter → <code>system-ui, -apple-system, sans-serif</code>. JetBrains Mono → <code>'Cascadia Code', 'Fira Code', 'Consolas', monospace</code>. 20 файлов изменено. <strong>Commit:</strong> <code>d54cb91</code>.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№68. В setup.html мусорные цифры на каждой строке — «186| 440| 187| 441|»</strong><br>На странице настройки отображались посторонние числа. Возникли в коммите <code>4b0c5e5</code> (13 мая, рестайл Linear dark) — при копировании содержимого файла вместе с номерами строк из read_file. При каждом патче нумерация накапливалась.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Regex-чистка:</strong> удалены все префиксы <code>   N|</code> из каждой строки — <code>re.sub(r'^[ \t]*\d+\|', '', content, flags=re.MULTILINE)</code> два прохода. Файл уменьшился с 18144 до 15120 символов (-3024). Все CSS-стили и HTML-структура сохранены. <strong>Commit:</strong> <code>827a2f9</code>.</div></div>
