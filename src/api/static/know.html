@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">80</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">81</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№80. Пересборка скилла know-updater → know</strong><br>know, прописывай полный диалог, без сокращений и обобщений это новая часть скила и он должн отрабатывать при каждом твоём ответе запомни и пересобери скилл, теперь он называется know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Скилл пересобран:</strong> старый <code>know-updater</code> удалён, создан новый <code>know</code> (productivity/know/SKILL.md). Правила: после КАЖДОГО ответа (без исключений), ПОЛНЫЙ текст диалога (без сокращений и обобщений), точная копия вопроса и ответа. Структура: тот же формат qa-item, сквозная нумерация, дата-секции от новых к старым. Pitfall: НИКОГДА не использовать <code>replace_all=true</code> в <code>patch()</code> для know.html.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№79. Прогресс-бар на viewer — показать процент распознавания</strong><br>Тонкая 2px полоска внизу страницы просмотра, заполняется по мере обработки документа.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен в viewer.html:</strong> <code>.ocr-progress</code> — position:fixed, bottom:0, height:2px, accent-цвет. JS <code>pollOcrProgress()</code> опрашивает <code>GET /api/v1/upload/{id}/details</code> каждые 2 сек. Прогресс = chunks_count / (estimated_pages * 10). При статусе completed — заполнение до 100%, затем скрытие. Для текстовых документов — сразу 100%. <strong>Commit:</strong> <code>29bdd42</code>.</div></div>
