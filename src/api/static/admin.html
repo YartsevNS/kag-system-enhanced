@@ -532,42 +532,39 @@
 
         async function loadStatus() {
             try {
-                const response = await apiFetch(`${API_URL}/status`);
-                const data = await response.json();
-                
-                const llmStatus = data.llm_backends?.ollama || {};
-                const embedding = data.embedding || {};
-                const config = data.active_config || {};
+                // Статус из Provider Architecture: функция чата + провайдер
+                const [fmResp, provResp] = await Promise.all([
+                    apiFetch(`${API_URL}/functions/chat`).then(r => r.json()).catch(() => ({})),
+                    apiFetch(`${API_URL}/providers`).then(r => r.json()).catch(() => [])
+                ]);
+
+                const modelName = fmResp.model || '—';
+                const providerId = fmResp.provider_id || null;
+                const provider = (provResp || []).find(p => p.id === providerId);
+                const providerName = provider ? provider.name : (providerId || 'не выбран');
+                const providerType = provider ? provider.type : '—';
+                const hasKey = provider ? provider.has_api_key : false;
 
                 document.getElementById('system-status').innerHTML = `
                     <div class="status-item">
-                        <div class="status-label">Ollama сервер</div>
+                        <div class="status-label">Модель чата</div>
                         <div class="status-value">
-                            ${llmStatus.healthy ? '✅ Подключен' : '❌ Недоступен'}
-                            ${llmStatus.response_time_ms ? `(${llmStatus.response_time_ms.toFixed(0)}ms)` : ''}
+                            <span class="badge ${modelName !== '—' ? 'badge-success' : 'badge-error'}">${modelName}</span>
                         </div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">Embedding модель</div>
+                        <div class="status-label">Провайдер</div>
+                        <div class="status-value">${providerName}</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Тип</div>
                         <div class="status-value">
-                            ${embedding.healthy ? '✅ Активна' : '❌ Неактивна'}
+                            <span class="badge badge-success">${providerType}</span>
                         </div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">LLM модель</div>
-                        <div class="status-value">
-                            <span class="badge ${llmStatus.healthy ? 'badge-success' : 'badge-error'}">
-                                ${config.llm_model || 'N/A'}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="status-item">
-                        <div class="status-label">Embedding</div>
-                        <div class="status-value">
-                            <span class="badge ${embedding.healthy ? 'badge-success' : 'badge-error'}">
-                                ${config.embedding_model || 'N/A'}
-                            </span>
-                        </div>
+                        <div class="status-label">API ключ</div>
+                        <div class="status-value">${hasKey ? '✅ есть' : (providerType === 'ollama' ? '✅ не требуется' : '❌ нет')}</div>
                     </div>
                 `;
             } catch (error) {
