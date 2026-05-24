@@ -116,12 +116,15 @@ async def hybrid_search(
                 for point in (qdrant_results or []):
                     score = point.get("score", 0)
                     content = (point.get("content", "") or "").strip()
-                    # Фильтр: score > 0.2 и нет дубликатов
-                    if score < 0.2 or not content:
+                    # Фильтр: score > 0.35, нет дубликатов
+                    if score < 0.35 or not content:
                         continue
                     text_key = content[:100]
                     if text_key in seen_texts:
                         continue
+                    # Буст: если query встречается в тексте — повышаем приоритет
+                    if q.lower() in content.lower():
+                        score += 0.3
                     seen_texts.add(text_key)
                     results.append({
                         "chunk_id": point.get("chunk_id", ""),
