@@ -112,15 +112,30 @@ async def hybrid_search(
             try:
                 await embeddings_service.initialize()
                 qdrant_results = await embeddings_service.search(q, limit=20)
+                seen_texts = set()
                 for point in (qdrant_results or []):
+                    score = point.get("score", 0)
+                    content = (point.get("content", "") or "").strip()
+                    # Фильтр: score > 0.2 и нет дубликатов
+                    if score < 0.2 or not content:
+                        continue
+                    text_key = content[:100]
+                    if text_key in seen_texts:
+                        continue
+                    seen_texts.add(text_key)
                     results.append({
                         "chunk_id": point.get("chunk_id", ""),
-                        "text": point.get("content", "")[:300],
+                        "text": content[:500],
                         "doc_id": point.get("document_id", ""),
                         "filename": point.get("file_type", ""),
+                        "score": round(score, 4),
                         "entity_count": 0,
                         "source": "qdrant"
                     })
+                # Сортируем по score
+                results.sort(key=lambda r: r.get("score", 0), reverse=True)
+                # Обрезаем до 10 лучших
+                results = results[:10]
             except Exception as e:
                 logger.warning(f"Qdrant fallback failed: {e}")
         
