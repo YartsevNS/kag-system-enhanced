@@ -14,7 +14,6 @@ from src.api.routes import chat, upload, admin, health, admin_models, auth, watc
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.middleware.auth import AuthMiddleware
-from src.api.middleware.auth_gate import AuthGateMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
@@ -113,10 +112,7 @@ if cors_origins:
         allow_headers=["*"],
     )
 
-# Auth gate — redirect unauthenticated web to /login
-app.add_middleware(AuthGateMiddleware)
-
-# Middleware аутентификации (для API, оставляем как fallback)
+# Middleware аутентификации (Keycloak JWT + статический токен)
 app.add_middleware(AuthMiddleware)
 
 # Подключение роутеров
