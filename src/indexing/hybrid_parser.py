@@ -182,9 +182,12 @@ class HybridDocumentParser:
             pdf = Path(file_path).suffix.lower() == '.pdf'
             if pdf:
                 pages = self._ocular.process_pdf(file_path, dpi=300)
-                for i, page_text in enumerate(pages):
-                    text = page_text if isinstance(page_text, str) else page_text.get('text', '')
-                    doc.pages.append(ParsedPage(page_num=i+1, text=text))
+                for page_data in pages:
+                    # process_pdf возвращает [{"page": N, "method": "...", "results": [...]}]
+                    results = page_data.get('results', []) if isinstance(page_data, dict) else []
+                    text = '\n'.join(r.get('text', '') for r in results if isinstance(r, dict) and r.get('text'))
+                    page_num = page_data.get('page', len(doc.pages) + 1) if isinstance(page_data, dict) else len(doc.pages) + 1
+                    doc.pages.append(ParsedPage(page_num=page_num, text=text))
                     doc.full_text += text + '\n\n'
             else:
                 results = self._ocular.process_image(file_path)
