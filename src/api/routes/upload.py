@@ -612,8 +612,10 @@ import asyncio
 _process_sem = asyncio.Semaphore(1)
 
 async def _process_document_async(document_id: str):
-    """Фоновая обработка документа (по одному, чтобы избежать OOM)"""
+    """Фоновая обработка документа (строго по одному, семафор)"""
+    logger.info(f"⏳ Ожидание семафора для {document_id}...")
     async with _process_sem:
+        logger.info(f"▶️ Семафор получен, начинаю обработку {document_id}")
         try:
             import asyncio
             def _sync_process():
