@@ -1,40 +1,40 @@
-     1|     1|<!DOCTYPE html>
-     2|     2|<html lang="ru">
-     3|     3|<head>
-     4|     4|    <meta charset="UTF-8">
-     5|     5|    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     6|     6|    <title>KAG - Setup Wizard</title>
-     7|     7|    
-     8|   295|<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-     9|<style>
-    10|:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
-    11|*{margin:0;padding:0;box-sizing:border-box}
-    12|body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-    13|nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
-    14|nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
-    15|nav .logo span{color:var(--accent-h)}
-    16|nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
-    17|nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
-    18|nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-    19|main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
-    20|h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
-    21|.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
-    22|.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
-    23|input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
-    24|input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
-    25|.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
-    26|.btn:hover{opacity:0.85}
-    27|.btn:disabled{opacity:0.5;cursor:not-allowed}
-    28|.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    29|.btn-ghost:hover{background:rgba(255,255,255,0.06)}
-    30|.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    31|.btn-danger:hover{background:rgba(220,38,38,0.25)}
-    32|table{width:100%;border-collapse:collapse}
-    33|th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
-    34|td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
-    35|.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
-    36|.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
-    37|.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Setup Wizard</title>
+    
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+.btn:hover{opacity:0.85}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-ghost:hover{background:rgba(255,255,255,0.06)}
+.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-danger:hover{background:rgba(220,38,38,0.25)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
+td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
+.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
 .badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
 
@@ -71,8 +71,8 @@
 .status-box.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
 @media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
 </style>
-    41|</head>
-    42|   296|<body>
+</head>
+<body>
 <nav>
   <div class="logo">🎯 <span>KAG</span></div>
     <a href="/">⬡ Дашборд</a>
@@ -86,195 +86,194 @@
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
 </nav>
-    56|   310|    </aside>
-    57|   311|
-    58|   312|    <!-- Main content -->
-    59|   313|    <div class="main-content">
-    60|   314|    <div class="container">
-    61|   315|        <div class="logo">🎯 KAG System</div>
-    62|   316|        <div class="subtitle">Первоначальная настройка системы</div>
-    63|   317|
-    64|   318|        <!-- Шаг 1: Базы данных (авто-создание) -->
-    65|   319|        <div class="step">
-    66|   320|            <div class="step-header">
-    67|   321|                <span class="step-num">1</span>
-    68|   322|                Создание баз данных
-    69|   323|            </div>
-    70|   324|            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
-    71|   325|                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
-    72|   326|            </p>
-    73|   327|
-    74|   328|            <!-- PostgreSQL -->
-    75|   329|            <div class="inner-card">
-    76|   330|                <div style="display:flex;align-items:center;justify-content:space-between;">
-    77|   331|                    <div>
-    78|   332|                        <strong>🐘 PostgreSQL</strong>
-    79|   333|                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
-    80|   334|                    </div>
-    81|   335|                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
-    82|   336|                        ⚡ Создать базу данных
-    83|   337|                    </button>
-    84|   338|                </div>
-    85|   339|                <div class="create-status" id="pg-status"></div>
-    86|   340|            </div>
-    87|   341|
-    88|   342|            <!-- Qdrant -->
-    89|   343|            <div class="inner-card">
-    90|   344|                <div style="display:flex;align-items:center;justify-content:space-between;">
-    91|   345|                    <div>
-    92|   346|                        <strong>🔍 Qdrant</strong>
-    93|   347|                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
-    94|   348|                    </div>
-    95|   349|                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
-    96|   350|                        ⚡ Создать коллекцию
-    97|   351|                    </button>
-    98|   352|                </div>
-    99|   353|                <div class="create-status" id="qdrant-status"></div>
-   100|   354|            </div>
-   101|   355|        </div>
-   102|   356|
-   103|   357|        <!-- Шаг 2: LLM Бэкенд -->
-   104|   358|        <div class="step">
-   105|   359|            <div class="step-header">
-   106|   360|                <span class="step-num">2</span>
-   107|   361|                Настройка LLM бэкенда
-   108|   362|            </div>
-   109|   363|            <div class="grid">
-   110|   364|                <div class="field">
-   111|   365|                    <label>Тип бэкенда</label>
-   112|   366|                    <select id="llm-type" onchange="updateLlmDefaults()">
-   113|   367|                        <option value="ollama">Ollama</option>
-   114|   368|                        <option value="vllm">vLLM</option>
-   115|   369|                    </select>
-   116|   370|                </div>
-   117|   371|                <div class="field">
-   118|   372|                    <label>Порт</label>
-   119|   373|                    <input type="number" id="llm-port" value="11434">
-   120|   374|                </div>
-   121|   375|                <div class="field full">
-   122|   376|                    <label>Адрес сервера</label>
-   123|   377|                    <input type="text" id="llm-host" value="192.168.50.41">
-   124|   378|                </div>
-   125|   379|                <div class="field full">
-   126|   380|                    <label>Название модели</label>
-   127|   381|                    <input type="text" id="llm-model" value="phi4-mini:latest">
-   128|   382|                    <div class="hint">Модель должна быть загружена на сервере</div>
-   129|   383|                </div>
-   130|   384|                <div class="field full">
-   131|   385|                    <label>Системный промпт</label>
-   132|   386|                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
-   133|   387|                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
-   134|   388|                </div>
-   135|   389|            </div>
-   136|   390|            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
-   137|   391|            <div class="test-status" id="llm-status"></div>
-   138|   392|        </div>
-   139|   393|
-   140|   394|        <!-- Шаг 3: Embedding -->
-   141|   395|        <div class="step">
-   142|   396|            <div class="step-header">
-   143|   397|                <span class="step-num">3</span>
-   144|   398|                Настройка Embedding модели
-   145|   399|            </div>
-   146|   400|            <div class="grid">
-   147|   401|                <div class="field full">
-   148|   402|                    <label>Название embedding модели</label>
-   149|   403|                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
-   150|   404|                </div>
-   151|   405|                <div class="field">
-   152|   406|                    <label>Размерность вектора</label>
-   153|   407|                    <input type="number" id="emb-dim" value="4096">
-   154|   408|                </div>
-   155|   409|            </div>
-   156|   410|        </div>
-   157|   411|
-   158|   412|        <!-- Шаг 4: SSH -->
-   159|   413|        <div class="step">
-   160|   414|            <div class="step-header">
-   161|   415|                <span class="step-num">4</span>
-   162|   416|                SSH доступ к серверу LLM
-   163|   417|            </div>
-   164|   418|            <div class="grid">
-   165|   419|                <div class="field">
-   166|   420|                    <label>SSH пользователь</label>
-   167|   421|                    <input type="text" id="ssh-user" value="yartsevn">
-   168|   422|                </div>
-   169|   423|                <div class="field">
-   170|   424|                    <label>SSH пароль</label>
-   171|   425|                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
-   172|   426|                </div>
-   173|   427|                <div class="field full">
-   174|   428|                    <label>Пароль для sudo (если отличается)</label>
-   175|   429|                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
-   176|   430|                </div>
-   177|   431|            </div>
-   178|   432|            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
-   179|   433|            <div class="test-status" id="ssh-status"></div>
-   180|   434|        </div>
-   181|   435|
-   182|   436|        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
-   183|   437|        <div class="status-box" id="final-status"></div>
-   184|   438|    </div>
-   185|   439|    </div>
-   186|   440|
-   187|   441|    <script>
-   188|   442|        // ==========================================
-   189|   443|        // Глобальные переменные
-   190|   444|        // ==========================================
-   191|   445|        const API = '/api/v1/setup';
-   192|   446|        
-   193|   447|        // Состояние тестов (для UX)
-   194|   448|        const state = {
-   195|   449|            dbTested: false,
-   196|   450|            llmTested: false,
-   197|   451|            sshTested: false
-   198|   452|        };
-   199|   453|
-   200|   454|        // ==========================================
-   201|   455|        // Вспомогательные функции
-   202|   456|        // ==========================================
-   203|   457|        
-   204|   458|        /**
-   205|   459|         * Показывает статус теста
-   206|   460|         * @param {string} elementId - ID элемента статуса
-   207|   461|         * @param {boolean} success - Успех или ошибка
-   208|   462|         * @param {string} message - Текст сообщения
-   209|   463|         */
-   210|   464|        function showTestStatus(elementId, success, message) {
-   211|   465|            const el = document.getElementById(elementId);
-   212|   466|            el.textContent = (success ? '✅ ' : '❌ ') + message;
-   213|   467|            el.className = 'test-status ' + (success ? 'success' : 'error');
-   214|   468|        }
-   215|   469|
-   216|   470|        /**
-   217|   471|         * Показывает финальный статус сохранения
-   218|   472|         * @param {boolean} success 
-   219|   473|         * @param {string} message 
-   220|   474|         */
-   221|   475|        function showFinalStatus(success, message) {
-   222|   476|            const el = document.getElementById('final-status');
-   223|   477|            el.textContent = message;
-   224|   478|            el.className = 'status-box ' + (success ? 'success' : 'error');
-   225|   479|        }
-   226|   480|
-   227|   481|        // ==========================================
-   228|   482|        // Тестирование подключений
-   229|   483|        // ==========================================
-   230|   484|
-   231|   485|        async function testDb() {
-   232|   486|            const payload = {
-   233|   487|                host: document.getElementById('db-host').value,
-   234|   488|                port: parseInt(document.getElementById('db-port').value),
-   235|   489|                name: document.getElementById('db-name').value,
-   236|   490|                user: document.getElementById('db-user').value,
-   237|   491|                password: document.getElementById('db-pass').value
-   238|   492|            };
-   239|   493|
-   240|   494|            showTestStatus('db-status', false, 'Тестирование...');
-   241|   495|
-   242|   496|            try {
-   243|   497|                const res = await fetch(`${API}/test-db`, {
-   244|   498|                    method: 'POST',
-   245|   499|                    headers: { 'Content-Type': 'application/json' },
-   246|   500|                    body: JSON.stringify(payload)
-   247|   501|
+    </aside>
+
+    <!-- Main content -->
+    <div class="main-content">
+    <div class="container">
+        <div class="logo">🎯 KAG System</div>
+        <div class="subtitle">Первоначальная настройка системы</div>
+
+        <!-- Шаг 1: Базы данных (авто-создание) -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">1</span>
+                Создание баз данных
+            </div>
+            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
+                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
+            </p>
+
+            <!-- PostgreSQL -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🐘 PostgreSQL</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
+                        ⚡ Создать базу данных
+                    </button>
+                </div>
+                <div class="create-status" id="pg-status"></div>
+            </div>
+
+            <!-- Qdrant -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🔍 Qdrant</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
+                        ⚡ Создать коллекцию
+                    </button>
+                </div>
+                <div class="create-status" id="qdrant-status"></div>
+            </div>
+        </div>
+
+        <!-- Шаг 2: LLM Бэкенд -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">2</span>
+                Настройка LLM бэкенда
+            </div>
+            <div class="grid">
+                <div class="field">
+                    <label>Тип бэкенда</label>
+                    <select id="llm-type" onchange="updateLlmDefaults()">
+                        <option value="ollama">Ollama</option>
+                        <option value="vllm">vLLM</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Порт</label>
+                    <input type="number" id="llm-port" value="11434">
+                </div>
+                <div class="field full">
+                    <label>Адрес сервера</label>
+                    <input type="text" id="llm-host" value="192.168.50.41">
+                </div>
+                <div class="field full">
+                    <label>Название модели</label>
+                    <input type="text" id="llm-model" value="phi4-mini:latest">
+                    <div class="hint">Модель должна быть загружена на сервере</div>
+                </div>
+                <div class="field full">
+                    <label>Системный промпт</label>
+                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
+                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
+                </div>
+            </div>
+            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
+            <div class="test-status" id="llm-status"></div>
+        </div>
+
+        <!-- Шаг 3: Embedding -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">3</span>
+                Настройка Embedding модели
+            </div>
+            <div class="grid">
+                <div class="field full">
+                    <label>Название embedding модели</label>
+                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
+                </div>
+                <div class="field">
+                    <label>Размерность вектора</label>
+                    <input type="number" id="emb-dim" value="4096">
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 4: SSH -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">4</span>
+                SSH доступ к серверу LLM
+            </div>
+            <div class="grid">
+                <div class="field">
+                    <label>SSH пользователь</label>
+                    <input type="text" id="ssh-user" value="yartsevn">
+                </div>
+                <div class="field">
+                    <label>SSH пароль</label>
+                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
+                </div>
+                <div class="field full">
+                    <label>Пароль для sudo (если отличается)</label>
+                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
+                </div>
+            </div>
+            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
+            <div class="test-status" id="ssh-status"></div>
+        </div>
+
+        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
+        <div class="status-box" id="final-status"></div>
+    </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // Глобальные переменные
+        // ==========================================
+        const API = '/api/v1/setup';
+        
+        // Состояние тестов (для UX)
+        const state = {
+            dbTested: false,
+            llmTested: false,
+            sshTested: false
+        };
+
+        // ==========================================
+        // Вспомогательные функции
+        // ==========================================
+        
+        /**
+         * Показывает статус теста
+         * @param {string} elementId - ID элемента статуса
+         * @param {boolean} success - Успех или ошибка
+         * @param {string} message - Текст сообщения
+         */
+        function showTestStatus(elementId, success, message) {
+            const el = document.getElementById(elementId);
+            el.textContent = (success ? '✅ ' : '❌ ') + message;
+            el.className = 'test-status ' + (success ? 'success' : 'error');
+        }
+
+        /**
+         * Показывает финальный статус сохранения
+         * @param {boolean} success 
+         * @param {string} message 
+         */
+        function showFinalStatus(success, message) {
+            const el = document.getElementById('final-status');
+            el.textContent = message;
+            el.className = 'status-box ' + (success ? 'success' : 'error');
+        }
+
+        // ==========================================
+        // Тестирование подключений
+        // ==========================================
+
+        async function testDb() {
+            const payload = {
+                host: document.getElementById('db-host').value,
+                port: parseInt(document.getElementById('db-port').value),
+                name: document.getElementById('db-name').value,
+                user: document.getElementById('db-user').value,
+                password: document.getElementById('db-pass').value
+            };
+
+            showTestStatus('db-status', false, 'Тестирование...');
+
+            try {
+                const res = await fetch(`${API}/test-db`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
