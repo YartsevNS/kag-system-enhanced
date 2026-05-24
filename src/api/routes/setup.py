@@ -126,8 +126,7 @@ async def create_pg_database():
         cur.close()
         conn.close()
         
-        # Сохраняем в config_store (пароль шифруется)
-        crypto = GOSTCrypto()
+        # Сохраняем в config_store (открытый текст — защищён авторизацией PostgreSQL)
         now = datetime.utcnow().isoformat()
         
         db_config = {
@@ -135,7 +134,7 @@ async def create_pg_database():
             "port": 5432,
             "name": db_name,
             "user": db_user,
-            "password": crypto.encrypt_to_base64(db_password),
+            "password": db_password,  # открытый текст
             "saved_at": now,
             "auto_created": True,
             "creds_shown": False
@@ -201,10 +200,9 @@ async def create_qdrant_collection():
             else:
                 logger.info(f"Qdrant коллекция уже существует: {collection_name}")
         
-        # Генерируем API ключ для доступа (сохраняем как пароль)
+        # Генерируем API ключ для доступа
         api_key = _generate_password(32)
         
-        crypto = GOSTCrypto()
         now = datetime.utcnow().isoformat()
         
         qdrant_config = {
@@ -212,7 +210,7 @@ async def create_qdrant_collection():
             "port": 6333,
             "collection": collection_name,
             "vector_size": vector_size,
-            "api_key": crypto.encrypt_to_base64(api_key),
+            "api_key": api_key,  # открытый текст
             "saved_at": now,
             "auto_created": True,
             "creds_shown": False
@@ -251,73 +249,57 @@ async def create_qdrant_collection():
 
 @router.get("/status")
 async def setup_status():
-    """Возвращает полный статус настройки: что создано, что нет, и креды."""
+    """
+    Возвращает статус настройки и креды всех баз.
+    Креды PG и Qdrant показываются только пока не скопированы (creds_shown=False).
+    """
     db_config = config_store.get("database", "default") or {}
     qdrant_config = config_store.get("qdrant", "default") or {}
     
-    status = {
-        "database": bool(db_config),
-        "qdrant": bool(qdrant_config),
-        "llm": bool(config_store.get("llm", "default")),
-        "configured": config_store.get("setup", "status", {}).get("configured", False)
+    result = {
+        "success": True,
+        "status": {
+            "database": bool(db_config.get("auto_created")),
+            "qdrant": bool(qdrant_config.get("auto_created")),
+            "llm": bool(config_store.get("llm", "default")),
+            "configured": config_store.get("setup", "status", {}).get("configured", False)
+        }
     }
     
-    result = {"success": True, "status": status}
-    
-    # Расшифровываем и возвращаем креды только если ещё не показаны
+    # PG — показываем креды только если auto_created и ещё не скопированы
     if db_config.get("auto_created") and not db_config.get("creds_shown", False):
-        try:
-            crypto = GOSTCrypto()
-            result["databases"] = result.get("databases", {})
-            result["databases"]["postgresql"] = {
-                "host": db_config.get("host", "keycloak-db"),
-                "port": db_config.get("port", 5432),
-                "name": db_config.get("name", "—"),
-                "user": db_config.get("user", "—"),
-                "password": crypto.decrypt_from_base64(db_config.get("password", "")) if db_config.get("password") else "—"
-            }
-        except Exception as e:
-            logger.warning(f"Не удалось расшифровать креды PostgreSQL: {e}")
+        result["databases"] = result.get("databases", {})
+        result["databases"]["postgresql"] = {
+            "host": db_config.get("host", ""),
+            "port": db_config.get("port", 0),
+            "name": db_config.get("name", ""),
+            "user": db_config.get("user", ""),
+            "password": db_config.get("password", "")  # открытый текст (защищён PostgreSQL-авторизацией)
+        }
     
+    # Qdrant — показываем только если ещё не скопированы
     if qdrant_config.get("auto_created") and not qdrant_config.get("creds_shown", False):
-        try:
-            crypto = GOSTCrypto()
-            result["databases"] = result.get("databases", {})
-            result["databases"]["qdrant"] = {
-                "host": qdrant_config.get("host", "qdrant"),
-                "port": qdrant_config.get("port", 6333),
-                "collection": qdrant_config.get("collection", "kag_documents"),
-                "api_key": crypto.decrypt_from_base64(qdrant_config.get("api_key", "")) if qdrant_config.get("api_key") else "—"
-            }
-        except Exception as e:
-            logger.warning(f"Не удалось расшифровать креды Qdrant: {e}")
+        result["databases"] = result.get("databases", {})
+        result["databases"]["qdrant"] = {
+            "host": qdrant_config.get("host", ""),
+            "port": qdrant_config.get("port", 0),
+            "collection": qdrant_config.get("collection", ""),
+            "api_key": qdrant_config.get("api_key", "")  # открытый текст
+        }
     
-    # Neo4j — всегда показываем (из docker-compose)
+    # Neo4j, Keycloak DB, KAG DB — всегда показываем (статические из docker-compose)
     result["databases"] = result.get("databases", {})
     result["databases"]["neo4j"] = {
-        "host": "neo4j",
-        "bolt_port": 7687,
-        "http_port": 7474,
-        "user": "neo4j",
-        "password": "kagneo4j2026"
+        "host": "neo4j", "bolt_port": 7687, "http_port": 7474,
+        "user": "neo4j", "password": "kagneo4j2026"
     }
-    
-    # Keycloak DB — всегда показываем (из docker-compose)
     result["databases"]["keycloak_db"] = {
-        "host": "keycloak-db",
-        "port": 5432,
-        "name": "keycloak",
-        "user": "keycloak",
-        "password": "keycloak_password"
+        "host": "keycloak-db", "port": 5432,
+        "name": "keycloak", "user": "keycloak", "password": "keycloak_password"
     }
-    
-    # KAG DB — отдельный PostgreSQL для API (из docker-compose)
     result["databases"]["kag_db"] = {
-        "host": "kag-pg",
-        "port": 5432,
-        "name": "kag",
-        "user": "kag",
-        "password": "KAGpg2026!secure"
+        "host": "kag-pg", "port": 5432,
+        "name": "kag", "user": "kag", "password": "KAGpg2026!secure"
     }
     
     return result
