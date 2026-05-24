@@ -216,7 +216,14 @@ class HybridDocumentParser:
         except Exception:
             doc.full_text = f"[Unable to parse {filename}]"
         return doc
-    
+
+    def parse_ocular_only(self, file_path: str) -> Optional[ParsedDocument]:
+        """Occular-ocr без Docling. Быстрее и стабильнее для русского текста."""
+        if not self._ocular_available:
+            return None
+        path = Path(file_path)
+        return self._parse_with_ocular_only(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())
+
     def _needs_ocr(self, text: str, filename: str) -> bool:
         """Check if text needs OCR enhancement (empty, garbled, or Russian)."""
         if not text or len(text.strip()) < 10:

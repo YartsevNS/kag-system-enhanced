@@ -420,11 +420,13 @@ class DocumentService:
             self._save_document_to_db(document_id)
             
             # Пробуем гибридный парсер (Docling + Occular-ocr), fallback на DocumentParser
+            # Occular-ocr (чистый, без Docling), fallback на DocumentParser
             try:
                 from src.indexing.hybrid_parser import get_hybrid_parser
                 hybrid = get_hybrid_parser()
-                parsed = hybrid.parse(str(file_path))
-                # Конвертируем ParsedDocument в segments для чанкера
+                parsed = hybrid.parse_ocular_only(str(file_path))
+                if not parsed:
+                    raise ValueError("Occular-ocr недоступен")
                 segments = []
                 for page in parsed.pages:
                     if page.text and page.text.strip():
@@ -437,11 +439,10 @@ class DocumentService:
                 parsed_metadata = parsed.metadata
                 parser_name = parsed.parse_method
                 if not segments:
-                    # Если пусто — fallback на старый парсер
-                    raise ValueError("Hybrid parser вернул пустой результат")
+                    raise ValueError("Occular-ocr вернул пустой результат")
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
             except Exception as e:
-                logger.warning(f"Hybrid parser failed ({e}), fallback to DocumentParser")
+                logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
                 from src.indexing.parsers import document_parser
                 parsed_doc = document_parser.parse(str(file_path), record.file_type)
                 segments = parsed_doc.get("segments", [])
