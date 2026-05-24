@@ -1,222 +1,222 @@
-     1|<!DOCTYPE html>
-     2|<html lang="ru">
-     3|<head>
-     4|    <meta charset="UTF-8">
-     5|    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     6|    <title>KAG - Setup Wizard</title>
-     7|    
-     8|<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-     9|<style>
-    10|:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
-    11|*{margin:0;padding:0;box-sizing:border-box}
-    12|body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-    13|nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
-    14|nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
-    15|nav .logo span{color:var(--accent-h)}
-    16|nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
-    17|nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
-    18|nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-    19|main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
-    20|h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
-    21|.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
-    22|.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
-    23|input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
-    24|input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
-    25|.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
-    26|.btn:hover{opacity:0.85}
-    27|.btn:disabled{opacity:0.5;cursor:not-allowed}
-    28|.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    29|.btn-ghost:hover{background:rgba(255,255,255,0.06)}
-    30|.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-    31|.btn-danger:hover{background:rgba(220,38,38,0.25)}
-    32|table{width:100%;border-collapse:collapse}
-    33|th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
-    34|td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
-    35|.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
-    36|.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
-    37|.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
-    38|.badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
-    39|@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
-    40|
-    41|/* ===== Setup Wizard Styles ===== */
-    42|.main-content{margin-left:240px;flex:1;padding:40px;max-width:900px}
-    43|.container{max-width:700px;margin:0 auto}
-    44|.main-content .logo{font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--text);margin-bottom:4px}
-    45|.subtitle{font-size:14px;color:var(--text3);margin-bottom:32px}
-    46|.step{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
-    47|.step-header{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-s)}
-    48|.step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
-    49|.inner-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px;margin-bottom:12px}
-    50|.inner-card:last-child{margin-bottom:0}
-    51|.btn-create{background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
-    52|.btn-create:hover{opacity:0.85}
-    53|.btn-create:disabled{opacity:0.4;cursor:not-allowed}
-    54|.create-status{margin-top:8px;font-size:12px;color:var(--text3);padding:6px 10px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.02)}
-    55|.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    56|.field{display:flex;flex-direction:column;gap:4px}
-    57|.field.full{grid-column:1/-1}
-    58|.field label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.3px}
-    59|.field input,.field select,.field textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;width:100%}
-    60|.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
-    61|.hint{font-size:11px;color:var(--text4);margin-top:2px}
-    62|.btn-test,.btn-save{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;margin-top:12px}
-    63|.btn-test:hover,.btn-save:hover{opacity:0.85}
-    64|.btn-test:disabled,.btn-save:disabled{opacity:0.4;cursor:not-allowed}
-    65|.btn-save{display:block;width:100%;padding:14px;font-size:16px;margin-top:24px}
-    66|.test-status{margin-top:8px;font-size:13px;padding:8px 14px;border-radius:var(--radius-sm);line-height:1.5}
-    67|.test-status.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
-    68|.test-status.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
-    69|.status-box{margin-top:16px;font-size:14px;padding:12px 18px;border-radius:var(--radius-sm);line-height:1.6}
-    70|.status-box.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
-    71|.status-box.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
-    72|@media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
-    73|</style>
-    74|</head>
-    75|<body>
-    76|<nav>
-    77|  <div class="logo">🎯 <span>KAG</span></div>
-    78|    <a href="/">⬡ Дашборд</a>
-    79|  <a href="/documents">📄 Документы</a>
-    80|  <a href="/chunks">🧩 Чанки</a>
-    81|  <a href="/search">🔎 Поиск</a>
-    82|  <a href="/kg">🕸️ Граф знаний</a>
-    83|  <a href="/monitor">🌐 Веб-монитор</a>
-    84|  <a href="/news">📰 Новости</a>
-    85|  <a href="/know">📚 Know</a>
-    86|  <a href="/logs">📋 Логи</a>
-    87|  <a href="/admin">⚙️ Админ</a>
-    88|</nav>
-    89|    </aside>
-    90|
-    91|    <!-- Main content -->
-    92|    <div class="main-content">
-    93|    <div class="container">
-    94|        <div class="logo">🎯 KAG System</div>
-    95|        <div class="subtitle">Первоначальная настройка системы</div>
-    96|
-    97|        <!-- Шаг 1: Базы данных (авто-создание) -->
-    98|        <div class="step">
-    99|            <div class="step-header">
-   100|                <span class="step-num">1</span>
-   101|                Создание баз данных
-   102|            </div>
-   103|            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
-   104|                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
-   105|            </p>
-   106|
-   107|            <!-- PostgreSQL -->
-   108|            <div class="inner-card">
-   109|                <div style="display:flex;align-items:center;justify-content:space-between;">
-   110|                    <div>
-   111|                        <strong>🐘 PostgreSQL</strong>
-   112|                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
-   113|                    </div>
-   114|                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
-   115|                        ⚡ Создать базу данных
-   116|                    </button>
-   117|                </div>
-   118|                <div class="create-status" id="pg-status"></div>
-   119|            </div>
-   120|
-   121|            <!-- Qdrant -->
-   122|            <div class="inner-card">
-   123|                <div style="display:flex;align-items:center;justify-content:space-between;">
-   124|                    <div>
-   125|                        <strong>🔍 Qdrant</strong>
-   126|                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
-   127|                    </div>
-   128|                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
-   129|                        ⚡ Создать коллекцию
-   130|                    </button>
-   131|                </div>
-   132|                <div class="create-status" id="qdrant-status"></div>
-   133|            </div>
-   134|        </div>
-   135|
-   136|        <!-- Шаг 2: LLM Бэкенд -->
-   137|        <div class="step">
-   138|            <div class="step-header">
-   139|                <span class="step-num">2</span>
-   140|                Настройка LLM бэкенда
-   141|            </div>
-   142|            <div class="grid">
-   143|                <div class="field">
-   144|                    <label>Тип бэкенда</label>
-   145|                    <select id="llm-type" onchange="updateLlmDefaults()">
-   146|                        <option value="ollama">Ollama</option>
-   147|                        <option value="vllm">vLLM</option>
-   148|                    </select>
-   149|                </div>
-   150|                <div class="field">
-   151|                    <label>Порт</label>
-   152|                    <input type="number" id="llm-port" value="11434">
-   153|                </div>
-   154|                <div class="field full">
-   155|                    <label>Адрес сервера</label>
-   156|                    <input type="text" id="llm-host" value="192.168.50.41">
-   157|                </div>
-   158|                <div class="field full">
-   159|                    <label>Название модели</label>
-   160|                    <input type="text" id="llm-model" value="phi4-mini:latest">
-   161|                    <div class="hint">Модель должна быть загружена на сервере</div>
-   162|                </div>
-   163|                <div class="field full">
-   164|                    <label>Системный промпт</label>
-   165|                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
-   166|                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
-   167|                </div>
-   168|            </div>
-   169|            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
-   170|            <div class="test-status" id="llm-status"></div>
-   171|        </div>
-   172|
-   173|        <!-- Шаг 3: Embedding -->
-   174|        <div class="step">
-   175|            <div class="step-header">
-   176|                <span class="step-num">3</span>
-   177|                Настройка Embedding модели
-   178|            </div>
-   179|            <div class="grid">
-   180|                <div class="field full">
-   181|                    <label>Название embedding модели</label>
-   182|                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
-   183|                </div>
-   184|                <div class="field">
-   185|                    <label>Размерность вектора</label>
-   186|                    <input type="number" id="emb-dim" value="4096">
-   187|                </div>
-   188|            </div>
-   189|        </div>
-   190|
-   191|        <!-- Шаг 4: SSH -->
-   192|        <div class="step">
-   193|            <div class="step-header">
-   194|                <span class="step-num">4</span>
-   195|                SSH доступ к серверу LLM
-   196|            </div>
-   197|            <div class="grid">
-   198|                <div class="field">
-   199|                    <label>SSH пользователь</label>
-   200|                    <input type="text" id="ssh-user" value="yartsevn">
-   201|                </div>
-   202|                <div class="field">
-   203|                    <label>SSH пароль</label>
-   204|                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
-   205|                </div>
-   206|                <div class="field full">
-   207|                    <label>Пароль для sudo (если отличается)</label>
-   208|                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
-   209|                </div>
-   210|            </div>
-   211|            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
-   212|            <div class="test-status" id="ssh-status"></div>
-   213|        </div>
-   214|
-   215|        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
-   216|        <div class="status-box" id="final-status"></div>
-   217|    </div>
-   218|    </div>
-   219|
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Setup Wizard</title>
+    
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+.btn:hover{opacity:0.85}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-ghost:hover{background:rgba(255,255,255,0.06)}
+.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-danger:hover{background:rgba(220,38,38,0.25)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
+td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
+.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
+.badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
+
+/* ===== Setup Wizard Styles ===== */
+.main-content{margin-left:240px;flex:1;padding:40px;max-width:900px}
+.container{max-width:700px;margin:0 auto}
+.main-content .logo{font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--text);margin-bottom:4px}
+.subtitle{font-size:14px;color:var(--text3);margin-bottom:32px}
+.step{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
+.step-header{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-s)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
+.inner-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.inner-card:last-child{margin-bottom:0}
+.btn-create{background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
+.btn-create:hover{opacity:0.85}
+.btn-create:disabled{opacity:0.4;cursor:not-allowed}
+.create-status{margin-top:8px;font-size:12px;color:var(--text3);padding:6px 10px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.02)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field.full{grid-column:1/-1}
+.field label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.3px}
+.field input,.field select,.field textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.hint{font-size:11px;color:var(--text4);margin-top:2px}
+.btn-test,.btn-save{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;margin-top:12px}
+.btn-test:hover,.btn-save:hover{opacity:0.85}
+.btn-test:disabled,.btn-save:disabled{opacity:0.4;cursor:not-allowed}
+.btn-save{display:block;width:100%;padding:14px;font-size:16px;margin-top:24px}
+.test-status{margin-top:8px;font-size:13px;padding:8px 14px;border-radius:var(--radius-sm);line-height:1.5}
+.test-status.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
+.test-status.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+.status-box{margin-top:16px;font-size:14px;padding:12px 18px;border-radius:var(--radius-sm);line-height:1.6}
+.status-box.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
+.status-box.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+@media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+    </aside>
+
+    <!-- Main content -->
+    <div class="main-content">
+    <div class="container">
+        <div class="logo">🎯 KAG System</div>
+        <div class="subtitle">Первоначальная настройка системы</div>
+
+        <!-- Шаг 1: Базы данных (авто-создание) -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">1</span>
+                Создание баз данных
+            </div>
+            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
+                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
+            </p>
+
+            <!-- PostgreSQL -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🐘 PostgreSQL</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
+                        ⚡ Создать базу данных
+                    </button>
+                </div>
+                <div class="create-status" id="pg-status"></div>
+            </div>
+
+            <!-- Qdrant -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🔍 Qdrant</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
+                        ⚡ Создать коллекцию
+                    </button>
+                </div>
+                <div class="create-status" id="qdrant-status"></div>
+            </div>
+        </div>
+
+        <!-- Шаг 2: LLM Бэкенд -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">2</span>
+                Настройка LLM бэкенда
+            </div>
+            <div class="grid">
+                <div class="field">
+                    <label>Тип бэкенда</label>
+                    <select id="llm-type" onchange="updateLlmDefaults()">
+                        <option value="ollama">Ollama</option>
+                        <option value="vllm">vLLM</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Порт</label>
+                    <input type="number" id="llm-port" value="11434">
+                </div>
+                <div class="field full">
+                    <label>Адрес сервера</label>
+                    <input type="text" id="llm-host" value="192.168.50.41">
+                </div>
+                <div class="field full">
+                    <label>Название модели</label>
+                    <input type="text" id="llm-model" value="phi4-mini:latest">
+                    <div class="hint">Модель должна быть загружена на сервере</div>
+                </div>
+                <div class="field full">
+                    <label>Системный промпт</label>
+                    <textarea id="llm-system-prompt" rows="3" placeholder="Системный промпт для LLM...">Ты - AI-ассистент. Отвечай на вопросы точно и по существу.</textarea>
+                    <div class="hint">Этот промпт будет использоваться как системное сообщение для всех запросов к LLM</div>
+                </div>
+            </div>
+            <button class="btn-test" onclick="testLlm()">🔍 Тест подключения к LLM</button>
+            <div class="test-status" id="llm-status"></div>
+        </div>
+
+        <!-- Шаг 3: Embedding -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">3</span>
+                Настройка Embedding модели
+            </div>
+            <div class="grid">
+                <div class="field full">
+                    <label>Название embedding модели</label>
+                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
+                </div>
+                <div class="field">
+                    <label>Размерность вектора</label>
+                    <input type="number" id="emb-dim" value="4096">
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 4: SSH -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">4</span>
+                SSH доступ к серверу LLM
+            </div>
+            <div class="grid">
+                <div class="field">
+                    <label>SSH пользователь</label>
+                    <input type="text" id="ssh-user" value="yartsevn">
+                </div>
+                <div class="field">
+                    <label>SSH пароль</label>
+                    <input type="password" id="ssh-pass" placeholder="Введите пароль">
+                </div>
+                <div class="field full">
+                    <label>Пароль для sudo (если отличается)</label>
+                    <input type="password" id="ssh-sudo" placeholder="Оставьте пустым, если такой же">
+                </div>
+            </div>
+            <button class="btn-test" onclick="testSsh()">🔍 Тест SSH подключения</button>
+            <div class="test-status" id="ssh-status"></div>
+        </div>
+
+        <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
+        <div class="status-box" id="final-status"></div>
+    </div>
+    </div>
+
 
 <script>
         // ==========================================
