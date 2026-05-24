@@ -365,15 +365,31 @@ async function enrichDocs() {
 
 function updateStats() {
   const ready = allDocs.filter(d => d.status === 'completed').length;
+  const pending = allDocs.filter(d => d.status === 'pending').length;
   const totalChunks = allDocs.reduce((s,d) => s + (d.chunks_count || 0), 0);
   const types = new Set(allDocs.map(d => d.document_type).filter(Boolean));
   const allTags = new Set();
   allDocs.forEach(d => (d.tags||[]).forEach(t => allTags.add(t)));
   document.getElementById('stat-total').textContent = allDocs.length;
   document.getElementById('stat-ready').textContent = ready;
+  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('reprocess-btn').style.display = pending > 0 ? 'block' : 'none';
   document.getElementById('stat-chunks').textContent = totalChunks;
   document.getElementById('stat-types').textContent = types.size;
   document.getElementById('stat-tags').textContent = allTags.size;
+}
+
+async function reprocessPending() {
+  const btn = document.querySelector('#reprocess-btn button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  try {
+    const r = await fetch('/api/v1/upload/reprocess-pending', { method: 'POST' });
+    const d = await r.json();
+    alert('Запущено: ' + d.count + ' документов');
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+  setTimeout(() => { loadAll(); }, 2000);
 }
 
 function getFiltered() {
