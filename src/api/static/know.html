@@ -72,7 +72,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
   <div class="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">84</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">85</div><div class="stat-label">Решённых задач</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
@@ -83,6 +83,10 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
     <div class="qa-list">
 
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№84. Как работает поиск в чате — трассировка кода и запросов</strong><br>проверь и объясни точные действия по коду и запросам как работает поиск в чате, в какие базы ходит, что куда передаёт, дай ответ и know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Шаг 1: Qdrant (векторный поиск)</strong> — <code>embeddings_service.search(query, limit=5)</code>. Сообщение пользователя векторизуется моделью <code>nomic-embed-text:latest</code> → вектор отправляется в Qdrant → возвращаются ближайшие чанки (<code>score, content, document_id</code>). Имена файлов добираются из <code>document_service.get_document(doc_id)</code>. <strong>Шаг 2: Neo4j (граф)</strong> — из сообщения извлекаются ключевые слова (regex: 2+ заглавных, 3+ латиница, 4+ кириллица) + doc_ids из Qdrant. Вызов <code>kg_service.hybrid_search(entities, doc_ids)</code> ищет сущности и связи в Neo4j по <code>CONTAINS</code>. <strong>Шаг 3: Сборка контекста</strong> — чанки форматируются как <code>[Источник N] «имя_файла» (score): содержание</code>, граф-результаты — как <code>[Граф] сущность → связь</code>. <strong>Шаг 4: LLM</strong> — <code>chat/completions</code> через Provider Architecture: системный промпт (из function_map) + контекст + история + сообщение → ответ. Метаданные: <code>total_docs, graph_used, sources</code>.</div></div>
+      </div>
 <div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№83. Документ не загружается при переходе со страницы превью</strong><br>при нажатии на превью и переходе н страницу не загружается документ, уже было ищи ошибку</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Та же проблема d54cb91!</strong> Замена <code>JetBrains Mono,monospace</code> → <code>'Cascadia Code','Fira Code','Consolas',monospace</code> внутри JS-строки <code>pre.style.cssText = '...font:13px/1.7 JetBrains Mono,monospace...'</code> сломала синтаксис (кавычки внутри single-quoted строки). Весь <code>&lt;script&gt;</code> не выполнялся — ни docId, ни init, ни API. <strong>Исправлено:</strong> viewer.html восстановлен из <code>d54cb91^</code>, progress bar накатан заново без затрагивания JS-строк с фонтами. <strong>Commit:</strong> <code>96ff139</code>.</div></div>
