@@ -81,10 +81,10 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 2G
+          memory: 4G
         reservations:
           cpus: "1.0"
-          memory: 1G
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
       interval: 30s
