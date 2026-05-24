@@ -22,6 +22,7 @@ _keycloak_checked_at: float = 0.0
 # Пути, доступные без авторизации
 PUBLIC_PREFIXES: Set[str] = {
     "/login",
+    "/setup",
     "/api/v1/auth",
     "/api/v1/health",
     "/api/v1/setup",
