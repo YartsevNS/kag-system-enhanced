@@ -8,9 +8,11 @@ GET  /auth/me        - Get current user info (requires JWT)
 """
 
 from datetime import datetime, timedelta, timezone
+import time
+from collections import defaultdict
 
 from passlib.hash import pbkdf2_sha256 as hash_method
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
@@ -77,6 +79,28 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Rate Limiter ──────────────────────────────────────────────────────────
+
+# In-memory: {ip: [(timestamp, ...)]}
+_rate_store: dict = defaultdict(list)
+_RATE_LIMIT = 5       # попыток
+_RATE_WINDOW = 60     # секунд
+
+
+def _check_rate_limit(ip: str) -> None:
+    """Проверить лимит попыток. Райзит 429 при превышении."""
+    now = time.time()
+    window_start = now - _RATE_WINDOW
+    # Очистить старые записи
+    _rate_store[ip] = [t for t in _rate_store[ip] if t > window_start]
+    if len(_rate_store[ip]) >= _RATE_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много попыток. Попробуйте через минуту.",
+        )
+    _rate_store[ip].append(now)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -171,13 +195,14 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: UserLogin, db: Session = Depends(get_db)):
+def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
     """
     Login and get JWT access + refresh tokens.
 
     Returns access_token (15 min) + refresh_token (7 days).
     401 if credentials are invalid.
     """
+    _check_rate_limit(request.client.host if request.client else "unknown")
     user = db.query(User).filter(User.username == body.username).first()
     if not user or not hash_method.verify(body.password, user.hashed_password):
         raise HTTPException(
@@ -192,12 +217,26 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
         )
 
     roles = _user_roles(user)
-    return {
-        "access_token": _create_access_token(user.username, roles),
-        "refresh_token": _create_refresh_token(user.username),
+    access_token = _create_access_token(user.username, roles)
+    refresh_token = _create_refresh_token(user.username)
+
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": _get_token_expiry(),
-    }
+    })
+    # httpOnly cookie — не доступен JavaScript
+    response.set_cookie(
+        key="kag_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # True на проде с HTTPS
+        samesite="lax",
+        path="/",
+        max_age=_get_token_expiry(),
+    )
+    return response
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -246,14 +285,25 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
         )
 
     roles = _user_roles(user)
+    access_token = _create_access_token(user.username, roles)
+    refresh_token = _create_refresh_token(user.username)
 
-    # Ротация: выпускаем НОВУЮ пару токенов
-    return {
-        "access_token": _create_access_token(user.username, roles),
-        "refresh_token": _create_refresh_token(user.username),
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": _get_token_expiry(),
-    }
+    })
+    response.set_cookie(
+        key="kag_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        path="/",
+        max_age=_get_token_expiry(),
+    )
+    return response
 
 
 @router.get("/me", response_model=UserResponse)

@@ -101,15 +101,15 @@ app = FastAPI(
 # Middleware для проверки setup (должен быть первым)
 app.add_middleware(SetupCheckMiddleware)
 
-# CORS middleware (включен для разработки)
-cors_origins = os.getenv("CORS_ORIGINS", "*")
+# CORS middleware — конкретные origin для безопасности (cookie с credentials)
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8000,http://192.168.50.18:8000,https://qd.gostsecret.ru")
 if cors_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in cors_origins.split(",")],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
 # SecurityMiddleware (JWT через JWKS + локальный fallback)

@@ -44,25 +44,44 @@ _jwks_checked_at: float = 0.0
 _JWKS_CACHE_TTL = 300
 
 
+from functools import lru_cache
+
+import urllib.request, json
+
+
+@lru_cache(maxsize=1)
+def _load_jwks_cached(keycloak_url: str, realm: str) -> str:
+    """Загрузить JWKS (с lru_cache). При ошибке возвращает пустой keys list."""
+    url = f"{keycloak_url}/realms/{realm}/protocol/openid-connect/certs"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            return resp.read().decode("utf-8")
+    except Exception as e:
+        logger.warning(f"[SEC] JWKS load failed: {e}")
+        return '{"keys": []}'
+
+
 def _load_jwks(keycloak_url: str, realm: str) -> dict:
+    """Загрузить JWKS (с TTL-кешем)."""
     global _jwks_cache, _jwks_checked_at
     now = time.monotonic()
     if _jwks_cache is not None and (now - _jwks_checked_at) < _JWKS_CACHE_TTL:
         return _jwks_cache
-    import urllib.request, json
-    url = f"{keycloak_url}/realms/{realm}/protocol/openid-connect/certs"
-    try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            _jwks_cache = json.loads(resp.read())
-    except Exception as e:
-        logger.warning(f"[SEC] JWKS load failed: {e}")
-        _jwks_cache = {"keys": []}
+    raw = _load_jwks_cached(keycloak_url, realm)
+    # Инвалидируем lru_cache каждые 5 минут для принудительного обновления
+    if _jwks_cache is not None:
+        _load_jwks_cached.cache_clear()
+    _jwks_cache = json.loads(raw)
     _jwks_checked_at = now
     return _jwks_cache
 
 
 def _verify_keycloak(token: str, keycloak_url: str, realm: str) -> dict:
+    """Проверить токен через JWKS Keycloak с полной валидацией."""
     jwks = _load_jwks(keycloak_url, realm)
+    settings = get_settings()
+    issuer = f"{keycloak_url}/realms/{realm}"
+
     header = jwt.get_unverified_header(token)
     kid = header.get("kid")
     if not kid:
@@ -71,9 +90,23 @@ def _verify_keycloak(token: str, keycloak_url: str, realm: str) -> dict:
     if not key_data:
         raise JWTError(f"Key '{kid}' not found in JWKS")
     public_key = jwk.construct(key_data)
-    return jwt.decode(token, public_key, algorithms=["RS256"],
-                      audience="kag-api",
-                      options={"verify_exp": True, "verify_aud": True})
+
+    return jwt.decode(
+        token,
+        public_key,
+        algorithms=["RS256"],
+        audience=settings.KEYCLOAK_CLIENT_ID,
+        issuer=issuer,
+        options={
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_nbf": True,
+            "verify_iat": True,
+            "verify_aud": True,
+            "verify_iss": True,
+            "require": ["exp", "sub", "iat"],
+        },
+    )
 
 
 def _verify_local(token: str, jwt_secret: str, algorithm: str) -> dict:
@@ -153,7 +186,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in ADMIN_PREFIXES):
             if not (roles & ADMIN_ROLES):
                 logger.warning(f"[SEC] 403: user={_get_username(payload)} roles={roles} path={path}")
-                return JSONResponse(status_code=403, content={"detail": "Недостаточно прав"})
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error_code": "ACCESS_DENIED",
+                        "detail": "Недостаточно прав",
+                    },
+                )
 
         logger.debug(f"[SEC] OK: user={_get_username(payload)} → {request.method} {path}")
         return await call_next(request)
@@ -161,7 +200,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def _auth_required(self, path: str, request: Request) -> Response:
         """Возвращает редирект /login для веб-страниц или 401 JSON для API."""
         if _is_api_path(path):
-            return JSONResponse(status_code=401, content={"detail": "Требуется аутентификация"})
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error_code": "AUTH_REQUIRED",
+                    "detail": "Требуется аутентификация",
+                },
+            )
         # Веб-страница — редирект на /login с сохранением целевого URL
         from urllib.parse import quote
         next_url = quote(path, safe="")
