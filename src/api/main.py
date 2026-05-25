@@ -136,6 +136,22 @@ if os.path.exists(static_path):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 
+# ── Общая функция отдачи HTML с no-cache ─────────────────────────────
+
+def _html_response(path: str) -> FileResponse:
+    """Отдать HTML-файл с заголовками против кеширования."""
+    if os.path.exists(path):
+        return FileResponse(
+            path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    return JSONResponse({"error": "Page not found"}, status_code=404)
+
+
 @app.get("/", summary="Веб-интерфейс KAG")
 async def root_web():
     """Перенаправление: на /documents если настроено, иначе на /setup"""
@@ -171,19 +187,13 @@ async def docker_dashboard():
 @app.get("/setup", summary="Страница первоначальной настройки")
 async def setup_page():
     """Страница Setup Wizard"""
-    setup_path = os.path.join(static_path, "setup.html")
-    if os.path.exists(setup_path):
-        return FileResponse(setup_path)
-    return {"error": "Setup page not found"}
+    return _html_response(os.path.join(static_path, "setup.html"))
 
 
 @app.get("/login", summary="Страница входа")
 async def login_page():
     """Страница аутентификации"""
-    login_path = os.path.join(static_path, "login.html")
-    if os.path.exists(login_path):
-        return FileResponse(login_path)
-    return {"error": "Login page not found"}
+    return _html_response(os.path.join(static_path, "login.html"))
 
 
 @app.get("/documents", summary="Управление документами")
