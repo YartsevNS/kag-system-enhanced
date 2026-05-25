@@ -17,23 +17,17 @@ from src.config import get_settings
 
 # ── Публичные пути (без токена) ───────────────────────────────────────
 
-PUBLIC_PREFIXES: Set[str] = {
-    "/login",
-    "/setup",
-    "/",
-    "/api/v1/auth/login",
-    "/api/v1/auth/refresh",
-    "/api/v1/auth/register",
-    "/api/v1/health",
-    "/api/v1/setup",
-    "/api/v1/setup/status",
-    "/api/v1/setup/check",
-    "/api/docs",
-    "/api/redoc",
-    "/api/openapi.json",
-    "/static/",
-    "/favicon.ico",
-}
+def _is_public(path: str) -> bool:
+    """Проверить, является ли путь публичным (без токена)."""
+    # Точные совпадения
+    if path in ("/", "/login", "/setup", "/favicon.ico"):
+        return True
+    # Префиксы
+    for p in ["/api/v1/auth/", "/api/v1/health", "/api/v1/setup", 
+              "/api/docs", "/api/redoc", "/api/openapi.json", "/static/"]:
+        if path.startswith(p):
+            return True
+    return False
 
 # ── Админские пути (требуют роль admin или kag-admin) ────────────────
 
@@ -120,7 +114,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # 1. Публичные пути — без проверки
-        if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+        if _is_public(path):
             return await call_next(request)
 
         # 2. Извлечь токен (cookie → Authorization header)
