@@ -154,7 +154,7 @@ def _html_response(path: str) -> FileResponse:
 
 @app.get("/", summary="Веб-интерфейс KAG")
 async def root_web():
-    """Перенаправление: на /documents если настроено, иначе на /setup"""
+    """Перенаправление на /documents (если настроено) или /setup."""
     from starlette.responses import RedirectResponse
     try:
         from src.api.services.config_store import config_store
