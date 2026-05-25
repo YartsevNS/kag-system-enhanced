@@ -13,6 +13,7 @@ from collections import defaultdict
 
 from passlib.hash import pbkdf2_sha256 as hash_method
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
