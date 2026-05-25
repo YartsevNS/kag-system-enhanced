@@ -15,7 +15,8 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 import uuid
 import time
-import hashlib  # SHA-256 для контроля дубликатов и версионности
+import hashlib
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from loguru import logger
@@ -76,9 +77,20 @@ class DocumentService:
         """
         settings = get_settings()
         
+        # Семафор для последовательной обработки (1 документ за раз)
+        self._processing_lock = asyncio.Semaphore(1)
+        
         # Используем /app/data/uploads (принадлежит kag, persistent)
         upload_base = Path("/app/data")
         self._upload_dir = upload_base / "uploads"
+        self._ocr_dir = upload_base / "ocr_results"
+        self._thumb_dir = upload_base / "thumbnails"
+
+        for d in [self._upload_dir, self._ocr_dir, self._thumb_dir]:
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
         
         try:
             self._upload_dir.mkdir(parents=True, exist_ok=True)
@@ -240,6 +252,9 @@ class DocumentService:
         with open(file_path, 'wb') as f:
             f.write(file_content)
 
+        # Этап 5.5: создаём миниатюру (первая страница для PDF, ресайз для изображений)
+        self._create_thumbnail(file_path, doc_id, filename)
+
         # Этап 6: создаём запись о документе
         record = DocumentRecord(
             document_id=doc_id,
@@ -386,6 +401,12 @@ class DocumentService:
         Returns:
             Результат обработки
         """
+        # Последовательная обработка: только 1 документ за раз
+        async with self._processing_lock:
+            return await self._process_document_impl(document_id)
+
+    async def _process_document_impl(self, document_id: str) -> Dict[str, Any]:
+        """Реализация обработки (вызывается под семафором)."""
         record = self._documents.get(document_id)
         if not record:
             raise ValueError(f"Документ не найден: {document_id}")
@@ -441,6 +462,10 @@ class DocumentService:
                 if not segments:
                     raise ValueError("Occular-ocr вернул пустой результат")
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
+                # Сохраняем OCR-результат
+                ocr_path = self._ocr_dir / record.filename
+                ocr_path.write_text(parsed.full_text, encoding="utf-8")
+                logger.info(f"OCR сохранён: {ocr_path}")
             except Exception as e:
                 logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
                 from src.indexing.parsers import document_parser
@@ -791,6 +816,33 @@ class DocumentService:
             logger.info(f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано")
         except Exception as e:
             logger.warning(f"Ошибка построения графа для {document_id}: {e}")
+
+    def _create_thumbnail(self, file_path: Path, doc_id: str, filename: str):
+        """Создать миниатюру документа (первая страница/ресайз)."""
+        try:
+            from PIL import Image
+            suffix = file_path.suffix.lower()
+
+            if suffix == '.pdf':
+                from pdf2image import convert_from_path
+                images = convert_from_path(str(file_path), first_page=1, last_page=1, dpi=72)
+                if images:
+                    img = images[0]
+                else:
+                    return
+            elif suffix in ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'):
+                img = Image.open(file_path)
+            else:
+                return  # Не поддерживаемый формат
+
+            # Ресайз до 300px по ширине
+            img.thumbnail((300, 400), Image.LANCZOS)
+            thumb_path = self._thumb_dir / f"{doc_id}_{filename}.thumb.jpg"
+            img.convert("RGB").save(str(thumb_path), "JPEG", quality=75)
+            logger.info(f"Миниатюра создана: {thumb_path}")
+
+        except Exception as e:
+            logger.warning(f"Миниатюра не создана для {filename}: {e}")
 
 
 # Глобальный экземпляр
