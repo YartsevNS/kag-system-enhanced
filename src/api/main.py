@@ -13,7 +13,7 @@ import os
 from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor
 from src.api.routes.chat import router_export
 from src.api.routes import setup
-from src.api.middleware.auth import AuthMiddleware
+from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
@@ -112,8 +112,8 @@ if cors_origins:
         allow_headers=["*"],
     )
 
-# Middleware аутентификации (Keycloak JWT + статический токен)
-app.add_middleware(AuthMiddleware)
+# SecurityMiddleware (JWT через JWKS + локальный fallback)
+app.add_middleware(SecurityMiddleware)
 
 # Подключение роутеров
 app.include_router(health.router, prefix="/api/v1", tags=["health"])

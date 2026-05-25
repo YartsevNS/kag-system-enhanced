@@ -1,18 +1,19 @@
 """
-Auth endpoints: register, login, me.
+Auth endpoints: register, login, refresh, me.
 
 POST /auth/register - Create new user
-POST /auth/login    - Get JWT access token
-GET  /auth/me       - Get current user info (requires JWT)
+POST /auth/login     - Get JWT access + refresh tokens
+POST /auth/refresh   - Rotate refresh token → new access + refresh
+GET  /auth/me        - Get current user info (requires JWT)
 """
 
 from datetime import datetime, timedelta, timezone
 
 from passlib.hash import pbkdf2_sha256 as hash_method
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
-from jose import jwt
+from jose import jwt, JWTError
 
 from src.config import get_settings
 from src.database.session import get_db
@@ -52,10 +53,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    """Request body for token refresh."""
+    refresh_token: str
+
+
 class TokenResponse(BaseModel):
-    """JWT token response."""
+    """JWT token response with access + refresh tokens."""
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+    expires_in: int  # секунд до истечения access_token
 
 
 class UserResponse(BaseModel):
@@ -74,8 +82,8 @@ class UserResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 
-def _create_token(username: str) -> str:
-    """Create a JWT access token for the given username."""
+def _create_access_token(username: str, roles: list | None = None) -> str:
+    """Создать Access Token (15 мин)."""
     settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
@@ -84,8 +92,30 @@ def _create_token(username: str) -> str:
         "sub": username,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
+        "type": "access",
+    }
+    if roles:
+        payload["roles"] = roles
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _create_refresh_token(username: str) -> str:
+    """Создать Refresh Token (7 дней)."""
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
+    payload = {
+        "sub": username,
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "refresh",
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _get_token_expiry() -> int:
+    """Сколько секунд живёт access_token."""
+    settings = get_settings()
+    return settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
 
 def _user_to_response(user: User) -> dict:
@@ -98,6 +128,14 @@ def _user_to_response(user: User) -> dict:
         "is_active": user.is_active,
         "created_at": user.created_at,
     }
+
+
+def _user_roles(user: User) -> list:
+    """Получить список ролей пользователя."""
+    roles = []
+    if user.is_admin:
+        roles.append("admin")
+    return roles
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
@@ -114,7 +152,6 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
 
     Returns user info without password. 409 if username already exists.
     """
-    # Check duplicate
     existing = db.query(User).filter(User.username == body.username).first()
     if existing:
         raise HTTPException(
@@ -136,9 +173,9 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(body: UserLogin, db: Session = Depends(get_db)):
     """
-    Login and get a JWT access token.
+    Login and get JWT access + refresh tokens.
 
-    Returns {"access_token": "...", "token_type": "bearer"}.
+    Returns access_token (15 min) + refresh_token (7 days).
     401 if credentials are invalid.
     """
     user = db.query(User).filter(User.username == body.username).first()
@@ -154,9 +191,68 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
             detail="Account is deactivated",
         )
 
+    roles = _user_roles(user)
     return {
-        "access_token": _create_token(user.username),
+        "access_token": _create_access_token(user.username, roles),
+        "refresh_token": _create_refresh_token(user.username),
         "token_type": "bearer",
+        "expires_in": _get_token_expiry(),
+    }
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
+    """
+    Обновить токены по refresh_token (ротация).
+
+    Старый refresh_token валидируется, выпускается НОВАЯ пара токенов.
+    401 если refresh_token недействителен или пользователь деактивирован.
+    """
+    settings = get_settings()
+
+    # Валидация refresh_token
+    try:
+        payload = jwt.decode(
+            body.refresh_token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_exp": True},
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is not a refresh token",
+        )
+
+    username = payload.get("sub")
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    # Проверка пользователя
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or deactivated",
+        )
+
+    roles = _user_roles(user)
+
+    # Ротация: выпускаем НОВУЮ пару токенов
+    return {
+        "access_token": _create_access_token(user.username, roles),
+        "refresh_token": _create_refresh_token(user.username),
+        "token_type": "bearer",
+        "expires_in": _get_token_expiry(),
     }
 
 
