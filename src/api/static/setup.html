@@ -591,7 +591,10 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                     const div = document.getElementById(id);
                     if (div) { div.style.display = 'none'; div.innerHTML = ''; }
                 });
-                setTimeout(() => { st.innerHTML = ''; }, 3000);
+                // Отмечаем setup как завершённый и редиректим
+                fetch('/api/v1/setup/complete', {method:'POST'}).catch(()=>{});
+                st.innerHTML = '✅ Скопировано! Переход на документы...';
+                setTimeout(() => { window.location.href = '/documents'; }, 1500);
             }).catch(() => {
                 const st = document.getElementById('copy-status');
                 st.className = 'create-status error';

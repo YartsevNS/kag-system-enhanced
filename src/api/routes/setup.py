@@ -528,3 +528,18 @@ async def mark_creds_shown():
             config_store.set(key, "default", cfg)
             logger.info(f"Креды {key} помечены как показанные")
     return {"success": True, "message": "Креды помечены как показанные"}
+
+
+@router.post("/complete")
+async def complete_setup():
+    """
+    Отмечает setup как завершённый.
+    Вызывается фронтендом после копирования кредов в буфер.
+    После этого / редиректит на /documents вместо /setup.
+    """
+    status = config_store.get("setup", "status", {})
+    status["configured"] = True
+    status["timestamp"] = datetime.now().isoformat()
+    config_store.set("setup", "status", status)
+    logger.info("Setup Wizard завершён — система настроена")
+    return {"success": True, "message": "Setup завершён"}

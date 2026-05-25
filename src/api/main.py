@@ -138,8 +138,15 @@ if os.path.exists(static_path):
 
 @app.get("/", summary="Веб-интерфейс KAG")
 async def root_web():
-    """Перенаправление на страницу настройки"""
+    """Перенаправление: на /documents если настроено, иначе на /setup"""
     from starlette.responses import RedirectResponse
+    try:
+        from src.api.services.config_store import config_store
+        status = config_store.get("setup", "status", {})
+        if status.get("configured"):
+            return RedirectResponse(url="/documents")
+    except Exception:
+        pass
     return RedirectResponse(url="/setup")
 
 
