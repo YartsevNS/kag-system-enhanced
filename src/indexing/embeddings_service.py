@@ -181,6 +181,12 @@ class EmbeddingsService:
 
                 self._qdrant_client.create_payload_index(
                     collection_name=self.collection_name,
+                    field_name="filename",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
                     field_name="group_ids",
                     field_schema=PayloadSchemaType.KEYWORD
                 )
@@ -226,11 +232,17 @@ class EmbeddingsService:
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{document_id}-{i}"))
 
+            # Извлекаем filename из metadata для прямого сохранения в payload
+            filename = ""
+            if metadata:
+                filename = metadata.get("filename", "")
+            
             payload = {
                 "document_id": document_id,
                 "chunk_id": chunk.get("chunk_id", f"{document_id}_chunk_{i}"),
                 "content": chunk.get("content", ""),
                 "file_type": metadata.get("file_type", "unknown") if metadata else "unknown",
+                "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
                 "group_ids": group_ids or [],
                 "metadata": {
                     **(metadata or {}),
@@ -390,6 +402,7 @@ class EmbeddingsService:
                     "document_id": payload.get("document_id"),
                     "chunk_id": payload.get("chunk_id"),
                     "file_type": payload.get("file_type"),
+                    "filename": payload.get("filename", ""),  # Возвращаем filename напрямую
                     "metadata": payload.get("metadata", {})
                 })
         except Exception as e:

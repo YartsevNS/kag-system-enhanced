@@ -220,9 +220,10 @@ class ChatService:
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
                         doc_id = result.get('document_id', '?')
-                        # Получаем имя файла из document_service
+                        # filename теперь возвращается напрямую из Qdrant (не нужен лишний запрос)
                         filename = result.get('filename', '')
-                        if not filename or filename == doc_id:
+                        if not filename:
+                            # Fallback: получаем имя файла из document_service только если не найдено в payload
                             try:
                                 from src.api.services.document_service import document_service
                                 record = document_service.get_document(doc_id)

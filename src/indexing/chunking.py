@@ -5,10 +5,19 @@
 - Контекста
 - Метаданных
 - Ссылок между чанками
+
+Использует RecursiveCharacterTextSplitter для русского языка с правильными разделителями.
 """
 
 from typing import Dict, Any, List
 from loguru import logger
+
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+    logger.warning("langchain-text-splitters не установлен. Используем fallback чанкер.")
 
 from src.config import get_settings
 
@@ -18,9 +27,8 @@ class DocumentChunker:
     Единый чанкер документов для векторизации.
 
     Стратегии:
-    - По размеру (фиксированное количество токенов/символов)
-    - По структуре (абзацы, секции)
-    - Семантический (по смысловым границам)
+    - RecursiveCharacterTextSplitter с разделителями для русского языка (приоритет)
+    - Fallback: посимвольное разбиение с учетом структуры
     """
 
     def __init__(
@@ -31,6 +39,24 @@ class DocumentChunker:
         settings = get_settings()
         self.chunk_size = chunk_size or settings.CHUNK_SIZE
         self.chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
+        
+        # Инициализируем RecursiveCharacterTextSplitter для русского языка
+        if LANGCHAIN_AVAILABLE:
+            # Разделители по приоритету: абзацы, строки, предложения, слова, символы
+            self.text_splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", ". ", " ", ""],
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
+                length_function=len,
+                keep_separator=True
+            )
+            logger.info(
+                f"RecursiveCharacterTextSplitter инициализирован: "
+                f"chunk_size={self.chunk_size}, overlap={self.chunk_overlap}"
+            )
+        else:
+            self.text_splitter = None
+            logger.warning("Используем fallback чанкер без langchain")
 
     def chunk(
         self,
@@ -51,28 +77,51 @@ class DocumentChunker:
         chunks = []
         chunk_seq = 0
 
-        for i, segment in enumerate(segments):
-            content = segment.get("content", "")
-
-            if len(content) <= self.chunk_size:
+        # Объединяем весь текст из сегментов для правильного чанкинга
+        full_text = "\n\n".join(seg.get("content", "") for seg in segments)
+        
+        if LANGCHAIN_AVAILABLE and self.text_splitter:
+            # Используем RecursiveCharacterTextSplitter для качественного разбиения
+            split_texts = self.text_splitter.split_text(full_text)
+            
+            for i, text in enumerate(split_texts):
                 chunk_seq += 1
                 chunks.append({
                     "chunk_id": f"chunk_{chunk_seq:05d}",
-                    "content": content,
+                    "content": text,
                     "metadata": {
-                        **segment.get("metadata", {}),
                         "segment_index": i,
-                        "chunk_index": 0,
-                        "total_chunks": 1,
-                        "chunk_seq": chunk_seq
+                        "chunk_index": i,
+                        "total_chunks": len(split_texts),
+                        "chunk_seq": chunk_seq,
+                        "splitter": "recursive_character"
                     }
                 })
-            else:
-                segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq)
-                chunks.extend(segment_chunks)
-                chunk_seq += len(segment_chunks)
+            logger.info(f"Документ разбит на {len(chunks)} чанков (RecursiveCharacterTextSplitter)")
+        else:
+            # Fallback: старый метод посимвольного разбиения
+            for i, segment in enumerate(segments):
+                content = segment.get("content", "")
 
-        logger.info(f"Документ разбит на {len(chunks)} чанков")
+                if len(content) <= self.chunk_size:
+                    chunk_seq += 1
+                    chunks.append({
+                        "chunk_id": f"chunk_{chunk_seq:05d}",
+                        "content": content,
+                        "metadata": {
+                            **segment.get("metadata", {}),
+                            "segment_index": i,
+                            "chunk_index": 0,
+                            "total_chunks": 1,
+                            "chunk_seq": chunk_seq
+                        }
+                    })
+                else:
+                    segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq)
+                    chunks.extend(segment_chunks)
+                    chunk_seq += len(segment_chunks)
+            logger.info(f"Документ разбит на {len(chunks)} чанков (fallback)")
+
         return chunks
 
     def chunk_segments(
@@ -91,28 +140,51 @@ class DocumentChunker:
         chunks = []
         chunk_seq = 0
 
-        for i, segment in enumerate(segments):
-            content = segment.get("content", "")
-            metadata = segment.get("metadata", {})
-
-            if len(content) <= self.chunk_size:
+        # Объединяем весь текст для правильного чанкинга
+        full_text = "\n\n".join(seg.get("content", "") for seg in segments)
+        
+        if LANGCHAIN_AVAILABLE and self.text_splitter:
+            # Используем RecursiveCharacterTextSplitter
+            split_texts = self.text_splitter.split_text(full_text)
+            
+            for i, text in enumerate(split_texts):
                 chunk_seq += 1
                 chunks.append({
                     "chunk_id": f"chunk_{chunk_seq:05d}",
-                    "content": content,
+                    "content": text,
                     "metadata": {
-                        **metadata,
-                        "chunk_index": chunk_seq,
+                        "chunk_index": i,
                         "chunk_seq": chunk_seq,
+                        "total_chunks": len(split_texts),
+                        "splitter": "recursive_character",
                         "is_partial": False
                     }
                 })
-            else:
-                segment_chunks = self._split_content(content, i, metadata, chunk_seq)
-                chunks.extend(segment_chunks)
-                chunk_seq += len(segment_chunks)
+            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (RecursiveCharacterTextSplitter)")
+        else:
+            # Fallback: старый метод
+            for i, segment in enumerate(segments):
+                content = segment.get("content", "")
+                metadata = segment.get("metadata", {})
 
-        logger.info(f"Сегменты разбиты на {len(chunks)} чанков")
+                if len(content) <= self.chunk_size:
+                    chunk_seq += 1
+                    chunks.append({
+                        "chunk_id": f"chunk_{chunk_seq:05d}",
+                        "content": content,
+                        "metadata": {
+                            **metadata,
+                            "chunk_index": chunk_seq,
+                            "chunk_seq": chunk_seq,
+                            "is_partial": False
+                        }
+                    })
+                else:
+                    segment_chunks = self._split_content(content, i, metadata, chunk_seq)
+                    chunks.extend(segment_chunks)
+                    chunk_seq += len(segment_chunks)
+            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (fallback)")
+
         return chunks
 
     def _split_content(
