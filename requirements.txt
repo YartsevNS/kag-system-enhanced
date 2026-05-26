@@ -74,3 +74,9 @@ shapely>=2.0.0
 onnxruntime>=1.16.0
 pymupdf>=1.23.0
 docling>=2.0.0
+
+# Улучшенный чанкинг для русского языка
+langchain-text-splitters>=0.3.0
+
+# Reranking для улучшения качества поиска
+sentence-transformers>=2.7.0
