@@ -191,6 +191,12 @@ class EmbeddingsService:
                     field_schema=PayloadSchemaType.KEYWORD
                 )
 
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="filename",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
                 logger.info(f"Коллекция создана: {self.collection_name}")
             else:
                 logger.info(f"Коллекция существует: {self.collection_name}")
