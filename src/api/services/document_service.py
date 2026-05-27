@@ -179,7 +179,7 @@ class DocumentService:
     async def upload_document(
         self,
         filename: str,
-        temp_file_path: str,
+        file_content: bytes,
         file_type: Optional[str] = None,
         uploaded_by: Optional[str] = None,
         group_ids: Optional[List[str]] = None,
@@ -188,57 +188,31 @@ class DocumentService:
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
-        
-        Отличие от предыдущей версии:
-        - Вместо file_content: bytes принимает temp_file_path: str
-        - Файл уже лежит во временной директории (/tmp/uploads/upload_id_filename)
-        - Хеш вычисляется стримингом (без загрузки всего файла в память)
-        - После успешной проверки — атомарный os.rename() в целевую директорию
-        - Если что-то пошло не так — temp файл удаляется
 
         Алгоритм:
-        1. Вычисляем SHA-256 хеш стримингом (по 64KB)
-        2. Если хеш СОВПАДАЕТ с существующим → удаляем temp, возвращаем существующий
-        3. Если force_new → бэкапим старую версию
-        4. Атомарный os.rename() temp → uploads/{doc_id}_{filename}
-        5. Создаём миниатюру (первая страница PDF, ресайз изображений)
+        1. SHA-256 хеш содержимого (быстро, в памяти)
+        2. Если хеш совпадает с существующим — возвращаем существующий (не дублируем)
+        3. Если force_new — бэкапим старую версию
+        4. Сохраняем файл на диск: /app/data/uploads/{doc_id}_{filename}
+        5. Создаём миниатюру
 
         Args:
-            filename: Имя файла (оригинальное, от пользователя)
-            temp_file_path: Полный путь к временному файлу (уже на диске)
+            filename: Имя файла (оригинальное)
+            file_content: Содержимое файла (байты)
             file_type: MIME тип (опционально)
-            uploaded_by: ID пользователя, загрузившего документ
-            group_ids: Список group_id для контроля доступа (RBAC)
-            force_new: Принудительно создать новый документ, игнорируя дубликаты
-            upload_id: UUID загрузки для связывания логов (генерируется в роуте)
+            uploaded_by: ID пользователя
+            group_ids: Список group_id для RBAC
+            force_new: Принудительно создать новый документ
+            upload_id: UUID загрузки (для логов)
 
         Returns:
-            DocumentRecord — запись о документе (новая или существующая)
+            DocumentRecord
         """
-        # ========== Этап 1: вычисляем SHA-256 хеш стримингом (без чтения всего файла в память) ==========
-        # Читаем файл блоками по 64KB, чтобы не загружать 500MB файл целиком
-        sha256_hash = hashlib.sha256()
-        file_size = 0
-        try:
-            with open(temp_file_path, 'rb') as f:
-                while True:
-                    chunk = f.read(65536)  # 64KB блок
-                    if not chunk:
-                        break
-                    sha256_hash.update(chunk)
-                    file_size += len(chunk)
-        except OSError as e:
-            logger.error(f"[{upload_id or '-'}] Ошибка чтения temp-файла {temp_file_path}: {e}")
-            try:
-                Path(temp_file_path).unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise ValueError(f"Не удалось прочитать загруженный файл: {e}")
-
-        file_hash = sha256_hash.hexdigest()
+        # ========== Этап 1: вычисляем SHA-256 хеш содержимого ==========
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        file_size = len(file_content)
         logger.debug(
-            f"[{upload_id or '-'}] Хеш вычислен: {file_hash[:16]}..., "
-            f"размер: {file_size} байт"
+            f"[{upload_id or '-'}] Хеш: {file_hash[:16]}..., размер: {file_size} байт"
         )
 
         # ========== Этап 2: проверяем дубликаты по хешу ==========
@@ -250,12 +224,6 @@ class DocumentService:
                     f"(хеш {file_hash[:12]}...) уже есть как "
                     f"{existing.document_id[:12]} v{existing.version}"
                 )
-                # Удаляем temp-файл — он не нужен, дубликат
-                try:
-                    Path(temp_file_path).unlink(missing_ok=True)
-                    logger.debug(f"[{upload_id or '-'}] Temp-файл удалён (дубликат): {temp_file_path}")
-                except OSError as e:
-                    logger.warning(f"[{upload_id or '-'}] Не удалось удалить temp-файл {temp_file_path}: {e}")
                 return existing
 
         # ========== Этап 3: создаём запись о документе ==========
@@ -286,25 +254,13 @@ class DocumentService:
             ext = Path(filename).suffix.lower()
             file_type = ext
 
-        # ========== Этап 5: атомарно перемещаем файл из temp в uploads ==========
+        # ========== Этап 5: сохраняем файл на диск ==========
         target_path = self._upload_dir / f"{doc_id}_{filename}"
-        try:
-            os.rename(temp_file_path, str(target_path))
-            logger.info(
-                f"[{upload_id}] 💾 Файл сохранён: {target_path.name} "
-                f"(был: {Path(temp_file_path).name})"
-            )
-        except OSError as e:
-            # Если rename не удался (разные файловые системы) — копируем и удаляем
-            logger.warning(f"[{upload_id}] rename не сработал ({e}), копирую...")
-            try:
-                import shutil
-                shutil.copy2(temp_file_path, str(target_path))
-                Path(temp_file_path).unlink(missing_ok=True)
-                logger.info(f"[{upload_id}] 💾 Файл скопирован (fallback): {target_path.name}")
-            except Exception as e2:
-                logger.error(f"[{upload_id}] ❌ Не удалось сохранить файл: {e2}")
-                raise ValueError(f"Ошибка сохранения файла: {e2}")
+        with open(target_path, 'wb') as f:
+            f.write(file_content)
+        logger.info(
+            f"[{upload_id}] 💾 Файл сохранён: {target_path.name} ({file_size} байт)"
+        )
 
         # ========== Этап 5.5: создаём миниатюру (первая страница для PDF, ресайз для изображений) ==========
         self._create_thumbnail(str(target_path), doc_id, filename)

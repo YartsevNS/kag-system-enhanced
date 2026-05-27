@@ -1,27 +1,21 @@
 """
 Маршруты для загрузки и обработки документов
 
-Архитектура загрузки (streaming → temp → rename):
-1. Клиент шлёт POST /api/v1/upload/ с multipart/form-data (файл)
-2. Сервер стримит файл во временную директорию /tmp/uploads/{upload_id}_{filename}
-   — НЕ читает весь файл в память (никакого await file.read())
-   — Для файлов >500MB используется chunked write (64KB буфер)
-3. document_service.upload_document() вычисляет хеш стримингом, проверяет дубликаты
-4. После проверки — атомарный os.rename() из /tmp/uploads/ в /app/data/uploads/
-5. В очередь обработки кладётся document_id, пул воркеров (max_workers из env)
-   забирает задачи и обрабатывает (парсинг → чанкинг → векторизация)
+Архитектура (как Paperless-ngx):
+1. Клиент шлёт POST /api/v1/upload/ с multipart/form-data
+2. Сервер читает файл в память (await file.read()) — быстро, не bottleneck
+3. Валидация (размер, тип, безопасность)
+4. document_service.upload_document() — хеширует, сохраняет на диск, проверяет дубликаты
+5. Сразу ответ клиенту с document_id
+6. Очередь FIFO (asyncio.Queue + пул воркеров) забирает обработку
 
-Очередь (вместо Semaphore(1)):
-- asyncio.Queue — FIFO, не блокирует event loop
-- Пул asyncio worker'ов (configurable max_workers)
-- ProcessPoolExecutor для CPU-bound задач (OCR, pdf2image)
-- Длина очереди логируется, алерт при >100
+Никакого temp/rename/staging — файл сразу в /app/data/uploads/.
+Обработка асинхронная, не блокирует upload.
 """
 
 import os
 import uuid
 import asyncio
-from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 
@@ -36,13 +30,8 @@ from src.database.user_models import User
 
 router = APIRouter()
 
-# ============================================================
-# Константы загрузки
-# ============================================================
-TEMP_DIR = Path("/tmp/uploads")         # Временная директория для стриминга
-MAX_FILE_SIZE = 500 * 1024 * 1024       # 500MB — лимит одного файла
-CHUNK_SIZE = 65536                      # 64KB — размер буфера стриминга
-STALE_TEMP_MINUTES = 30                 # Удалять temp-файлы старше 30 минут
+# Лимит одного файла (500MB)
+MAX_FILE_SIZE = 500 * 1024 * 1024
 
 
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
@@ -51,111 +40,70 @@ async def upload_document(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Загрузить документ с потоковой записью на диск (streaming upload).
-    
-    Отличие от предыдущей версии:
-    - Файл не читается в память целиком, а стримится на диск по 64KB
-    - Генерируется upload_id (UUID v4) для связывания всех логов
-    - После записи — атомарный rename из temp в uploads
-    - При ошибке temp-файл гарантированно удаляется
-    - Валидация размера происходит ДО начала загрузки (Content-Length)
-    
-    Args:
-        file: Загружаемый файл (multipart/form-data)
-        current_user: Пользователь (опционально, для RBAC)
-    
-    Returns:
-        DocumentStatus с document_id для отслеживания обработки
+    Загрузить документ.
+
+    Простая логика: прочитать файл → проверить → сохранить → ответить.
+    Обработка (OCR, чанкинг, векторизация) — асинхронно через очередь.
     """
-    # ========== Этап 0: генерируем upload_id для связывания всех логов ==========
     upload_id = str(uuid.uuid4())
     filename = file.filename or f"unnamed_{upload_id[:8]}"
-    logger.info(f"[{upload_id}] 📥 Запрос загрузки: {filename}, тип: {file.content_type}")
+    logger.info(f"[{upload_id}] 📥 Загрузка: {filename}, тип: {file.content_type}")
 
-    # ========== Этап 1: очищаем старые temp-файлы (предочистка) ==========
+    # Читаем файл целиком
     try:
-        document_service.cleanup_stale_temp_files(
-            temp_dir=str(TEMP_DIR),
-            max_age_minutes=STALE_TEMP_MINUTES
-        )
+        content = await file.read()
     except Exception as e:
-        logger.warning(f"[{upload_id}] Ошибка cleanup: {e}")
+        logger.error(f"[{upload_id}] ❌ Ошибка чтения файла: {e}")
+        raise HTTPException(status_code=400, detail={
+            "code": "UPLOAD_ERROR",
+            "message": f"Ошибка чтения файла: {e}",
+            "upload_id": upload_id
+        })
 
-    # ========== Этап 2: создаём temp-файл и стримим данные на диск ==========
-    # Формат: /tmp/uploads/{upload_id}_{filename}
-    # Используем upload_id в имени, чтобы избежать коллизий имён файлов
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    temp_path = TEMP_DIR / f"{upload_id}_{filename}"
-    
-    bytes_written = 0
-    try:
-        with open(temp_path, 'wb') as temp_f:
-            # Читаем файл из запроса по частям (64KB) и пишем на диск
-            # Такой подход не держит весь файл в памяти Python
-            while True:
-                chunk = await file.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                temp_f.write(chunk)
-                bytes_written += len(chunk)
-                
-                # Проверка лимита размера файла
-                if bytes_written > MAX_FILE_SIZE:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"Файл слишком большой: {bytes_written} байт "
-                               f"(макс. {MAX_FILE_SIZE} байт)"
-                    )
+    file_size = len(content)
 
-        logger.info(
-            f"[{upload_id}] ✅ Файл записан в temp: {temp_path.name} "
-            f"({bytes_written} байт)"
-        )
+    # Проверка лимита размера
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail={
+            "code": "VALIDATION_ERROR",
+            "message": f"Файл слишком большой: {file_size} байт (макс. {MAX_FILE_SIZE} байт)",
+            "upload_id": upload_id
+        })
 
-    except HTTPException:
-        # Ошибка лимита размера — удаляем temp и пробрасываем дальше
-        _cleanup_temp(temp_path, upload_id)
-        raise
-    except Exception as e:
-        logger.error(f"[{upload_id}] ❌ Ошибка записи temp-файла: {e}")
-        _cleanup_temp(temp_path, upload_id)
-        raise HTTPException(status_code=500, detail=f"Ошибка записи файла: {e}")
-
-    # ========== Этап 3: валидация файла (тип, размер, безопасность) ==========
+    # Валидация безопасности
     try:
         SecurityValidator.validate_file_upload(
-            file_path=str(temp_path),
+            file_path="",
             filename=filename,
-            file_size=bytes_written,
+            file_size=file_size,
             mime_type=file.content_type
         )
     except SecurityValidationError as ve:
-        _cleanup_temp(temp_path, upload_id)
         raise HTTPException(status_code=400, detail={
             "code": "VALIDATION_ERROR",
             "message": ve.message,
             "upload_id": upload_id
         })
 
-    # ========== Этап 4: передаём файл в document_service для хеширования и сохранения ==========
+    # Сохраняем через document_service
     try:
         uploaded_by = current_user.id if current_user else None
         group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
 
         record = await document_service.upload_document(
             filename=filename,
-            temp_file_path=str(temp_path),
+            file_content=content,
             file_type=file.content_type,
             uploaded_by=uploaded_by,
             group_ids=group_ids,
             upload_id=upload_id
         )
 
-        # ========== Этап 5: ставим документ в очередь обработки ==========
-        # Очередь FIFO, пул воркеров забирает задачи
-        # Воркеры запускают process_document() с ProcessPoolExecutor для CPU-bound
+        # Ставим в очередь обработки
         await _processing_queue.put(record.document_id)
-        logger.info(f"[{upload_id}] 📋 Документ поставлен в очередь (размер очереди: {_processing_queue.qsize()})")
+        logger.info(
+            f"[{upload_id}] 📋 В очередь (размер: {_processing_queue.qsize()})"
+        )
 
         return DocumentStatus(
             document_id=record.document_id,
@@ -167,23 +115,12 @@ async def upload_document(
         )
 
     except Exception as e:
-        logger.error(f"[{upload_id}] ❌ Ошибка обработки загруженного файла: {e}")
-        _cleanup_temp(temp_path, upload_id)
+        logger.error(f"[{upload_id}] ❌ Ошибка сохранения: {e}")
         raise HTTPException(status_code=500, detail={
             "code": "UPLOAD_ERROR",
             "message": str(e),
             "upload_id": upload_id
         })
-
-
-def _cleanup_temp(path: Path, upload_id: str):
-    """Безопасно удалить temp-файл при ошибке. Не кидает исключений."""
-    try:
-        if path.exists():
-            path.unlink()
-            logger.info(f"[{upload_id}] 🗑️ Temp-файл удалён: {path.name}")
-    except OSError as e:
-        logger.warning(f"[{upload_id}] Не удалось удалить temp-файл {path.name}: {e}")
 
 
 @router.post("/batch", summary="Пакетная загрузка документов")
@@ -192,98 +129,80 @@ async def upload_documents_batch(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Пакетная загрузка нескольких документов (streaming).
-    
-    Каждый файл обрабатывается независимо:
-    - Стримится в /tmp/uploads/{upload_id}_{filename}
-    - Валидируется, хешируется, перемещается атомарно
-    - Ставится в очередь обработки
-    
-    Если один файл упал — остальные продолжают загружаться.
-    
+    Пакетная загрузка нескольких документов.
+
+    Каждый файл: прочитать → проверить → сохранить → в очередь.
+    Если один файл упал — остальные продолжают.
+
     Args:
         files: Список файлов для загрузки
         current_user: Пользователь (опционально)
-    
+
     Returns:
         Список результатов {filename, document_id, status, error}
     """
     logger.info(f"Пакетная загрузка: {len(files)} файлов")
-    
+
     uploaded_by = current_user.id if current_user else None
     group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     results = []
     for file in files:
         upload_id = str(uuid.uuid4())
         filename = file.filename or f"unnamed_{upload_id[:8]}"
-        temp_path = TEMP_DIR / f"{upload_id}_{filename}"
-        
+
         try:
-            # ========== Streaming в temp ==========
-            bytes_written = 0
-            with open(temp_path, 'wb') as temp_f:
-                while True:
-                    chunk = await file.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    temp_f.write(chunk)
-                    bytes_written += len(chunk)
-                    if bytes_written > MAX_FILE_SIZE:
-                        raise HTTPException(status_code=413, detail="Файл слишком большой")
-            
-            # ========== Валидация ==========
+            content = await file.read()
+            file_size = len(content)
+
+            if file_size > MAX_FILE_SIZE:
+                raise HTTPException(status_code=413, detail="Файл слишком большой")
+
             SecurityValidator.validate_file_upload(
-                file_path=str(temp_path),
+                file_path="",
                 filename=filename,
-                file_size=bytes_written,
+                file_size=file_size,
                 mime_type=file.content_type
             )
-            
-            # ========== Сохранение в document_service ==========
+
             record = await document_service.upload_document(
                 filename=filename,
-                temp_file_path=str(temp_path),
+                file_content=content,
                 file_type=file.content_type,
                 uploaded_by=uploaded_by,
                 group_ids=group_ids,
                 upload_id=upload_id
             )
-            
-            # ========== В очередь ==========
+
             await _processing_queue.put(record.document_id)
-            
+
             results.append({
                 "document_id": record.document_id,
                 "filename": filename,
                 "status": record.status,
                 "file_size": record.file_size
             })
-            
-        except HTTPException as e:
-            _cleanup_temp(temp_path, upload_id)
-            results.append({
-                "filename": filename,
-                "status": "error",
-                "error": e.detail
-            })
+
         except SecurityValidationError as ve:
-            _cleanup_temp(temp_path, upload_id)
             results.append({
                 "filename": filename,
                 "status": "error",
                 "error": ve.message
             })
+        except HTTPException as e:
+            results.append({
+                "filename": filename,
+                "status": "error",
+                "error": e.detail
+            })
         except Exception as e:
             logger.error(f"[{upload_id}] Ошибка загрузки {filename}: {e}")
-            _cleanup_temp(temp_path, upload_id)
             results.append({
                 "filename": filename,
                 "status": "error",
                 "error": str(e)
             })
-    
+
     return {"uploaded": len(results), "documents": results}
 
 
