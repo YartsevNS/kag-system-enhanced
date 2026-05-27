@@ -178,89 +178,142 @@ class DocumentService:
     async def upload_document(
         self,
         filename: str,
-        file_content: bytes,
+        temp_file_path: str,
         file_type: Optional[str] = None,
         uploaded_by: Optional[str] = None,
         group_ids: Optional[List[str]] = None,
-        force_new: bool = False  # True = всегда создавать новый документ, игнорируя дубликаты
+        force_new: bool = False,
+        upload_id: Optional[str] = None
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
+        
+        Отличие от предыдущей версии:
+        - Вместо file_content: bytes принимает temp_file_path: str
+        - Файл уже лежит во временной директории (/tmp/uploads/upload_id_filename)
+        - Хеш вычисляется стримингом (без загрузки всего файла в память)
+        - После успешной проверки — атомарный os.rename() в целевую директорию
+        - Если что-то пошло не так — temp файл удаляется
 
-        Логика:
-        1. Вычисляется SHA-256 хеш содержимого файла
-        2. Если хеш СОВПАДАЕТ с существующим документом → возвращается существующий (не дублируется)
-        3. Если force_new=True → старая копия бэкапится как .v{N}.bak, создаётся новая версия
-        4. Файл сохраняется как {doc_id}_{filename}
+        Алгоритм:
+        1. Вычисляем SHA-256 хеш стримингом (по 64KB)
+        2. Если хеш СОВПАДАЕТ с существующим → удаляем temp, возвращаем существующий
+        3. Если force_new → бэкапим старую версию
+        4. Атомарный os.rename() temp → uploads/{doc_id}_{filename}
+        5. Создаём миниатюру (первая страница PDF, ресайз изображений)
 
         Args:
-            filename: Имя файла
-            file_content: Содержимое файла (байты)
+            filename: Имя файла (оригинальное, от пользователя)
+            temp_file_path: Полный путь к временному файлу (уже на диске)
             file_type: MIME тип (опционально)
             uploaded_by: ID пользователя, загрузившего документ
-            group_ids: Список group_id для контроля доступа
-            force_new: Принудительно создать новый документ, даже если хеш совпадает
+            group_ids: Список group_id для контроля доступа (RBAC)
+            force_new: Принудительно создать новый документ, игнорируя дубликаты
+            upload_id: UUID загрузки для связывания логов (генерируется в роуте)
 
         Returns:
-            Запись о документе (новая или существующая)
+            DocumentRecord — запись о документе (новая или существующая)
         """
-        # Этап 1: вычисляем SHA-256 хеш содержимого
-        file_hash = hashlib.sha256(file_content).hexdigest()
+        # ========== Этап 1: вычисляем SHA-256 хеш стримингом (без чтения всего файла в память) ==========
+        # Читаем файл блоками по 64KB, чтобы не загружать 500MB файл целиком
+        sha256_hash = hashlib.sha256()
+        file_size = 0
+        try:
+            with open(temp_file_path, 'rb') as f:
+                while True:
+                    chunk = f.read(65536)  # 64KB блок
+                    if not chunk:
+                        break
+                    sha256_hash.update(chunk)
+                    file_size += len(chunk)
+        except OSError as e:
+            logger.error(f"[{upload_id or '-'}] Ошибка чтения temp-файла {temp_file_path}: {e}")
+            try:
+                Path(temp_file_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise ValueError(f"Не удалось прочитать загруженный файл: {e}")
 
-        # Этап 2: проверяем — нет ли уже документа с таким же хешем?
+        file_hash = sha256_hash.hexdigest()
+        logger.debug(
+            f"[{upload_id or '-'}] Хеш вычислен: {file_hash[:16]}..., "
+            f"размер: {file_size} байт"
+        )
+
+        # ========== Этап 2: проверяем дубликаты по хешу ==========
         if not force_new:
             existing = self._find_by_hash(file_hash)
             if existing:
                 logger.info(
-                    f"🔁 Дубликат обнаружен: {filename} (хеш {file_hash[:12]}...) "
-                    f"уже существует как {existing.document_id} (v{existing.version})"
+                    f"[{upload_id or '-'}] 🔁 Дубликат: {filename} "
+                    f"(хеш {file_hash[:12]}...) уже есть как "
+                    f"{existing.document_id[:12]} v{existing.version}"
                 )
-                return existing  # Возвращаем существующий — не создаём дубликат
+                # Удаляем temp-файл — он не нужен, дубликат
+                try:
+                    Path(temp_file_path).unlink(missing_ok=True)
+                    logger.debug(f"[{upload_id or '-'}] Temp-файл удалён (дубликат): {temp_file_path}")
+                except OSError as e:
+                    logger.warning(f"[{upload_id or '-'}] Не удалось удалить temp-файл {temp_file_path}: {e}")
+                return existing
 
-        # Этап 3: если force_new и есть документ с таким хешем — делаем бэкап
+        # ========== Этап 3: создаём запись о документе ==========
         doc_id = str(uuid.uuid4())
         version = 1
         previous_hash = None
         original_text = None
+        upload_id = upload_id or doc_id  # Если upload_id не передан, используем document_id
 
         if force_new:
             prev = self._find_by_hash(file_hash)
             if prev:
-                # Бэкапим старый файл
                 prev_path = self._find_file(prev.document_id, prev.filename)
                 if prev_path:
                     backup_path = prev_path.with_suffix(prev_path.suffix + f'.v{prev.version}.bak')
                     try:
                         import shutil
                         shutil.copy2(prev_path, backup_path)
-                        logger.info(f"📦 Бэкап создан: {backup_path.name}")
+                        logger.info(f"[{upload_id}] 📦 Бэкап: {backup_path.name}")
                     except Exception as e:
-                        logger.warning(f"Не удалось создать бэкап: {e}")
-
-                # Наследуем версию и текст оригинала
+                        logger.warning(f"[{upload_id}] Не удалось создать бэкап: {e}")
                 version = prev.version + 1
                 previous_hash = prev.file_hash
                 original_text = prev.original_text or self._load_original_text(prev.document_id)
 
-        # Этап 4: определяем тип файла
+        # ========== Этап 4: определяем тип файла по расширению, если не передан ==========
         if not file_type:
             ext = Path(filename).suffix.lower()
             file_type = ext
 
-        # Этап 5: сохраняем файл на диск
-        file_path = self._upload_dir / f"{doc_id}_{filename}"
-        with open(file_path, 'wb') as f:
-            f.write(file_content)
+        # ========== Этап 5: атомарно перемещаем файл из temp в uploads ==========
+        target_path = self._upload_dir / f"{doc_id}_{filename}"
+        try:
+            os.rename(temp_file_path, str(target_path))
+            logger.info(
+                f"[{upload_id}] 💾 Файл сохранён: {target_path.name} "
+                f"(был: {Path(temp_file_path).name})"
+            )
+        except OSError as e:
+            # Если rename не удался (разные файловые системы) — копируем и удаляем
+            logger.warning(f"[{upload_id}] rename не сработал ({e}), копирую...")
+            try:
+                import shutil
+                shutil.copy2(temp_file_path, str(target_path))
+                Path(temp_file_path).unlink(missing_ok=True)
+                logger.info(f"[{upload_id}] 💾 Файл скопирован (fallback): {target_path.name}")
+            except Exception as e2:
+                logger.error(f"[{upload_id}] ❌ Не удалось сохранить файл: {e2}")
+                raise ValueError(f"Ошибка сохранения файла: {e2}")
 
-        # Этап 5.5: создаём миниатюру (первая страница для PDF, ресайз для изображений)
-        self._create_thumbnail(file_path, doc_id, filename)
+        # ========== Этап 5.5: создаём миниатюру (первая страница для PDF, ресайз для изображений) ==========
+        self._create_thumbnail(str(target_path), doc_id, filename)
 
-        # Этап 6: создаём запись о документе
+        # ========== Этап 6: создаём запись о документе в памяти ==========
         record = DocumentRecord(
             document_id=doc_id,
             filename=filename,
             file_type=file_type,
-            file_size=len(file_content),
+            file_size=file_size,
             file_hash=file_hash,
             version=version,
             previous_hash=previous_hash,
@@ -272,8 +325,8 @@ class DocumentService:
 
         self._documents[doc_id] = record
         logger.info(
-            f"📄 Документ загружен: {doc_id[:12]}... v{version} | "
-            f"хеш {file_hash[:12]}... | {filename}"
+            f"[{upload_id}] ✅ Документ загружен: {doc_id[:12]} v{version} | "
+            f"хеш {file_hash[:12]}... | {filename} ({file_size} байт)"
         )
 
         # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
@@ -843,6 +896,54 @@ class DocumentService:
 
         except Exception as e:
             logger.warning(f"Миниатюра не создана для {filename}: {e}")
+
+    # ============================================================
+    # Cleanup — удаление старых temp-файлов
+    # ============================================================
+    @staticmethod
+    def cleanup_stale_temp_files(
+        temp_dir: str = "/tmp/uploads",
+        max_age_minutes: int = 30
+    ) -> int:
+        """
+        Удалить temp-файлы старше N минут.
+        
+        Защита от засорения /tmp/ при обрыве соединения или падении.
+        Вызывается:
+        - Фоновым таймером из lifespan (каждые 10 минут)
+        - Перед каждым upload (как предочистка)
+        
+        Args:
+            temp_dir: Путь к temp-директории
+            max_age_minutes: Максимальный возраст файла в минутах
+        
+        Returns:
+            Количество удалённых файлов
+        """
+        temp_path = Path(temp_dir)
+        if not temp_path.exists():
+            return 0
+        
+        now = datetime.utcnow().timestamp()
+        max_age_seconds = max_age_minutes * 60
+        deleted = 0
+        
+        for f in temp_path.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                # Считаем возраст по mtime (время последнего изменения)
+                file_age = now - f.stat().st_mtime
+                if file_age > max_age_seconds:
+                    f.unlink()
+                    deleted += 1
+                    logger.debug(f"🧹 Temp-файл удалён (старше {max_age_minutes}мин): {f.name}")
+            except OSError as e:
+                logger.warning(f"Не удалось удалить temp-файл {f.name}: {e}")
+        
+        if deleted:
+            logger.info(f"🧹 Очистка temp: удалено {deleted} файлов")
+        return deleted
 
 
 # Глобальный экземпляр
