@@ -70,12 +70,11 @@ class HybridDocumentParser:
         # Try Occular-ocr
         try:
             from ocr_skel import OCRPipeline
-            # max_workers=0 → авто (все ядра CPU), для последовательного режима =1
-            import os
-            workers = int(os.environ.get("OCR_WORKERS", "0"))
-            self._ocular = OCRPipeline(onnx=True, gpu=False, max_workers=workers)
+            # Примечание: параметр max_workers убран из новых версий OCRPipeline
+            # OCRPipeline сам определяет количество потоков по onnxruntime
+            self._ocular = OCRPipeline(onnx=True, gpu=False)
             self._ocular_available = True
-            logger.info(f"Occular-ocr initialized (CPU, max_workers={workers})")
+            logger.info("Occular-ocr initialized (CPU, onnx)")
         except Exception as e:
             logger.warning(f"Occular-ocr not available: {e}")
             self._ocular = None
