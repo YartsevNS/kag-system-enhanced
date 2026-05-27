@@ -375,6 +375,25 @@ async function uploadFiles(files) {
   }
 }
 
+/**
+ * Класс ошибки загрузки с кодом и upload_id.
+ * 
+ * code: VALIDATION_ERROR | UPLOAD_ERROR | HTTP_ERROR | NETWORK_ERROR | PARSE_ERROR
+ * status: HTTP статус (для HTTP_ERROR)
+ * uploadId: UUID загрузки (для связывания логов)
+ * 
+ * ВАЖНО: определён ДО uploadFileXHR, т.к. классы не hoist'ятся в JS
+ */
+class UploadError extends Error {
+  constructor(message, code, status, uploadId) {
+    super(message);
+    this.code = code || 'UNKNOWN';
+    this.status = status || 0;
+    this.uploadId = uploadId || null;
+    this.name = 'UploadError';
+  }
+}
+
 function uploadFileXHR(file, onProgress) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
@@ -415,23 +434,6 @@ function uploadFileXHR(file, onProgress) {
     xhr.onerror = () => reject(new UploadError('Сетевая ошибка — проверьте соединение', 'NETWORK_ERROR'));
     xhr.send(fd);
   });
-}
-
-/**
- * Класс ошибки загрузки с кодом и upload_id.
- * 
- * code: VALIDATION_ERROR | UPLOAD_ERROR | HTTP_ERROR | NETWORK_ERROR | PARSE_ERROR
- * status: HTTP статус (для HTTP_ERROR)
- * uploadId: UUID загрузки (для связывания логов)
- */
-class UploadError extends Error {
-  constructor(message, code, status, uploadId) {
-    super(message);
-    this.code = code || 'UNKNOWN';
-    this.status = status || 0;
-    this.uploadId = uploadId || null;
-    this.name = 'UploadError';
-  }
 }
 
 async function loadAll() {
