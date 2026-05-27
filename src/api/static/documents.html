@@ -370,13 +370,16 @@ async function loadAll() {
     // Автообновление если есть документы в обработке
     const hasProcessing = allDocs.some(d => d.status === 'processing' || d.status === 'pending');
     if (hasProcessing && !window._docsPollTimer) {
-      window._docsPollTimer = setInterval(() => { loadAll(); }, 5000);
+      window._docsPollTimer = setInterval(() => { loadAll(true); }, 5000);
     } else if (!hasProcessing && window._docsPollTimer) {
       clearInterval(window._docsPollTimer);
       window._docsPollTimer = null;
     }
   } catch(e) {
-    document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
+    // При автообновлении (silent=true) не показываем ошибку на весь экран
+    if (window._docsPollTimer && !allDocs.length) {
+      document.getElementById('docs-grid').innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+    }
   }
 }
 
