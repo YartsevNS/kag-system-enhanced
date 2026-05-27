@@ -278,40 +278,49 @@ async function uploadFiles(files) {
   const pst = document.getElementById('prog-stage-status');
   pw.style.display = 'block';
   pf.style.width = '0%'; pp.textContent = '0%';
-  ps.textContent = '📥 Загрузка...'; pst.textContent = '⏳'; pst.className = 'prog-status';
+  if (ps) ps.textContent = '📥 Загрузка...';
+  if (pst) { pst.textContent = '⏳'; pst.className = 'prog-status'; }
 
-  // Этап 1: загружаем все файлы на сервер
+  // Этап 1: загружаем все файлы на сервер с реальным прогрессом XHR
   const docIds = [];
+  let totalBytes = 0;
+  files.forEach(f => totalBytes += f.size);
+  let loadedBytes = 0;
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     pn.textContent = file.name;
-    pp.textContent = Math.round(((i) / files.length) * 100) + '%';
-    pf.style.width = Math.round(((i) / files.length) * 100) + '%';
-    const fd = new FormData(); fd.append('file', file);
+    if (ps) ps.textContent = '📤 ' + file.name;
     try {
-      const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
-      if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Upload failed'); }
-      const result = await r.json();
-      docIds.push(result.document_id);
-      toast(`✅ ${file.name} загружен`);
+      const docId = await uploadFileXHR(file, (l, t) => {
+        const overallPct = Math.min(100, Math.round((loadedBytes + l) / totalBytes * 100));
+        pf.style.width = overallPct + '%';
+        pp.textContent = overallPct + '%';
+      });
+      if (docId) {
+        docIds.push(docId);
+        loadedBytes += file.size;
+        toast(`✅ ${file.name} загружен`);
+      } else {
+        toast(`❌ ${file.name}: пустой ответ`, true);
+        pn.textContent = '❌ ' + file.name;
+      }
     } catch(e) {
       toast(`❌ ${file.name}: ${e.message}`, true);
       pn.textContent = '❌ ' + file.name;
     }
-    pp.textContent = Math.round(((i + 1) / files.length) * 100) + '%';
-    pf.style.width = Math.round(((i + 1) / files.length) * 100) + '%';
   }
 
   // Этап 2: отслеживаем обработку всех загруженных документов
   if (docIds.length === 0) { pw.style.display = 'none'; loadAll(); return; }
 
-  ps.textContent = '🔄 Обработка документов...';
+  if (ps) ps.textContent = '🔄 Обработка документов...';
   pn.textContent = docIds.length + ' файлов';
 
   const stageLabels = {
     0: '⏳ Ожидание...', 5: '🔍 Распознавание текста...',
-    10: '🔍 Распознавание текста...', 30: '📄 Парсинг документа...',
-    50: '✂️ Чанкинг...', 90: '🧠 Векторизация...', 100: '✅ Готово'
+    30: '📄 Парсинг документа...', 50: '✂️ Чанкинг...',
+    90: '🧠 Векторизация...', 100: '✅ Готово'
   };
 
   let allDone = false;
@@ -322,39 +331,72 @@ async function uploadFiles(files) {
       if (!r.ok) continue;
       const data = await r.json();
       const docs = data.documents || [];
-      let totalProgress = 0, done = 0;
+      let totalProgress = 0, done = 0, found = 0;
 
       for (const docId of docIds) {
         const doc = docs.find(d => d.document_id === docId);
         if (!doc) continue;
-        const p = doc.progress || 0;
+        found++;
+        const p = typeof doc.progress === 'number' ? doc.progress : 0;
         totalProgress += p;
         if (doc.status === 'completed') {
           done++;
-          pst.textContent = '✅';
-          pst.className = 'prog-status done';
+          if (pst) { pst.textContent = '✅'; pst.className = 'prog-status done'; }
         }
       }
+
+      if (found === 0) continue;
 
       const avgProgress = Math.round(totalProgress / docIds.length);
       pf.style.width = avgProgress + '%';
       pp.textContent = avgProgress + '%';
 
-      // Определяем текущий этап по среднему прогрессу
       let stageKey = 0;
       const keys = Object.keys(stageLabels).map(Number).sort((a,b)=>a-b);
       for (const k of keys) { if (avgProgress >= k) stageKey = k; }
-      ps.textContent = stageLabels[stageKey] || '🔄 Обработка...';
+      if (ps) ps.textContent = stageLabels[stageKey] || '🔄 Обработка...';
 
       if (done === docIds.length) {
         allDone = true;
-        ps.textContent = '✅ Все документы обработаны';
-        pst.textContent = '✅';
-        pst.className = 'prog-status done';
+        if (ps) ps.textContent = '✅ Все документы обработаны';
+        if (pst) { pst.textContent = '✅'; pst.className = 'prog-status done'; }
         setTimeout(() => { pw.style.display = 'none'; loadAll(); }, 1500);
       }
     } catch(e) { /* сетевые ошибки игнорируем */ }
   }
+}
+
+function uploadFileXHR(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API}/upload/`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded, e.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const result = JSON.parse(xhr.responseText);
+          resolve(result.document_id);
+        } catch(e) {
+          reject(new Error('Invalid JSON response'));
+        }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.detail || `HTTP ${xhr.status}`));
+        } catch(e) {
+          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+        }
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(fd);
+  });
 }
 
 async function loadAll() {
