@@ -37,8 +37,9 @@ class ChatService:
 
     def __init__(self):
         """Инициализация сервиса"""
-        self._search_limit = 5
-        logger.info("ChatService инициализирован")
+        self._search_limit = 20  # Увеличиваем для последующего reranking (вернём топ-5)
+        self._rerank_top_k = 5   # Количество документов после reranking
+        logger.info("ChatService инициализирован с поддержкой reranking")
 
     def _get_chat_provider(self) -> tuple:
         """
@@ -209,20 +210,33 @@ class ChatService:
             try:
                 logger.debug("Выполняю RAG поиск...")
                 from src.indexing.embeddings_service import embeddings_service
+                # Поиск с увеличенным limit для последующего reranking
                 search_results = await embeddings_service.search(
                     query=user_message,
-                    limit=self._search_limit,
+                    limit=self._search_limit,  # 20 результатов для reranking
                     group_ids=group_ids,
                     is_admin=is_admin
                 )
 
                 if search_results:
+                    # Применяем reranking для улучшения релевантности
+                    try:
+                        from src.indexing.reranker import reranker_service
+                        search_results = reranker_service.rerank(
+                            query=user_message,
+                            documents=search_results,
+                            top_k=self._rerank_top_k  # Возвращаем топ-5
+                        )
+                        logger.info(f"Reranking выполнен: топ-{self._rerank_top_k} документов отобрано")
+                    except Exception as rerank_error:
+                        logger.warning(f"Reranking не выполнен: {rerank_error}, используем исходные результаты")
+                    
+                    # Формируем контекст из reranked результатов
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
                         doc_id = result.get('document_id', '?')
-                        # Получаем имя файла из document_service
                         filename = result.get('filename', '')
-                        if not filename or filename == doc_id:
+                        if not filename:
                             try:
                                 from src.api.services.document_service import document_service
                                 record = document_service.get_document(doc_id)
@@ -230,14 +244,44 @@ class ChatService:
                                     filename = record.filename
                             except Exception:
                                 pass
-                        # Сохраняем filename в результат для фронта
                         result['filename'] = filename or doc_id[:12]
+                        score_info = f"rerank:{result.get('rerank_score', 0):.3f}" if 'rerank_score' in result else f"score:{result['score']:.3f}"
                         context_parts.append(
-                            f"[Источник {i}] «{filename or doc_id[:12]}» (score:{result['score']:.3f}):\n{result['content']}"
+                            f"[Источник {i}] «{filename or doc_id[:12]}» ({score_info}):\n{result['content']}"
                         )
                     context = "\n\n".join(context_parts)
                     sources = search_results
-                    logger.info(f"Qdrant: найдено {len(sources)} чанков")
+                    logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
+PLACEHOLDER
 
                 # 2b. Поиск в графе Neo4j
                 try:

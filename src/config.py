@@ -103,8 +103,10 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int = 768
 
     # Настройки чанкинга для документов
-    CHUNK_SIZE: int = 1000  # Размер чанка в символах
-    CHUNK_OVERLAP: int = 200  # Перекрытие между чанками
+    # Оптимально для русского языка: 512 токенов ≈ 2000-2500 символов
+    # Перекрытие 15% для сохранения контекста между чанками
+    CHUNK_SIZE: int = 512  # Размер чанка в токенах (не символах!)
+    CHUNK_OVERLAP: int = 77  # 15% перекрытие (512 * 0.15 ≈ 77)
 
     # Общие настройки LLM
     LLM_MODEL_NAME: str = "mistralai/Mistral-7B-Instruct-v0.2"
