@@ -37,9 +37,8 @@ class ChatService:
 
     def __init__(self):
         """Инициализация сервиса"""
-        self._search_limit = 20  # Увеличиваем для последующего reranking (вернём топ-5)
-        self._rerank_top_k = 5   # Количество документов после reranking
-        logger.info("ChatService инициализирован с поддержкой reranking")
+        self._search_limit = 10  # Количество документов для контекста чата
+        logger.info("ChatService инициализирован")
 
     def _get_chat_provider(self) -> tuple:
         """
@@ -210,28 +209,16 @@ class ChatService:
             try:
                 logger.debug("Выполняю RAG поиск...")
                 from src.indexing.embeddings_service import embeddings_service
-                # Поиск с увеличенным limit для последующего reranking
+                # Поиск релевантных чанков
                 search_results = await embeddings_service.search(
                     query=user_message,
-                    limit=self._search_limit,  # 20 результатов для reranking
+                    limit=self._search_limit,  # Количество чанков для контекста
                     group_ids=group_ids,
                     is_admin=is_admin
                 )
 
                 if search_results:
-                    # Применяем reranking для улучшения релевантности
-                    try:
-                        from src.indexing.reranker import reranker_service
-                        search_results = reranker_service.rerank(
-                            query=user_message,
-                            documents=search_results,
-                            top_k=self._rerank_top_k  # Возвращаем топ-5
-                        )
-                        logger.info(f"Reranking выполнен: топ-{self._rerank_top_k} документов отобрано")
-                    except Exception as rerank_error:
-                        logger.warning(f"Reranking не выполнен: {rerank_error}, используем исходные результаты")
-                    
-                    # Формируем контекст из reranked результатов
+                    # Формируем контекст из результатов поиска
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
                         doc_id = result.get('document_id', '?')
@@ -252,36 +239,6 @@ class ChatService:
                     context = "\n\n".join(context_parts)
                     sources = search_results
                     logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
-PLACEHOLDER
 
                 # 2b. Поиск в графе Neo4j
                 try:

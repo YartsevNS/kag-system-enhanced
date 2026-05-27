@@ -78,5 +78,5 @@ docling>=2.0.0
 # Улучшенный чанкинг для русского языка
 langchain-text-splitters>=0.3.0
 
-# Reranking для улучшения качества поиска
-sentence-transformers>=2.7.0
+# langchain-text-splitters — качественный чанкинг для русского языка
+# (лёгкий, не тянет torch/transformers)
