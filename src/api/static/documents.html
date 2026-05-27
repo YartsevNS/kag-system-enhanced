@@ -306,7 +306,16 @@ async function uploadFiles(files) {
         pn.textContent = '❌ ' + file.name;
       }
     } catch(e) {
-      toast(`❌ ${file.name}: ${e.message}`, true);
+      // Структурированная ошибка — показываем код + upload_id
+      const errMsg = e instanceof UploadError && e.uploadId
+        ? `${e.message} [${e.code}] (id:${e.uploadId.slice(0,8)})`
+        : e.message || 'Неизвестная ошибка';
+      toast(`❌ ${file.name}: ${errMsg}`, true);
+      if (ps) {
+        ps.textContent = `❌ ${errMsg}`;
+        ps.style.color = 'var(--red)';
+      }
+      if (pst) { pst.textContent = '❌'; pst.className = 'prog-status'; pst.style.color = 'var(--red)'; }
       pn.textContent = '❌ ' + file.name;
     }
   }
@@ -383,20 +392,46 @@ function uploadFileXHR(file, onProgress) {
           const result = JSON.parse(xhr.responseText);
           resolve(result.document_id);
         } catch(e) {
-          reject(new Error('Invalid JSON response'));
+          reject(new UploadError('Invalid JSON response', 'PARSE_ERROR'));
         }
       } else {
+        // Структурированная ошибка от сервера:
+        // { code: "VALIDATION_ERROR", message: "...", upload_id: "..." }
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.detail || `HTTP ${xhr.status}`));
+          // Если деталь — строка (старый формат)
+          const msg = typeof err.detail === 'string' ? err.detail
+            // Если деталь — объект (новый структурированный формат)
+            : err.detail?.message || err.message || `HTTP ${xhr.status}`;
+          const code = err.detail?.code || err.code || 'HTTP_ERROR';
+          const uploadId = err.detail?.upload_id || err.upload_id || null;
+          const httpStatus = xhr.status;
+          reject(new UploadError(msg, code, httpStatus, uploadId));
         } catch(e) {
-          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          reject(new UploadError(`HTTP ${xhr.status}: ${xhr.responseText}`, 'HTTP_ERROR', xhr.status));
         }
       }
     };
-    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.onerror = () => reject(new UploadError('Сетевая ошибка — проверьте соединение', 'NETWORK_ERROR'));
     xhr.send(fd);
   });
+}
+
+/**
+ * Класс ошибки загрузки с кодом и upload_id.
+ * 
+ * code: VALIDATION_ERROR | UPLOAD_ERROR | HTTP_ERROR | NETWORK_ERROR | PARSE_ERROR
+ * status: HTTP статус (для HTTP_ERROR)
+ * uploadId: UUID загрузки (для связывания логов)
+ */
+class UploadError extends Error {
+  constructor(message, code, status, uploadId) {
+    super(message);
+    this.code = code || 'UNKNOWN';
+    this.status = status || 0;
+    this.uploadId = uploadId || null;
+    this.name = 'UploadError';
+  }
 }
 
 async function loadAll() {
