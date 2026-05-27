@@ -92,17 +92,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
-
-/* Progress */
-/* Progress bar — upload + processing */
-.progress-wrap{display:none;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
-.progress-wrap .prog-label{font-size:12px;color:var(--text3);margin-bottom:6px;display:flex;justify-content:space-between}
-.progress-bar{width:100%;height:8px;background:var(--elevated);border-radius:4px;overflow:hidden}
-.progress-bar .prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-h));border-radius:4px;transition:width 0.5s ease;width:0%}
-.prog-stage{font-size:11px;color:var(--text4);margin-top:6px;display:flex;justify-content:space-between}
-.prog-stage .prog-file{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%}
-.prog-stage .prog-status{color:var(--amber)}
-.prog-stage .prog-status.done{color:var(--emerald)}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
 
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.docs-grid{grid-template-columns:1fr}}
 </style>
@@ -142,11 +132,6 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="upload-text">Загрузить документы</div>
     <div class="upload-hint">Перетащите файлы или нажмите для выбора</div>
     <div id="allowed-formats-bar" style="display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px;"></div>
-  </div>
-  <div class="progress-wrap" id="progress-wrap">
-    <div class="prog-label"><span id="prog-file">—</span><span id="prog-pct">0%</span></div>
-    <div class="progress-bar"><div class="prog-fill" id="prog-fill"></div></div>
-    <div class="prog-stage"><span class="prog-file" id="prog-stage-text">📥 Загрузка файла...</span><span class="prog-status" id="prog-stage-status">⏳</span></div>
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
@@ -270,170 +255,27 @@ function setupDragDrop() {
 
 async function uploadFiles(files) {
   if (!files.length) return;
-  const pw = document.getElementById('progress-wrap');
-  const pf = document.getElementById('prog-fill');
-  const pp = document.getElementById('prog-pct');
   const pn = document.getElementById('prog-file');
-  const ps = document.getElementById('prog-stage-text');
-  const pst = document.getElementById('prog-stage-status');
-  pw.style.display = 'block';
-  pf.style.width = '0%'; pp.textContent = '0%';
-  if (ps) ps.textContent = '📥 Загрузка...';
-  if (pst) { pst.textContent = '⏳'; pst.className = 'prog-status'; }
-
-  // Этап 1: загружаем все файлы на сервер с реальным прогрессом XHR
-  const docIds = [];
-  let totalBytes = 0;
-  files.forEach(f => totalBytes += f.size);
-  let loadedBytes = 0;
+  if (pn) pn.textContent = '⏳ Загрузка...';
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    pn.textContent = file.name;
-    if (ps) ps.textContent = '📤 ' + file.name;
-    try {
-      const docId = await uploadFileXHR(file, (l, t) => {
-        const overallPct = Math.min(100, Math.round((loadedBytes + l) / totalBytes * 100));
-        pf.style.width = overallPct + '%';
-        pp.textContent = overallPct + '%';
-      });
-      if (docId) {
-        docIds.push(docId);
-        loadedBytes += file.size;
-        toast(`✅ ${file.name} загружен`);
-      } else {
-        toast(`❌ ${file.name}: пустой ответ`, true);
-        pn.textContent = '❌ ' + file.name;
-      }
-    } catch(e) {
-      // Структурированная ошибка — показываем код + upload_id
-      const errMsg = e instanceof UploadError && e.uploadId
-        ? `${e.message} [${e.code}] (id:${e.uploadId.slice(0,8)})`
-        : e.message || 'Неизвестная ошибка';
-      toast(`❌ ${file.name}: ${errMsg}`, true);
-      if (ps) {
-        ps.textContent = `❌ ${errMsg}`;
-        ps.style.color = 'var(--red)';
-      }
-      if (pst) { pst.textContent = '❌'; pst.className = 'prog-status'; pst.style.color = 'var(--red)'; }
-      pn.textContent = '❌ ' + file.name;
-    }
-  }
-
-  // Этап 2: отслеживаем обработку всех загруженных документов
-  if (docIds.length === 0) { pw.style.display = 'none'; loadAll(); return; }
-
-  if (ps) ps.textContent = '🔄 Обработка документов...';
-  pn.textContent = docIds.length + ' файлов';
-
-  const stageLabels = {
-    0: '⏳ Ожидание...', 5: '🔍 Распознавание текста...',
-    30: '📄 Парсинг документа...', 50: '✂️ Чанкинг...',
-    90: '🧠 Векторизация...', 100: '✅ Готово'
-  };
-
-  let allDone = false;
-  while (!allDone) {
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const r = await fetch(`${API}/upload/list`);
-      if (!r.ok) continue;
-      const data = await r.json();
-      const docs = data.documents || [];
-      let totalProgress = 0, done = 0, found = 0;
-
-      for (const docId of docIds) {
-        const doc = docs.find(d => d.document_id === docId);
-        if (!doc) continue;
-        found++;
-        const p = typeof doc.progress === 'number' ? doc.progress : 0;
-        totalProgress += p;
-        if (doc.status === 'completed') {
-          done++;
-          if (pst) { pst.textContent = '✅'; pst.className = 'prog-status done'; }
-        }
-      }
-
-      if (found === 0) continue;
-
-      const avgProgress = Math.round(totalProgress / docIds.length);
-      pf.style.width = avgProgress + '%';
-      pp.textContent = avgProgress + '%';
-
-      let stageKey = 0;
-      const keys = Object.keys(stageLabels).map(Number).sort((a,b)=>a-b);
-      for (const k of keys) { if (avgProgress >= k) stageKey = k; }
-      if (ps) ps.textContent = stageLabels[stageKey] || '🔄 Обработка...';
-
-      if (done === docIds.length) {
-        allDone = true;
-        if (ps) ps.textContent = '✅ Все документы обработаны';
-        if (pst) { pst.textContent = '✅'; pst.className = 'prog-status done'; }
-        setTimeout(() => { pw.style.display = 'none'; loadAll(); }, 1500);
-      }
-    } catch(e) { /* сетевые ошибки игнорируем */ }
-  }
-}
-
-/**
- * Класс ошибки загрузки с кодом и upload_id.
- * 
- * code: VALIDATION_ERROR | UPLOAD_ERROR | HTTP_ERROR | NETWORK_ERROR | PARSE_ERROR
- * status: HTTP статус (для HTTP_ERROR)
- * uploadId: UUID загрузки (для связывания логов)
- * 
- * ВАЖНО: определён ДО uploadFileXHR, т.к. классы не hoist'ятся в JS
- */
-class UploadError extends Error {
-  constructor(message, code, status, uploadId) {
-    super(message);
-    this.code = code || 'UNKNOWN';
-    this.status = status || 0;
-    this.uploadId = uploadId || null;
-    this.name = 'UploadError';
-  }
-}
-
-function uploadFileXHR(file, onProgress) {
-  return new Promise((resolve, reject) => {
+    if (pn) pn.textContent = `📤 ${file.name}`;
     const fd = new FormData();
     fd.append('file', file);
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API}/upload/`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(e.loaded, e.total);
+    try {
+      const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
+      if (!r.ok) {
+        const e = await r.json();
+        const msg = typeof e.detail === 'string' ? e.detail : e.detail?.message || e.message || 'Upload failed';
+        throw new Error(msg);
       }
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const result = JSON.parse(xhr.responseText);
-          resolve(result.document_id);
-        } catch(e) {
-          reject(new UploadError('Invalid JSON response', 'PARSE_ERROR'));
-        }
-      } else {
-        // Структурированная ошибка от сервера:
-        // { code: "VALIDATION_ERROR", message: "...", upload_id: "..." }
-        try {
-          const err = JSON.parse(xhr.responseText);
-          // Если деталь — строка (старый формат)
-          const msg = typeof err.detail === 'string' ? err.detail
-            // Если деталь — объект (новый структурированный формат)
-            : err.detail?.message || err.message || `HTTP ${xhr.status}`;
-          const code = err.detail?.code || err.code || 'HTTP_ERROR';
-          const uploadId = err.detail?.upload_id || err.upload_id || null;
-          const httpStatus = xhr.status;
-          reject(new UploadError(msg, code, httpStatus, uploadId));
-        } catch(e) {
-          reject(new UploadError(`HTTP ${xhr.status}: ${xhr.responseText}`, 'HTTP_ERROR', xhr.status));
-        }
-      }
-    };
-    xhr.onerror = () => reject(new UploadError('Сетевая ошибка — проверьте соединение', 'NETWORK_ERROR'));
-    xhr.send(fd);
-  });
+      toast(`✅ ${file.name} загружен`);
+    } catch(e) {
+      toast(`❌ ${file.name}: ${e.message}`, true);
+    }
+  }
+  setTimeout(() => { loadAll(); }, 500);
 }
 
 async function loadAll() {
