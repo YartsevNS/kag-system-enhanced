@@ -59,7 +59,65 @@ MAX_WORKERS=4
 ```
 По умолчанию: `min(4, cpu_count())` — для сервера с 4 ядрами = 4
 
-### План дальнейших улучшений
+### Occular-ocr — инициализация
+
+**Файл**: `src/indexing/hybrid_parser.py`
+
+**Проблема**: `OCRPipeline.__init__() got an unexpected keyword argument 'max_workers'`
+Новая версия `ocr_skel` убрала параметр `max_workers`. OCRPipeline сам управляет потоками через onnxruntime.
+
+**Решение (строка 76)**:
+```python
+# Было (сломано):
+self._ocular = OCRPipeline(onnx=True, gpu=False, max_workers=workers)
+
+# Стало (работает):
+self._ocular = OCRPipeline(onnx=True, gpu=False)
+```
+
+**Fallback цепочка**:
+1. Docling + Occular-ocr (приоритет) — layout + распознавание русского текста
+2. Docling only — если Occular не доступен
+3. Tesseract — последний fallback (МЕДЛЕННЫЙ, не используется если Occular жив)
+
+## UploadError — class hoisting в JavaScript
+
+**Файл**: `src/api/static/documents.html`
+
+**Проблема**: `ReferenceError: UploadError is not defined`
+class declarations в JS не hoist'ятся (в отличие от function declarations). `uploadFileXHR` (function declaration) использует `new UploadError()`, но class определён после функции.
+
+**Решение**: класс `UploadError` определён ДО (`строка 378`), `uploadFileXHR` — ПОСЛЕ (`строка 399`).
+
+**Структурированная ошибка**:
+```javascript
+class UploadError extends Error {
+  constructor(message, code, status, uploadId) { ... }
+}
+// code: VALIDATION_ERROR | UPLOAD_ERROR | HTTP_ERROR | NETWORK_ERROR | PARSE_ERROR
+```
+
+## Структурированный ответ сервера при ошибках upload
+
+**Файл**: `src/api/routes/upload.py`
+
+**Формат ошибки**:
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Файл слишком большой: 500MB макс.",
+  "upload_id": "58ae0c15-d74f-474a-91ed-8834518942b3"
+}
+```
+
+**Где генерируется**:
+- `SecurityValidationError` → `VALIDATION_ERROR` (400)
+- `HTTPException` с лимитом размера → `413`
+- Любая другая ошибка → `UPLOAD_ERROR` (500)
+
+На фронте парсится в `uploadFileXHR()` через `err.detail?.message || err.message` и пробрасывается в `UploadError`.
+
+## План дальнейших улучшений
 1. Chunked upload (TUS/resumable.js) для файлов >500MB
 2. Hot folder (watchdog на /data/hot/)
 3. Метрики: uploads_total, uploads_failed, queue_depth, disk_usage
