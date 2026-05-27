@@ -259,6 +259,13 @@ async def users_page():
     return {"error": "Users page not found"}
 
 
+@app.get("/know", summary="База знаний KAG")
+async def know_web():
+    """Страница базы знаний (история сессий, Q&A)"""
+    know_path = os.path.join(static_path, "know.html")
+    return _html_response(know_path)
+
+
 @app.get("/logs", summary="Логи системы")
 async def logs_page():
     """Страница просмотра логов"""
