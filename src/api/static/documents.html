@@ -376,9 +376,9 @@ async function loadAll() {
       window._docsPollTimer = null;
     }
   } catch(e) {
-    // При автообновлении (silent=true) не показываем ошибку на весь экран
-    if (window._docsPollTimer && !allDocs.length) {
-      document.getElementById('docs-grid').innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+    // При первом вызове (нет таймера) показываем ошибку
+    if (!window._docsPollTimer || !allDocs.length) {
+      document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
     }
   }
 }
