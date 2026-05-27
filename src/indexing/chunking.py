@@ -39,7 +39,7 @@ class DocumentChunker:
         settings = get_settings()
         self.chunk_size = chunk_size or settings.CHUNK_SIZE
         self.chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
-        
+
         # Инициализируем RecursiveCharacterTextSplitter для русского языка
         if LANGCHAIN_AVAILABLE:
             # Разделители по приоритету: абзацы, строки, предложения, слова, символы
@@ -61,7 +61,8 @@ class DocumentChunker:
     def chunk(
         self,
         document: Dict[str, Any],
-        file_type: str
+        file_type: str,
+        document_id: str = None
     ) -> List[Dict[str, Any]]:
         """
         Разбить документ на чанки.
@@ -69,6 +70,7 @@ class DocumentChunker:
         Args:
             document: Распарсенный документ со списком segments
             file_type: Тип файла
+            document_id: ID документа (для уникальности chunk_id)
 
         Returns:
             Список чанков с метаданными
@@ -79,15 +81,16 @@ class DocumentChunker:
 
         # Объединяем весь текст из сегментов для правильного чанкинга
         full_text = "\n\n".join(seg.get("content", "") for seg in segments)
-        
+
         if LANGCHAIN_AVAILABLE and self.text_splitter:
             # Используем RecursiveCharacterTextSplitter для качественного разбиения
             split_texts = self.text_splitter.split_text(full_text)
-            
+
             for i, text in enumerate(split_texts):
                 chunk_seq += 1
+                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                 chunks.append({
-                    "chunk_id": f"chunk_{chunk_seq:05d}",
+                    "chunk_id": cid,
                     "content": text,
                     "metadata": {
                         "segment_index": i,
@@ -105,8 +108,9 @@ class DocumentChunker:
 
                 if len(content) <= self.chunk_size:
                     chunk_seq += 1
+                    cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                     chunks.append({
-                        "chunk_id": f"chunk_{chunk_seq:05d}",
+                        "chunk_id": cid,
                         "content": content,
                         "metadata": {
                             **segment.get("metadata", {}),
@@ -117,7 +121,7 @@ class DocumentChunker:
                         }
                     })
                 else:
-                    segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq)
+                    segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq, document_id)
                     chunks.extend(segment_chunks)
                     chunk_seq += len(segment_chunks)
             logger.info(f"Документ разбит на {len(chunks)} чанков (fallback)")
@@ -126,13 +130,15 @@ class DocumentChunker:
 
     def chunk_segments(
         self,
-        segments: List[Dict[str, Any]]
+        segments: List[Dict[str, Any]],
+        document_id: str = None
     ) -> List[Dict[str, Any]]:
         """
         Разбить список сегментов на чанки.
 
         Args:
             segments: Список сегментов из парсера
+            document_id: ID документа (для уникальности chunk_id)
 
         Returns:
             Список чанков для векторизации
@@ -142,15 +148,16 @@ class DocumentChunker:
 
         # Объединяем весь текст для правильного чанкинга
         full_text = "\n\n".join(seg.get("content", "") for seg in segments)
-        
+
         if LANGCHAIN_AVAILABLE and self.text_splitter:
             # Используем RecursiveCharacterTextSplitter
             split_texts = self.text_splitter.split_text(full_text)
-            
+
             for i, text in enumerate(split_texts):
                 chunk_seq += 1
+                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                 chunks.append({
-                    "chunk_id": f"chunk_{chunk_seq:05d}",
+                    "chunk_id": cid,
                     "content": text,
                     "metadata": {
                         "chunk_index": i,
@@ -169,8 +176,9 @@ class DocumentChunker:
 
                 if len(content) <= self.chunk_size:
                     chunk_seq += 1
+                    cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                     chunks.append({
-                        "chunk_id": f"chunk_{chunk_seq:05d}",
+                        "chunk_id": cid,
                         "content": content,
                         "metadata": {
                             **metadata,
@@ -180,7 +188,7 @@ class DocumentChunker:
                         }
                     })
                 else:
-                    segment_chunks = self._split_content(content, i, metadata, chunk_seq)
+                    segment_chunks = self._split_content(content, i, metadata, chunk_seq, document_id)
                     chunks.extend(segment_chunks)
                     chunk_seq += len(segment_chunks)
             logger.info(f"Сегменты разбиты на {len(chunks)} чанков (fallback)")
@@ -192,7 +200,8 @@ class DocumentChunker:
         content: str,
         segment_index: int,
         metadata: Dict[str, Any],
-        start_seq: int = 0
+        start_seq: int = 0,
+        document_id: str = None
     ) -> List[Dict[str, Any]]:
         """Разбить длинный контент на чанки с перекрытием"""
 
@@ -213,8 +222,9 @@ class DocumentChunker:
 
             if chunk_text:
                 chunk_seq += 1
+                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                 chunks.append({
-                    "chunk_id": f"chunk_{chunk_seq:05d}",
+                    "chunk_id": cid,
                     "content": chunk_text,
                     "metadata": {
                         **metadata,

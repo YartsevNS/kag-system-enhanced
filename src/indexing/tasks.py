@@ -71,7 +71,7 @@ def process_document(
         
         # Шаг 2: Чанкинг
         chunker = DocumentChunker()
-        chunks = chunker.chunk(parsed_content, file_type)
+        chunks = chunker.chunk(parsed_content, file_type, document_id)
         
         logger.info(f"Документ разбит на чанки: {document_id}, количество: {len(chunks)}")
         
