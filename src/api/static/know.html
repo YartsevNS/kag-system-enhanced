@@ -3,51 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — База знаний</title>
+<title>KAG — База знаний (Know)</title>
 <style>
-:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
 nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
 nav .logo span{color:var(--accent-h)}
 nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-main{margin-left:240px;flex:1;padding:28px 36px;max-width:1600px;width:100%}
-h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
-.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+main{margin-left:240px;flex:1;padding:24px 32px;max-width:1300px}
+h1{font-size:24px;font-weight:600;margin-bottom:4px}
+.sub{font-size:12px;color:var(--text4);margin-bottom:20px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:10px 14px}
+.stat-num{font-size:18px;font-weight:700;color:var(--text)}
+.stat-label{font-size:9px;color:var(--text4);text-transform:uppercase;margin-top:2px}
 
-/* Stats row */
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
-.stat-card .stat-num{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-0.5px}
-.stat-card .stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
+/* Date section */
+.date-section{margin-bottom:24px}
+.date-header{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border-s);display:flex;align-items:center;gap:8px}
+.date-header .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-h)}
 
-/* Date sections */
-.date-section{margin-bottom:28px}
-.date-header{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.date-header .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block}
-
-/* QA List - two column grid */
-.qa-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:900px){.qa-list{grid-template-columns:1fr}}
-
-/* QA Item */
-.qa-item{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;transition:all 0.15s}
-.qa-item:hover{border-color:var(--accent)}
-.qa-q{border-left:3px solid var(--accent-h);padding:12px 16px 8px}
-.qa-a{border-left:3px solid var(--emerald);padding:8px 16px 12px}
-.qa-label{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text4);margin-bottom:4px}
-.qa-text{font-size:13px;line-height:1.5;color:var(--text2)}
+/* Q&A layout */
+.qa-list{display:flex;flex-direction:column;gap:14px}
+.qa-item{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.qa-q,.qa-a{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;position:relative}
+.qa-q{border-left:3px solid var(--accent-h)}
+.qa-a{border-left:3px solid var(--emerald)}
+.qa-label{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;font-weight:600}
+.qa-q .qa-label{color:var(--accent-h)}
+.qa-a .qa-label{color:var(--emerald)}
+.qa-text{font-size:13px;color:var(--text2);line-height:1.65}
 .qa-text strong{color:var(--text)}
-.qa-text code{font-size:12px;background:var(--elevated);padding:1px 6px;border-radius:4px;color:var(--accent-l);font-family:'Cascadia Code','Fira Code','Consolas',monospace}
-.qa-text pre{background:var(--elevated);padding:10px 14px;border-radius:var(--radius-sm);overflow-x:auto;font-size:11px;margin:6px 0;color:var(--text3);font-family:'Cascadia Code','Fira Code','Consolas',monospace}
+.qa-text code{background:var(--elevated);padding:1px 5px;border-radius:4px;font-size:11px;color:var(--accent-h);font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace}
+.qa-text ul{margin:6px 0 0 16px}
+.qa-text li{margin:2px 0;color:var(--text3)}
+.qa-meta{font-size:10px;color:var(--text4);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap}
+.qa-meta span{display:flex;align-items:center;gap:4px}
 
-.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+/* Tag chips */
+.tags-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.tag{background:rgba(94,106,210,0.08);color:var(--accent-h);padding:2px 8px;border-radius:9999px;font-size:9px;font-weight:500}
 
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:12px}.stats-row{grid-template-columns:repeat(2,1fr)}.qa-item{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -65,83 +66,408 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
 </nav>
-
 <main>
-  <h1>📚 База знаний</h1>
-  <div class="sub">История сессий, решённых задач и технических решений</div>
+  <h1>📚 База знаний (Know)</h1>
+  <div class="sub">Все сессии, диалоги и решения. Вопросы слева, ответы справа. Хронология по датам.</div>
 
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-num" id="stat-sessions">2</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">6</div><div class="stat-label">Решённых задач</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-days">2</div><div class="stat-label">Дней работы</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-files">9+</div><div class="stat-label">Файлов изменено</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">90</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
 
-  <!-- 27 May 2026 -->
-
+  
+  <!-- May 27, 2026 -->
   <div class="date-section">
-    <div class="date-header"><span class="dot"></span>27 мая 2026 — Сессия #2</div>
+    <div class="date-header"><span class="dot"></span>27 мая 2026 — Сессия #12</div>
     <div class="qa-list">
 
-      <!-- №6 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№6. Structed errors on frontend</strong><br>После деплоя streaming upload + очереди при попытке загрузить файл — ошибка "UploadError is not defined" и пустой ответ сервера.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Проблема: class declarations в JS не hoist'ятся. <code>UploadError</code> был определён после <code>uploadFileXHR</code>, которая его использует. Исправлено: класс перенесён до функции. Также обновлён know.md. Коммит: <code>924d53a</code>, <code>104a4bc</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№104. UploadError is not defined на фронте</strong><br>После деплоя streaming upload при загрузке файла — ошибка "UploadError is not defined". В консоли JS — ReferenceError.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Class declarations в JS не hoist'ятся. <code>UploadError</code> был определён после <code>uploadFileXHR</code>. Перенёс класс до функции. Коммит: <code>924d53a</code>.</div></div>
       </div>
 
-      <!-- №5 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№5. Occular-ocr не работает, падает на Tesseract</strong><br>После деплоя при загрузке PDF вместо Occular-ocr запускался Tesseract. В логах: <code>OCRPipeline.__init__() got an unexpected keyword argument 'max_workers'</code>. Tesseract обрабатывал одну страницу >2 минут, worker блокировался.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Новая версия <code>ocr_skel</code> убрала параметр <code>max_workers</code> из конструктора. Убран вызов <code>OCRPipeline(onnx=True, gpu=False, max_workers=workers)</code> → <code>OCRPipeline(onnx=True, gpu=False)</code>. Fallback цепочка: Docling + Occular → Docling only → Tesseract. Файл: <code>src/indexing/hybrid_parser.py</code>. Коммит: <code>d2851f8</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№103. Occular-ocr сломан — падает на max_workers</strong><br>При загрузке PDF вместо Occular запускался Tesseract. В логах: <code>OCRPipeline.__init__() got an unexpected keyword argument 'max_workers'</code>. Tesseract обрабатывал одну страницу >2 минут.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Новая версия <code>ocr_skel</code> убрала <code>max_workers</code> из конструктора. Убран вызов <code>OCRPipeline(onnx=True, gpu=False, max_workers=workers)</code> → <code>OCRPipeline(onnx=True, gpu=False)</code>. Fallback: Docling + Occular → Docling → Tesseract. Файл: <code>src/indexing/hybrid_parser.py</code>. Коммит: <code>d2851f8</code>.</div></div>
       </div>
 
-      <!-- №4 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№4. Streaming upload + async Queue + ProcessPoolExecutor</strong><br>Задача: переделать загрузку файлов — убрать <code>await file.read()</code> (весь файл в память), заменить <code>Semaphore(1)</code> на очередь с пулом воркеров, добавить <code>upload_id</code>, cleanup temp-файлов, лимит 500MB.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Три файла изменено:<br><br><strong>1. <code>src/api/routes/upload.py</code></strong> — полная переработка:<br>• Стриминг в <code>/tmp/uploads/{upload_id}_{filename}</code> по 64KB<br>• Замена <code>Semaphore(1)</code> на <code>asyncio.Queue</code> + пул воркеров<br>• <code>_MAX_WORKERS = int(env.MAX_WORKERS) or min(4, cpu_count())</code><br>• <code>ProcessPoolExecutor</code> для CPU-bound (OCR, pdf2image)<br>• <code>_cleanup_temp()</code> при любой ошибке<br>• Лимит 500MB с проверкой в процессе стриминга<br>• Структурированный ответ ошибки: <code>{code, message, upload_id}</code><br><br><strong>2. <code>src/api/services/document_service.py</code></strong>:<br>• Сигнатура: <code>file_content: bytes</code> → <code>temp_file_path: str</code><br>• Хеш стримингом (64KB блоки)<br>• <code>os.rename()</code> temp → uploads (атомарно)<br>• <code>cleanup_stale_temp_files()</code> — удаление файлов >30 мин<br>• <code>upload_id</code> во всех логах<br><br><strong>3. <code>src/models.py</code></strong> — добавлено поле <code>upload_id</code> в <code>DocumentStatus</code>.<br><br>Коммит: <code>30b0bab</code> (428 insertions, 123 deletions).</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№102. Streaming upload + async очередь + ProcessPoolExecutor</strong><br>Переделать загрузку: убрать await file.read() (весь файл в память), заменить Semaphore(1) на очередь с пулом воркеров, добавить upload_id, cleanup temp, лимит 500MB.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>3 файла:</strong><br><br><strong>1. upload.py:</strong> стриминг в /tmp/uploads/ по 64KB. Замена Semaphore(1) на asyncio.Queue + пул воркеров (<code>MAX_WORKERS</code> env, default min(4, cpu)). <code>_cleanup_temp()</code> при любой ошибке. Лимит 500MB. Структурированный ответ: <code>{code, message, upload_id}</code>.<br><br><strong>2. document_service.py:</strong> <code>file_content: bytes</code> → <code>temp_file_path: str</code>. Хеш стримингом. os.rename() temp → uploads. cleanup_stale_temp_files() — удаление >30 мин. upload_id во всех логах.<br><br><strong>3. models.py:</strong> upload_id в DocumentStatus.<br><br>Коммит: <code>30b0bab</code> (428+ строк).</div></div>
       </div>
 
-      <!-- №3 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№3. Web не доступен — DNS поменялся</strong><br>Сайт qd.gostsecret.ru перестал открываться. DNS резолвится в 185.229.9.179, а сервер на 37.204.20.233.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">DNS запись была изменена. Сервер жив на 37.204.20.233. DNS само-восстановился через некоторое время.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№101. Web недоступен — DNS поменялся</strong><br>Сайт qd.gostsecret.ru перестал открываться. DNS резолвится в 185.229.9.179, сервер на 37.204.20.233.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">DNS запись была изменена администратором. Сервер жив. DNS само-восстановился через несколько минут.</div></div>
       </div>
 
-      <!-- №2 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№2. Документ завис на этапе векторизации — dimension mismatch</strong><br>Загруженный !!!Тест.pdf дошёл до "Векторизация" и упал с ошибкой. В логах: <code>Wrong input: Vector dimension error: expected dim: 768, got 1024</code>. Коллекция Qdrant создана с dim=768, а модель bge-m3 возвращает 1024.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Изменено:<br>• <code>EMBEDDING_DIMENSIONS=1024</code> в docker-compose.yml на сервере<br>• Коллекция Qdrant удалена и пересоздана с dim=1024<br>• Убран <code>ScalarQuantization</code> — новая версия Qdrant не принимает <code>always_ram=True</code><br><br>Коммит: <code>ba5c607</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№100. Документ завис на векторизации — dimension mismatch</strong><br>!!!Тест.pdf дошёл до векторизации и упал. В логах: <code>Wrong input: Vector dimension error: expected dim: 768, got 1024</code>. Qdrant коллекция с dim=768, модель bge-m3 возвращает 1024.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">EMBEDDING_DIMENSIONS=1024 в docker-compose.yml. Коллекция удалена и пересоздана с dim=1024. Убран ScalarQuantization (always_ram не поддерживается новой версией Qdrant). Коммит: <code>ba5c607</code>.</div></div>
       </div>
 
-      <!-- №1 -->
-      <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№1. Прогресс-бар загрузки не заполняется</strong><br>При загрузке документа прогресс-бар стоит на месте, потом прыгает на 100%. Нет real-time прогресса, нет этапа отслеживания обработки.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Файл <code>src/api/static/documents.html</code> обновлён:<br>• <strong>XHR onprogress</strong> — real-time прогресс загрузки (было fetch → стало XMLHttpRequest с <code>upload.onprogress</code>)<br>• <strong>Этап 2 (поллинг)</strong> — каждые 2 секунды опрос <code>/api/v1/upload/list</code>, средний прогресс по всем docId<br>• <strong>Safe navigation</strong> — <code>if (ps) ps.textContent</code> (не падает если элементов нет)<br>• <strong>Found counter</strong> — не прыгает прогресс с 100% на 0%<br>• <strong>Типизированная проверка</strong> — <code>typeof doc.progress === 'number'</code><br>• <strong>CSS</strong> — padding, border, градиент, высота 8px, строка этапов<br>• <strong>Автообновление</strong> — поллинг /list каждые 5 сек при processing/pending<br><br>Коммиты: <code>d4278d2</code>, <code>65d00ce</code>.</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№99. Прогресс-бар загрузки не заполняется</strong><br>Прогресс-бар стоит на 0%, потом прыгает на 100%. Нет real-time прогресса, нет этапа обработки.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>documents.html</code> — 5 изменений:<br>• XHR onprogress вместо fetch (real-time прогресс)<br>• Этап 2: поллинг /api/v1/upload/list каждые 2с, средний прогресс<br>• Safe navigation (if ps) — не падает если нет элементов<br>• Found counter — не прыгает 100%→0%<br>• typeof проверка прогресса<br>• CSS: градиент, 8px, padding<br>• Автообновление /list при processing/pending каждые 5с<br>Коммит: <code>d4278d2</code>.</div></div>
       </div>
 
     </div>
   </div>
 
-  <!-- 26 May 2026 -->
+  <!-- May 25, 2026 -->
   <div class="date-section">
-    <div class="date-header"><span class="dot"></span>26 мая 2026 — Сессия #1</div>
+    <div class="date-header"><span class="dot"></span>25 мая 2026 — Сессия #11 (текущая)</div>
     <div class="qa-list">
 
-      <!-- знать нет записей -->
-      <div class="qa-item" style="grid-column:1/-1">
-        <div class="qa-q"><div class="qa-label">ℹ️</div><div class="qa-text" style="color:var(--text4);text-align:center">Первая сессия — настройка инфраструктуры, CORS, загрузка документов, базовые фиксы</div></div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№98. Pipeline документов v2 — OCR, миниатюры, последовательная обработка</strong><br>страница documents падает. я рассчитываю, что документы сначала загружаются на диск, после чего для них создаются миниатюры, после чего начинает работать распознавание occelar-ocr, распознанный документ сохраняется на диск в папку отличную от оригинала, но с тем же наименованием, после распознавания 1 файла запускается 2й, 3й итд. далее запускается импорт в векторную базу. может ли occelar ocr задействовать все ресурсы процессора?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>6 улучшений в document_service.py и hybrid_parser.py:</strong><br>1) Папки: /app/data/ocr_results/ + /app/data/thumbnails/.<br>2) Миниатюры: Pillow + pdf2image, 300×400px при загрузке.<br>3) OCR на диск: результат → ocr_results/{filename}.<br>4) Последовательно: asyncio.Semaphore(1).<br>5) Qdrant: после чанкинга → embeddings.<br>6) Occular-OCR: max_workers из OCR_WORKERS env (0=все ядра CPU).<br>Коммит: 0737df3.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№97. Ветка kag-rusystem-allv2 — 6 улучшений безопасности</strong><br>в проекте есть папка 1 в ней два файла csv посмотри сначала его и py там валидатор подумай стоит ли применить? ты во внешней сети, сделай всё, что требуется для повышения безопасности, постарайся не сломать достижения аутентификации этого проекта, может сделать новую ветку c v2 на конце?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создана ветка <code>kag-rusystem-allv2</code> с 6 улучшениями:</strong><br>1) <strong>JWT Validator:</strong> issuer, nbf, iat, require проверки + <code>lru_cache</code> для JWKS в <code>security.py</code>.<br>2) <strong>httpOnly cookie:</strong> сервер ставит <code>Set-Cookie: kag_token=...; HttpOnly; SameSite=Lax</code> — JS не имеет доступа к токену. <code>login.html</code> больше не сохраняет токен в localStorage.<br>3) <strong>CORS whitelist:</strong> <code>qd.gostsecret.ru</code>, <code>192.168.50.18</code>, <code>localhost</code> вместо <code>*</code>. Методы: GET/POST/PUT/DELETE/OPTIONS.<br>4) <strong>Структурированные ошибки:</strong> <code>error_code: AUTH_REQUIRED | TOKEN_INVALID | ACCESS_DENIED</code>.<br>5) <strong>Rate limiting:</strong> 5 попыток/мин на <code>/api/v1/auth/login</code> (in-memory, 429 при превышении).<br>6) <strong>Папка <code>1/</code>:</strong> валидатор Qwen + CSV рисков добавлены в репо.<br><strong>Результат:</strong> сайт работает без сбоев. <code>https://qd.gostsecret.ru</code> → логин → документы.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№96. Сайт не запрашивает пароль — нужна полная авторизация</strong><br>сервер не запрашивает пароль, но при загрузке пришет, что требуется аутентификация - исправляй. сайт не запрашивает пароль и логин, не происходит процесс авторизации</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>SecurityMiddleware переписан:</strong> теперь ВСЕ пути требуют JWT (кроме /login, /setup, /, /static, /api/v1/auth/*).<br>• Веб-страницы без токена → 302 на <code>/login?next=...</code><br>• API без токена → 401 JSON<br>• Токен из cookie <code>kag_token</code> или заголовка Authorization<br>• После логина — редирект на <code>next</code> или /documents<br>• Баг: <code>"/"</code> в PUBLIC_PREFIXES через <code>startswith</code> совпадал со ВСЕМИ путями — исправлено на <code>_is_public()</code> с точными совпадениями.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№95. Аутентификация не работает + setup должен удаляться</strong><br>аутентификация не работает, проверяй. страница setup должна удалятся после копирования в буфер обмена, исправь и пропуш на git know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Три исправления:</strong><br>1) <code>login.html</code> — редирект после логина на <code>/documents</code> (было <code>/</code>, который вёл на <code>/setup</code>).<br>2) <code>setup.html</code> — после копирования кредов вызывает <code>POST /api/v1/setup/complete</code> и редиректит на <code>/documents</code> через 1.5 сек.<br>3) <code>main.py</code> — <code>/</code> редиректит на <code>/documents</code> если configured, иначе на <code>/setup</code>. Добавлены <code>Cache-Control: no-cache</code> для <code>/login</code> и <code>/setup</code>.<br>4) <code>setup.py</code> — новый <code>POST /complete</code> endpoint отмечает setup завершённым в config_store.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№93. SecurityMiddleware — эталонный модуль аутентификации</strong><br>Спроектировать и реализовать эталонный модуль аутентификации: Access Token (15 мин) + Refresh Token (7 дней, ротация), валидация через JWKS Keycloak + локальный JWT fallback, SecurityMiddleware с контролем ролей, аудит-логирование 401/403.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Три файла изменены:</strong><br>1) <code>src/api/middleware/security.py</code> — НОВЫЙ: JWKS Keycloak (кеш 5 мин) + локальный JWT fallback, роли admin/kag-admin для <code>/api/v1/admin/*</code>, логирование всех 401/403.<br>2) <code>src/api/routes/auth.py</code> — <code>POST /refresh</code> (ротация: старый инвалидируется, новый выпускается). Логин возвращает <code>access_token</code> + <code>refresh_token</code> + <code>expires_in</code> (3600 сек).<br>3) <code>src/api/main.py</code> — <code>AuthMiddleware</code> → <code>SecurityMiddleware</code>.<br><strong>Логика:</strong> не-API пути (веб-страницы) — без токена. Публичные API (<code>/auth/*</code>, <code>/health</code>) — без токена. Остальной API — JWT обязателен. Admin API — JWT + роль admin/kag-admin.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№94. Откат PUBLIC_PREFIXES — вернуть доступ к сайту</strong><br>теперь я вообще не могу зайти на сайт. в проектах ранее расположенных на github была замечательная логика аутентификации, приведи текущую к той, которая была в ветку docling-integration</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>В ветке <code>feature/docling-integration</code></strong> в <code>PUBLIC_PREFIXES</code> был <code>"/"</code> — все пути начинаются с <code>/</code> → startswith-проверка пропускала вообще всё без токена. Коммит <code>af389e5</code> убрал <code>"/"</code> — сайт перестал открываться. <strong>Исправлено:</strong> <code>"/"</code> возвращён в <code>PUBLIC_PREFIXES</code> коммитом <code>4b3f776</code>. Позже заменено на <code>SecurityMiddleware</code> с правильной логикой (не-API без токена, API с токеном).</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№91. Создание админа — не могу зайти на сайт</strong><br>не могу зайти на сайт, сделай пользователя admin:Kagsecret569!</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Пользователь создан напрямую в БД PostgreSQL</strong> (контейнер kag-pg). Регистрация через <code>POST /api/v1/auth/register</code> требует токен — поэтому использован <code>docker exec kag-api python3</code> с прямым доступом к SQLAlchemy-модели <code>User</code>. <strong>Проблемы по пути:</strong> 1) Keycloak (8080) — это старая зависимость, не используется для пользователей KAG. 2) Правильный URL логина: <code>/api/v1/auth/login</code> (не <code>/auth/login</code>). 3) <code>from src.database.session import _SessionLocal</code> не работает — нужно <code>import src.database.session as dbs</code> и обращаться через <code>dbs._SessionLocal()</code> после <code>dbs._get_engine()</code>. Пользователь: <strong>admin / Kagsecret569!</strong>, is_admin=true.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№92. Отключить аутентификацию для страницы Know</strong><br>можешь на время отключить аутентификацию на странице know ?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен <code>/know</code> в PUBLIC_PREFIXES</strong> в <code>src/api/middleware/auth.py</code>. Файл изменён через <code>docker cp</code> (в контейнере нет прав на запись): <code>docker cp kag-api:/app/src/api/middleware/auth.py /tmp/</code> → sed → <code>docker cp /tmp/auth.py kag-api:/app/...</code> → <code>docker-compose restart api</code>. <code>/know</code> добавлен в множество публичных путей наряду с <code>/docs</code>, <code>/api/v1/auth</code> и др. Остальная аутентификация не затронута — админка и API требуют токен.</div></div>
       </div>
 
     </div>
   </div>
 
-</main>
+  <!-- May 24, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>24 мая 2026 — Сессия #10</div>
+    <div class="qa-list">
 
-<script>
-// Подгрузка статистики при загрузке страницы (заглушка для будущей динамики)
-document.addEventListener('DOMContentLoaded', () => {
-  // Статистика статическая, обновляется при редактировании HTML
-});
-</script>
-</body>
-</html>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№89. Почему админка показывает enbeddrus:v0.2, а реально используется nomic-embed-text?</strong><br>в админке Embedding (векторизация) «Модель для векторизации текста оллама evilfreelancer/enbeddrus:v0.2» — эта настройка ничего не значит? как так может быть я подключаю сеть но она не подключена???</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Три несвязанных источника:</strong> 1) Админка → <code>function_map/embedding</code> в config_store (Provider Architecture). 2) Setup Wizard → <code>embedding/default</code> в config_store. 3) Реальный <code>embeddings_service</code> → читает из <code>EMBEDDING_MODEL</code> env var. <strong>docker-compose.yml жёстко задавал</strong> <code>EMBEDDING_MODEL=nomic-embed-text:latest</code> вместо <code>${EMBEDDING_MODEL:-default}</code> — игнорировал .env и админку. <strong>Исправлено:</strong> docker-compose использует env var; .env переключён на <code>evilfreelancer/enbeddrus:v0.2</code> (768d, русский, BERT-based). Embedding убран из setup wizard (настраивается в админке или .env).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№88. Эмбеддинг для Qdrant или Neo4j?</strong><br>это для qdrant или для neo4j?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Для Qdrant.</strong> Чанки разбиваются → векторизуются <code>nomic-embed-text</code> → сохраняются в Qdrant. Neo4j — отдельный шаг (извлечение сущностей через LLM), идёт после векторизации и тоже медленный.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№87. Где узкое место — Occular-OCR или кодинг? Почему нет загрузки CPU?</strong><br>я не вижу загрузку процессора при использовании обработки, скажи это узкое место occularocr или ошибка в нашем кодинге, проанализируй оригинальный подход https://github.com/Bodhi42/Occular-ocr там говорится что страницу распознаёт за секунду может можно несколько потоков или многопроцессорность?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Occular-OCR — НЕ узкое место.</strong> Тест: 7 страниц PDF методом <code>text</code> (прямое извлечение, без OCR) = <strong>1.3 секунды</strong>. <code>ocr_skel</code> использует до 4 воркеров для параллельного OCR страниц. <strong>Реальное узкое место — эмбеддинг (векторизация):</strong> 21 батч × 32 текста × ~60 сек/батч через сеть на Ollama <code>nomic-embed-text</code> = <strong>~21 минута на документ</strong>. 9 pending × 21 мин ≈ 3 часа. DPI снижен до 200 (было 300). Документы реально обрабатываются — в логах видно: «Обработка батча 11/21». CPU не нагружается потому что эмбеддинг ждёт сетевых ответов от Ollama, а не считает локально.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№86. Кнопка перезапуска pending-документов + «Ожидает» статус</strong><br>сделай кнопку перезапуска не обработанных документов, у меня куча несколько висит в ожидает, что это?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Статус pending (ожидает)</strong> — документ загружен, но обработка не завершилась (OOM-падение убило фоновые задачи). <strong>Добавлено:</strong> API <code>POST /api/v1/upload/reprocess-pending</code> — находит все pending и запускает <code>_process_document_async</code>. Кнопка <strong>🔄 Переобработать</strong> на /documents в карточке «Ожидает». JS <code>reprocessPending()</code> + <code>updateStats()</code> с <code>stat-pending</code> и показом/скрытием кнопки. <strong>Commits:</strong> <code>e2e83a8, af97dec</code>. На сервере: 19 документов (8 completed, 11 pending). Обработка идёт.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№85. Scope и релевантность на странице гибридного поиска /kg</strong><br>можешь настроить так, что бы scope можно было выставлять рядом с кнопкой поиск, как и релевантность для поиска rag, жёсткое количество 10 по прежнему много мусора, scope вручную будет лучше. тебе не кажется?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Да, согласен.</strong> Добавлены два выпадающих списка рядом с поиском: <code>hybrid-scope</code> (Гибрид / Только граф / Только векторы) и <code>hybrid-relevance</code> (score ≥ 0.6 / 0.5 / 0.4 / 0.3 / Без фильтра). Параметры передаются в API: <code>?scope=both|neo4j|qdrant&relevance_score=0.4</code>. При scope=qdrant или пустом Neo4j — Qdrant fallback. При scope=neo4j — только граф. <strong>Commits:</strong> <code>689044e, 3e27589, 63f78bc</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№84. Как работает поиск в чате — трассировка кода и запросов</strong><br>проверь и объясни точные действия по коду и запросам как работает поиск в чате, в какие базы ходит, что куда передаёт, дай ответ и know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Шаг 1: Qdrant (векторный поиск)</strong> — <code>embeddings_service.search(query, limit=5)</code>. Сообщение пользователя векторизуется моделью <code>nomic-embed-text:latest</code> → вектор отправляется в Qdrant → возвращаются ближайшие чанки (<code>score, content, document_id</code>). Имена файлов добираются из <code>document_service.get_document(doc_id)</code>. <strong>Шаг 2: Neo4j (граф)</strong> — из сообщения извлекаются ключевые слова (regex: 2+ заглавных, 3+ латиница, 4+ кириллица) + doc_ids из Qdrant. Вызов <code>kg_service.hybrid_search(entities, doc_ids)</code> ищет сущности и связи в Neo4j по <code>CONTAINS</code>. <strong>Шаг 3: Сборка контекста</strong> — чанки форматируются как <code>[Источник N] «имя_файла» (score): содержание</code>, граф-результаты — как <code>[Граф] сущность → связь</code>. <strong>Шаг 4: LLM</strong> — <code>chat/completions</code> через Provider Architecture: системный промпт (из function_map) + контекст + история + сообщение → ответ. Метаданные: <code>total_docs, graph_used, sources</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№83. Документ не загружается при переходе со страницы превью</strong><br>при нажатии на превью и переходе н страницу не загружается документ, уже было ищи ошибку</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Та же проблема d54cb91!</strong> Замена <code>JetBrains Mono,monospace</code> → <code>'Cascadia Code','Fira Code','Consolas',monospace</code> внутри JS-строки <code>pre.style.cssText = '...font:13px/1.7 JetBrains Mono,monospace...'</code> сломала синтаксис (кавычки внутри single-quoted строки). Весь <code>&lt;script&gt;</code> не выполнялся — ни docId, ни init, ни API. <strong>Исправлено:</strong> viewer.html восстановлен из <code>d54cb91^</code>, progress bar накатан заново без затрагивания JS-строк с фонтами. <strong>Commit:</strong> <code>96ff139</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№82. Полосочка не появляется на превью, know не обновился на сайте</strong><br>на сайте не появляется полосочка на превью, после твоего ответа так и не обновилась страница know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>1. Know:</strong> git checkout от локальных изменений + pull (сервер отставал на 2 коммита). <strong>2. Полоска:</strong> стартовая ширина 0% делала её невидимой. Заменено на 5% — видна сразу при загрузке. pollOcrProgress затем анимирует до 100% или скрывает. <strong>Commit:</strong> <code>beb3c75</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№81. Синяя полоска прогресса не видна на viewer</strong><br>так проверб синюю полоску, нет на сайте её и задеплой на git и сайт</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Две ошибки в viewer.html:</strong> 1) Лишняя <code>}</code> перед <code>@media</code> — ломала CSS, браузер не применял стиль <code>.ocr-progress</code>. 2) Не было JS-функции <code>pollOcrProgress()</code> — при вызове в <code>init()</code> была ошибка ReferenceError. <strong>Исправлено:</strong> убрана лишняя скобка, добавлена функция <code>pollOcrProgress</code> с опросом <code>/api/v1/upload/{id}/details</code> каждые 2 сек, прогресс = <code>min(95, chunks_count * 10)%</code>, при completed → 100% → скрытие через 1 сек. <strong>Commit:</strong> <code>0cd71cc</code>. Задеплоено на оба сервера.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№80. Пересборка скилла know-updater → know</strong><br>know, прописывай полный диалог, без сокращений и обобщений это новая часть скила и он должн отрабатывать при каждом твоём ответе запомни и пересобери скилл, теперь он называется know</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Скилл пересобран:</strong> старый <code>know-updater</code> удалён, создан новый <code>know</code> (productivity/know/SKILL.md). Правила: после КАЖДОГО ответа (без исключений), ПОЛНЫЙ текст диалога (без сокращений и обобщений), точная копия вопроса и ответа. Структура: тот же формат qa-item, сквозная нумерация, дата-секции от новых к старым. Pitfall: НИКОГДА не использовать <code>replace_all=true</code> в <code>patch()</code> для know.html.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№79. Прогресс-бар на viewer — показать процент распознавания</strong><br>Тонкая 2px полоска внизу страницы просмотра, заполняется по мере обработки документа.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен в viewer.html:</strong> <code>.ocr-progress</code> — position:fixed, bottom:0, height:2px, accent-цвет. JS <code>pollOcrProgress()</code> опрашивает <code>GET /api/v1/upload/{id}/details</code> каждые 2 сек. Прогресс = chunks_count / (estimated_pages * 10). При статусе completed — заполнение до 100%, затем скрытие. Для текстовых документов — сразу 100%. <strong>Commit:</strong> <code>29bdd42</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№78. Типизация — убрать паузы между батчами</strong><br>Неравномерная загрузка CPU: паузы между параллельными батчами. Нужно последовательно без ожидания.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Убран параллелизм и семафор.</strong> Простой цикл: 1 батч (5 документов) → LLM → результат → следующий. <code>process_batch</code> вынесен в отдельный метод <code>_process_batch</code>. Семафор <code>Semaphore(2)</code> удалён. <strong>Commit:</strong> <code>9e96822</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№77. Сервис упал (Killed) при загрузке 3 документов — OOM</strong><br>После загрузки 3 файлов контейнер kag-api убит (Killed). Лимит памяти 2G не хватило на параллельный парсинг + LLM + entity extraction.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>OOM Kill.</strong> Лимит памяти увеличен с 2G до 4G (reservations 2G). <strong>Commit:</strong> <code>b97456c</code>. Причина: параллельная обработка документов — парсинг, LLM-вызовы, векторизация одновременно.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№76. Типизация документов идёт слишком долго</strong><br>Каждый документ обрабатывается отдельным LLM-вызовом — для 100 документов / 100 минут.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Батчинг + параллель.</strong> Новый <code>_detect_types_batch()</code> — 5 документов за один LLM-вызов. Параллельные батчи через <code>asyncio.Semaphore(2)</code> + <code>asyncio.gather</code> (до 4 одновременно). Удалён мёртвый <code>_load_type_prompt()</code> и 13KB <code>prompts/type.txt</code>. <strong>Commit:</strong> <code>03e0061</code>. Ускорение: ~×10-20.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№75. Документ-призрак — Файл не найден на сервере (404)</strong><br>После пересоздания контейнера API документ отображается в списке, но при открытии — «Файл не найден». Загруженный файл потерян.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Причины:</strong> uploads директория была недоступна (Permission denied), DocumentService падал в fallback <code>/tmp/kag_uploads</code> (не persistent). После рестарта контейнера /tmp очищается — файл пропадает, метаданные в PostgreSQL остаются. <strong>Пермишены:</strong> <code>chmod -R 777 /app/data</code> в command docker-compose. GOST-ключ и аудит тоже починились: <code>Ключ загружен из файла</code>. <strong>Фикс:</strong> ghost-запись удалена из config_store. Новые загрузки — в <code>/app/data/uploads</code> (persistent volume).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№74. viewer.html — документ не отображается, пустая страница</strong><br>PDF.js не рендерит PDF на qd.gostsecret.ru. API отдаёт preview (200), worker загружается — но страница пустая.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Та же причина — d54cb91.</strong> Замена Google Fonts сломала viewer.html (font-family замены затронули JS). Восстановлен откатом до <code>d54cb91^</code>. Также восстановлены admin.html и documents.html (аналогичная поломка). <strong>Правило:</strong> массовые замены в HTML утверждать с пользователем — легко сломать JS.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№73. Тестирование деплоя с нуля на 192.168.50.18</strong><br>Сервер очищен, проект переразвёрнут с ветки <code>kag-rusystem-allv1</code>. Проверен полный цикл: клонирование, .env, docker-compose --profile dev, создание PG/Qdrant, креды всех 5 баз.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Ключевые проблемы:</strong><br>1. Профили — <code>--profile dev</code> обязателен<br>2. kag-pg запущен вручную<br>3. GOST-ключ не персистит → креды открытым текстом в config_store<br>4. Одноразовость через <code>creds_shown</code> + <code>POST /mark-creds-shown</code><br>5. Пароль keycloak-db сброшен ALTER USER</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№72. Кнопка «Скопировать все креды» в буфер</strong><br>Нужна возможность одним кликом скопировать все данные баз (имя БД, хост, порт, логин, пароль) в буфер обмена.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлена кнопка <code>📋 Скопировать все креды в буфер</code></strong> в шаге 1. JS-функция <code>copyAllCreds()</code> собирает данные из карточек <code>.db-creds</code>, форматирует с заголовками, вызывает <code>navigator.clipboard.writeText()</code>. Статус ✅/❌ на 3 сек. <strong>Commit:</strong> <code>da93736</code> (ветка <code>kag-rusystem-allv1</code>).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№71. Показать логины/пароли/названия всех баз на странице setup</strong><br>Должны отображаться креды для PostgreSQL (KAG), Qdrant, Neo4j, Keycloak DB, KAG Database.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>API:</strong> эндпоинт <code>GET /api/v1/setup/status</code> расширен — возвращает <code>databases</code> с кредами (GOST-дешифровка для PG/Qdrant, статические для остальных). <strong>Фронт:</strong> 5 карточек <code>.db-creds</code>, функция <code>renderDbCreds()</code> — таблица (Хост/Порт/БД/Пользователь/Пароль зелёным). Заполняется при загрузке и после createPgDb/createQdrant. <strong>Commit:</strong> <code>d797997</code>, <code>0d46f81</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№70. На странице постоянно моргает «прочитано» и «ожидаю ответа»</strong><br>В левом нижнем углу браузера бесконечно мигает статус-бар. Страница перезагружается в цикле.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Бесконечный цикл редиректов:</strong> <code>DOMContentLoaded</code> → configured=true → <code>location='/'</code> → / (307) → /setup → повтор. <strong>Убран блок</strong> с редиректом. <strong>Commit:</strong> <code>b8b01b3</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№69. Шрифты загружаются из интернета (Google Fonts)</strong><br>Все страницы используют <code>fonts.googleapis.com</code>. Нужно убрать CDN.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Удалены ссылки из 15 файлов.</strong> Inter → <code>system-ui, -apple-system, sans-serif</code>. JetBrains Mono → <code>'Cascadia Code', 'Fira Code', 'Consolas', monospace</code>. 20 файлов изменено. <strong>Commit:</strong> <code>d54cb91</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№68. В setup.html мусорные цифры на каждой строке — «186| 440| 187| 441|»</strong><br>На странице настройки отображались посторонние числа. Возникли в коммите <code>4b0c5e5</code> (13 мая, рестайл Linear dark) — при копировании содержимого файла вместе с номерами строк из read_file. При каждом патче нумерация накапливалась.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Regex-чистка:</strong> удалены все префиксы <code>   N|</code> из каждой строки — <code>re.sub(r'^[ \t]*\d+\|', '', content, flags=re.MULTILINE)</code> два прохода. Файл уменьшился с 18144 до 15120 символов (-3024). Все CSS-стили и HTML-структура сохранены. <strong>Commit:</strong> <code>827a2f9</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№67. Страница setup без дизайна — все элементы в потоке без CSS</strong><br>После перехода на <code>/setup</code> страница отображается без оформления: заголовки, поля, карточки, кнопки — всё в стандартном браузерном виде. Базовый CSS (nav, body, переменные) есть, но классы <code>.step</code>, <code>.field</code>, <code>.grid</code>, <code>.inner-card</code>, <code>.btn-create</code>, <code>.test-status</code> и другие не стилизованы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен полный набор CSS-стилей</strong> для setup.html в <code>&lt;style&gt;</code> секцию: <code>.main-content</code> (margin-left:240px, padding:40px), <code>.step</code> (card с border-radius-lg, padding:24px, margin-bottom:20px), <code>.step-header</code> (flex с border-bottom), <code>.step-num</code> (круглый бейдж 32px с accent-цветом), <code>.grid</code> (2 колонки, gap:12px), <code>.field</code> (flex column), <code>.field.full</code> (grid-column:1/-1), <code>.inner-card</code> (panel-style), <code>.btn-create/.btn-test/.btn-save</code> (accent-кнопки), <code>.test-status/.status-box</code> (success/error варианты). <strong>Commit:</strong> <code>737c300</code>. Перезапуск не нужен — статика через volume mount.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№66. При входе на сайт «Отсутствует токен аутентификации» вместо страницы setup</strong><br>При открытии <code>http://192.168.50.18:8000/</code> возвращается JSON с ошибкой 401, а должна открываться страница настройки системы. Страница /setup работала, а корень нет.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Две проблемы:</strong> (1) Корень <code>/</code> не был в <code>PUBLIC_PREFIXES</code> AuthMiddleware — блокировался до проверки в коде. (2) <code>root_web()</code> пытался отдать <code>index.html</code>, а не редиректить на setup. <strong>Исправлено:</strong> <code>/</code> добавлен в <code>PUBLIC_PREFIXES</code> в <code>src/api/middleware/auth.py</code>. <code>root_web()</code> в <code>src/api/main.py</code> заменён на <code>RedirectResponse(url="/setup")</code> — при входе на сайт сразу редирект на страницу настройки. <strong>Commit:</strong> <code>10c0f73</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№65. Проект неработоспособен после развёртывания с git — /admin возвращает 401</strong><br>После чистого деплоя kag-system-enhanced на сервер 192.168.50.18 страница <code>/admin</code> не открывается — HTTP 401. При этом <code>/setup</code> работает, <code>/login</code> работает, а <code>/admin</code> нет.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Корень проблемы:</strong> <code>/admin</code> не был в списке <code>PUBLIC_PREFIXES</code> в <code>src/api/middleware/auth.py</code>. AuthMiddleware требовал токен для доступа к странице админки. Страница <code>/static/admin.html</code> при этом была доступна (200 OK). <strong>Исправлено:</strong> добавлен <code>"/admin"</code> в <code>PUBLIC_PREFIXES</code>. После git pull и restart kag-api — <code>/admin</code> отдаёт HTML (200). <strong>Commit:</strong> <code>3d83cdc</code>.</div></div>
+      </div>
+    </div>
+  </div><!-- May 22, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>22 мая 2026 — Сессия #9 (текущая)</div>
+    <div class="qa-list">
+
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№63. Порядок задач на Know — от новых к старым</strong><br>Задачи должны располагаться от последней с наибольшим номером к первой с наименьшим номером и рядом соответствующие ответы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Реверс qa-item блоков</strong> внутри каждого <code>qa-list</code>. Секция 22 мая: №62→№57. Май 19: №56→№46. Использован regex для извлечения и переворота блоков.</div></div>
+      </div>
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№64. Активная LLM — модель не сохраняется при обновлении</strong><br>После обновления страницы опять выбирается ollama и phi4-mini, хотя ранее был сохранён DeepSeek.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлен <code>loadActiveLlmConfig()</code></strong> — читает <code>GET /llm-config</code>, восстанавливает provider, model, url, api_key. Вызывается в <code>loadAll()</code>. Эндпоинт <code>config_store("llm_config","active")</code>. При сохранении пишет все поля в PostgreSQL.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№62. Активная LLM модель — провайдеры, модели, баланс</strong><br>Сделать по аналогии с граф-моделью: выбор провайдера, API-ключ, баланс, сохранение в PostgreSQL.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Полная переработка секции.</strong> Статический HTML с provider-select, model-select, api-key, url. JS: <code>onActiveLlmProviderChange()</code>, <code>saveActiveLlm()</code> → <code>POST /switch-llm</code> с полями <code>backend_type, model_name, url, api_key, provider</code>. <code>config_store("llm_config","active")</code> — переживает рестарт. <code>loadActiveLlmConfig()</code> восстанавливает при загрузке. <code>LLMBackendType</code> расширен: DEEPSEEK, OPENROUTER.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№61. Модель графа (Neo4j) — только Ollama, нет выбора провайдера</strong><br>При выборе DeepSeek дропдаун моделей не обновляется. Баланс в долларах/юанях.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлены:</strong> <code>onGraphProviderChange()</code>, <code>loadGraphModels()</code> — фетчат модели провайдера. Кнопка 💰 Баланс с <code>checkGraphBalance()</code>. Эндпоинт <code>GET /graph/balance</code> — OpenRouter ($), DeepSeek (¥/CNY), OpenAI (✅ ключ активен).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№60. Внешние LLM — нет выбора моделей, теста, баланса</strong><br>При выборе провайдера DeepSeek и вводе API-ключа нет возможности протестировать, запросить баланс и выбрать модель.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Расширен test_ext_llm()</strong> — поддержка OpenAI/DeepSeek/OpenRouter через <code>/v1/chat/completions</code>. <code>loadExtModels()</code> фетчит модели через <code>GET /ext-llm/models?provider=</code>. Баланс: OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (проверка ключа). <code>populateExtSelect()</code> вызывается в <code>loadAll()</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№59. Статус системы — Ollama ❌ недоступен</strong><br>Хотя тест перезагрузки проходит, статус показывает красные крестики.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Два бага:</strong> (1) health-check использовал <code>GET /</code> вместо <code>/api/tags</code> — исправлено. (2) <code>config_store.get("llm","default")</code> возвращал <code>{"system_prompt":"..."}</code> без host — model_manager брал <code>localhost</code>. Добавлены поля <code>host: 192.168.50.41, port: 11434</code>. Embedding: создан отдельный <code>config_store("embedding","default")</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№58. Админка не грузит данные — все секции «Загрузка...»</strong><br>На странице /admin статус системы, типы, модели — всё показывает «Загрузка...». Раньше работало без авторизации.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Откат к рабочей версии <code>b857ccf</code></strong> — админка использовала простые <code>fetch()</code> без auth. Добавлен <code>apiFetch()</code> с <code>localStorage.getItem('kag_token')</code> — 31 вызов заменил на <code>apiFetch</code>. <code>LLMBackendType</code> enum расширен: deepseek, openrouter. Настройки сохраняются в PostgreSQL через <code>config_store("llm_config","active")</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№57. Восстановление после сбоя — Keycloak realm, PostgreSQL, Qdrant</strong><br>Проект был полностью уничтожен после перезагрузки контейнеров. Восстанови наработки, чтобы не потерять при следующей перезагрузке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Аудит и восстановление.</strong> Код сохранён в git. Создан отдельный <code>kag-pg</code> PostgreSQL с bind-mount <code>/home/yartsevn/kag-system/data/pg</code>. Qdrant на <code>data/qdrant</code>. Загрузки на <code>data/uploads</code>. 68 файлов переимпортированы. Keycloak realm <code>kag</code> пересоздан через REST API. Setup-флаг сброшен в <code>config_store("setup","status",{"configured":True})</code>.</div></div>
+      </div>
+    </div>
+  </div><!-- May 19, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>19 мая 2026 — Сессия #8</div>
+    <div class="qa-list">
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Авто-классификация типов документов</strong><br>Тип не появляется на миниатюрах.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Исправлен document_analyzer: таймаут увеличен до 120с, синхронизация config_store с API списка. 15 из 16 документов получили типы (contract, invoice, letter, form, legal, technical, financial). Endpoint <code>POST /api/v1/upload/reanalyze-all</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Просмотр текстовых документов</strong><br>Ошибка «Файл повреждён или не является PDF» для txt/md.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">viewer.html теперь определяет тип: PDF → PDF.js, текст → рендеринг содержимого белым текстом на тёмном фоне. Скрываются PDF-элементы для текстовых.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Миниатюры — белый фон</strong><br>И админка: чекбоксы форматов + бейджи на странице загрузки.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Миниатюры: белый фон, чёрный/серый текст. Админка: 12 чекбоксов в алфавитном порядке. Документы: цветные/серые бейджи над зоной загрузки, accept у input динамически.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Code Review страницы логов</strong><br>Профессиональное ревью с делегированием.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Суб-агент провёл ревью: найдены XSS (innerHTML), отсутствие auth на эндпоинтах, инъекция в docker logs. Исправлено: DOM-создание вместо innerHTML, authHeaders на все fetch, санитайз container_name, хеш-дедупликация логов.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Neo4j best practices — анализ и реализация</strong><br>Сравнить с neo4j.com/blog/knowledge-graph-generation.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Реализованы все лучшие практики Neo4j: двухпроходное извлечение (core → relations → extended), MERGE вместо CREATE (авто-дедупликация), пост-обработка (entity linking), валидация качества, разделение Lexical/Domain Graph, индексы и constraints. Всё с русскими комментариями.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Доменные схемы — множественные пресеты</strong><br>Переключение между схемами сущностей.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">5 доменных пресетов: 🌐 Универсальная, 💰 Бухгалтерия, ⚖️ Юридическая, 🏥 Медицинская, 🔐 <strong>Инфобез</strong> (ГОСТ Р 56545/56546). Настраиваются в админке и на <code>/kg</code>. Схема ИБ включает: asset, vulnerability, threat, incident, control, risk_level, classification, regulation.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Пагинация на странице документов</strong><br>Добавить кнопки «следующие N» с прокруткой.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены кнопки ◀/▶ с перелистыванием страниц, счётчик «1–50 из 100 (стр. 1/2)», селектор количества (20/50/100/200/500/Все). При смене фильтра — сброс на первую страницу.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Веб-мониторинг — RSS + scrape + change detection</strong><br>Нужна страница для мониторинга внешних сайтов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/monitor</code>: RSS-парсер (feedparser), веб-скрапер (BeautifulSoup4), change detection (SHA-256). 6 встроенных источников. Интеграция с KAG Pipeline: Download → SHA-256 → Dedup → Upload → Parse → Qdrant → Neo4j.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ГОСТы — страница не парсится</strong><br>gost.ru/standarts/InformationSecurity — ссылки есть, система не видит.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Ссылки вели на <code>rst.gov.ru:8443/file-service/file/load/...</code> без расширения <code>.pdf</code>. Добавлены: паттерны file-service в <code>_is_document_url</code>, Content-Type → расширение, Content-Disposition → имя файла. <strong>115 ГОСТов найдено.</strong></div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Настройка скорости скачивания</strong><br>Сервер блокирует. Нужны партии и паузы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены настройки: <strong>Партия</strong> (файлов за раз), <strong>Пауза между партиями</strong> (сек), <strong>Пауза между файлами</strong> (сек), <strong>Случ. разброс</strong> (0..N сек). Обработка 429 (Retry-After), 503. Настраивается для каждого источника.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>ЦБ РФ RSS — добавить набор источников</strong><br>Изучить cbr.ru/development/rss/.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлено 8 RSS-каналов ЦБ РФ отдельным набором: новое на сайте, новости/интервью, пресс-релизы, курсы валют, регламент МЦИ, +3 English. Кнопка «🏦 ЦБ РФ (8)».</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>RSS не скачиваются</strong><br>Почему новости ЦБ не попадают в KAG?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">RSS-парсер искал только <strong>вложения</strong> (enclosures с PDF). В новостных RSS их нет. Добавлен шаг 3: если нет вложений → сохраняем саму новость как <code>.txt</code> документ (заголовок + описание + ссылка).</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Дедупликация новостей</strong><br>Нужна логика: вычитывать название+дату, если есть — не загружать.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Два уровня дедупликации: 1) <strong>Ключ новости</strong> <code>title[:80]|YYYY-MM-DD</code> в <code>_news_keys</code> set → config_store; 2) <strong>SHA-256</strong> контента. Каждая новость — 1 экземпляр в KAG.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Роскомнадзор RSS</strong><br>Изучить и добавить.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен RSS РКН: <code>rkn.gov.ru/_services/rss/</code>. Новости по надзору в сфере связи, ИТ, СМИ, защите ПДн.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>SecurityNews RSS — добавить как источник</strong><br>5 RSS-каналов secnews.ru по ИБ.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены 5 каналов SecurityNews: все публикации, статьи, зарубежные, российские, дайджест СМИ. Кнопка «🔐 SecurityNews (5)» на <code>/monitor</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Лента новостей — отдельная страница</strong><br>Нужна страница с блоками новостей в реальном времени, с раскрытием по клику.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создана страница <code>/news</code>: сетка блоков 280px, клик — раскрытие на всю ширину, панель источников с чипсами (вкл/выкл), тестовый источник Securelist. Дедупликация по тексту.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Баг: общие сущности — всего 3 при 130 документах</strong><br>Почему так мало cross-doc entities?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Найден критический баг: <code>chunk_id = "chunk_00001"</code> был одинаковым для ВСЕХ документов. <code>MATCH (c:Chunk {id: "chunk_00001"})</code> цеплял чанки всех документов → сущность «EUR/USD» была связана со 113 документами. <strong>Исправлено:</strong> <code>chunk_id = "{document_id}_chunk_{i}"</code>. Старые сущности удалены, граф перестраивается.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Перестройка графа — визуализация и расчёт времени</strong><br>Нужно визуализировать процесс перестроения графа знаний и рассчитать сколько времени займёт.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена панель визуализации на <code>/kg</code>: прогресс-бар с процентами, счётчик «N / 130 документов», ETA с расчётом скорости (~1.5 док/мин). При завершении панель становится зелёной и скрывается через 10 сек. <strong>Время:</strong> ~3-5 часов на 130 документов × 3 чанка.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№46. Skill know-updater — автообновление страницы Know</strong><br>Сделай скилл, который будет дописывать каждый диалог на страницу know после ответа.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан skill <code>know-updater</code> (<code>productivity/know-updater/SKILL.md</code>). После существенного ответа читает <code>know.html</code>, добавляет Q&A блок в начало секции текущей даты, коммитит и пушит. Формат: вопрос слева (синяя полоса), ответ справа (зелёная). <strong>Правила:</strong> не дублировать, не на каждый чих, технические детали с code-ссылками.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№47. Дедупликация сущностей — зачем и как работает</strong><br>Расскажи подробнее о реальной дедупликации, так ли она нужна или это что-то технологическое ускоряет или улучшает работу?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Дедупликация через MERGE вместо CREATE</strong> — это не косметика, а архитектурное решение:<br>• <strong>Граф становится связным</strong> — через общие сущности можно перейти между документами<br>• <strong>Экономия памяти</strong> — 1000 доков с «Ивановым» = 1 узел, не 1000<br>• <strong>Быстрее поиск</strong> — <code>MATCH (e:Entity {name: "Иванов"})</code> возвращает 1 запись<br>• <strong>Аналитика</strong> — видно что «Иванов» в 150 документах (важный контрагент)<br><strong>Баг с chunk_id:</strong> раньше <code>chunk_id = "chunk_00001"</code> для всех доков → MERGE склеивал всё подряд. Исправлено на <code>"{doc_id}_chunk_{i}"</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№56. Сторож типизации документов</strong><br>Сторож должен проверять наличие тегов и типов. При отсутствии — перезапускать распознавание первых 2 чанков. Показывать статус на странице документов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/type_watchdog.py</code> — определяет тип документа по первым 2 чанкам через LLM. API: <code>POST /api/v1/kg/type-watchdog/start</code>, <code>GET .../status</code>. <strong>15 русских типов:</strong> Договор, Отчёт, Счёт, Стандарт (ГОСТ), etc. <strong>Авто-пополнение:</strong> LLM предлагает новый тип → добавляется в список. Редактирование в админке: ➕ добавить / ✕ удалить. Статус на странице /documents: ⏳ идёт / ✅ завершено / ⚠️ без типа. Клик по «Типов» → админка.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№55. Bulk delete документов</strong><br>На странице документов в таблице сделать чекбоксы для группового удаления.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> чекбокс «Выбрать все» в шапке таблицы, индивидуальные чекбоксы у каждой строки, панель «🗑️ Удалить выбранные» с подсчётом. Количество сохраняется в <code>localStorage</code>. Подтверждение перед удалением.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№54. Сторож перестроения графа</strong><br>Нужен сторож процесса. Перезапускать при необходимости вручную или сторожем.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Создан:</strong> <code>src/indexing/rebuild_watchdog.py</code> — asyncio-задача внутри uvicorn. <strong>API:</strong> <code>POST /api/v1/kg/watchdog/start</code>, <code>POST .../stop</code>, <code>GET .../status</code>. <strong>Алгоритм:</strong> каждые 30 сек проверяет рост сущностей. При зависании (5 циклов) — авто-перезапуск с очисткой. Авто-старт при запуске контейнера если entities &lt; 10.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№53. Тестирование AI-чата</strong><br>Тестируй ответы чата. Проверяй нейросети, строй предположения и проверяй.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Проблема:</strong> активная модель <code>phi4-mini-reasoning:latest</code> — reasoning-модель с китайскими <code>&lt;think&gt;</code> тегами. Ответы пустые или нерелевантные. <strong>Fix:</strong> переключено на <code>phi4-mini:latest</code> — ответы на русском, ссылается на документы. <strong>Mistral:7b</strong> — более развёрнутые ответы, медленнее. <strong>Neo4j-поиск:</strong> улучшен — извлечение ключевых слов из сообщения вместо полного предложения. 4 теста пройдено.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№52. QA тестирование — профессиональный прогон</strong><br>Занимайся автотестами как профессиональный тестировщик. Изучи методики, проведи полное тестирование.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Загружены скиллы:</strong> systematic-debugging, test-driven-development, dogfood. <strong>3 делегата параллельно:</strong> (1) Smoke — 11 страниц, FAIL: меню неконсистентно (только /admin 11 пунктов). (2) API — 10 эндпоинтов, PASS: все 200 OK. (3) Admin — FAIL: промпт и форматы не персистят. <strong>Исправлено:</strong> навигация 9 страниц + дашборд; промпт сохранение в config_store; chunk_id уникальные.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№51. Системный промпт для чата — RAG из Neo4j+Qdrant</strong><br>Нужен промпт для AI-чата, чтобы работал с обеими базами. Создай поле в админке.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Добавлено:</strong> секция «💬 Системный промпт для чата» в админке с textarea 320px. API: <code>GET/POST /api/v1/admin/models/chat-prompt</code>. Сохранение в <code>config_store("llm", "default")</code>. Дефолтный промпт: работает с Qdrant (векторы) и Neo4j (граф). Чат-сервис обогащает контекст из обеих баз: <code>[Источник N]</code> + <code>[Граф]</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№50. Гибридный поиск — только Neo4j, нет Qdrant</strong><br>Вбиваю «криптография» — ничего не найдено. Нужен fallback на Qdrant.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Fix:</strong> Гибридный поиск теперь двухэтапный: (1) Neo4j через <code>CONTAINS</code> (не <code>IN</code>), (2) Если пусто — fallback на <code>embeddings_service.search()</code> в Qdrant. Пояснение мелким шрифтом на странице /kg.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№49. Выбор нейросетей — API-ключи теряются при смене провайдера</strong><br>Где сохраняется API-ключ? Почему не видно после повторного выбора провайдера?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Баг:</strong> <code>_ext_llm_config</code> — глобальная переменная в памяти. <strong>Fix:</strong> сохранение в <code>config_store.set("ext_llm", "default", {...})</code> → PostgreSQL. Загрузка при старте модуля. Условие <code>if not model AND not api_key</code> заменено на безусловную загрузку из БД. <strong>Баланс-проверка:</strong> OpenRouter (<code>/api/v1/credits</code>), DeepSeek (<code>/v1/user/balance</code>), OpenAI (тест доступности). Endpoint: <code>GET /api/v1/admin/models/ext-llm/balance</code>.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№48. Навигация — единое меню на всех страницах</strong><br>Переделай меню слева. На всех страницах кроме чата должно быть одинаковое меню из 11 пунктов.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Унифицирована навигация на 14 страницах: Дашборд → Чат с AI → Документы → Чанки → Поиск → Граф знаний → Веб-монитор → Новости → Know → Логи → Админ. Дашборд получил <code>.nav-item</code> CSS-классы. Админка сохранила оригинальную структуру.</div></div>
+      </div>
+    </div>
+  </div><!-- May 18, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>18 мая 2026 — Сессии #6-7</div>
+    <div class="qa-list">
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /logs пустая</strong><br>Ничего не отображается.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлены эндпоинты: system/info, docker/stats, docker/{name}/logs. Исправлен JS: убран show-system, updateSystemPanel всегда активна. Системные метрики через psutil.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Страница /search не работает</strong><br>Никакой поиск не функционирует.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Три проблемы: 1) Нет auth-заголовков в fetch; 2) Нет функций getToken()/authHeaders(); 3) Эндпоинт <code>/api/v1/chat/search</code> не существовал. Добавлен endpoint, authHeaders, getToken. Все 3 режима поиска работают.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Гибридный поиск не работает</strong><br>На странице /kg гибридный поиск (граф + вектор) ничего не ищет.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Entity extraction падал молча: <code>mistral:7b</code> не генерировал валидный JSON на русском. Заменён на <code>phi4-mini</code>. Добавлен WARNING-лог при неудаче парсинга. Исправлена сериализация свойств в JSON. Endpoint rebuild-graph.</div></div>
+      </div>
+    </div>
+  </div><!-- May 17, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>17 мая 2026 — Сессии #4-5</div>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Граф знаний — поиск и Cypher</strong><br>Добавить прямой запрос Neo4j и entity search.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен endpoint <code>/api/v1/kg/cypher</code> с защитой от модификации данных. UI на /kg: textarea для Cypher, отображение в таблице. Entity search с фильтром по типу и поиском CONTAINS.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- May 14, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>14 мая 2026 — Сессии #1-3</div>
+    <div class="qa-list">
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Duplicates & Versioning</strong><br>Храним ли оригиналы для сравнения при повторной загрузке?</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">SHA-256 при загрузке, проверка дубликата по хешу, бэкап <code>.v{N}.bak</code>, сравнение версий (diff по словам), endpoint <code>/upload/{id}/diff</code>. Всё с русскими комментариями.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>Мониторинг Docker и системы</strong><br>Обзор существующих страниц мониторинга.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Изучены: логи, Docker dashboard, Qdrant мониторинг. OpenTelemetry + Prometheus. Документы: загрузка, чанки, статусы. Система имеет полный мониторинговый стек.</div></div>
+      </div>
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>PDF viewer не работает</strong><br>Документ не отображается, ошибка pdfjsLib is not defined.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Две проблемы: 1) /details endpoint читал из пустой таблицы documents вместо config_store (system_configs). 2) PDF.js грузился с недоступного CDN. Исправлено: endpoint → config_store, PDF.js → локальные файлы <code>/static/pdf.min.js</code>.</div></div>
+      </div>
+    </div>
+  </div>

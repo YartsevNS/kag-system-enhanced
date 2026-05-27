@@ -333,9 +333,3 @@ async def news_page():
     return {"error": "News page not found"}
 
 
-@app.get("/know", summary="База знаний")
-async def know_page():
-    know_path = os.path.join(static_path, "know.html")
-    if os.path.exists(know_path):
-        return FileResponse(know_path)
-    return {"error": "Know page not found"}
