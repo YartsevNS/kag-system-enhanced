@@ -139,7 +139,7 @@ class EmbeddingsService:
             if not exists:
                 logger.info(f"Создание коллекции: {self.collection_name}")
 
-                from qdrant_client.http.models import HnswConfigDiff, OptimizersConfigDiff, ScalarQuantization, ScalarType
+                from qdrant_client.http.models import HnswConfigDiff, OptimizersConfigDiff
 
                 self._qdrant_client.create_collection(
                     collection_name=self.collection_name,
@@ -153,10 +153,6 @@ class EmbeddingsService:
                     ),
                     optimizers_config=OptimizersConfigDiff(
                         indexing_threshold=5000  # индексация после 5000 точек
-                    ),
-                    quantization_config=ScalarQuantization(
-                        scalar=ScalarType.INT8,  # int8 квантование для скорости
-                        always_ram=True
                     )
                 )
 
