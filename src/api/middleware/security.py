@@ -146,6 +146,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
+        # 0. CORS preflight — пропустить без проверки
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # 1. Публичные пути — без проверки
         if _is_public(path):
             return await call_next(request)
