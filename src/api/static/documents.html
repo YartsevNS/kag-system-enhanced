@@ -94,10 +94,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
 
 /* Progress */
-.progress-wrap{display:none;margin-top:12px}
-.progress-wrap .prog-label{font-size:12px;color:var(--text3);margin-bottom:4px;display:flex;justify-content:space-between}
-.progress-bar{width:100%;height:6px;background:var(--elevated);border-radius:3px;overflow:hidden}
-.progress-bar .prog-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s;width:0%}
+/* Progress bar — upload + processing */
+.progress-wrap{display:none;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.progress-wrap .prog-label{font-size:12px;color:var(--text3);margin-bottom:6px;display:flex;justify-content:space-between}
+.progress-bar{width:100%;height:8px;background:var(--elevated);border-radius:4px;overflow:hidden}
+.progress-bar .prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-h));border-radius:4px;transition:width 0.5s ease;width:0%}
+.prog-stage{font-size:11px;color:var(--text4);margin-top:6px;display:flex;justify-content:space-between}
+.prog-stage .prog-file{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%}
+.prog-stage .prog-status{color:var(--amber)}
+.prog-stage .prog-status.done{color:var(--emerald)}
 
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.docs-grid{grid-template-columns:1fr}}
 </style>
@@ -141,6 +146,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="progress-wrap" id="progress-wrap">
     <div class="prog-label"><span id="prog-file">—</span><span id="prog-pct">0%</span></div>
     <div class="progress-bar"><div class="prog-fill" id="prog-fill"></div></div>
+    <div class="prog-stage"><span class="prog-file" id="prog-stage-text">📥 Загрузка файла...</span><span class="prog-status" id="prog-stage-status">⏳</span></div>
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
@@ -268,26 +274,87 @@ async function uploadFiles(files) {
   const pf = document.getElementById('prog-fill');
   const pp = document.getElementById('prog-pct');
   const pn = document.getElementById('prog-file');
+  const ps = document.getElementById('prog-stage-text');
+  const pst = document.getElementById('prog-stage-status');
   pw.style.display = 'block';
-  pf.style.width = '0%';
-  pp.textContent = '0%';
+  pf.style.width = '0%'; pp.textContent = '0%';
+  ps.textContent = '📥 Загрузка...'; pst.textContent = '⏳'; pst.className = 'prog-status';
 
+  // Этап 1: загружаем все файлы на сервер
+  const docIds = [];
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     pn.textContent = file.name;
+    pp.textContent = Math.round(((i) / files.length) * 100) + '%';
+    pf.style.width = Math.round(((i) / files.length) * 100) + '%';
     const fd = new FormData(); fd.append('file', file);
     try {
       const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
       if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Upload failed'); }
+      const result = await r.json();
+      docIds.push(result.document_id);
       toast(`✅ ${file.name} загружен`);
     } catch(e) {
       toast(`❌ ${file.name}: ${e.message}`, true);
+      pn.textContent = '❌ ' + file.name;
     }
-    const pct = Math.round(((i + 1) / files.length) * 100);
-    pf.style.width = pct + '%';
-    pp.textContent = pct + '%';
+    pp.textContent = Math.round(((i + 1) / files.length) * 100) + '%';
+    pf.style.width = Math.round(((i + 1) / files.length) * 100) + '%';
   }
-  setTimeout(() => { pw.style.display = 'none'; loadAll(); }, 800);
+
+  // Этап 2: отслеживаем обработку всех загруженных документов
+  if (docIds.length === 0) { pw.style.display = 'none'; loadAll(); return; }
+
+  ps.textContent = '🔄 Обработка документов...';
+  pn.textContent = docIds.length + ' файлов';
+
+  const stageLabels = {
+    0: '⏳ Ожидание...', 5: '🔍 Распознавание текста...',
+    10: '🔍 Распознавание текста...', 30: '📄 Парсинг документа...',
+    50: '✂️ Чанкинг...', 90: '🧠 Векторизация...', 100: '✅ Готово'
+  };
+
+  let allDone = false;
+  while (!allDone) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await fetch(`${API}/upload/list`);
+      if (!r.ok) continue;
+      const data = await r.json();
+      const docs = data.documents || [];
+      let totalProgress = 0, done = 0;
+
+      for (const docId of docIds) {
+        const doc = docs.find(d => d.document_id === docId);
+        if (!doc) continue;
+        const p = doc.progress || 0;
+        totalProgress += p;
+        if (doc.status === 'completed') {
+          done++;
+          pst.textContent = '✅';
+          pst.className = 'prog-status done';
+        }
+      }
+
+      const avgProgress = Math.round(totalProgress / docIds.length);
+      pf.style.width = avgProgress + '%';
+      pp.textContent = avgProgress + '%';
+
+      // Определяем текущий этап по среднему прогрессу
+      let stageKey = 0;
+      const keys = Object.keys(stageLabels).map(Number).sort((a,b)=>a-b);
+      for (const k of keys) { if (avgProgress >= k) stageKey = k; }
+      ps.textContent = stageLabels[stageKey] || '🔄 Обработка...';
+
+      if (done === docIds.length) {
+        allDone = true;
+        ps.textContent = '✅ Все документы обработаны';
+        pst.textContent = '✅';
+        pst.className = 'prog-status done';
+        setTimeout(() => { pw.style.display = 'none'; loadAll(); }, 1500);
+      }
+    } catch(e) { /* сетевые ошибки игнорируем */ }
+  }
 }
 
 async function loadAll() {
@@ -300,6 +367,14 @@ async function loadAll() {
     updateStats();
     renderAll();
     checkTypeWatchdog();
+    // Автообновление если есть документы в обработке
+    const hasProcessing = allDocs.some(d => d.status === 'processing' || d.status === 'pending');
+    if (hasProcessing && !window._docsPollTimer) {
+      window._docsPollTimer = setInterval(() => { loadAll(); }, 5000);
+    } else if (!hasProcessing && window._docsPollTimer) {
+      clearInterval(window._docsPollTimer);
+      window._docsPollTimer = null;
+    }
   } catch(e) {
     document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
   }
@@ -470,7 +545,7 @@ function renderCards(docs) {
       <div class="card-body">
         <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${d.uploaded_by_name||'—'}</div>
-        <div class="card-meta">${statusMap[d.status]||d.status} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+        <div class="card-meta">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
       </div>
     </div>`;
