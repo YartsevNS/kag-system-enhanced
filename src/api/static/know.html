@@ -77,7 +77,34 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
   </div>
 
-  
+  <!-- May 31, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>31 мая 2026 — Сессия #13</div>
+    <div class="qa-list">
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№111. Удалён torch из зависимостей</strong><br>Worker не собирался из-за нехватки места: torch тянет CUDA библиотеки на 2GB+. torch не используется в коде — Occular через ONNX, reranker через FlashRank.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Убран <code>torch>=2.0.0</code> из requirements.txt. После чистки docker cache (26GB) билд прошёл. Коммит: <code>631651e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№110. Лёгкий reranker на FlashRank</strong><br>Вернуть reranker для поиска без torch и sentence-transformers.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан <code>src/indexing/reranker.py</code> с FlashRank (ONNX, ~50MB). Fallback BM25. Подключён к search(). Коммит: <code>3eaf838</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№109. Bulk folder import — ZIP/TAR/GZ</strong><br>Добавить загрузку папок через архивы.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>POST /api/v1/upload/bulk</code>. Распаковка в /tmp, валидация, Celery. Коммит: <code>1b6d15e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№108. Деплой + очистка docker cache</strong><br>Не хватило места при сборке worker (torch 2GB+ CUDA).</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>docker system prune -af --volumes</code> — очищено 26GB. Worker собран. Коммит: <code>631651e</code>.</div></div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- May 27, 2026 -->
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>27 мая 2026 — Сессия #12</div>
