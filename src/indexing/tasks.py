@@ -27,21 +27,49 @@ def process_document(
 ) -> Dict[str, Any]:
     """
     Обработать документ: парсинг → чанкинг → векторизация.
-    Выполняется в Celery worker (отдельный контейнер).
     
-    Args:
-        document_id: Идентификатор документа
-        
-    Returns:
-        Результат обработки
-        
-    Raises:
-        self.retry: при любой ошибке (5 попыток, экспоненциальная задержка)
+    Важно: worker — отдельный процесс, document_service загружает документы
+    из config_store при инициализации. Новые документы, добавленные после
+    старта worker'а, НЕ попадают в его оперативную память.
+    Поэтому мы принудительно перезагружаем документ из config_store.
     """
     logger.info(f"[Celery] Начало обработки: {document_id}")
     
     try:
-        # document_service.process_document — async, запускаем через asyncio.run
+        # Принудительно загружаем документ из БД в память worker'а
+        from src.api.services.document_service import document_service
+        from src.api.services.config_store import config_store
+        
+        # Получаем метаданные из config_store
+        all_docs = config_store.get_all("documents") or {}
+        doc_data = all_docs.get(document_id)
+        
+        if isinstance(doc_data, str):
+            raise ValueError(f"Документ повреждён в БД (строка вместо dict): {document_id}")
+        
+        if doc_data:
+            # Пересоздаём запись в памяти (даже если уже была)
+            from src.api.services.document_service import DocumentRecord
+            from datetime import datetime
+            
+            record = DocumentRecord(
+                document_id=document_id,
+                filename=doc_data.get("filename", "unknown"),
+                file_type=doc_data.get("file_type", ""),
+                file_size=doc_data.get("file_size", 0),
+                file_hash=doc_data.get("file_hash", ""),
+                status=doc_data.get("status", "pending"),
+                progress=doc_data.get("progress", 0),
+                uploaded_by=doc_data.get("uploaded_by"),
+                group_ids=doc_data.get("group_ids", []),
+                version=doc_data.get("version", 1),
+                created_at=datetime.fromisoformat(doc_data["created_at"]) if doc_data.get("created_at") else datetime.utcnow(),
+                updated_at=datetime.fromisoformat(doc_data["updated_at"]) if doc_data.get("updated_at") else datetime.utcnow(),
+            )
+            document_service._documents[document_id] = record
+            logger.info(f"[Celery] Документ загружен из БД: {document_id}")
+        
+        # Обрабатываем
         result = asyncio.run(document_service.process_document(document_id))
         logger.info(f"[Celery] ✅ Документ обработан: {document_id}")
         return {
@@ -52,8 +80,6 @@ def process_document(
         
     except Exception as exc:
         logger.error(f"[Celery] ❌ Ошибка обработки {document_id}: {exc}")
-        
-        # Экспоненциальная задержка: 60с, 120с, 240с, 480с, 960с
         countdown = 60 * (2 ** self.request.retries)
         raise self.retry(exc=exc, countdown=countdown)
 
