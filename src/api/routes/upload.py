@@ -13,6 +13,7 @@
 Обработка асинхронная, не блокирует upload.
 """
 import os
+import io
 import uuid
 import asyncio
 import json
@@ -484,6 +485,159 @@ async def upload_documents_batch(
             })
 
     return {"uploaded": len(results), "documents": results}
+
+
+@router.post("/bulk", summary="Пакетная загрузка архива (zip/tar)")
+async def upload_bulk(
+    file: UploadFile = File(...),
+    request: Request = None,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Загрузить ZIP/TAR/GZ архив с документами.
+    
+    Архив распаковывается во временную папку, каждый файл внутри
+    проходит валидацию и отправляется в Celery на обработку.
+    
+    Поддерживаемые форматы внутри архива: PDF, DOCX, TXT, MD, CSV.
+    Вложенные папки игнорируются (все файлы извлекаются плоским списком).
+    
+    Args:
+        file: ZIP/TAR/GZ файл с документами
+        
+    Returns:
+        Список результатов загрузки каждого файла из архива
+    """
+    # Rate limit
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
+    upload_id = str(uuid.uuid4())
+    filename = file.filename or f"archive_{upload_id[:8]}"
+    logger.info(f"[{upload_id}] 📦 Загрузка архива: {filename}")
+
+    # Читаем архив в память
+    try:
+        archive_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка чтения архива: {e}")
+
+    # Создаём временную папку для распаковки
+    extract_dir = Path(f"/tmp/bulk_{upload_id}")
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded_by = current_user.id if current_user else None
+    group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+    results = []
+    allowed_exts = {".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".xlsx", ".xls", ".png", ".jpg", ".jpeg"}
+
+    try:
+        # Определяем тип архива по расширению
+        ext = Path(filename).suffix.lower()
+
+        if ext in (".zip",):
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
+                for info in zf.infolist():
+                    if info.filename.startswith("__") or info.filename.startswith("."):
+                        continue
+                    entry_ext = Path(info.filename).suffix.lower()
+                    if entry_ext not in allowed_exts:
+                        continue
+                    # Извлекаем во временную папку
+                    zf.extract(info, extract_dir)
+                    extracted_path = extract_dir / info.filename
+                    if not extracted_path.is_file():
+                        continue
+
+                    # Загружаем каждый файл
+                    _process_bulk_file(
+                        extracted_path, entry_ext, uploaded_by, group_ids,
+                        upload_id, results
+                    )
+
+        elif ext in (".tar", ".gz", ".tgz"):
+            import tarfile
+                    # tarfile.open режим определяется по расширению
+            mode = "r:gz" if ext in (".gz", ".tgz") else "r:"
+            with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode=mode) as tf:
+                for member in tf.getmembers():
+                    if not member.isfile():
+                        continue
+                    entry_ext = Path(member.name).suffix.lower()
+                    if entry_ext not in allowed_exts:
+                        continue
+                    tf.extract(member, extract_dir)
+                    extracted_path = extract_dir / member.name
+                    if not extracted_path.is_file():
+                        continue
+
+                    _process_bulk_file(
+                        extracted_path, entry_ext, uploaded_by, group_ids,
+                        upload_id, results
+                    )
+        else:
+            raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат архива: {ext}")
+
+    except Exception as e:
+        logger.error(f"[{upload_id}] Ошибка распаковки архива: {e}")
+        raise HTTPException(status_code=400, detail=f"Ошибка распаковки: {e}")
+    finally:
+        # Очищаем временную папку
+        import shutil
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+    logger.info(f"[{upload_id}] 📦 Архив обработан: {len(results)} файлов, "
+                f"ошибок: {sum(1 for r in results if r['status']=='error')}")
+    return {"upload_id": upload_id, "total": len(results), "documents": results}
+
+
+def _process_bulk_file(
+    file_path: Path,
+    file_ext: str,
+    uploaded_by, group_ids, upload_id, results: list
+):
+    """Загрузить один файл из архива в document_service."""
+    import uuid as _uuid
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+
+        if len(content) == 0:
+            results.append({"filename": file_path.name, "status": "error", "error": "Empty file"})
+            return
+        if len(content) > MAX_FILE_SIZE:
+            results.append({"filename": file_path.name, "status": "error", "error": "File too large"})
+            return
+
+        # Валидация
+        SecurityValidator.validate_file_upload(
+            file_path="", filename=file_path.name,
+            file_size=len(content), mime_type=file_ext,
+        )
+
+        doc_id = str(_uuid.uuid4())
+        # Используем document_service напрямую
+        import asyncio
+        record = asyncio.run(document_service.upload_document(
+            filename=file_path.name, file_content=content,
+            file_type=file_ext, uploaded_by=uploaded_by,
+            group_ids=group_ids, upload_id=upload_id,
+        ))
+
+        # В очередь Celery
+        celery_process_document.delay(document_id=record.document_id)
+
+        results.append({
+            "document_id": record.document_id,
+            "filename": file_path.name,
+            "status": record.status,
+            "file_size": record.file_size,
+        })
+
+    except Exception as e:
+        logger.warning(f"[{upload_id}] Ошибка файла {file_path.name}: {e}")
+        results.append({"filename": file_path.name, "status": "error", "error": str(e)})
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatus, summary="Статус документа")
