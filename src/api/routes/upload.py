@@ -12,14 +12,15 @@
 Никакого temp/rename/staging — файл сразу в /app/data/uploads/.
 Обработка асинхронная, не блокирует upload.
 """
-
 import os
 import uuid
 import asyncio
+import json
+from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response
 from loguru import logger
 
 from src.models import DocumentStatus
@@ -30,8 +31,262 @@ from src.database.user_models import User
 
 router = APIRouter()
 
-# Лимит одного файла (500MB)
-MAX_FILE_SIZE = 500 * 1024 * 1024
+# Лимит одного файла (1GB)
+MAX_FILE_SIZE = 1024 * 1024 * 1024
+
+# Директория для TUS чанков (временные файлы)
+TUS_DIR = Path("/tmp/tus_uploads")
+
+
+# ============================================================
+# TUS — resumable upload protocol (RFC-описание)
+# Позволяет загружать файлы до 1GB по частям.
+# ============================================================
+
+TUS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _tus_meta_path(upload_id: str) -> Path:
+    """Путь к файлу метаданных TUS-сессии."""
+    return TUS_DIR / f"{upload_id}.meta"
+
+
+def _tus_file_path(upload_id: str) -> Path:
+    """Путь к файлу с частично загруженными данными."""
+    return TUS_DIR / f"{upload_id}.bin"
+
+
+@router.options("/tus")
+async def tus_options():
+    """TUS: вернуть поддерживаемые опции протокола."""
+    return Response(
+        headers={
+            "Tus-Resumable": "1.0.0",
+            "Tus-Version": "1.0.0",
+            "Tus-Extension": "creation,termination",
+            "Tus-Max-Size": str(MAX_FILE_SIZE),
+        }
+    )
+
+
+@router.post("/tus", status_code=201)
+async def tus_create(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    TUS: создать новую сессию загрузки.
+
+    Заголовки запроса:
+    - Upload-Length: общий размер файла в байтах
+    - Upload-Metadata: base64(filename, content_type)
+    """
+    # Проверка протокола
+    if request.headers.get("Tus-Resumable") != "1.0.0":
+        raise HTTPException(status_code=412, detail="Tus-Resumable: 1.0.0 required")
+
+    upload_length = request.headers.get("Upload-Length")
+    if not upload_length:
+        raise HTTPException(status_code=400, detail="Upload-Length header required")
+
+    try:
+        total_size = int(upload_length)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Upload-Length")
+
+    if total_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large: {total_size} > {MAX_FILE_SIZE}")
+
+    # Парсим метаданные (Upload-Metadata: filename base64..., content_type base64...)
+    filename = f"file_{uuid.uuid4().hex[:8]}"
+    content_type = "application/octet-stream"
+    metadata_header = request.headers.get("Upload-Metadata", "")
+    for part in metadata_header.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if " " in part:
+            key, b64_val = part.split(" ", 1)
+            try:
+                import base64
+                decoded = base64.b64decode(b64_val).decode("utf-8")
+                if key == "filename":
+                    filename = decoded
+                elif key == "content_type":
+                    content_type = decoded
+            except Exception:
+                pass
+
+    upload_id = str(uuid.uuid4())
+
+    # Сохраняем метаданные сессии
+    meta = {
+        "upload_id": upload_id,
+        "filename": filename,
+        "content_type": content_type,
+        "total_size": total_size,
+        "offset": 0,
+        "created_at": datetime.utcnow().isoformat(),
+        "uploaded_by": str(current_user.id) if current_user else None,
+    }
+    with open(_tus_meta_path(upload_id), "w") as f:
+        json.dump(meta, f)
+
+    # Создаём пустой файл для чанков (pre-allocate не обязателен)
+    _tus_file_path(upload_id).touch()
+
+    logger.info(f"[TUS] Сессия создана: {upload_id}, файл: {filename}, размер: {total_size}")
+
+    # Location — URL для последующих PATCH/HEAD запросов
+    return Response(
+        status_code=201,
+        headers={
+            "Location": f"/api/v1/upload/tus/{upload_id}",
+            "Tus-Resumable": "1.0.0",
+            "Upload-Offset": "0",
+        },
+    )
+
+
+@router.head("/tus/{upload_id}")
+async def tus_head(upload_id: str):
+    """TUS: получить текущий статус загрузки (сколько байт уже получено)."""
+    meta_path = _tus_meta_path(upload_id)
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    file_path = _tus_file_path(upload_id)
+    offset = file_path.stat().st_size if file_path.exists() else 0
+
+    return Response(
+        headers={
+            "Upload-Offset": str(offset),
+            "Upload-Length": str(meta["total_size"]),
+            "Tus-Resumable": "1.0.0",
+        }
+    )
+
+
+@router.patch("/tus/{upload_id}", status_code=204)
+async def tus_patch(
+    upload_id: str,
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    TUS: загрузить очередной чанк.
+
+    Заголовки:
+    - Upload-Offset: текущая позиция (должна совпадать с размером файла на диске)
+    - Content-Type: application/offset+octet-stream
+    """
+    if request.headers.get("Tus-Resumable") != "1.0.0":
+        raise HTTPException(status_code=412, detail="Tus-Resumable: 1.0.0 required")
+
+    meta_path = _tus_meta_path(upload_id)
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    file_path = _tus_file_path(upload_id)
+    current_offset = file_path.stat().st_size if file_path.exists() else 0
+
+    # Проверка Upload-Offset из заголовка
+    try:
+        header_offset = int(request.headers.get("Upload-Offset", "0"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Upload-Offset")
+
+    if header_offset != current_offset:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Conflict: header offset {header_offset} != actual {current_offset}",
+        )
+
+    # Читаем чанк из тела запроса и дописываем в файл
+    chunk = await request.body()
+    if not chunk:
+        raise HTTPException(status_code=400, detail="Empty chunk")
+
+    with open(file_path, "ab") as f:
+        f.write(chunk)
+
+    new_offset = file_path.stat().st_size
+    logger.debug(f"[TUS] Чанк получен: {upload_id}, offset: {current_offset}→{new_offset}")
+
+    # Если всё загружено — завершаем сессию
+    if new_offset >= meta["total_size"]:
+        logger.info(f"[TUS] Загрузка завершена: {upload_id}, файл: {meta['filename']}")
+
+        # Собираем файл и отправляем в document_service
+        try:
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+
+            uploaded_by = current_user.id if current_user else meta.get("uploaded_by")
+            group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+
+            # Валидация
+            SecurityValidator.validate_file_upload(
+                file_path="",
+                filename=meta["filename"],
+                file_size=len(file_content),
+                mime_type=meta["content_type"],
+            )
+
+            record = await document_service.upload_document(
+                filename=meta["filename"],
+                file_content=file_content,
+                file_type=meta["content_type"],
+                uploaded_by=uploaded_by,
+                group_ids=group_ids,
+                upload_id=upload_id,
+            )
+
+            # В очередь обработки
+            await _processing_queue.put(record.document_id)
+            logger.info(f"[TUS] Документ обработан: {record.document_id}")
+
+        except Exception as e:
+            logger.error(f"[TUS] Ошибка финализации {upload_id}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            # Очищаем временные файлы
+            _cleanup_tus(upload_id)
+
+    return Response(
+        headers={
+            "Upload-Offset": str(new_offset),
+            "Tus-Resumable": "1.0.0",
+        }
+    )
+
+
+@router.delete("/tus/{upload_id}", status_code=204)
+async def tus_delete(upload_id: str):
+    """TUS: отменить и удалить сессию загрузки."""
+    _cleanup_tus(upload_id)
+    return Response()
+
+
+def _cleanup_tus(upload_id: str):
+    """Удалить временные файлы TUS-сессии."""
+    for p in [_tus_meta_path(upload_id), _tus_file_path(upload_id)]:
+        try:
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+
+
+# ============================================================
+# Simple multipart upload (без TUS)
+# ============================================================
 
 
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
