@@ -472,10 +472,19 @@ class DocumentService:
                 if not segments:
                     raise ValueError("Occular-ocr вернул пустой результат")
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
-                # Сохраняем OCR-результат
+                # Сохраняем полный текст
                 ocr_path = self._ocr_dir / record.filename
                 ocr_path.write_text(parsed.full_text, encoding="utf-8")
                 logger.info(f"OCR сохранён: {ocr_path}")
+                
+                # Сохраняем Markdown-версию (с таблицами и структурой)
+                try:
+                    md_text = parsed.to_markdown()
+                    md_path = self._ocr_dir / f"{record.filename}.md"
+                    md_path.write_text(md_text, encoding="utf-8")
+                    logger.info(f"Markdown сохранён: {md_path} ({len(md_text)} симв)")
+                except Exception as e:
+                    logger.warning(f"Markdown не создан: {e}")
             except Exception as e:
                 logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
                 from src.indexing.parsers import document_parser

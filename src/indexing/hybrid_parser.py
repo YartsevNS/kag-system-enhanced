@@ -41,6 +41,66 @@ class ParsedDocument:
     metadata: Dict[str, Any] = field(default_factory=dict)
     parse_method: str = "unknown"  # "docling+ocular", "ocular_only", "docling_only"
 
+    def to_markdown(self) -> str:
+        """
+        Собрать Markdown из распознанного документа.
+
+        Приоритет: layout (от Docling) + таблицы + распознанный текст (от Occular).
+        Если layout есть — используем его для заголовков и структуры.
+        Если нет — просто full_text.
+        """
+        md_parts = []
+
+        for page in self.pages:
+            # Заголовок страницы
+            if len(self.pages) > 1:
+                md_parts.append(f"## Страница {page.page_num}\n")
+
+            # Если есть layout-элементы
+            if page.layout:
+                for item in page.layout:
+                    item_type = item.get('type', 'text')
+
+                    if item_type == 'table':
+                        table_data = item.get('data', {})
+                        md_table = table_data.get('markdown', '')
+                        if md_table:
+                            md_parts.append(md_table)
+                            md_parts.append("")
+                        else:
+                            # Fallback: просто текст
+                            md_parts.append(table_data.get('text', ''))
+                            md_parts.append("")
+
+                    elif item_type == 'image':
+                        caption = item.get('caption', '') or item.get('description', '')
+                        md_parts.append(f"![{caption}]({item.get('src', '')})")
+                        md_parts.append("")
+
+                    elif item_type == 'formula':
+                        latex = item.get('latex', '')
+                        md_parts.append(f"$$\n{latex}\n$$")
+                        md_parts.append("")
+
+                    else:
+                        # Text block — берём текст страницы
+                        if page.text:
+                            # Разбиваем на параграфы по пустым строкам
+                            paragraphs = page.text.strip().split('\n\n')
+                            for p in paragraphs:
+                                p = p.strip()
+                                if p:
+                                    md_parts.append(p)
+                                    md_parts.append("")
+            else:
+                # Нет layout — просто текст страницы
+                if page.text:
+                    md_parts.append(page.text.strip())
+                    md_parts.append("")
+
+        result = "\n".join(md_parts).strip()
+        return result if result else self.full_text
+
 
 class HybridDocumentParser:
     """
