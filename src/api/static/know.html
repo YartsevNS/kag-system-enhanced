@@ -84,6 +84,21 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="qa-list">
 
 <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№107. Celery worker вместо asyncio очереди</strong><br>Заменить asyncio.Queue + ProcessPoolExecutor на полноценный Celery worker с изоляцией и retry. Обработка документов должна переживать перезапуск API.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">В проекте уже были <code>celery_app.py</code> и <code>Dockerfile.worker</code>. Обновлён <code>tasks.py</code>: <code>process_document</code> теперь вызывает <code>document_service.process_document()</code> через <code>asyncio.run()</code>. Upload: <code>await _processing_queue.put()</code> → <code>celery_process_document.delay()</code>. Retry: 5 попыток, экспоненциальная задержка 60→960с. Очередь в Redis не теряется. Коммит: <code>bcb2f4a</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№106. Rate limiter на upload endpoints</strong><br>Добавить ограничение на количество upload-запросов, чтобы один пользователь не мог забить очередь.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен in-memory sliding window rate limiter: 10 запросов в минуту на POST /upload и POST /upload/batch. По IP клиента. HTTP 429 с кодом RATE_LIMIT. Коммит: <code>a90767a</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№105. TUS resumable upload protocol</strong><br>Добавить поддержку chunked upload для файлов до 1GB с возможностью возобновления при обрыве соединения.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Реализован TUS protocol (RFC): POST /tus — создание сессии, HEAD — статус, PATCH — загрузка чанка, DELETE — отмена. Файлы до 1GB. Временные файлы: /tmp/tus_uploads/{id}.meta + {id}.bin. По завершении — авто-финализация в document_service + очередь Celery. Коммит: <code>3ad6982</code>.</div></div>
+      </div>
+
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№104. UploadError is not defined на фронте</strong><br>После деплоя streaming upload при загрузке файла — ошибка "UploadError is not defined". В консоли JS — ReferenceError.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Class declarations в JS не hoist'ятся. <code>UploadError</code> был определён после <code>uploadFileXHR</code>. Перенёс класс до функции. Коммит: <code>924d53a</code>.</div></div>
       </div>
