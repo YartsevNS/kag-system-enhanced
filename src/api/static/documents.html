@@ -157,6 +157,14 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
+    <select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка">
+      <option value="date_desc">📅 Новые сверху</option>
+      <option value="date_asc">📅 Старые сверху</option>
+      <option value="name_asc">🔤 А–Я</option>
+      <option value="name_desc">🔤 Я–А</option>
+      <option value="size_desc">📦 Большие сверху</option>
+      <option value="size_asc">📦 Малые сверху</option>
+    </select>
     <select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице">
       <option value="20">20 шт</option>
       <option value="50" selected>50 шт</option>
@@ -212,6 +220,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (savedCount) {
     const sel = document.getElementById('count-filter');
     if (sel) sel.value = savedCount;
+  }
+  // Восстановить сохранённую сортировку
+  const savedSort = localStorage.getItem('docs-sort');
+  if (savedSort) {
+    const sel = document.getElementById('sort-filter');
+    if (sel) sel.value = savedSort;
   }
 });
 
@@ -441,6 +455,19 @@ function resetPage() { currentPage = 0; }
 
 function renderAll() {
   const docs = getFiltered();
+  // Сортировка
+  const sortVal = document.getElementById('sort-filter')?.value || 'date_desc';
+  docs.sort((a, b) => {
+    switch (sortVal) {
+      case 'date_desc': return new Date(b.created_at) - new Date(a.created_at);
+      case 'date_asc':  return new Date(a.created_at) - new Date(b.created_at);
+      case 'name_asc':  return (a.filename||'').localeCompare(b.filename||'');
+      case 'name_desc': return (b.filename||'').localeCompare(a.filename||'');
+      case 'size_desc': return (b.file_size||0) - (a.file_size||0);
+      case 'size_asc':  return (a.file_size||0) - (b.file_size||0);
+      default: return 0;
+    }
+  });
   const total = docs.length;
   var slice = getPageSlice(docs);
   updatePager(slice.page, slice.totalPages, total, slice.shown);
