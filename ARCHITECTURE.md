@@ -167,3 +167,24 @@ Granite-Docling 258M — опциональное улучшение для та
 | Миниатюры не создавались | chown /app/data, mkdir thumbnails |
 | Redis терял сеть | docker-compose --force-recreate |
 | Документы в pending без обработки | Исправлено: KAG_DB_URL + загрузка из БД в worker |
+| **Worker не имел Occular/docling** | Dockerfile.worker обновлён: добавлены Tesseract, Occular, веса |
+
+## Изменения Dockerfile.worker (31 мая 2026)
+
+**Проблема**: Worker собирался ТОЛЬКО из requirements.txt (без Occular OCR, без Docling).
+При обработке падал `Docling not available: No module named 'docling'` и `Occular-ocr not available: No module named 'ocr_skel'`.
+Обработка шла через DocumentParser (pypdf/tesseract) — **без русского OCR**.
+
+**Исправление**: Dockerfile.worker теперь включает:
+```dockerfile
+# Stage 1 (builder)
+RUN apt-get install -y tesseract-ocr tesseract-ocr-rus poppler-utils libgl1 libglib2.0-0t64
+
+RUN pip install git+https://github.com/Bodhi42/Occular-ocr.git
+RUN curl -sLO ...dbnet.onnx ...crnn_encoder.onnx ...crnn_mobilenet_large.pth
+
+# Stage 2 (production)
+RUN apt-get install -y tesseract-ocr tesseract-ocr-rus poppler-utils libgl1 libglib2.0-0t64
+```
+
+Теперь Worker имеет те же OCR-возможности, что и API.
