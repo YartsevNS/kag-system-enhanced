@@ -84,8 +84,28 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="qa-list">
 
 <div class="qa-item">
-        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№107. Celery worker вместо asyncio очереди</strong><br>Заменить asyncio.Queue + ProcessPoolExecutor на полноценный Celery worker с изоляцией и retry. Обработка документов должна переживать перезапуск API.</div></div>
-        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">В проекте уже были <code>celery_app.py</code> и <code>Dockerfile.worker</code>. Обновлён <code>tasks.py</code>: <code>process_document</code> теперь вызывает <code>document_service.process_document()</code> через <code>asyncio.run()</code>. Upload: <code>await _processing_queue.put()</code> → <code>celery_process_document.delay()</code>. Retry: 5 попыток, экспоненциальная задержка 60→960с. Очередь в Redis не теряется. Коммит: <code>bcb2f4a</code>.</div></div>
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№111. Удалён torch из зависимостей</strong><br>Worker не собирался из-за нехватки места: torch тянет CUDA библиотеки на 2GB+. torch не используется в коде — Occular через ONNX, reranker через FlashRank.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Убран <code>torch>=2.0.0</code> из requirements.txt. После чистки docker cache (26GB) и удаления torch билд прошёл. Коммит: <code>631651e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№110. Лёгкий reranker на FlashRank</strong><br>Вернуть reranker для поиска, но без тяжёлых зависимостей (torch, sentence-transformers).</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Создан <code>src/indexing/reranker.py</code> с FlashRank (ONNX-based, ~50MB, без torch). Fallback на BM25. Подключён к <code>search()</code> в embeddings_service.py. Срабатывает при запросах >3 слов. Коммит: <code>3eaf838</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№109. Bulk folder import — ZIP/TAR/GZ архивы</strong><br>Добавить возможность загружать целые папки с документами через zip-архив.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлен <code>POST /api/v1/upload/bulk</code>. Принимает ZIP/TAR/GZ, распаковывает в <code>/tmp/bulk_{upload_id}/</code>, валидирует каждый файл и отправляет в Celery. Поддерживает: PDF, DOCX, TXT, MD, CSV, XLSX, PNG, JPG. Коммит: <code>1b6d15e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№108. Деплой на сервер + очистка места</strong><br>При сборке worker не хватило места на диске. Torch тянет 2GB+ CUDA библиотек. Docker cache занял 26GB.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>docker system prune -af --volumes</code> — очищено 26GB. Убран torch из зависимостей. Worker собран и запущен. Коммит: <code>631651e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№107. Celery worker вместо asyncio очереди</strong><br>Заменить asyncio.Queue + ProcessPoolExecutor на полноценный Celery worker с изоляцией и retry.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">В проекте уже были <code>celery_app.py</code> и <code>Dockerfile.worker</code>. Обновлён <code>tasks.py</code>: <code>process_document</code> через <code>asyncio.run()</code>. Upload: <code>await _processing_queue.put()</code> → <code>celery_process_document.delay()</code>. Retry 5 попыток. Коммит: <code>bcb2f4a</code>.</div></div>
       </div>
 
 <div class="qa-item">
