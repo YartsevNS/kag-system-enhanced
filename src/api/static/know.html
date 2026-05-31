@@ -83,6 +83,36 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     <div class="qa-list">
 
 <div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№117. Оптимизация токенов в RAG</strong><br>Как уменьшить количество токенов, потребляемых LLM при генерации ответов с RAG.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">План: 1) Уменьшить <code>_search_limit</code> с 10 до 5 (reranker отбирает лучшее). 2) Обрезать контекст >2000 токенов. 3) Ограничить историю чата последними 6 сообщениями. 4) Уменьшить chunk_size с 1000 до 512.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№116. Docling-core вместо docling</strong><br>docling тянул torch (532MB) + CUDA (2GB) транзитивно через torchvision. Место на диске кончилось.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>docling>=2.0.0</code> → <code>docling-core>=2.0.0</code>. <code>DocumentConverter</code> работает. -2.5GB. Билд 5 мин вместо 30. Коммит: <code>a4939c3</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№115. Redis не в сети kag_internal + сломан docker-compose</strong><br>Redis потерял сеть. Worker не видел redis. При правке command celery добавился к redis.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>git checkout -- docker-compose.yml</code>. Перезапуск: <code>docker-compose up -d --force-recreate redis worker api</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№114. Диск забит — контейнеры не стартуют</strong><br>43GB из 48GB. Docker overlay2, Redis AOF, PostgreSQL — No space left on device.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>docker system prune -af --volumes</code> — очищено 30GB. Свободно 32GB.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№113. Worker не слушает очередь documents</strong><br>Файлы в pending, worker не получает задачи.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>-Q documents,celery</code> в CMD Dockerfile.worker. Коммит: <code>5ae7f4c</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№112. Сортировка карточек документов</strong><br>Нет сортировки на /documents.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>sort-filter</code>: новые/старые, А–Я/Я–А, большие/малые. localStorage. Коммит: <code>84434c6</code>.</div></div>
+      </div>
+
+<div class="qa-item">
         <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№111. Удалён torch из зависимостей</strong><br>Worker не собирался из-за нехватки места: torch тянет CUDA библиотеки на 2GB+. torch не используется в коде — Occular через ONNX, reranker через FlashRank.</div></div>
         <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Убран <code>torch>=2.0.0</code> из requirements.txt. После чистки docker cache (26GB) билд прошёл. Коммит: <code>631651e</code>.</div></div>
       </div>
