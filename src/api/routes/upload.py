@@ -1206,3 +1206,51 @@ async def reprocess_pending_documents():
             logger.warning(f"Не удалось запустить {did}: {e}")
     
     return {"success": True, "message": f"Запущена переобработка", "count": count}
+
+
+@router.get("/queue", summary="Статус очереди обработки")
+async def queue_status():
+    """
+    Мониторинг очереди Celery: длина, активные задачи, воркеры.
+    
+    Returns:
+        Статус очереди обработки документов
+    """
+    try:
+        from src.indexing.celery_app import celery_app
+        
+        # Получаем инспекцию воркеров
+        i = celery_app.control.inspect()
+        active_tasks = i.active() or {}
+        reserved_tasks = i.reserved() or {}
+        scheduled_tasks = i.scheduled() or {}
+        
+        workers = []
+        total_active = 0
+        total_reserved = 0
+        
+        for worker_name, tasks in active_tasks.items():
+            workers.append({
+                "name": worker_name,
+                "active": len(tasks),
+                "reserved": len(reserved_tasks.get(worker_name, [])),
+                "scheduled": len(scheduled_tasks.get(worker_name, [])),
+            })
+            total_active += len(tasks)
+            total_reserved += len(reserved_tasks.get(worker_name, []))
+        
+        return {
+            "workers": workers,
+            "total_workers": len(workers),
+            "total_active": total_active,
+            "total_reserved": total_reserved,
+            "queue_depth": total_active + total_reserved,
+            "status": "ok" if workers else "no_workers",
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения статуса очереди: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+        }

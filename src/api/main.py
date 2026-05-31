@@ -71,9 +71,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Watchdog не запущен: {e}")
     
+    # Запуск Hot Folder Watcher
+    try:
+        from src.indexing.hot_folder_watcher import hot_folder_watcher
+        await hot_folder_watcher.start()
+        logger.info("HotFolderWatcher запущен")
+    except Exception as e:
+        logger.warning(f"HotFolderWatcher не запущен: {e}")
+    
     yield
     
-    # Очистка при завершении
+    # Остановка Hot Folder Watcher
+    try:
+        from src.indexing.hot_folder_watcher import hot_folder_watcher
+        await hot_folder_watcher.stop()
+    except Exception:
+        pass
+    
+    # Закрытие сервисов
     try:
         from src.indexing.embeddings_service import embeddings_service
         await embeddings_service.close()
