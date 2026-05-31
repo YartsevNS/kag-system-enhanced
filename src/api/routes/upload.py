@@ -29,6 +29,9 @@ from src.security.validator import SecurityValidator, SecurityValidationError
 from src.api.middleware.auth_v2 import get_current_user_optional
 from src.database.user_models import User
 
+# Celery задача обработки документов (вместо asyncio.Queue)
+from src.indexing.tasks import process_document as celery_process_document
+
 router = APIRouter()
 
 # Лимит одного файла (1GB)
@@ -268,9 +271,9 @@ async def tus_patch(
                 upload_id=upload_id,
             )
 
-            # В очередь обработки
-            await _processing_queue.put(record.document_id)
-            logger.info(f"[TUS] Документ обработан: {record.document_id}")
+            # В очередь Celery (retry, изоляция, Redis)
+            celery_process_document.delay(document_id=record.document_id)
+            logger.info(f"[TUS] Документ в Celery: {record.document_id}")
 
         except Exception as e:
             logger.error(f"[TUS] Ошибка финализации {upload_id}: {e}")
@@ -380,11 +383,9 @@ async def upload_document(
             upload_id=upload_id
         )
 
-        # Ставим в очередь обработки
-        await _processing_queue.put(record.document_id)
-        logger.info(
-            f"[{upload_id}] 📋 В очередь (размер: {_processing_queue.qsize()})"
-        )
+        # В очередь Celery
+        celery_process_document.delay(document_id=record.document_id)
+        logger.info(f"[{upload_id}] 📋 В Celery")
 
         return DocumentStatus(
             document_id=record.document_id,
@@ -453,7 +454,7 @@ async def upload_documents_batch(
                 upload_id=upload_id
             )
 
-            await _processing_queue.put(record.document_id)
+            celery_process_document.delay(document_id=record.document_id)
 
             results.append({
                 "document_id": record.document_id,
@@ -929,83 +930,7 @@ async def reanalyze_all_documents():
 
 
 # ============================================================
-# Очередь обработки документов (вместо Semaphore(1))
-# ============================================================
-# FIFO очередь + пул воркеров.
-# max_workers берётся из переменной окружения (по умолчанию min(4, cpu_count))
-# Каждый воркер забирает document_id из очереди и запускает process_document()
-# CPU-bound задачи (OCR, pdf2image) выполняются в ProcessPoolExecutor
-# ============================================================
-import os
-from concurrent.futures import ProcessPoolExecutor
-from loguru import logger
-from src.api.services.document_service import document_service
-
-# Количество параллельных обработчиков документов.
-# Значение из env MAX_WORKERS, иначе min(4, cpu_count)
-_MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 0)) or min(4, (os.cpu_count() or 2))
-
-# FIFO очередь: producer (upload) кладёт document_id, consumer (worker) забирает
-_processing_queue: asyncio.Queue = asyncio.Queue()
-
-# Пул процессов для CPU-bound задач (OCR, pdf2image, распознавание)
-_process_pool: ProcessPoolExecutor = ProcessPoolExecutor(max_workers=_MAX_WORKERS)
-
-
-async def _worker_loop(worker_id: int):
-    """
-    Цикл обработки документов из очереди.
-    
-    Запускается один раз при старте модуля (на каждый worker).
-    - Ждёт document_id из очереди (FIFO)
-    - Запускает process_document()
-    - Если ошибка — документ помечается как failed
-    - После завершения — берёт следующий из очереди
-    
-    Args:
-        worker_id: Номер воркера (для логов)
-    """
-    logger.info(f"[Worker {worker_id}] Запущен (max_workers={_MAX_WORKERS})")
-    while True:
-        try:
-            # Ждём задачу из очереди (блокирующая операция, но не блокирует event loop)
-            document_id = await _processing_queue.get()
-            logger.info(f"[Worker {worker_id}] 📥 Взял задачу: {document_id[:12]}... "
-                        f"(очередь: {_processing_queue.qsize()})")
-            
-            # Запускаем обработку документа
-            try:
-                # TODO: CPU-bound этапы (OCR, pdf2image) вынести в _process_pool
-                # Сейчас process_document — async, но внутри есть sync блоки
-                # В будущем: вызов через loop.run_in_executor(_process_pool, sync_fn)
-                result = await document_service.process_document(document_id)
-                logger.info(f"[Worker {worker_id}] ✅ Документ обработан: {document_id[:12]}...")
-            except Exception as e:
-                logger.error(f"[Worker {worker_id}] ❌ Ошибка обработки {document_id[:12]}...: {e}")
-                # Статус failed уже выставляется в _process_document_impl
-                # Здесь только логирование
-            finally:
-                _processing_queue.task_done()
-                
-        except asyncio.CancelledError:
-            logger.info(f"[Worker {worker_id}] Остановлен")
-            break
-        except Exception as e:
-            logger.error(f"[Worker {worker_id}] Критическая ошибка в цикле: {e}")
-            # Не останавливаем воркер — пусть берёт следующую задачу
-            await asyncio.sleep(1)
-
-
-# ============================================================
-# Запуск воркеров при старте модуля
-# ============================================================
-# Создаём _MAX_WORKERS корутин, каждая крутит _worker_loop
-for i in range(_MAX_WORKERS):
-    asyncio.ensure_future(_worker_loop(i + 1))
-
-logger.info(f"⚙️ Очередь обработки: {_MAX_WORKERS} воркеров")
-
-
+# Версионность и контроль дубликатов
 # ============================================================
 # Версионность и контроль дубликатов
 # ============================================================

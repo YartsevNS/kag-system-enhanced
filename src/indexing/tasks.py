@@ -1,95 +1,61 @@
 """
-Celery задачи для обработки документов
+Celery задачи для обработки документов.
+
+Вызываются из upload.py вместо asyncio.Queue.
+Преимущества: retry, изоляция, очередь в Redis (не теряется при перезапуске).
 """
 
 from typing import Dict, Any, Optional
-from celery import chain
+import asyncio
 from loguru import logger
-import time
 
 from src.indexing.celery_app import celery_app
-from src.indexing.parsers import DocumentParser
-from src.indexing.chunking import DocumentChunker
-from src.indexing.vectorizer import Vectorizer
+from src.api.services.document_service import document_service
 
 
 @celery_app.task(
     bind=True,
     queue="documents",
     max_retries=5,
-    default_retry_delay=60
+    default_retry_delay=60,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def process_document(
     self,
     document_id: str,
-    file_path: str,
-    file_type: str,
-    metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Обработать документ: распарсить, разбить на чанки, векторизовать.
+    Обработать документ: парсинг → чанкинг → векторизация.
+    Выполняется в Celery worker (отдельный контейнер).
     
     Args:
         document_id: Идентификатор документа
-        file_path: Путь к файлу
-        file_type: Тип файла (pdf, txt, docx, audio)
-        metadata: Дополнительные метаданные
         
     Returns:
         Результат обработки
+        
+    Raises:
+        self.retry: при любой ошибке (5 попыток, экспоненциальная задержка)
     """
-    logger.info(f"Начало обработки документа: {document_id}, тип: {file_type}")
+    logger.info(f"[Celery] Начало обработки: {document_id}")
     
     try:
-        # Шаг 1: Парсинг документа (гибридный: Docling + Occular-ocr)
-        from src.indexing.hybrid_parser import get_hybrid_parser
-        hybrid = get_hybrid_parser()
-        parsed_doc = hybrid.parse(file_path)
-        
-        # Структурированный вывод
-        parsed_content = {
-            'text': parsed_doc.full_text,
-            'pages': [{'num': p.page_num, 'text': p.text} for p in parsed_doc.pages],
-            'tables': sum((p.tables for p in parsed_doc.pages), []),
-            'segments': [p.text for p in parsed_doc.pages],
-            'metadata': parsed_doc.metadata,
-            'parse_method': parsed_doc.parse_method
-        }
-        
-        # Шаг 1.5: Авто-классификация
-        from src.indexing.auto_tagger import get_auto_tagger
-        tagger = get_auto_tagger()
-        classification = tagger.classify(parsed_doc.full_text, parsed_doc.filename)
-        
-        logger.info(
-            f"Документ распарсен: {parsed_doc.filename}, "
-            f"метод: {parsed_doc.parse_method}, "
-            f"страниц: {len(parsed_doc.pages)}, "
-            f"тип: {classification.document_type.value} ({classification.confidence:.0%}), "
-            f"теги: {classification.tags}"
-        )
-        
-        # Шаг 2: Чанкинг
-        chunker = DocumentChunker()
-        chunks = chunker.chunk(parsed_content, file_type, document_id)
-        
-        logger.info(f"Документ разбит на чанки: {document_id}, количество: {len(chunks)}")
-        
-        # Шаг 3: Векторизация (цепочка задач)
-        vectorize_document.delay(document_id, chunks, metadata or {})
-        
+        # document_service.process_document — async, запускаем через asyncio.run
+        result = asyncio.run(document_service.process_document(document_id))
+        logger.info(f"[Celery] ✅ Документ обработан: {document_id}")
         return {
             "document_id": document_id,
-            "status": "chunked",
-            "chunks_count": len(chunks),
-            "parsed_segments": len(parsed_content.get("segments", []))
+            "status": "completed",
+            "result": str(result),
         }
         
     except Exception as exc:
-        logger.error(f"Ошибка обработки документа {document_id}: {exc}")
+        logger.error(f"[Celery] ❌ Ошибка обработки {document_id}: {exc}")
         
-        # Повторная попытка с экспоненциальной задержкой
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+        # Экспоненциальная задержка: 60с, 120с, 240с, 480с, 960с
+        countdown = 60 * (2 ** self.request.retries)
+        raise self.retry(exc=exc, countdown=countdown)
 
 
 @celery_app.task(
