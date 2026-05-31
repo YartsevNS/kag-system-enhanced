@@ -410,6 +410,15 @@ class EmbeddingsService:
         except Exception as e:
             logger.warning(f"REST search failed: {e}")
 
+        # Reranking: если результатов много и запрос осмысленный (>3 слов)
+        if len(formatted_results) > 3 and len(query.split()) >= 3:
+            try:
+                from src.indexing.reranker import rerank_search_results
+                formatted_results = await rerank_search_results(query, formatted_results, top_k=limit)
+                logger.debug(f"После reranking: {len(formatted_results)} результатов")
+            except Exception as e:
+                logger.warning(f"Reranking failed (non-critical): {e}")
+
         logger.debug(f"Найдено {len(formatted_results)} результатов")
         return formatted_results
 
