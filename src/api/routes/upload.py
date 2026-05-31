@@ -34,6 +34,26 @@ router = APIRouter()
 # Лимит одного файла (1GB)
 MAX_FILE_SIZE = 1024 * 1024 * 1024
 
+# Rate limiter: не более N запросов в минуту на upload
+import time
+from collections import defaultdict
+_RATE_STORE: dict = defaultdict(list)
+_RATE_LIMIT = 10       # запросов
+_RATE_WINDOW = 60      # секунд
+
+
+def _check_rate_limit(ip: str):
+    """Проверить лимит upload-запросов. 429 при превышении."""
+    now = time.time()
+    window_start = now - _RATE_WINDOW
+    _RATE_STORE[ip] = [t for t in _RATE_STORE[ip] if t > window_start]
+    if len(_RATE_STORE[ip]) >= _RATE_LIMIT:
+        raise HTTPException(status_code=429, detail={
+            "code": "RATE_LIMIT",
+            "message": f"Слишком много запросов. Максимум {_RATE_LIMIT} в минуту.",
+        })
+    _RATE_STORE[ip].append(now)
+
 # Директория для TUS чанков (временные файлы)
 TUS_DIR = Path("/tmp/tus_uploads")
 
@@ -292,6 +312,7 @@ def _cleanup_tus(upload_id: str):
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
 async def upload_document(
     file: UploadFile = File(...),
+    request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
@@ -302,6 +323,11 @@ async def upload_document(
     """
     upload_id = str(uuid.uuid4())
     filename = file.filename or f"unnamed_{upload_id[:8]}"
+
+    # Rate limit
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     logger.info(f"[{upload_id}] 📥 Загрузка: {filename}, тип: {file.content_type}")
 
     # Читаем файл целиком
@@ -381,6 +407,7 @@ async def upload_document(
 @router.post("/batch", summary="Пакетная загрузка документов")
 async def upload_documents_batch(
     files: list[UploadFile] = File(...),
+    request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
@@ -388,14 +415,11 @@ async def upload_documents_batch(
 
     Каждый файл: прочитать → проверить → сохранить → в очередь.
     Если один файл упал — остальные продолжают.
-
-    Args:
-        files: Список файлов для загрузки
-        current_user: Пользователь (опционально)
-
-    Returns:
-        Список результатов {filename, document_id, status, error}
     """
+    # Rate limit (batch считается как 1 запрос)
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     logger.info(f"Пакетная загрузка: {len(files)} файлов")
 
     uploaded_by = current_user.id if current_user else None
