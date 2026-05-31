@@ -17,8 +17,9 @@ services:
       - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
+      - JWT_SECRET=${JWT_SECRET:-supersecretkey}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://kag:KAGsecret569@kag-pg:5432/kag}
       - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/1
