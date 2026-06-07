@@ -616,7 +616,8 @@ class DocumentService:
         return self._documents.get(document_id)
 
     def list_documents(self, limit: int = 100) -> List[DocumentRecord]:
-        """Получить список всех документов"""
+        """Получить список всех документов (из БД, с обновлением кэша)"""
+        self._load_documents_from_db()  # Всегда читаем свежие данные из PostgreSQL
         return list(self._documents.values())[-limit:]
 
     async def delete_document(self, document_id: str) -> bool:
