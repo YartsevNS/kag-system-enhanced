@@ -20,7 +20,7 @@ from src.config import get_settings
 def _is_public(path: str) -> bool:
     """Проверить, является ли путь публичным (без токена)."""
     # Точные совпадения
-    if path in ("/", "/login", "/setup", "/favicon.ico"):
+    if path in ("/", "/login", "/setup", "/know", "/favicon.ico"):
         return True
     # Префиксы
     for p in ["/api/v1/auth/", "/api/v1/health", "/api/v1/setup", 
