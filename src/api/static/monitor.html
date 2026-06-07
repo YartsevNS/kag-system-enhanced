@@ -199,13 +199,6 @@ async function loadSources() {
     const d = await r.json();
     const sources = d.sources || [];
     
-    // Статистика
-    document.getElementById('stat-sources').textContent = sources.length;
-    document.getElementById('stat-found').textContent = sources.reduce(function(s,c){return s+(c.items_found||0)},0);
-    document.getElementById('stat-uploaded').textContent = sources.reduce(function(s,c){return s+(c.items_uploaded||0)},0);
-    var lastChecks = sources.filter(function(s){return s.last_check}).map(function(s){return s.last_check}).sort();
-    document.getElementById('stat-last').textContent = lastChecks.length ? new Date(lastChecks[lastChecks.length-1]).toLocaleString('ru-RU') : '—';
-
     // Таблица источников
     var html = '<table><thead><tr><th>Название</th><th>URL</th><th>Тип</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
     if (!sources.length) {
