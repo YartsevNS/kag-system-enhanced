@@ -448,17 +448,6 @@
             </div>
         </div>
 
-        <!-- Активная Embedding модель (управляется через Привязку функций) -->
-        <div class="section">
-            <h2 class="section-title">📐 Активная Embedding модель</h2>
-            <div id="active-embedding">
-                <div class="loading">
-                    <div class="loading-dots"><span></span><span></span><span></span></div>
-                    Загрузка...
-                </div>
-            </div>
-        </div>
-
         <!-- Все модели Ollama -->
         <div class="section">
             <h2 class="section-title">📦 Загруженные модели Ollama</h2>
@@ -578,24 +567,8 @@
 
         async function loadActiveModels() {
             try {
-                const [lm, embModels] = await Promise.all([
-                    apiFetch(`${API_URL}/llm`).then(r => r.json()),
-                    apiFetch(`${API_URL}/embeddings`).then(r => r.json())
-                ]);
+                const lm = await apiFetch(`${API_URL}/llm`).then(r => r.json());
                 llmModels = lm;
-
-                // Активная Embedding модель
-                const activeEmb = embModels.find(m => m.is_active);
-                document.getElementById('active-embedding').innerHTML = activeEmb ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--elevated); border-radius: 8px;">
-                        <div style="font-size: 2rem;">📐</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeEmb.name}</div>
-                            <div style="color: var(--text4); font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                ` : '<div style="color: var(--text4);">Нет доступных embedding моделей</div>';
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
@@ -673,30 +646,6 @@
             }
         }
 
-        async function switchEmbeddingModel() {
-            const select = document.getElementById('emb-select');
-            const modelName = select.value;
-            
-            showNotification(`Переключение embedding на ${modelName}...`);
-            
-            try {
-                const response = await apiFetch(`${API_URL}/switch-embedding`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                if (response.ok) {
-                    showNotification(`✅ Embedding модель переключена на ${modelName}`);
-                    await loadAll();
-                } else {
-                    const error = await response.json();
-                    showNotification(`❌ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`❌ Ошибка: ${error.message}`, true);
-            }
-        }
 
         async function pullModel() {
             const modelName = document.getElementById('model-name-input').value.trim();
