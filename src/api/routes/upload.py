@@ -756,7 +756,7 @@ async def reindex_document(document_id: str):
     
     try:
         await document_service.process_document(document_id)
-        record = document_service.get_document(document_id)
+        record = document_service.get_document_status(document_id)
         return {
             "status": "ok",
             "document_id": document_id,
@@ -1260,7 +1260,7 @@ async def check_ocr(document_id: str):
     """Проверяет, есть ли распознанный Markdown-файл для документа."""
     from src.api.services.document_service import document_service
     try:
-        record = document_service.get_document(document_id)
+        record = document_service.get_document_status(document_id)
         if not record:
             raise HTTPException(status_code=404, detail="Документ не найден")
         md_path = document_service._ocr_dir / f"{record.filename}.md"
@@ -1283,7 +1283,7 @@ async def view_ocr_markdown(document_id: str):
     """Возвращает содержимое распознанного Markdown-файла."""
     from src.api.services.document_service import document_service
     from fastapi.responses import PlainTextResponse
-    record = document_service.get_document(document_id)
+    record = document_service.get_document_status(document_id)
     if not record:
         raise HTTPException(status_code=404, detail="Документ не найден")
     md_path = document_service._ocr_dir / f"{record.filename}.md"
