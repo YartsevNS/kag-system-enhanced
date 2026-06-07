@@ -18,6 +18,7 @@ services:
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
       - JWT_SECRET=${JWT_SECRET:-supersecretkey}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026%21secure@kag-pg:5432/kag}
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -53,7 +54,7 @@ services:
       - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text:latest}
       - EMBEDDING_TIMEOUT=60.0
-      - EMBEDDING_DIMENSIONS=1024
+      - EMBEDDING_DIMENSIONS=768
       # Общие настройки
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
       - LLM_MAX_TOKENS=4096
@@ -107,7 +108,7 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@kag-pg:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026%21secure@kag-pg:5432/kag}
     volumes:
       - ./src:/app/src
       - ./data:/app/data
