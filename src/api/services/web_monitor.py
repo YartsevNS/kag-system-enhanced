@@ -865,8 +865,17 @@ class WebMonitorService:
                             await _process_document_async(record.document_id)
                             new_count += 1
                             if news_key:
-                                self._news_keys.add(news_key)  # Запоминаем ключ после успешной загрузки
-                            self._save_state()  # Сохраняем состояние сразу
+                                self._news_keys.add(news_key)
+                            self._save_state()
+                            self.track_download({
+                                'url': url, 'filename': filename,
+                                'source_id': source.id, 'source_name': source.name,
+                                'status': 'downloaded',
+                                'file_hash': file_hash, 'file_size': len(content),
+                                'kag_document_id': record.document_id,
+                                'content_type': 'text/plain',
+                                'downloaded_at': datetime.utcnow().isoformat()
+                            })
                             logger.info(f"📰 [{new_count}/{total}] RSS-новость: {filename[:50]}")
                         except Exception as e:
                             logger.warning(f"Ошибка сохранения RSS-новости {filename[:50]}: {e}")
@@ -923,6 +932,14 @@ class WebMonitorService:
 
                         if len(content) < 100:  # Слишком маленький — не документ
                             skip_count += 1
+                            self.track_download({
+                                'url': url, 'filename': filename,
+                                'source_id': source.id, 'source_name': source.name,
+                                'status': 'skipped', 'error': 'file too small (<100 bytes)',
+                                'file_hash': None, 'file_size': len(content),
+                                'kag_document_id': None, 'content_type': None,
+                                'downloaded_at': datetime.utcnow().isoformat()
+                            })
                             continue
 
                         # SHA-256 для дедупликации
@@ -936,6 +953,15 @@ class WebMonitorService:
                                 logger.info(f"🔁 Дубликат: {filename[:50]} уже существует как {existing.document_id[:12]}...")
                                 skip_count += 1
                                 self._seen_urls.add(url)
+                                self.track_download({
+                                    'url': url, 'filename': filename,
+                                    'source_id': source.id, 'source_name': source.name,
+                                    'status': 'duplicate',
+                                    'file_hash': file_hash, 'file_size': len(content),
+                                    'kag_document_id': existing.document_id,
+                                    'content_type': None,
+                                    'downloaded_at': datetime.utcnow().isoformat()
+                                })
                                 continue
                         except Exception:
                             pass
@@ -953,6 +979,15 @@ class WebMonitorService:
 
                             new_count += 1
                             self._seen_urls.add(url)
+                            self.track_download({
+                                'url': url, 'filename': filename,
+                                'source_id': source.id, 'source_name': source.name,
+                                'status': 'downloaded',
+                                'file_hash': file_hash, 'file_size': len(content),
+                                'kag_document_id': record.document_id,
+                                'content_type': content_type,
+                                'downloaded_at': datetime.utcnow().isoformat()
+                            })
                             logger.info(f"📥 [{new_count}/{total}] Загружен: {filename[:50]} (из {source.name})")
 
                         except Exception as e:
@@ -974,6 +1009,109 @@ class WebMonitorService:
 
         logger.info(f"📊 Итого: {new_count} новых, {skip_count} пропущено из {total}")
         return new_count, skip_count
+
+    # ============================================================
+    # Документ-уровень: история скачиваний
+    # ============================================================
+
+    def track_download(self, entry: dict):
+        """Сохранить запись о попытке скачивания документа.
+
+        entry: {
+            'url': str, 'filename': str, 'source_id': str, 'source_name': str,
+            'status': 'downloaded'|'skipped'|'error'|'duplicate',
+            'file_hash': str | None, 'file_size': int | None,
+            'kag_document_id': str | None, 'error': str | None,
+            'content_type': str | None, 'downloaded_at': str (ISO)
+        }
+        """
+        try:
+            from src.api.services.config_store import config_store
+            downloads = config_store.get("web_monitor", "downloads") or []
+            downloads.append(entry)
+            # Храним последние 2000 записей
+            config_store.set("web_monitor", "downloads", downloads[-2000:])
+        except Exception as e:
+            logger.warning(f"track_download: {e}")
+
+    def get_downloads(self, limit: int = 100, status: str = None,
+                      source_id: str = None) -> List[Dict]:
+        """Получить историю скачиваний документов с фильтрацией."""
+        try:
+            from src.api.services.config_store import config_store
+            downloads = config_store.get("web_monitor", "downloads") or []
+            # Новые сверху
+            downloads = list(reversed(downloads))
+            if status:
+                downloads = [d for d in downloads if d.get('status') == status]
+            if source_id:
+                downloads = [d for d in downloads if d.get('source_id') == source_id]
+            return downloads[:limit]
+        except Exception:
+            return []
+
+    def get_stats(self) -> dict:
+        """Агрегированная статистика мониторинга."""
+        try:
+            from src.api.services.config_store import config_store
+            downloads = config_store.get("web_monitor", "downloads") or []
+            sources = self.get_sources()
+
+            total_found = sum(s.items_found for s in sources)
+            total_attempts = len(downloads)
+            downloaded = sum(1 for d in downloads if d.get('status') == 'downloaded')
+            skipped = sum(1 for d in downloads if d.get('status') == 'skipped')
+            duplicates = sum(1 for d in downloads if d.get('status') == 'duplicate')
+            errors = sum(1 for d in downloads if d.get('status') == 'error')
+            processed = sum(1 for d in downloads if d.get('kag_document_id'))
+
+            # Последняя активность
+            last_download = None
+            if downloads:
+                last_dl = downloads[-1]
+                last_download = {
+                    'url': last_dl.get('url', '')[:100],
+                    'filename': last_dl.get('filename', ''),
+                    'status': last_dl.get('status', ''),
+                    'downloaded_at': last_dl.get('downloaded_at', ''),
+                    'source_name': last_dl.get('source_name', ''),
+                }
+
+            # По источникам
+            by_source = []
+            for s in sources:
+                src_downloads = [d for d in downloads if d.get('source_id') == s.id]
+                src_processed = sum(1 for d in src_downloads if d.get('kag_document_id'))
+                last_check = s.last_check.isoformat() if s.last_check else None
+                by_source.append({
+                    'id': s.id,
+                    'name': s.name,
+                    'type': s.type,
+                    'enabled': s.enabled,
+                    'url': s.url[:120],
+                    'items_found': s.items_found,
+                    'items_uploaded': s.items_uploaded,
+                    'download_attempts': len(src_downloads),
+                    'processed': src_processed,
+                    'last_check': last_check,
+                })
+
+            return {
+                'sources_total': len(sources),
+                'sources_enabled': sum(1 for s in sources if s.enabled),
+                'total_found': total_found,
+                'total_download_attempts': total_attempts,
+                'downloaded': downloaded,
+                'skipped': skipped,
+                'duplicates': duplicates,
+                'errors': errors,
+                'processed_into_kag': processed,
+                'last_activity': last_download,
+                'by_source': by_source,
+            }
+        except Exception as e:
+            logger.error(f"get_stats error: {e}")
+            return {'error': str(e)}
 
     def get_history(self, limit: int = 50) -> List[Dict]:
         """Получить историю проверок мониторинга."""

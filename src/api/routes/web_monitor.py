@@ -322,3 +322,55 @@ async def add_secnews_sources():
         return {"status": "ok", "message": f"Добавлено {added} каналов SecurityNews"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# ============================================================
+# Статистика и история скачиваний
+# ============================================================
+
+@router.get("/stats", summary="Агрегированная статистика мониторинга")
+async def get_monitor_stats():
+    """
+    Возвращает сводную статистику:
+    - Источники: всего/активных
+    - Документы: найдено/скачано/пропущено/дубликаты/ошибки
+    - Обработано в KAG (векторизовано)
+    - По каждому источнику
+    - Последняя активность
+    """
+    try:
+        from src.api.services.web_monitor import web_monitor
+        stats = web_monitor.get_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/downloads", summary="История скачиваний документов")
+async def get_download_history(
+    limit: int = Query(100, ge=1, le=1000, description="Количество записей"),
+    status: Optional[str] = Query(None, description="Фильтр: downloaded, skipped, duplicate, error"),
+    source_id: Optional[str] = Query(None, description="Фильтр по ID источника"),
+):
+    """
+    Возвращает историю попыток скачивания документов.
+
+    Каждая запись содержит:
+    - url, filename, source_name
+    - status (downloaded/skipped/duplicate/error)
+    - file_hash, file_size, content_type
+    - kag_document_id (если успешно загружен в KAG)
+    - downloaded_at (ISO timestamp)
+    """
+    try:
+        from src.api.services.web_monitor import web_monitor
+        downloads = web_monitor.get_downloads(
+            limit=limit, status=status, source_id=source_id
+        )
+        return {
+            "total": len(downloads),
+            "downloads": downloads,
+        }
+    except Exception as e:
+        logger.error(f"Ошибка получения истории: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

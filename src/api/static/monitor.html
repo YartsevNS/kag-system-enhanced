@@ -19,7 +19,7 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .sub{font-size:13px;color:var(--text4);margin-bottom:20px}
 .panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:18px;margin-bottom:16px}
 .panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stats-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
 .stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 16px}
 .stat-num{font-size:22px;font-weight:700;color:var(--text)}
 .stat-label{font-size:10px;color:var(--text4);text-transform:uppercase;margin-top:2px}
@@ -45,7 +45,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:1000}
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.stats-row{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.stats-row{grid-template-columns:repeat(3,1fr)}}
+
+.section{margin-bottom:24px}
+.section-title{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--text2)}
 </style>
 </head>
 <body>
@@ -68,11 +71,13 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="sub">Автоматический поиск новых документов на государственных порталах — RSS, скрапинг, change detection → KAG Pipeline</div>
 
   <!-- Статистика -->
-  <div class="stats-row" id="stats-row">
+  <div class="stats-row" id="stats-row" style="grid-template-columns:repeat(6,1fr)">
     <div class="stat-card"><div class="stat-num" id="stat-sources">—</div><div class="stat-label">Источников</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-found">—</div><div class="stat-label">Найдено всего</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-uploaded">—</div><div class="stat-label">Загружено в KAG</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-last">—</div><div class="stat-label">Последняя проверка</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-found">—</div><div class="stat-label">Найдено документов</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-downloaded">—</div><div class="stat-label">Скачано</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-processed">—</div><div class="stat-label">Векторизовано</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-errors">—</div><div class="stat-label">Ошибок</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-activity" style="font-size:12px">—</div><div class="stat-label">Последняя активность</div></div>
   </div>
 
   <!-- Управление расписанием -->
@@ -154,6 +159,17 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <h2>📜 История проверок</h2>
     <div id="history-table"></div>
   </div>
+  <!-- История скачиваний -->
+  <div class="section" style="margin-top:24px">
+    <h2 class="section-title">📥 История скачиваний документов</h2>
+    <p style="font-size:12px;color:var(--text4);margin-bottom:12px">
+      Хронология попыток скачивания: успешные загрузки, дубликаты, ошибки. Для каждого документа указан KAG ID (если векторизован).
+    </p>
+    <div id="downloads-table">
+      <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка...</div>
+    </div>
+  </div>
+
 </main>
 
 <div class="toast" id="toast"></div>
@@ -172,6 +188,7 @@ function authHeaders() {
 }
 
 async function loadAll() {
+  await loadStats();
   await loadSources();
   await loadHistory();
 }
@@ -215,6 +232,52 @@ async function loadSources() {
   } catch(e) {
     document.getElementById('sources-table').innerHTML = '<span style="color:var(--red)">Ошибка: ' + e.message + '</span>';
   }
+}
+
+async function loadStats() {
+  try {
+    var r = await fetch(API + '/stats', { headers: authHeaders() });
+    var s = await r.json();
+    if (s.error) return;
+    document.getElementById('stat-sources').textContent = s.sources_enabled + '/' + s.sources_total;
+    document.getElementById('stat-found').textContent = s.total_found || 0;
+    document.getElementById('stat-downloaded').textContent = s.downloaded || 0;
+    document.getElementById('stat-processed').textContent = s.processed_into_kag || 0;
+    document.getElementById('stat-errors').textContent = s.errors || 0;
+    if (s.last_activity) {
+      var dt = s.last_activity.downloaded_at ? new Date(s.last_activity.downloaded_at).toLocaleString('ru-RU') : '—';
+      document.getElementById('stat-activity').textContent = dt;
+    }
+    await loadDownloads();
+  } catch(e) { console.error('Stats:', e); }
+}
+
+async function loadDownloads() {
+  try {
+    var r = await fetch(API + '/downloads?limit=50', { headers: authHeaders() });
+    var d = await r.json();
+    var downloads = d.downloads || [];
+    var html = '<table><thead><tr><th>Файл</th><th>Источник</th><th>Статус</th><th>Размер</th><th>KAG ID</th><th>Время</th></tr></thead><tbody>';
+    if (!downloads.length) {
+      html += '<tr><td colspan="6" style="text-align:center;color:var(--text4);padding:20px">История пуста — запустите проверку источников</td></tr>';
+    } else {
+      downloads.forEach(function(d) {
+        var sb = d.status === 'downloaded' ? '<span class="badge badge-ok">Скачан</span>' :
+                 d.status === 'duplicate' ? '<span class="badge badge-warn">Дубль</span>' :
+                 d.status === 'skipped' ? '<span class="badge">Пропущен</span>' :
+                 '<span class="badge badge-err">Ошибка</span>';
+        var kid = d.kag_document_id ? '<code style="font-size:10px">' + d.kag_document_id.substring(0,12) + '</code>' : '—';
+        var fs = d.file_size ? (d.file_size > 1024 ? (d.file_size/1024).toFixed(1)+' KB' : d.file_size+' B') : '—';
+        var dt = d.downloaded_at ? new Date(d.downloaded_at).toLocaleString('ru-RU') : '—';
+        html += '<tr><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="'+(d.url||'')+'">'+(d.filename||'?')+'</td>'+
+          '<td style="font-size:11px;color:var(--text4)">'+(d.source_name||'—')+'</td>'+
+          '<td>'+sb+'</td><td style="font-size:11px">'+fs+'</td><td>'+kid+'</td>'+
+          '<td style="font-size:11px;color:var(--text4)">'+dt+'</td></tr>';
+      });
+    }
+    html += '</tbody></table>';
+    document.getElementById('downloads-table').innerHTML = html;
+  } catch(e) { console.error('Downloads:', e); }
 }
 
 async function addSource() {
