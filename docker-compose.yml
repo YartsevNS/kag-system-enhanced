@@ -109,7 +109,7 @@ services:
       - EMBEDDING_DIMENSIONS=1024
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-pg:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@kag-pg:5432/kag}
     volumes:
       - ./src:/app/src
       - ./data:/app/data
