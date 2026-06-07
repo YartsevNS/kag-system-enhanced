@@ -794,6 +794,7 @@ class WebMonitorService:
         Returns:
             (new_items: int, skipped_items: int)
         """
+        import aiohttp
         import asyncio as _asyncio
         import random as _random
 
