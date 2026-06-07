@@ -18,7 +18,7 @@ services:
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
       - JWT_SECRET=${JWT_SECRET:-supersecretkey}
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026%21secure@kag-pg:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@kag-pg:5432/kag}
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - REDIS_PORT=6379
