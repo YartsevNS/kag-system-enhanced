@@ -527,7 +527,7 @@ function renderTable(docs) {
       <td><a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0}</a></td>
       <td>${d.uploaded_by_name||'—'}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
-      <td>${statusMap[d.status]||d.status}</td>
+      <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
       <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
     </tr>`).join('');
 }
