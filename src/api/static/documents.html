@@ -672,7 +672,7 @@ function ocrLink(d) {
 }
 async function viewOcr(id) {
   try {
-    var r = await fetch('/api/v1/upload/' + id + '/ocr', { headers: authHeaders() });
+    var r = await fetch('/api/v1/upload/' + id + '/ocr', { credentials: 'include' });
     var d = await r.json();
     if (d.ocr_md_exists) {
       window.open('/api/v1/upload/' + id + '/ocr/view', '_blank');
