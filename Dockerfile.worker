@@ -73,4 +73,4 @@ USER kag
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
     CMD celery -A src.indexing.celery_app inspect ping || exit 1
 
-CMD ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--pool=solo", "-Q", "documents,celery"]
+CMD ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--pool=solo", "-B", "-Q", "documents,celery,maintenance"]

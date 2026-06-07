@@ -294,3 +294,34 @@ def revoke_document_tasks(document_id: str) -> int:
     except Exception as e:
         logger.warning(f"[revoke] Ошибка при отзыве задач для {document_id}: {e}")
     return revoked
+
+# ═══════════════════════════════════════════════════════════════
+# Recovery: периодическая проверка зависших документов
+# ═══════════════════════════════════════════════════════════════
+
+@celery_app.task(
+    bind=True,
+    name="src.indexing.tasks.check_stuck_documents",
+    queue="maintenance",
+    max_retries=2,
+    default_retry_delay=120,
+)
+def check_stuck_documents(self):
+    """
+    Периодическая задача (каждые 5 минут).
+    Сканирует документы в статусе processing дольше порога — 
+    сбрасывает в pending и перезапускает обработку.
+    """
+    from src.indexing.recovery import recover_stuck_documents
+
+    logger.debug("[Beat] Проверка зависших документов...")
+    try:
+        result = recover_stuck_documents(requeue=True)
+        if result["recovered"] > 0:
+            logger.warning(
+                f"[Beat] Найдено и восстановлено {result['recovered']} "
+                f"зависших документов: {result['details']}"
+            )
+    except Exception as e:
+        logger.error(f"[Beat] Ошибка проверки зависших документов: {e}")
+        raise self.retry(exc=e, countdown=120)
