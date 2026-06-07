@@ -1255,6 +1255,16 @@ async def queue_status():
             "error": str(e),
         }
 
+
+async def _process_document_async(document_id: str):
+    """Запустить фоновую обработку документа через Celery."""
+    try:
+        from src.indexing.tasks import process_document
+        process_document.delay(document_id)
+    except Exception as e:
+        from loguru import logger
+        logger.warning(f"Не удалось запустить Celery задачу для {document_id}: {e}")
+
 @router.get("/{document_id}/ocr", summary="Проверить наличие OCR/Markdown")
 async def check_ocr(document_id: str):
     """Проверяет, есть ли распознанный Markdown-файл для документа."""
