@@ -405,10 +405,9 @@ class ModelManager:
         Использует прямой HTTP запрос для надежности.
         """
         try:
-            import os
             import httpx
             
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://192.168.50.41:11434")
+            base_url = self._embedding_client.base_url if self._embedding_client else "http://192.168.50.41:11434"
             
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(f"{base_url}/api/tags")
