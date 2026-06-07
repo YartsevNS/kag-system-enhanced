@@ -525,8 +525,10 @@ function toast(msg) {const t=document.getElementById('toast');t.textContent=msg;
 
 function logout() {
   localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
   fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
-    .finally(() => { window.location.href = '/login'; });
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
 }
 
 </script>
