@@ -192,7 +192,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
     </div>
     <table>
-      <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th></th></tr></thead>
+      <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead>
       <tbody id="table-body"></tbody>
     </table>
     <div class="empty" id="table-empty" style="display:none">Нет документов</div>
@@ -665,6 +665,22 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
+
+function ocrLink(d) {
+  if (d.status !== 'completed') return '<span style="color:var(--text4);font-size:11px">—</span>';
+  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>';
+}
+async function viewOcr(id) {
+  try {
+    var r = await fetch('/api/v1/upload/' + id + '/ocr', { headers: authHeaders() });
+    var d = await r.json();
+    if (d.ocr_md_exists) {
+      window.open('/api/v1/upload/' + id + '/ocr/view', '_blank');
+    } else {
+      toast('Markdown ещё не создан', true);
+    }
+  } catch(e) { toast('Ошибка: ' + e.message, true); }
+}
 </script>
 </body>
 </html>

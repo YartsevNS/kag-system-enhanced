@@ -1254,3 +1254,39 @@ async def queue_status():
             "status": "error",
             "error": str(e),
         }
+
+@router.get("/{document_id}/ocr", summary="Проверить наличие OCR/Markdown")
+async def check_ocr(document_id: str):
+    """Проверяет, есть ли распознанный Markdown-файл для документа."""
+    from src.api.services.document_service import document_service
+    try:
+        record = document_service.get_document(document_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Документ не найден")
+        md_path = document_service._ocr_dir / f"{record.filename}.md"
+        exists = md_path.exists()
+        return {
+            "document_id": document_id,
+            "filename": record.filename,
+            "ocr_md_exists": exists,
+            "ocr_md_path": str(md_path) if exists else None,
+            "ocr_md_size": md_path.stat().st_size if exists else 0,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"document_id": document_id, "ocr_md_exists": False, "error": str(e)}
+
+
+@router.get("/{document_id}/ocr/view", summary="Просмотр распознанного Markdown")
+async def view_ocr_markdown(document_id: str):
+    """Возвращает содержимое распознанного Markdown-файла."""
+    from src.api.services.document_service import document_service
+    from fastapi.responses import PlainTextResponse
+    record = document_service.get_document(document_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    md_path = document_service._ocr_dir / f"{record.filename}.md"
+    if not md_path.exists():
+        raise HTTPException(status_code=404, detail="Markdown не найден")
+    return PlainTextResponse(md_path.read_text(encoding="utf-8"), media_type="text/markdown")
