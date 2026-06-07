@@ -17,10 +17,10 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
 /* Sidebar */
-nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:10}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:10;overflow-y:auto}
 nav .logo{padding:20px 24px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s)}
 nav .logo span{color:var(--accent-h)}
-nav .nav-items{flex:1;padding:12px 8px}
+nav .nav-items{flex:1;padding:12px 8px;overflow-y:auto}
 nav .nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-sm);color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s;margin-bottom:2px}
 nav .nav-item:hover{background:rgba(255,255,255,0.04);color:var(--text2)}
 nav .nav-item.active{background:rgba(255,255,255,0.06);color:var(--text)}
