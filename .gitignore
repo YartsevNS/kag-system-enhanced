@@ -48,3 +48,4 @@ models/
 
 # SBOM
 sbom.json
+docker/nginx/ssl/
