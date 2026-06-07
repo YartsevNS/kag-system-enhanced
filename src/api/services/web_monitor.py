@@ -474,7 +474,7 @@ class WebMonitorService:
         new_urls = []
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 # Загружаем RSS (feedparser синхронный, запускаем в потоке)
                 import asyncio
                 loop = asyncio.get_running_loop()
@@ -584,7 +584,7 @@ class WebMonitorService:
         new_urls = []
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 headers = {}
                 if source.last_etag:
                     headers['If-None-Match'] = source.last_etag
@@ -670,7 +670,7 @@ class WebMonitorService:
         result = MonitorResult(source_id=source.id)
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 async with session.get(source.url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status != 200:
                         result.status = "error"
