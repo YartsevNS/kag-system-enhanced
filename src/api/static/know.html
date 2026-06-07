@@ -71,10 +71,43 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
   <div class="sub">Все сессии, диалоги и решения. Вопросы слева, ответы справа. Хронология по датам.</div>
 
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-num" id="stat-sessions">11</div><div class="stat-label">Сессий</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tasks">90</div><div class="stat-label">Решённых задач</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-days">21</div><div class="stat-label">Дней работы</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-files">164+</div><div class="stat-label">Файлов изменено</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-sessions">14</div><div class="stat-label">Сессий</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tasks">95</div><div class="stat-label">Решённых задач</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-days">22</div><div class="stat-label">Дней работы</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-files">170+</div><div class="stat-label">Файлов изменено</div></div>
+  </div>
+
+  <!-- June 7, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>7 июня 2026 — Сессия #14</div>
+    <div class="qa-list">
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№118. Сравнение веток: docling-integration vs ocr-upload-improvements</strong><br>В ветке <code>feature/docling-integration</code> использовался <code>rapidocr-onnxruntime</code> без torch, но русский язык не поддерживается. Occular OCR даёт 93.7% точность на русском, но тянет torch как зависимость.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Выбран подход с torch: <code>docling>=2.0.0</code> (layout analysis + таблицы) + <code>Occular OCR</code> (русский текст). Occular ставится через <code>pip install --no-deps git+https://...</code> — зависимости (opencv, onnxruntime) уже есть в requirements.txt. Torch нужен для Docling/Granite (layout, таблицы), не для Occular.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№119. Сборка worker с torch — хватит ли диска?</strong><br>Предыдущая сборка падала из-за нехватки места: torch + CUDA библиотеки занимают ~3 ГБ. Сервер 48 ГБ, занято 32 ГБ.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>docker image prune -a -f</code> — очищено 16 ГБ. Свободно 30 ГБ. Worker собран успешно: <strong>6.86 ГБ</strong> с torch + docling + Occular. Коммит: <code>15dd80e</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№120. EMBEDDING_DIMENSIONS mismatch — векторы не сохраняются в Qdrant</strong><br>Ошибка: <code>Wrong input: Vector dimension error: expected dim: 768, got 1024</code>. Модель bge-m3 возвращает 1024, коллекция создана с 768.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><code>EMBEDDING_DIMENSIONS=1024</code> в docker-compose.yml (API и worker). Коллекция <code>kag_documents</code> удалена и пересоздана с dim=1024. Убран ScalarQuantization (не поддерживается новой версией Qdrant). Коммиты: <code>b45d49f</code>, <code>62d49d3</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№121. Пароль PostgreSQL с «!» — docker-compose заменяет на ***</strong><br>Worker не мог подключиться к БД: пароль <code>KAGpg2026!secure</code> превращался в <code>***</code>. SQLAlchemy через <code>create_engine()</code> падал, прямой psycopg2 работал.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Корень проблемы:</strong> docker-compose v1 не обрабатывает <code>!</code> в значениях без экранирования. В API-секции жёстко прописан <code>KAG_DB_URL=postgresql://kag:KAGpg2026!secure@...</code> — <code>!</code> заменялся на <code>***</code>. <strong>Fix:</strong> пароль изменён на <code>KAGpg2026secure</code> (без спецсимволов) в docker-compose.yml и .env. <code>ALTER USER kag PASSWORD 'KAGpg2026secure'</code>. Убран дубликат KAG_DB_URL в API-секции. Коммит: <code>d246174</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№122. Полный пайплайн — проверка сквозной обработки</strong><br>Загрузить тестовый PDF с русским текстом и проверить все этапы: загрузка → Docling → Occular → Markdown → чанкинг → векторизация → Qdrant.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Пайплайн отработал успешно:</strong><br>• <code>Docling Standard pipeline initialized (CPU)</code><br>• <code>Occular-ocr initialized (CPU, ONNX)</code> — DBNet + CRNN<br>• <code>Parsed: 1 pages, 122 chars</code><br>• <code>Markdown сохранён: 120 симв</code><br>• <code>RecursiveCharacterTextSplitter: 1 чанк</code><br>• <code>Embedding: dimensions=1024 (nomic-embed-text)</code><br>• <code>Сохранено 1 векторов в Qdrant</code><br>• <code>Миниатюра создана</code><br>• <code>Neo4j схема инициализирована</code><br><strong>Итог:</strong> документ <code>77ea60f6</code> — completed. Worker 6.86 ГБ, диск 16 ГБ свободно.</div></div>
+      </div>
+
+    </div>
   </div>
 
   <!-- May 31, 2026 -->
