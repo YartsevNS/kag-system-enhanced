@@ -642,6 +642,30 @@ class DocumentService:
         # Удаляем из Qdrant
         await embeddings_service.delete_document(document_id)
         
+        # Удаляем файлы OCR, Markdown и миниатюры
+        ocr_dir = self._ocr_dir
+        for suffix in ["", ".md"]:
+            ocr_path = ocr_dir / f"{record.filename}{suffix}"
+            if ocr_path.exists():
+                try:
+                    ocr_path.unlink()
+                    logger.debug(f"Удалён {ocr_path}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить {ocr_path}: {e}")
+        thumb_path = self._thumb_dir / f"{document_id}.webp"
+        if thumb_path.exists():
+            try:
+                thumb_path.unlink()
+            except Exception as e:
+                logger.warning(f"Не удалось удалить миниатюру: {e}")
+        
+        # Удаляем из Neo4j (граф знаний)
+        try:
+            from src.indexing.knowledge_graph import kg_service
+            kg_service.clear_document(document_id)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить из Neo4j: {e}")
+        
         # Удаляем запись
         del self._documents[document_id]
         
