@@ -209,7 +209,7 @@ async function loadSources() {
         var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
         html += '<tr>' +
           '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') + '</td>' +
-          '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + s.url + '">' + s.url.substring(0,50) + '</td>' +
+          '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + s.url + '" target="_blank" title="' + s.url + '" style="color:var(--accent-h);text-decoration:none">' + s.url.substring(0,50) + '</a></td> +
           '<td><span class="badge badge-info">' + typeLabel + '</span></td>' +
           '<td>' + (s.enabled ? '<span class="badge badge-ok">✅ Активен</span>' : '<span class="badge badge-warn">⏸ Пауза</span>') + '</td>' +
           '<td>' + (s.check_interval_minutes >= 1440 ? Math.round(s.check_interval_minutes/1440) + ' д' : s.check_interval_minutes >= 60 ? Math.round(s.check_interval_minutes/60) + ' ч' : s.check_interval_minutes + ' мин') + '</td>' +
