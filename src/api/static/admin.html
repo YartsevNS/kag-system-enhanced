@@ -6,14 +6,26 @@
     <title>KAG — Управление моделями</title>
     
     <style>
-        :root {
-            --bg: #08090a; --panel: #0f1011; --surface: #191a1b; --elevated: #23252a;
-            --text: #f7f8f8; --text2: #d0d6e0; --text3: #8a8f98; --text4: #62666d;
-            --accent: #5e6ad2; --accent-h: #7170ff; --accent-l: #828fff;
-            --green: #27a644; --emerald: #10b981;
-            --red: #dc2626; --red2: #ef4444;
-            --border: rgba(255,255,255,0.08); --border-s: rgba(255,255,255,0.05);
+        :root[data-theme=light] {
+            --bg: #F5F7FA; --panel: #FFFFFF; --surface: #F0F2F5; --elevated: #FFFFFF;
+            --text: #1A1C1E; --text2: #4A5058; --text3: #6C7278; --text4: #8A8F98;
+            --accent: #08A652; --accent-h: #069945; --accent-l: #0AB85E;
+            --green: #27A644; --emerald: #10B981;
+            --red: #DC2626; --red2: #EF4444;
+            --border: rgba(0,0,0,0.10); --border-s: rgba(0,0,0,0.06);
             --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        :root[data-theme=dark] {
+            --bg: #08090A; --panel: #0F1011; --surface: #121315; --elevated: #1A1C1E;
+            --text: #F0F2F5; --text2: #B0B8C1; --text3: #6C7278; --text4: #505860;
+            --accent: #08A652; --accent-h: #0AB85E; --accent-l: #0CC96A;
+            --green: #27A644; --emerald: #10B981;
+            --red: #DC2626; --red2: #EF4444;
+            --border: rgba(255,255,255,0.10); --border-s: rgba(255,255,255,0.06);
+            --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
             font-family: system-ui, -apple-system, sans-serif;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -243,7 +255,10 @@
             <a href="/docs" class="nav-item"><span class="icon">📖</span> <span>Документация</span></a>
             <a href="/guide" class="nav-item"><span class="icon">📘</span> <span>Руководство</span></a>
         </div>
-        <div style="padding:16px 24px;border-top:1px solid var(--border-s)">
+        <div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px">
+            <button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s">
+                <span id="theme-icon">☀️</span> <span id="theme-label">Светлая</span>
+            </button>
             <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
         </div>
     <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
@@ -1699,6 +1714,40 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
+async function loadTheme() {
+  try {
+    var r = await fetch('/api/v1/admin/models/theme', { headers: authHeaders() });
+    var d = await r.json();
+    var theme = d.value || 'light';
+    applyTheme(theme);
+  } catch(e) { applyTheme('light'); }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  var icon = document.getElementById('theme-icon');
+  var label = document.getElementById('theme-label');
+  if (icon && label) {
+    icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    label.textContent = theme === 'dark' ? 'Тёмная' : 'Светлая';
+  }
+}
+
+async function toggleTheme() {
+  var current = document.documentElement.getAttribute('data-theme') || 'light';
+  var next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  try {
+    await fetch('/api/v1/admin/models/theme', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ theme: next })
+    });
+  } catch(e) {}
+}
+
+loadTheme();
+</script>
 </script>
 </body>
 </html>

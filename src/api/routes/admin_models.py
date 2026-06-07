@@ -1742,3 +1742,26 @@ async def update_doc_types(data: dict):
         return {"status": "ok", "message": f"Тип '{name}' {'добавлен' if action == 'add' else 'удалён'}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# Theme API
+from pydantic import BaseModel
+
+class ThemeRequest(BaseModel):
+    theme: str  # "light" or "dark"
+
+@router.get("/theme", summary="Получить тему пользователя")
+async def get_theme():
+    """Возвращает сохранённую тему (light/dark). По умолчанию light."""
+    try:
+        from src.api.services.config_store import config_store
+        theme = config_store.get("ui", "theme") or {"value": "light"}
+        return theme
+    except Exception:
+        return {"value": "light"}
+
+@router.post("/theme", summary="Сохранить тему пользователя")
+async def save_theme(body: ThemeRequest):
+    """Сохраняет выбранную тему в PostgreSQL."""
+    from src.api.services.config_store import config_store
+    config_store.set("ui", "theme", {"value": body.theme})
+    return {"status": "ok", "theme": body.theme}
