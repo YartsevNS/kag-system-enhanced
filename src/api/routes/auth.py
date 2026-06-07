@@ -12,7 +12,8 @@ import time
 from collections import defaultdict
 
 from passlib.hash import pbkdf2_sha256 as hash_method
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
@@ -315,3 +316,19 @@ def me(current_user: User = Depends(get_current_user)):
     Requires a valid JWT token in the Authorization header.
     """
     return _user_to_response(current_user)
+
+@router.post("/logout", summary="Выход из системы")
+def logout(request: Request, response: Response):
+    """
+    Удаляет токен из httpOnly cookie и возвращает успех.
+    Клиент также должен очистить localStorage.
+    """
+    resp = JSONResponse({"status": "ok", "message": "Вы вышли из системы"})
+    resp.delete_cookie(
+        key="kag_token",
+        path="/",
+        secure=False,  # True для HTTPS
+        httponly=True,
+        samesite="lax"
+    )
+    return resp

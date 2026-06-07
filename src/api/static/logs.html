@@ -113,6 +113,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
   <a href="/know">📚 Know</a>
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
 </nav>
 <main>
   <h1>📋 Логи системы</h1>
@@ -521,6 +522,13 @@ function now() {
 function fmtBytes(b) {if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB','TB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];}
 function escapeHtml(t) {const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 function toast(msg) {const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2500);}
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .finally(() => { window.location.href = '/login'; });
+}
+
 </script>
 </body>
 </html>

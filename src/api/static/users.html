@@ -55,6 +55,7 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
   <a href="/know">📚 Know</a>
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
 </nav>
 <main>
   <h1>👥 Пользователи и группы</h1>
@@ -324,6 +325,13 @@ async function testAD() {
     st.textContent = data.success ? ('Found ' + data.users_found + ' users' + (data.sample ? ': ' + data.sample.map(u=>u.username).join(', ') : '')) : ('Error: ' + (data.message || ''));
   } catch(e) { st.textContent = 'Error: ' + e.message; }
 }
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .finally(() => { window.location.href = '/login'; });
+}
+
 </script>
 </body>
 </html>

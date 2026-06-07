@@ -60,6 +60,7 @@ tr:hover td{background:rgba(255,255,255,0.015)}
   <a href="/know">📚 Know</a>
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
 </nav>
 <main>
 <h1>🐳 Docker & Сервер</h1>
@@ -216,6 +217,13 @@ async function act(name, action) {
 
 loadAll();
 setInterval(loadAll, 5000);
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .finally(() => { window.location.href = '/login'; });
+}
+
 </script>
 </body>
 </html>

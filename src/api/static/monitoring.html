@@ -65,6 +65,7 @@ input:focus,select:focus{border-color:var(--accent-h)}
   <a href="/know">📚 Know</a>
   <a href="/logs">📋 Логи</a>
   <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
 </nav>
 <main>
   <h1>📡 Мониторинг</h1>
@@ -198,6 +199,13 @@ async function loadNotifications() {
 
 loadUrls(); loadFolders(); loadNotifications();
 setInterval(() => { loadUrls(); loadFolders(); loadNotifications(); }, 30000);
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .finally(() => { window.location.href = '/login'; });
+}
+
 </script>
 </body>
 </html>

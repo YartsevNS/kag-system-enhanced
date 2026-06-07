@@ -239,7 +239,8 @@
         <div style="padding:16px 24px;border-top:1px solid var(--border-s)">
             <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
         </div>
-    </nav>
+    <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
 
     <!-- Main Content -->
     <main>
@@ -1682,6 +1683,13 @@
 
     // Автозапуск при загрузке страницы
     document.addEventListener('DOMContentLoaded', function() { loadAll(); });
-    </script>
+    
+function logout() {
+  localStorage.removeItem('kag_token');
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .finally(() => { window.location.href = '/login'; });
+}
+
+</script>
 </body>
 </html>
