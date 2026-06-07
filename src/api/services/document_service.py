@@ -645,6 +645,15 @@ class DocumentService:
         # Удаляем запись
         del self._documents[document_id]
         
+        # Отзываем Celery задачи для этого документа (если висят в очереди)
+        try:
+            from src.indexing.tasks import revoke_document_tasks
+            revoked = revoke_document_tasks(document_id)
+            if revoked:
+                logger.info(f"Отозвано {revoked} Celery задач для {document_id}")
+        except Exception as e:
+            logger.warning(f"Не удалось отозвать задачи: {e}")
+
         # Удаляем из БД
         try:
             from src.api.services.config_store import config_store

@@ -110,6 +110,29 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
     </div>
   </div>
 
+  <!-- June 7, 2026 -->
+  <div class="date-section">
+    <div class="date-header"><span class="dot"></span>7 июня 2026 — Сессия #15</div>
+    <div class="qa-list">
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№123. Статусы документов не обновляются — всегда «pending»</strong><br>Worker обрабатывает документы, записывает completed в БД, но на странице /documents статус остаётся «pending».</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>list_documents() читал из self._documents (in-memory dict)</strong>, который заполняется только при старте API. Worker пишет в PostgreSQL, но API не перечитывает. <strong>Исправлено:</strong> <code>list_documents()</code> теперь вызывает <code>self._load_documents_from_db()</code> перед возвратом — всегда читает свежие данные из PostgreSQL. Коммит: <code>7f8dac9</code>.</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№124. Celery prefork ломает SQLAlchemy connection pool</strong><br>Первый save в БД проходит, второй (финальный со status=completed) падает молча: <code>psycopg2.DatabaseError: error with status PGRES_TUPLES_OK</code>. Ошибка пишется в DEBUG, не видна.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text"><strong>Причина:</strong> Celery по умолчанию использует prefork pool — форкает процессы. Форк наследует SQLAlchemy connection pool родителя, соединения становятся битыми. Первый запрос переподключается (pool_pre_ping=True), второй использует другое битое соединение из пула. <strong>Fix:</strong> <code>--pool=solo</code> в CMD Dockerfile.worker — не форкает, один процесс, одно соединение. Коммит: <code>af709ae</code>. Очередь Redis очищена от старых задач (<code>FLUSHDB</code>).</div></div>
+      </div>
+
+<div class="qa-item">
+        <div class="qa-q"><div class="qa-label">💬 Вопрос</div><div class="qa-text"><strong>№125. При удалении файла очищать его из очереди Celery</strong><br>Если документ в очереди на обработку, при удалении он должен быть убран из очереди, не затрагивая остальные.</div></div>
+        <div class="qa-a"><div class="qa-label">✅ Решение</div><div class="qa-text">Добавлена функция <code>revoke_document_tasks(document_id)</code> в <code>src/indexing/tasks.py</code>. Использует Celery inspect для поиска active/reserved задач по document_id в kwargs, вызывает <code>celery_app.control.revoke(task_id, terminate=True)</code>. Вызывается из <code>document_service.delete_document()</code> перед удалением из БД. Остальные документы в очереди не затрагиваются. Коммит: <code>af709ae+</code>.</div></div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- May 31, 2026 -->
   <div class="date-section">
     <div class="date-header"><span class="dot"></span>31 мая 2026 — Сессия #13</div>

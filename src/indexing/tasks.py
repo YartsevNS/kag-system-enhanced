@@ -265,3 +265,32 @@ def batch_process_documents(
         "failed": sum(1 for r in results if r["status"] == "failed"),
         "results": results
     }
+
+
+def revoke_document_tasks(document_id: str) -> int:
+    """
+    Отозвать все pending/active Celery задачи для указанного документа.
+
+    Использует inspect для поиска задач по document_id в kwargs,
+    затем revoke с terminate. Возвращает количество отозванных задач.
+    """
+    revoked = 0
+    try:
+        inspector = celery_app.control.inspect()
+        # Смотрим active и reserved задачи
+        for state_name, getter in [("active", inspector.active), ("reserved", inspector.reserved)]:
+            tasks_by_worker = getter() or {}
+            for worker_name, tasks in tasks_by_worker.items():
+                for task in tasks:
+                    kwargs = task.get("kwargs", {})
+                    if kwargs.get("document_id") == document_id:
+                        task_id = task.get("id")
+                        if task_id:
+                            celery_app.control.revoke(task_id, terminate=True)
+                            logger.info(f"[revoke] {state_name} task {task_id} для {document_id}")
+                            revoked += 1
+        if revoked:
+            logger.info(f"[revoke] Отозвано {revoked} задач для {document_id}")
+    except Exception as e:
+        logger.warning(f"[revoke] Ошибка при отзыве задач для {document_id}: {e}")
+    return revoked
