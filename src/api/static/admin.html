@@ -446,6 +446,39 @@
             <div id="chunking-status" style="margin-top: 1rem;"></div>
         </div>
 
+
+        <!-- Настройки OCR -->
+        <div class="section">
+            <h2 class="section-title">🔍 Настройки OCR (Occular)</h2>
+            <p style="font-size:12px;color:var(--text4);margin-bottom:12px">
+                <strong>Docling</strong> извлекает текст из текстовых PDF быстро (1-2 сек/стр). 
+                <strong>Occular OCR</strong> распознаёт отсканированные документы (10-15 сек/стр). 
+                Если Docling уже нашёл текст — можно пропустить Occular для ускорения.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="ocr-force" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                        <span><strong>Всегда запускать Occular OCR</strong> (force_ocr)</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px">
+                        Включите для отсканированных документов. Для текстовых PDF — оставьте выключенным (быстрее).
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>DPI для OCR (качество распознавания)</label>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <input type="range" id="ocr-dpi" min="100" max="400" value="200" step="50" oninput="document.getElementById('ocr-dpi-val').textContent=this.value" onchange="saveOcrSettings()" style="flex:1;max-width:200px">
+                        <span id="ocr-dpi-val" style="font-weight:600">200</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        <strong>100-150:</strong> быстро, низкое качество · <strong>200:</strong> оптимально (по умолчанию) · <strong>300-400:</strong> высокое качество, медленно
+                    </div>
+                </div>
+            </div>
+            <div id="ocr-settings-status" style="margin-top:1rem;font-size:12px"></div>
+        </div>
+
         <!-- Системный промпт для чата -->
         <div class="section">
             <h2 class="section-title">💬 Системный промпт для чата</h2>
@@ -1747,7 +1780,67 @@ async function toggleTheme() {
 }
 
 loadTheme();
+
+async function loadOcrSettings() {
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', { credentials: 'include' });
+    var d = await r.json();
+    document.getElementById('ocr-force').checked = d.force_ocr || false;
+    document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
+  } catch(e) {}
+}
+async function saveOcrSettings() {
+  var data = {
+    force_ocr: document.getElementById('ocr-force').checked,
+    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
+  };
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
+      setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
+    }
+  } catch(e) {}
+}
+loadOcrSettings();
+
 </script>
+
+async function loadOcrSettings() {
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', { credentials: 'include' });
+    var d = await r.json();
+    document.getElementById('ocr-force').checked = d.force_ocr || false;
+    document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
+  } catch(e) {}
+}
+async function saveOcrSettings() {
+  var data = {
+    force_ocr: document.getElementById('ocr-force').checked,
+    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
+  };
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
+      setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
+    }
+  } catch(e) {}
+}
+loadOcrSettings();
+
 </script>
 </body>
 </html>

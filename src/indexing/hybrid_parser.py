@@ -110,9 +110,18 @@ class HybridDocumentParser:
     CPU-only. No GPU required.
     """
     
-    def __init__(self):
+    def __init__(self, force_ocr: bool = None, dpi: int = None):
         self._docling_available = False
         self._ocular_available = False
+        # Load OCR settings from config_store (admin panel)
+        try:
+            from src.api.services.config_store import config_store
+            ocr_cfg = config_store.get("ocr", "settings") or {}
+            self._force_ocr = force_ocr if force_ocr is not None else ocr_cfg.get("force_ocr", False)
+            self._dpi = dpi if dpi is not None else ocr_cfg.get("dpi", 200)
+        except Exception:
+            self._force_ocr = force_ocr if force_ocr is not None else False
+            self._dpi = dpi if dpi is not None else 200
         self._init_engines()
     
     def _init_engines(self):
@@ -243,7 +252,7 @@ class HybridDocumentParser:
         try:
             pdf = Path(file_path).suffix.lower() == '.pdf'
             if pdf:
-                pages = self._ocular.process_pdf(file_path, dpi=300)
+                pages = self._ocular.process_pdf(file_path, dpi=self._dpi)
                 for page_data in pages:
                     # process_pdf возвращает [{"page": N, "method": "...", "results": [...]}]
                     results = page_data.get('results', []) if isinstance(page_data, dict) else []
@@ -290,17 +299,27 @@ class HybridDocumentParser:
         return self._parse_with_ocular_only(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())
 
     def _needs_ocr(self, text: str, filename: str) -> bool:
-        """Check if text needs OCR enhancement (empty, garbled, or Russian)."""
+        """Check if text needs OCR enhancement.
+
+        Decision logic:
+        1. force_ocr=True -> always run OCR
+        2. Empty/garbled text -> run OCR
+        3. Docling found good text -> skip OCR (save 10-15s per page)
+        4. Text has encoding issues -> run OCR
+        """
+        if self._force_ocr:
+            return True
         if not text or len(text.strip()) < 10:
             return True
-        # Check for common OCR artifacts in PDF text layer
-        if '□□' in text or '???' in text:
+        # Artifacts in PDF text layer
+        if any(artifact in text for artifact in ['□□', '???', '□', 'â', 'Ã']):
             return True
-        # Russian text often has encoding issues in PDF text layer
+        # Docling found substantial clean text -> skip Occular
+        if len(text.strip()) > 100:
+            return False
+        # Russian text check
         has_cyrillic = any('\u0400' <= c <= '\u04FF' for c in text)
-        has_latin = any(c.isascii() and c.isalpha() for c in text)
-        if has_cyrillic and not has_latin:
-            # Pure Cyrillic, likely from text layer — good enough
+        if has_cyrillic:
             return False
         return False
     
