@@ -77,7 +77,7 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
                 f"задача потеряна при перезапуске worker'а"
             )
             doc_data["updated_at"] = now.isoformat()
-            config_store.set(f"documents:{doc_id}", doc_data)
+            config_store.set("documents", doc_id, doc_data)
             result["recovered"] += 1
             result["details"].append({
                 "document_id": doc_id,
