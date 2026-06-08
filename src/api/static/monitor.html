@@ -201,12 +201,12 @@ async function loadSources() {
           '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') + '</td>' +
           '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + s.url + '" target="_blank" title="' + s.url + '" style="color:var(--accent);text-decoration:none">' + s.url.substring(0,50) + '</a></td>' +
           '<td><span class="badge badge-info">' + typeLabel + '</span></td>' +
-          '<td>' + (s.enabled ? '<span class="badge badge-ok">✅ Активен</span>' : '<span class="badge badge-warn">⏸ Пауза</span>') + '</td>' +
+          '<td><label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px" onclick="event.stopPropagation()"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleSource(\'' + s.id + '\',this.checked)" style="accent-color:var(--accent)"> ' + (s.enabled?'<span style="color:var(--green)">Активен</span>':'<span style="color:var(--red)">Отключен</span>') + '</label></td>' +
           '<td>' + (s.check_interval_minutes >= 1440 ? Math.round(s.check_interval_minutes/1440) + ' д' : s.check_interval_minutes >= 60 ? Math.round(s.check_interval_minutes/60) + ' ч' : s.check_interval_minutes + ' мин') + '</td>' +
           '<td>' + (s.items_found||0) + '</td>' +
           '<td>' + (s.items_uploaded||0) + '</td>' +
           '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
-          '<td><button class="btn-outline" style="font-size:11px;padding:4px 8px" onclick="runCheck(\'' + s.id + '\')">🔍</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
+          '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">🔍 Проверить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
           '</tr>';
       });
     }
@@ -497,6 +497,24 @@ async function quickCheck() {
 // Инициализация
 restoreSchedule();
 loadAll();
+
+async function toggleSource(id, enabled) {
+  try {
+    var r = await fetch(API + '/sources/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ enabled: enabled }),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      toast(enabled ? '✅ Мониторинг включён' : '⏸ Мониторинг остановлен');
+      loadSources();
+    } else {
+      toast('❌ Ошибка сохранения', true);
+    }
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
 </script>
 </body>
 </html>
