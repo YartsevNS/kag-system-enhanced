@@ -490,12 +490,23 @@ class WebMonitorService:
         try:
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 # Загружаем RSS (feedparser синхронный, запускаем в потоке)
-                import asyncio
+                import asyncio, re as _re
                 loop = asyncio.get_running_loop()
-                feed = await loop.run_in_executor(
-                    None, 
-                    lambda: feedparser.parse(source.url)
-                )
+                
+                # Санитизация: фиксим битый XML (распространено в гос. RSS)
+                def _fetch_and_parse(url):
+                    import urllib.request
+                    try:
+                        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                        raw = urllib.request.urlopen(req, timeout=30).read()
+                        # Чиним частые проблемы: непарные &, невалидные символы
+                        raw = raw.decode('utf-8', errors='replace')
+                        raw = _re.sub(r'&(?!amp;|lt;|gt;|quot;|apos;|#\d+;)', '&amp;', raw)
+                        return feedparser.parse(raw)
+                    except Exception:
+                        return feedparser.parse(url)
+                
+                feed = await loop.run_in_executor(None, lambda: _fetch_and_parse(source.url))
 
                 if feed.bozo and not feed.entries:
                     result.status = "error"
