@@ -442,7 +442,8 @@ class WebMonitorService:
                 # Обновляем статистику
                 source.last_check = now
                 total_found = len(result.items) if result.items else 0
-                source.items_found += total_found
+                # items_found = найдено в последнюю проверку (все ссылки на странице)
+                source.items_found = total_found
                 source.items_uploaded += result.new_items
                 self.save_source(source)
                 results.append(result)
