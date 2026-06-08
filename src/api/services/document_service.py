@@ -494,6 +494,27 @@ class DocumentService:
                 parser_name = "DocumentParser"
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
 
+            # Шаг 1.5: Суммаризация (опционально, 40%)
+            summarization_enabled = False
+            try:
+                ocr_cfg = config_store.get("ocr", "settings") or {}
+                summarization_enabled = ocr_cfg.get("enable_summarization", False)
+            except Exception:
+                pass
+            
+            if summarization_enabled and parsed_text:
+                try:
+                    logger.info(f"Суммаризация документа: {document_id}")
+                    record.progress = 40
+                    self._save_document_to_db(document_id)
+                    summary = await self._summarize_text(parsed_text, record.filename)
+                    if summary:
+                        record.summary = summary
+                        plog.log("summarize", {"summary_length": len(summary)})
+                        logger.info(f"Суммаризация выполнена: {len(summary)} симв")
+                except Exception as e:
+                    logger.warning(f"Суммаризация не удалась: {e}")
+
             # Шаг 2: Чанкинг (50%)
             logger.info(f"Чанкинг документа: {document_id}")
             record.progress = 50
@@ -947,4 +968,24 @@ class DocumentService:
 
 
 # Глобальный экземпляр
+
+    async def _summarize_text(self, text: str, filename: str) -> str:
+        """Создать краткую суммаризацию документа через LLM."""
+        try:
+            from src.llm.router import llm_router
+            prompt = f"""Создай краткую аннотацию документа (3-5 предложений) на русском языке.
+Название: {filename}
+Текст (начало): {text[:3000]}
+
+Аннотация:"""
+            result = await llm_router.generate(
+                prompt=prompt,
+                max_tokens=300,
+                temperature=0.3
+            )
+            return result.strip()
+        except Exception as e:
+            logger.warning(f"LLM summarization failed: {e}")
+            return ""
+
 document_service = DocumentService()

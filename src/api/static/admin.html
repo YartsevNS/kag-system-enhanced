@@ -476,6 +476,20 @@
                     </div>
                 </div>
             </div>
+            <div class="form-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="ocr-summarize" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                    <span><strong>🤖 Суммаризация документа через LLM</strong> (enable_summarization)</span>
+                </label>
+                <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px;line-height:1.5">
+                    <strong>Зачем:</strong> embedding-модели теряют точность на длинных текстах (>8000 токенов). 
+                    Суммаризация сжимает документ до 3-5 предложений, создавая «представительский» вектор 
+                    для поиска на уровне документов. Чанки по-прежнему векторизуются отдельно для точного поиска.<br>
+                    <strong>Когда включать:</strong> документы >5 страниц, поиск по общему смыслу документа.<br>
+                    <strong>Когда НЕ включать:</strong> короткие документы, поиск по конкретным фрагментам текста.
+                </div>
+            </div>
+
             <div id="ocr-settings-status" style="margin-top:1rem;font-size:12px"></div>
         </div>
 
@@ -1787,12 +1801,14 @@ async function loadOcrSettings() {
     var d = await r.json();
     document.getElementById('ocr-force').checked = d.force_ocr || false;
     document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
     document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
   } catch(e) {}
 }
 async function saveOcrSettings() {
   var data = {
     force_ocr: document.getElementById('ocr-force').checked,
+    enable_summarization: document.getElementById('ocr-summarize').checked,
     dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
   };
   try {
@@ -1818,12 +1834,14 @@ async function loadOcrSettings() {
     var d = await r.json();
     document.getElementById('ocr-force').checked = d.force_ocr || false;
     document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
     document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
   } catch(e) {}
 }
 async function saveOcrSettings() {
   var data = {
     force_ocr: document.getElementById('ocr-force').checked,
+    enable_summarization: document.getElementById('ocr-summarize').checked,
     dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
   };
   try {

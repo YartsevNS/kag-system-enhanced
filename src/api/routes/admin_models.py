@@ -1770,6 +1770,7 @@ async def save_theme(body: ThemeRequest):
 class OcrSettingsRequest(BaseModel):
     force_ocr: bool = False
     dpi: int = 200
+    enable_summarization: bool = False
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
@@ -1780,5 +1781,5 @@ async def get_ocr_settings():
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
 async def save_ocr_settings(body: OcrSettingsRequest):
     from src.api.services.config_store import config_store
-    config_store.set("ocr", "settings", {"force_ocr": body.force_ocr, "dpi": body.dpi})
+    config_store.set("ocr", "settings", {"force_ocr": body.force_ocr, "dpi": body.dpi, "enable_summarization": body.enable_summarization})
     return {"status": "ok"}
