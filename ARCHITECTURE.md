@@ -188,3 +188,46 @@ RUN apt-get install -y tesseract-ocr tesseract-ocr-rus poppler-utils libgl1 libg
 ```
 
 Теперь Worker имеет те же OCR-возможности, что и API.
+
+---
+
+## Веб-мониторинг и загрузка документов (v1)
+
+> Добавлено: 8 июня 2026
+
+
+---
+
+## Веб-мониторинг и загрузка документов (v1)
+
+> Добавлено: 8 июня 2026
+
+### Источники
+Поддерживаются три типа источников:
+- **RSS/Atom** — парсинг лент (pravo.gov.ru, cbr.ru)
+- **Scrape** — извлечение ссылок со страниц (gost.ru — 116 файлов)
+- **Change Detection** — отслеживание изменений по SHA-256
+
+### Процесс скачивания
+1. Проверка источника -> извлечение URL документов
+2. Фильтрация: `/file-service/file/load/`, `.pdf`, `.docx`
+3. Дедупликация: `_seen_urls` (в памяти) + SHA-256 (по содержимому)
+4. Скачивание партиями (batch_size=5, пауза 15 сек между партиями)
+5. Каждый файл -> `document_service.upload_document()` -> Celery `process_document`
+6. OCR -> Markdown -> чанки -> Qdrant + Neo4j
+
+### Счётчики
+- `items_found` — найдено ссылок в последнюю проверку
+- `items_uploaded` — всего скачано (кумулятивно)
+- `download_attempts` — попыток скачивания (downloaded/skipped/duplicate/error)
+
+### Хранение метаданных
+- `config_store("web_monitor", "sources")` — источники
+- `config_store("web_monitor", "downloads")` — история скачиваний
+- `config_store("web_monitor", "history")` — история проверок
+
+### Важно
+- При скачивании 100+ файлов процесс идёт в фоне (async)
+- Не обрывать соединение во время загрузки
+- Дедупликация по URL + SHA-256 предотвращает повторную загрузку
+- SSL verify отключен для гос.порталов (aiohttp.TCPConnector(ssl=False))
