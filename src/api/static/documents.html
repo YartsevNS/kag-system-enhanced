@@ -677,7 +677,7 @@ async function viewOcr(id) {
     if (d.ocr_md_exists) {
       window.open('/api/v1/upload/' + id + '/ocr/view', '_blank');
     } else {
-      toast('Markdown ещё не создан', true);
+      if (confirm('Markdown не найден. Пересоздать OCR?')) { var r2 = await fetch('/api/v1/upload/' + id + '/reprocess-ocr', { method: 'POST', credentials: 'include' }); var d2 = await r2.json(); toast(d2.message || 'Переобработка запущена'); }
     }
   } catch(e) { toast('Ошибка: ' + e.message, true); }
 }

@@ -439,12 +439,25 @@ class WebMonitorService:
                 else:
                     result = MonitorResult(source_id=source.id, status="error", error=f"Неизвестный тип: {source.type}")
 
-                # Обновляем время последней проверки
+                # Обновляем статистику
                 source.last_check = now
-                source.items_found += result.new_items
+                total_found = len(result.items) if result.items else 0
+                source.items_found += total_found
                 source.items_uploaded += result.new_items
                 self.save_source(source)
                 results.append(result)
+
+                # Сохраняем в историю
+                self.add_history({
+                    "source_id": source.id,
+                    "source_name": source.name,
+                    "time": now.isoformat(),
+                    "status": result.status,
+                    "new_items": result.new_items,
+                    "skipped": result.skipped_items,
+                    "total_found": total_found,
+                    "error": result.error,
+                })
 
             except Exception as e:
                 logger.error(f"Ошибка проверки {source.name}: {e}")

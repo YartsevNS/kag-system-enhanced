@@ -178,7 +178,7 @@ async function loadAll() {
 
 async function loadSources() {
   try {
-    const r = await fetch(API + '/sources', { headers: authHeaders() });
+    const r = await fetch(API + '/sources', { credentials: 'include' });
     const d = await r.json();
     const sources = d.sources || [];
     
@@ -317,7 +317,7 @@ async function deleteSource(id) {
 
 async function loadHistory() {
   try {
-    var r = await fetch(API + '/history?limit=20', { headers: authHeaders() });
+    var r = await fetch(API + '/history?limit=20', { credentials: 'include' });
     var d = await r.json();
     var history = d.history || [];
     var html = '<table><thead><tr><th>Время</th><th>Источник</th><th>Результат</th><th>Детали</th></tr></thead><tbody>';
@@ -328,8 +328,8 @@ async function loadHistory() {
         html += '<tr>' +
           '<td style="font-size:11px;color:var(--text4)">' + new Date(h.time||h.checked_at||'').toLocaleString('ru-RU') + '</td>' +
           '<td>' + (h.source_name||h.source_id||'?') + '</td>' +
-          '<td><span class="badge ' + (h.status==='ok'?'badge-ok':h.status==='error'?'badge-err':'badge-warn') + '">' + (h.status||'?') + '</span></td>' +
-          '<td style="font-size:12px">Найдено: '+(h.new_items||0)+', пропущено: '+(h.skipped||0)+'</td>' +
+          '<td>' + (h.status==='ok'?'<span class="badge" style="background:rgba(39,166,68,0.15);color:var(--green)">✅ OK</span>':h.status==='no_changes'?'<span class="badge" style="background:rgba(108,114,120,0.15);color:var(--text4)">— Нет изменений</span>':'<span class="badge" style="background:rgba(220,38,38,0.15);color:var(--red)">❌ '+ (h.status||'?')+'</span>') + '</td>' +
+          '<td style="font-size:12px"><span style="color:var(--emerald)">📥 '+(h.new_items||0)+' новых</span>' + (h.total_found ? ' · <span style="color:var(--text4)">🔗 '+(h.total_found)+' ссылок</span>' : '') + (h.skipped ? ' · <span style="color:var(--amber)">⏭ '+(h.skipped)+'</span>' : '') + (h.error ? ' · <span style="color:var(--red)">❌ '+h.error.substring(0,60)+'</span>' : '') + '</td>' +
           '</tr>';
       });
     }

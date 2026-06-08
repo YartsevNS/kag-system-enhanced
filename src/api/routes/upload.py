@@ -1300,3 +1300,30 @@ async def view_ocr_markdown(document_id: str):
     if not md_path.exists():
         raise HTTPException(status_code=404, detail="Markdown не найден")
     return PlainTextResponse(md_path.read_text(encoding="utf-8"), media_type="text/markdown")
+
+
+
+@router.post("/{document_id}/reprocess-ocr", summary="Пересоздать OCR/Markdown для документа")
+async def reprocess_ocr(document_id: str):
+    """Принудительно перезапускает OCR и создание Markdown для документа."""
+    from src.api.services.document_service import document_service
+    from src.indexing.tasks import process_document
+    
+    record = document_service.get_document_status(document_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    file_path = document_service._upload_dir / f"{document_id}_{record.filename}"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Исходный файл не найден")
+    
+    record.status = "pending"
+    record.progress = 0
+    document_service._save_document_to_db(document_id)
+    
+    task = process_document.delay(document_id)
+    return {
+        "status": "ok",
+        "message": f"Переобработка запущена: {document_id}",
+        "task_id": str(task.id)
+    }
