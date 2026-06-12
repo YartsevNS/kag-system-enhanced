@@ -592,6 +592,62 @@ class WebMonitorService:
     # Web Scraper
     # ============================================================
 
+
+    @staticmethod
+    def _extract_link_metadata(link, soup, source) -> dict:
+        """Извлечь метаданные документа из HTML-структуры вокруг ссылки.
+        
+        Для ГОСТ: ищет тип (ГОСТ Р), номер (59162-2020), название в соседних ячейках.
+        Для ЦБ: ищет тип документа, номер, дату.
+        Возвращает dict с ключами: doc_type, doc_number, doc_title, doc_date.
+        """
+        meta = {}
+        try:
+            parent = link.parent  # <td> или <p>
+            row = parent.parent if parent else None  # <tr>
+            
+            if row and row.name == 'tr':
+                cells = row.find_all('td')
+                link_text = link.get_text(strip=True)
+                
+                # Ищем ячейку с типом документа (ГОСТ Р, ГОСТ, Приказ, Указание)
+                for cell in cells:
+                    text = cell.get_text(strip=True)
+                    if not text or text == link_text:
+                        continue
+                    # Паттерны типов документов
+                    for pattern in ['ГОСТ Р', 'ГОСТ', 'Приказ', 'Указание', 'Положение', 
+                                    'Методические рекомендации', 'Стандарт', 'Информационное письмо']:
+                        if pattern.upper() in text.upper():
+                            meta['doc_type'] = text.strip()
+                            break
+                    # Номер документа (цифры, дефисы, точки)
+                    import re
+                    num_match = re.match(r'^\s*[№#]?\s*([\d.\-]+)\s*$', text)
+                    if num_match and not meta.get('doc_number'):
+                        meta['doc_number'] = num_match.group(1)
+                    # Название (длинный текст)
+                    if len(text) > 30 and not meta.get('doc_title'):
+                        meta['doc_title'] = text.strip()
+                
+                # Если номер не нашли в соседних ячейках — парсим из текста ссылки
+                if not meta.get('doc_number'):
+                    num = re.search(r'(\d{1,5}[.,\-]\d{1,4}[.,\-]?\d{0,4})', link_text)
+                    if num:
+                        meta['doc_number'] = num.group(1)
+                
+                # Название из текста ссылки если не нашли в ячейках
+                if not meta.get('doc_title') and len(link_text) > 10:
+                    meta['doc_title'] = link_text.strip()
+            else:
+                # Простой случай — только текст ссылки
+                text = link.get_text(strip=True)
+                if text:
+                    meta['doc_title'] = text
+        except Exception:
+            pass
+        return meta
+
     async def _check_scrape(self, source: MonitorSource) -> MonitorResult:
         """Проверить веб-страницу на новые ссылки на документы.
         
@@ -659,7 +715,14 @@ class WebMonitorService:
                             if not any(kw.lower() in text_lower for kw in source.keywords):
                                 continue
 
-                        new_urls.append({'url': abs_url, 'title': text or Path(href).name, 'source': source.name})
+                        # Извлекаем метаданные из окружающей структуры (ГОСТ, ЦБ и т.д.)
+                        meta = _extract_link_metadata(link, soup, source)
+                        new_urls.append({
+                            'url': abs_url,
+                            'title': text or meta.get('title') or Path(href).name,
+                            'source': source.name,
+                            'metadata': meta
+                        })
 
                 result.items = new_urls
 
@@ -721,7 +784,8 @@ class WebMonitorService:
                         record = await document_service.upload_document(
                             filename=filename,
                             file_content=html.encode('utf-8'),
-                            file_type="text/html"
+                            file_type="text/html",
+                            source_metadata={'source_url': source.url, 'source_name': source.name}
                         )
                         # Запускаем обработку
                         from src.api.routes.upload import _process_document_async
@@ -885,7 +949,8 @@ class WebMonitorService:
                             record = await document_service.upload_document(
                                 filename=filename,
                                 file_content=content,
-                                file_type='text/plain'
+                                file_type='text/plain',
+                                source_metadata=item.get('metadata')
                             )
                             from src.api.routes.upload import _process_document_async
                             await _process_document_async(record.document_id)
@@ -997,7 +1062,8 @@ class WebMonitorService:
                             record = await document_service.upload_document(
                                 filename=filename,
                                 file_content=content,
-                                file_type=None
+                                file_type=None,
+                                source_metadata=item.get('metadata')
                             )
                             # Запускаем фоновую обработку
                             from src.api.routes.upload import _process_document_async

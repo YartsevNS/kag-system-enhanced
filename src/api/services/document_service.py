@@ -50,6 +50,7 @@ class DocumentRecord(BaseModel):
     version: int = Field(default=1, description="Версия документа (1 = оригинал)")
     previous_hash: Optional[str] = Field(default=None, description="Хеш предыдущей версии (если была замена)")
     original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
+    source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -184,7 +185,8 @@ class DocumentService:
         uploaded_by: Optional[str] = None,
         group_ids: Optional[List[str]] = None,
         force_new: bool = False,
-        upload_id: Optional[str] = None
+        upload_id: Optional[str] = None,
+        source_metadata: Optional[dict] = None
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
@@ -558,7 +560,8 @@ class DocumentService:
                     "filename": record.filename,
                     "file_type": record.file_type,
                     "file_size": record.file_size,
-                    **parsed_metadata
+                    **parsed_metadata,
+                    "source_metadata": record.source_metadata or {},
                 },
                 group_ids=record.group_ids
             )
