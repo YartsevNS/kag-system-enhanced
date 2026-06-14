@@ -110,7 +110,7 @@ async def create_pg_database():
         # Подключаемся к PostgreSQL с bootstrap-учёткой
         settings = __import__('src.config', fromlist=['get_settings']).get_settings()
         conn = psycopg2.connect(
-            host="keycloak-db",
+            host="kag-db",
             port=5432,
             dbname="keycloak",
             user=settings.KC_DB_USERNAME,
@@ -131,7 +131,7 @@ async def create_pg_database():
         now = datetime.utcnow().isoformat()
         
         db_config = {
-            "host": "keycloak-db",
+            "host": "kag-db",
             "port": 5432,
             "name": db_name,
             "user": db_user,
@@ -148,7 +148,7 @@ async def create_pg_database():
             "success": True,
             "message": "База данных PostgreSQL создана",
             "database": {
-                "host": "keycloak-db",
+                "host": "kag-db",
                 "port": 5432,
                 "name": db_name,
                 "user": db_user,
@@ -295,11 +295,11 @@ async def setup_status():
         "user": "neo4j", "password": "kagneo4j2026"
     }
     result["databases"]["keycloak_db"] = {
-        "host": "keycloak-db", "port": 5432,
+        "host": "kag-db", "port": 5432,
         "name": "keycloak", "user": "keycloak", "password": "keycloak_password"
     }
     result["databases"]["kag_db"] = {
-        "host": "keycloak-db", "port": 5432,
+        "host": "kag-db", "port": 5432,
         "name": "kag", "user": "kag", "password": "KAGpg2026!secure"
     }
     
@@ -479,7 +479,7 @@ async def save_setup(payload: FullSetupPayload):
             "configured": True,
             "timestamp": now,
             "llm_model": payload.llm.model,
-            "db_host": db_config.get("host", "keycloak-db")
+            "db_host": db_config.get("host", "kag-db")
         })
         
         logger.info("=== НАСТРОЙКИ УСПЕШНО СОХРАНЕНЫ ===")
@@ -560,7 +560,7 @@ async def create_neo4j_database():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/create-keycloak-db")
+@router.post("/create-kag-db")
 async def create_keycloak_database():
     """Создаёт realm и client в Keycloak."""
     try:
@@ -593,7 +593,7 @@ async def create_admin_user():
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        e = create_engine("postgresql://kag:kagpass123@keycloak-db:5432/kag")
+        e = create_engine("postgresql://kag:kagpass123@kag-db:5432/kag")
         with e.connect() as conn:
             h = pbkdf2_sha256.hash("admin123456")
             conn.execute(text("INSERT INTO users (id, username, full_name, email, hashed_password, is_active, is_admin, created_at, updated_at) VALUES (:id, :u, :fn, :em, :h, TRUE, TRUE, NOW(), NOW()) ON CONFLICT (username) DO NOTHING"),
@@ -632,7 +632,7 @@ async def init_all():
         db_password = secrets.token_urlsafe(24)
 
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        conn = psycopg2.connect(host="keycloak-db", port=5432, dbname="keycloak",
+        conn = psycopg2.connect(host="kag-db", port=5432, dbname="keycloak",
             user=settings.KC_DB_USERNAME, password=settings.KC_DB_PASSWORD, connect_timeout=10)
         conn.autocommit = True
         cur = conn.cursor()
@@ -640,7 +640,7 @@ async def init_all():
         cur.execute(f"CREATE DATABASE {db_name} OWNER {db_user}")
         cur.execute(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user}")
         cur.close(); conn.close()
-        config_store.set("database", "default", {"auto_created": True, "host": "keycloak-db",
+        config_store.set("database", "default", {"auto_created": True, "host": "kag-db",
             "port": 5432, "name": db_name, "user": db_user, "password": db_password, "created_at": datetime.utcnow().isoformat()})
         results["success"].append("pg")
     except Exception as e:
@@ -685,7 +685,7 @@ async def init_all():
     try:
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
-        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@keycloak-db:5432/kag"))
+        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-db:5432/kag"))
         with e.connect() as conn:
             conn.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, full_name VARCHAR(255), email VARCHAR(255), hashed_password VARCHAR(255) NOT NULL, is_active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
             h = pbkdf2_sha256.hash("admin123456")
@@ -730,7 +730,7 @@ async def init_all():
         db_password = secrets.token_urlsafe(24)
 
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        conn = psycopg2.connect(host="keycloak-db", port=5432, dbname="keycloak",
+        conn = psycopg2.connect(host="kag-db", port=5432, dbname="keycloak",
             user=settings.KC_DB_USERNAME, password=settings.KC_DB_PASSWORD, connect_timeout=10)
         conn.autocommit = True
         cur = conn.cursor()
@@ -738,7 +738,7 @@ async def init_all():
         cur.execute(f"CREATE DATABASE {db_name} OWNER {db_user}")
         cur.execute(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user}")
         cur.close(); conn.close()
-        config_store.set("database", "default", {"auto_created": True, "host": "keycloak-db",
+        config_store.set("database", "default", {"auto_created": True, "host": "kag-db",
             "port": 5432, "name": db_name, "user": db_user, "password": db_password, "created_at": datetime.utcnow().isoformat()})
         results["success"].append("pg")
     except Exception as e:
@@ -783,7 +783,7 @@ async def init_all():
     try:
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
-        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@keycloak-db:5432/kag"))
+        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-db:5432/kag"))
         with e.connect() as conn:
             conn.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, full_name VARCHAR(255), email VARCHAR(255), hashed_password VARCHAR(255) NOT NULL, is_active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
             h = pbkdf2_sha256.hash("admin123456")
