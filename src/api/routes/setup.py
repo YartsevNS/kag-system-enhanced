@@ -294,7 +294,7 @@ async def setup_status():
         "host": "neo4j", "bolt_port": 7687, "http_port": 7474,
         "user": "neo4j", "password": "kagneo4j2026"
     }
-    result["databases"]["keycloak_db"] = {
+    result["databases"]["kag_db"] = {
         "host": "kag-db", "port": 5432,
         "name": "keycloak", "user": "keycloak", "password": "keycloak_password"
     }
@@ -567,7 +567,7 @@ async def create_keycloak_database():
         import os, httpx
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
         async with httpx.AsyncClient() as client:
-            r = await client.post("http://keycloak:8080/realms/master/protocol/openid-connect/token",
+            r = await client.post("http://kag-keycloak:8080/realms/master/protocol/openid-connect/token",
                 data={"client_id": "admin-cli", "username": os.environ.get("KEYCLOAK_ADMIN", "admin"),
                       "password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin"), "grant_type": "password"},
                 timeout=10)
@@ -575,7 +575,7 @@ async def create_keycloak_database():
             if not token:
                 return {"success": False, "message": "Не удалось авторизоваться в Keycloak"}
             # Create kag realm
-            r2 = await client.post("http://keycloak:8080/admin/realms",
+            r2 = await client.post("http://kag-keycloak:8080/admin/realms",
                 json={"realm": "kag", "enabled": True},
                 headers={"Authorization": f"Bearer {token}"}, timeout=10)
             if r2.status_code == 409:
