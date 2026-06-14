@@ -591,6 +591,8 @@
             </div>
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px">
                 <input type="file" id="backup-file" accept=".json" style="font-size:12px;padding:6px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+            <button class="btn-outline" onclick="clearHistory()" style="padding:8px 16px;background:var(--surface);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:12px">Clear monitor history</button>
+            <span id="clear-history-status" style="font-size:12px;color:var(--text4)"></span>
                 <button class="btn btn-secondary" onclick="uploadBackup()" style="display:flex;align-items:center;gap:6px;padding:10px 20px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:13px">Upload & restore</button>
                 <span id="restore-status" style="font-size:12px;color:var(--text4)"></span>
             </div>
@@ -1893,6 +1895,19 @@ async function downloadBackup() {
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
   }
+}
+
+
+async function clearHistory() {
+  if (!confirm('Delete ALL monitor check history?')) return;
+  var s = document.getElementById('clear-history-status');
+  s.textContent = 'Deleting...';
+  try {
+    var r = await fetch('/api/v1/monitor/history', { method: 'DELETE', credentials: 'include' });
+    var d = await r.json();
+    s.textContent = d.message || 'Cleared';
+    setTimeout(function(){ s.textContent = ''; }, 3000);
+  } catch(e) { s.textContent = 'Error: ' + e.message; }
 }
 
 </script>

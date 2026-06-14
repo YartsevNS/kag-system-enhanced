@@ -374,3 +374,13 @@ async def get_download_history(
     except Exception as e:
         logger.error(f"Ошибка получения истории: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete(/history, summary=Очистить историю проверок)
+async def clear_history():
+    Удаляет всю историю проверок мониторинга.
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set(web_monitor, history, [])
+        return {status: ok, message: История проверок очищена}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
