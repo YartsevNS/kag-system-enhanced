@@ -585,20 +585,21 @@
                 Скачать все настройки системы в JSON: провайдеры, модели, OCR, чанкинг,
                 веб-мониторинг, SSH, тема, форматы загрузки, промпты.
             </p>
-            <div style="display:flex;gap:10px;align-items:center">
-                <button class="btn btn-primary" onclick="downloadBackup()">Download backup</button>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="downloadBackup()" style="display:flex;align-items:center;gap:6px;padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:13px">Download backup</button>
                 <span id="backup-status" style="font-size:12px;color:var(--text4)"></span>
             </div>
-            <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
-                <input type="file" id="backup-file" accept=".json" style="font-size:12px">
-                <button class="btn btn-secondary" onclick="uploadBackup()">Upload & restore</button>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px">
+                <input type="file" id="backup-file" accept=".json" style="font-size:12px;padding:6px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+                <button class="btn btn-secondary" onclick="uploadBackup()" style="display:flex;align-items:center;gap:6px;padding:10px 20px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:13px">Upload & restore</button>
                 <span id="restore-status" style="font-size:12px;color:var(--text4)"></span>
             </div>
             <div style="margin-top:12px;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.5">
-                <strong style="color:var(--amber)">What is saved:</strong> all PostgreSQL settings (config_store) -
-                LLM providers, function bindings, OCR/chunking/embedding config, SSH config,
-                web monitor sources, theme, system prompt, upload formats.
-                <strong>Not saved:</strong> documents themselves, Qdrant vectors, Neo4j graph.
+                <strong style="color:var(--amber)">Что сохраняется:</strong> все настройки из PostgreSQL (config_store) -
+                провайдеры LLM, привязка функций, OCR/чанкинг/embedding, SSH,
+                источники мониторинга, тема, системный промпт, форматы загрузки.
+                <strong>Не сохраняется:</strong> сами документы, векторы Qdrant, граф Neo4j.
+                После восстановления перезагрузи страницу.
             </div>
         </div>
     </main>
