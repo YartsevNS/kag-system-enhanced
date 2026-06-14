@@ -1,4 +1,5 @@
 """
+import os
 Setup Wizard API для KAG
 
 Обрабатывает первоначальную настройку системы.
@@ -545,12 +546,14 @@ async def complete_setup():
 async def create_neo4j_database():
     """Создаёт индекс и ограничения в Neo4j для графа знаний."""
     try:
+        import os
         from neo4j import GraphDatabase
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
         driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")))
         with driver.session() as session:
+            session.run("DROP INDEX IF EXISTS idx_document_id")
+            session.run("DROP INDEX IF EXISTS idx_entity_name")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
-            session.run("CREATE INDEX IF NOT EXISTS FOR (d:Document) ON (d.id)")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
             session.run("CREATE INDEX IF NOT EXISTS FOR (e:Entity) ON (e.name)")
         driver.close()
@@ -564,7 +567,7 @@ async def create_neo4j_database():
 async def create_keycloak_database():
     """Создаёт realm и client в Keycloak."""
     try:
-        import httpx
+        import os, httpx
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
         async with httpx.AsyncClient() as client:
             r = await client.post("http://keycloak:8080/realms/master/protocol/openid-connect/token",
