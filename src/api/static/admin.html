@@ -586,8 +586,13 @@
                 веб-мониторинг, SSH, тема, форматы загрузки, промпты.
             </p>
             <div style="display:flex;gap:10px;align-items:center">
-                <button class="btn btn-primary" onclick="downloadBackup()">Download backup.json</button>
+                <button class="btn btn-primary" onclick="downloadBackup()">Download backup</button>
                 <span id="backup-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+                <input type="file" id="backup-file" accept=".json" style="font-size:12px">
+                <button class="btn btn-secondary" onclick="uploadBackup()">Upload & restore</button>
+                <span id="restore-status" style="font-size:12px;color:var(--text4)"></span>
             </div>
             <div style="margin-top:12px;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.5">
                 <strong style="color:var(--amber)">What is saved:</strong> all PostgreSQL settings (config_store) -
@@ -1845,59 +1850,29 @@ async function saveOcrSettings() {
 loadOcrSettings();
 
 
-async function downloadBackup() {
-  var status = document.getElementById('backup-status');
-  status.textContent = 'Generating backup...';
+
+async function uploadBackup() {
+  var fileInput = document.getElementById('backup-file');
+  if (!fileInput.files.length) { alert('Select a backup file first'); return; }
+  var status = document.getElementById('restore-status');
+  status.textContent = 'Restoring...';
   try {
-    var r = await fetch('/api/v1/admin/models/backup', { credentials: 'include' });
-    var blob = await r.blob();
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'kag-backup.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    status.textContent = 'Downloaded';
-    setTimeout(function(){ status.textContent = ''; }, 3000);
+    var form = new FormData();
+    form.append('file', fileInput.files[0]);
+    var r = await fetch('/api/v1/admin/models/backup-restore', {
+      method: 'POST', body: form, credentials: 'include'
+    });
+    var result = await r.json();
+    if (r.ok) {
+      status.textContent = 'Restored ' + (result.restored || 0) + ' namespaces';
+    } else {
+      status.textContent = 'Error: ' + (result.detail || result.message);
+    }
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
   }
 }
 
-async function loadOcrSettings() {
-  try {
-    var r = await fetch('/api/v1/admin/models/ocr-settings', { credentials: 'include' });
-    var d = await r.json();
-    document.getElementById('ocr-force').checked = d.force_ocr || false;
-    document.getElementById('ocr-dpi').value = d.dpi || 200;
-    document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
-    document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
-  } catch(e) {}
-}
-async function saveOcrSettings() {
-  var data = {
-    force_ocr: document.getElementById('ocr-force').checked,
-    enable_summarization: document.getElementById('ocr-summarize').checked,
-    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
-  };
-  try {
-    var r = await fetch('/api/v1/admin/models/ocr-settings', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data),
-      credentials: 'include'
-    });
-    if (r.ok) {
-      document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
-      setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
-    }
-  } catch(e) {}
-}
-loadOcrSettings();
-
-
 async function downloadBackup() {
   var status = document.getElementById('backup-status');
   status.textContent = 'Generating backup...';
@@ -1907,7 +1882,7 @@ async function downloadBackup() {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'kag-backup.json';
+    var ts = new Date().toISOString().slice(0,19).replace(/[:-]/g,''); a.download = 'backup_kag_' + ts + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -1808,3 +1808,32 @@ async def get_backup():
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     headers = {"Content-Disposition": f"attachment; filename=kag-backup-{ts}.json"}
     return JSONResponse(content=backup, headers=headers)
+import json, traceback
+from fastapi import UploadFile, File
+from src.api.services.config_store import config_store
+
+@router.post("/backup-restore", summary="Восстановить настройки из backup JSON")
+async def restore_backup(file: UploadFile = File(...)):
+    """Загружает backup JSON и восстанавливает все namespace-ы в config_store."""
+    try:
+        content = await file.read()
+        data = json.loads(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
+    
+    if "data" not in data:
+        raise HTTPException(status_code=400, detail="Not a valid backup file (missing 'data' key)")
+    
+    restored = 0
+    errors = []
+    for ns, ns_data in data["data"].items():
+        if not isinstance(ns_data, dict):
+            continue
+        try:
+            for key, value in ns_data.items():
+                config_store.set(ns, key, value)
+            restored += 1
+        except Exception as e:
+            errors.append(f"{ns}: {e}")
+    
+    return {"status": "ok", "restored": restored, "errors": errors}
