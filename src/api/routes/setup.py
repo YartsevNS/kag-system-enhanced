@@ -551,9 +551,7 @@ async def create_neo4j_database():
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
         driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")))
         with driver.session() as session:
-            session.run("DROP INDEX IF EXISTS idx_document_id")
-            session.run("DROP INDEX IF EXISTS idx_entity_name")
-            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
+            session.run("CALL db.index.fulltext.createNodeIndex("doc_search", ["Document"], ["title","content"])")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
             session.run("CREATE INDEX IF NOT EXISTS FOR (e:Entity) ON (e.name)")
         driver.close()
