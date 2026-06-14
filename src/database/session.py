@@ -24,10 +24,10 @@ def _get_engine():
     if _engine is None:
         settings = get_settings()
         connect_args = {}
-        if "sqlite" in settings.DATABASE_URL:
+        if "sqlite" in settings.KAG_DB_URL:
             connect_args["check_same_thread"] = False
         _engine = create_engine(
-            settings.DATABASE_URL,
+            settings.KAG_DB_URL,
             connect_args=connect_args,
             pool_pre_ping=True,
         )
