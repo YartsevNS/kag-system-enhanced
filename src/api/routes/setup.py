@@ -291,7 +291,8 @@ async def setup_status():
     # Neo4j, Keycloak DB, KAG DB — всегда показываем (статические из docker-compose)
     result["databases"] = result.get("databases", {})
     result["databases"]["neo4j"] = {
-        "host": "neo4j", "bolt_port": 7687, "http_port": 7474,
+        "host": "neo4j", "bolt_port": 7687, "http_port": 7474
+    }
     result["databases"]["kag_db"] = {
         "host": "kag-db", "port": 5432,
         "name": "kag", "user": "kag", "password": "KAGpg2026!secure"
@@ -537,11 +538,18 @@ async def complete_setup():
     status["timestamp"] = datetime.now().isoformat()
 
 @router.post("/create-neo4j-db")
-
-    result[databases][kag_db] = {
-        host: kag-db, port: 5432,
-        name: kag, user: kag, password: ***
-    }
+async def create_neo4j_database():
+    try:
+        import os
+        from neo4j import GraphDatabase
+        password = os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")
+        driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", password))
+        with driver.session() as s:
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
+        driver.close()
+        results["success"].append("neo4j")
+    except Exception as e:
         if "IndexAlreadyExists" in str(e):
             results["success"].append("neo4j (already exists)")
         else:
@@ -553,8 +561,9 @@ async def complete_setup():
         from sqlalchemy import create_engine, text
         e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-db:5432/kag"))
         with e.connect() as conn:
-            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255); ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS email VARCHAR(255); ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
-            conn.execute(text("INSERT INTO users (id, username, full_name, hashed_password, is_active, is_admin, created_at, updated_at)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()"))
             h = pbkdf2_sha256.hash("admin123456")
             conn.execute(text("INSERT INTO users (id, username, full_name, hashed_password, is_active, is_admin, created_at, updated_at) VALUES (:id, :u, :fn, :h, TRUE, TRUE, NOW(), NOW()) ON CONFLICT (username) DO NOTHING"),
                 {"id": str(uuid.uuid4()), "u": "admin", "fn": "Administrator", "h": h})
