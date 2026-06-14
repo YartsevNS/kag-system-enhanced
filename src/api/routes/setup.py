@@ -600,7 +600,7 @@ async def init_all():
         db_password = secrets.token_urlsafe(24)
 
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        conn = psycopg2.connect(host="keycloak-db", port=5432, dbname="keycloak",
+        conn = psycopg2.connect(host="kag-db", port=5432, dbname="keycloak",
             user=settings.KC_DB_USERNAME, password=settings.KC_DB_PASSWORD, connect_timeout=10)
         conn.autocommit = True
         cur = conn.cursor()
@@ -608,7 +608,7 @@ async def init_all():
         cur.execute(f"CREATE DATABASE {db_name} OWNER {db_user}")
         cur.execute(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user}")
         cur.close(); conn.close()
-        config_store.set("database", "default", {"auto_created": True, "host": "keycloak-db",
+        config_store.set("database", "default", {"auto_created": True, "host": "kag-db",
             "port": 5432, "name": db_name, "user": db_user, "password": db_password, "created_at": datetime.utcnow().isoformat()})
         results["success"].append("pg")
     except Exception as e:
