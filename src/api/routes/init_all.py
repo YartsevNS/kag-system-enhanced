@@ -75,11 +75,15 @@ async def init_all():
     # 4. Admin user in PG
     try:
         import os
+        import uuid
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
         e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-pg:5432/kag"))
         with e.connect() as conn:
             conn.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, full_name VARCHAR(255), email VARCHAR(255), hashed_password VARCHAR(255) NOT NULL, is_active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
+            conn.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()"))
             h = pbkdf2_sha256.hash("admin123456")
             conn.execute(text("INSERT INTO users (id, username, full_name, hashed_password, is_active, is_admin, created_at, updated_at) VALUES (:id, :u, :fn, :h, TRUE, TRUE, NOW(), NOW()) ON CONFLICT (username) DO NOTHING"),
                 {"id": str(uuid.uuid4()), "u": "admin", "fn": "Administrator", "h": h})
