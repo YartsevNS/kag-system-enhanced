@@ -547,7 +547,7 @@ async def create_neo4j_database():
     try:
         from neo4j import GraphDatabase
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", settings.NEO4J_PASSWORD))
+        driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")))
         with driver.session() as session:
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
             session.run("CREATE INDEX IF NOT EXISTS FOR (d:Document) ON (d.id)")
@@ -568,8 +568,8 @@ async def create_keycloak_database():
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
         async with httpx.AsyncClient() as client:
             r = await client.post("http://keycloak:8080/realms/master/protocol/openid-connect/token",
-                data={"client_id": "admin-cli", "username": settings.KC_ADMIN_USERNAME or "admin",
-                      "password": settings.KC_ADMIN_PASSWORD or "admin", "grant_type": "password"},
+                data={"client_id": "admin-cli", "username": os.environ.get("KEYCLOAK_ADMIN", "admin"),
+                      "password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "admin"), "grant_type": "password"},
                 timeout=10)
             token = r.json().get("access_token")
             if not token:
