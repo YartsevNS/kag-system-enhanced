@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     KC_DB_PORT: int = 5432
     KC_DB_NAME: str = "keycloak"
 
+    # KAG собственная БД (не Keycloak!)
+    KAG_DB_URL: str = ""  # Если задана — config_store использует её приоритетно
+
     # Casbin
     CASBIN_MODEL_PATH: str = "/app/src/auth/rbac_model.conf"
     CASBIN_POLICY_FILE: str = "/app/src/auth/rbac_policy.csv"
@@ -100,8 +103,10 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int = 768
 
     # Настройки чанкинга для документов
-    CHUNK_SIZE: int = 1000  # Размер чанка в символах
-    CHUNK_OVERLAP: int = 200  # Перекрытие между чанками
+    # Оптимально для русского языка: 512 токенов ≈ 2000-2500 символов
+    # Перекрытие 15% для сохранения контекста между чанками
+    CHUNK_SIZE: int = 512  # Размер чанка в токенах (не символах!)
+    CHUNK_OVERLAP: int = 77  # 15% перекрытие (512 * 0.15 ≈ 77)
 
     # Общие настройки LLM
     LLM_MODEL_NAME: str = "mistralai/Mistral-7B-Instruct-v0.2"
@@ -130,6 +135,14 @@ class Settings(BaseSettings):
     AUTH_ENABLED: bool = False
     KAG_API_TOKEN: str = ""
     CORS_ORIGINS: str = "*"
+
+    # JWT
+    JWT_SECRET: str = "kag-system-secret-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # Database (for user auth)
+    DATABASE_URL: str = "sqlite:////app/data/kag_users.db"
 
     class Config:
         env_file = ".env"

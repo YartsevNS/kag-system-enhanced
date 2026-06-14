@@ -10,8 +10,8 @@
 """
 
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Body
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException
+
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -404,6 +404,9 @@ class SwitchModelRequest(BaseModel):
     """Запрос на переключение модели"""
     backend_type: LLMBackendType = Field(..., description="Тип бэкенда")
     model_name: str = Field(..., description="Название модели")
+    url: Optional[str] = Field(default=None, description="URL API")
+    api_key: Optional[str] = Field(default=None, description="API ключ")
+    provider: Optional[str] = Field(default=None, description="Провайдер")
 
 
 class SwitchEmbeddingRequest(BaseModel):
@@ -416,574 +419,7 @@ class PullModelRequest(BaseModel):
     model_name: str = Field(..., description="Название модели для загрузки")
 
 
-# ===========================================
-# HTML админ-панель
-# ===========================================
 
-@router.get("/admin", response_class=HTMLResponse, summary="Админ-панель управления моделями")
-async def models_admin_page():
-    """
-    HTML страница для управления моделями.
-
-    Предоставляет веб-интерфейс для:
-    - Просмотра всех моделей
-    - Переключения между бэкендами
-    - Выбора активной модели
-    """
-    return """
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление моделями</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 2rem;
-        }
-        .container { max-width: 1400px; margin: 0 auto; }
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .subtitle { color: #94a3b8; margin-bottom: 2rem; }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        .card {
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid #334155;
-        }
-        .card h2 {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            color: #f8fafc;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .status-healthy { background: #22c55e; }
-        .status-error { background: #ef4444; }
-        .status-warning { background: #f59e0b; }
-        .status-badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #334155;
-        }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .btn-primary {
-            background: #3b82f6;
-            color: white;
-        }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-secondary {
-            background: #475569;
-            color: white;
-        }
-        .btn-secondary:hover { background: #374151; }
-        .btn-sm {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.75rem;
-        }
-        .btn-active {
-            background: #22c55e;
-            color: white;
-        }
-        select, input {
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.5rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            width: 100%;
-        }
-        .form-group { margin-bottom: 1rem; }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
-        }
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-        }
-        .info-item {
-            background: #0f172a;
-            padding: 1rem;
-            border-radius: 8px;
-        }
-        .info-item .label {
-            color: #94a3b8;
-            font-size: 0.75rem;
-            margin-bottom: 0.25rem;
-        }
-        .info-item .value {
-            color: #f8fafc;
-            font-size: 1.125rem;
-            font-weight: 600;
-        }
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #94a3b8;
-        }
-        .refresh-btn {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 1.5rem;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-            transition: all 0.2s;
-        }
-        .refresh-btn:hover {
-            transform: scale(1.1);
-            background: #2563eb;
-        }
-        #notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🎛️ Управление моделями KAG</h1>
-        <p class="subtitle">Админ-панель для конфигурации LLM и Embedding моделей</p>
-
-        <div id="notification"></div>
-
-        <!-- Статус системы -->
-        <div class="card" id="status-card">
-            <h2>📊 Статус системы</h2>
-            <div class="info-grid" id="system-status">
-                <div class="loading">Загрузка...</div>
-            </div>
-        </div>
-
-        <div class="grid">
-            <!-- LLM Модели -->
-            <div class="card">
-                <h2>🤖 LLM Модели</h2>
-                <div id="llm-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Embedding Модели -->
-            <div class="card">
-                <h2>📐 Embedding Модели</h2>
-                <div id="embedding-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Все модели Ollama -->
-            <div class="card">
-                <h2>📦 Все модели Ollama</h2>
-                <div id="all-ollama-models">
-                    <div class="loading">Загрузка...</div>
-                </div>
-            </div>
-
-            <!-- Загрузить модель -->
-            <div class="card">
-                <h2>⬇️ Загрузить новую модель</h2>
-                <div class="form-group">
-                    <label>Название модели (например, llama2:7b, mistral:latest)</label>
-                    <input type="text" id="model-name-input" placeholder="Введите название модели...">
-                </div>
-                <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
-            </div>
-        </div>
-    </div>
-
-    <button class="refresh-btn" onclick="loadAll()" title="Обновить">↻</button>
-
-    <script>
-        const API_BASE = '/api/v1/admin/models';
-
-        async function loadStatus() {
-            try {
-                const response = await fetch(`${API_BASE}/status`);
-                const data = await response.json();
-                
-                const statusHtml = `
-                    <div class="info-item">
-                        <div class="label">Активный бэкенд</div>
-                        <div class="value">${data.active_config.llm_backend || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">LLM модель</div>
-                        <div class="value">${data.active_config.llm_model || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">Embedding модель</div>
-                        <div class="value">${data.active_config.embedding_model || 'N/A'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="label">Размерность embedding</div>
-                        <div class="value">${data.embedding.dimensions}</div>
-                    </div>
-                `;
-                document.getElementById('system-status').innerHTML = statusHtml;
-
-                // Обновляем статусы бэкендов
-                updateBackendStatus(data.llm_backends);
-            } catch (error) {
-                console.error('Ошибка загрузки статуса:', error);
-            }
-        }
-
-        function updateBackendStatus(backends) {
-            // Добавляем индикаторы к заголовкам карточек
-        }
-
-        async function loadLlmModels() {
-            try {
-                const response = await fetch(`${API_BASE}/llm`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('llm-models').innerHTML = 
-                        '<div class="loading">Нет доступных моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Бэкенд</th>
-                                <th>Статус</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>${m.backend}</td>
-                                    <td>
-                                        <span class="status-badge ${m.is_active ? 'badge-success' : 'badge-error'}">
-                                            ${m.is_active ? 'Активна' : 'Неактивна'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        ${!m.is_active ? `
-                                            <button class="btn btn-secondary btn-sm" 
-                                                onclick="switchLlmModel('${m.backend}', '${m.name}')">
-                                                Активировать
-                                            </button>
-                                        ` : '<span class="btn-active btn btn-sm">✓ Активна</span>'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('llm-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки LLM моделей:', error);
-            }
-        }
-
-        async function loadEmbeddingModels() {
-            try {
-                const response = await fetch(`${API_BASE}/embeddings`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('embedding-models').innerHTML = 
-                        '<div class="loading">Нет доступных embedding моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Статус</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>
-                                        <span class="status-badge ${m.is_active ? 'badge-success' : 'badge-error'}">
-                                            ${m.is_active ? 'Активна' : 'Неактивна'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        ${!m.is_active ? `
-                                            <button class="btn btn-secondary btn-sm" 
-                                                onclick="switchEmbeddingModel('${m.name}')">
-                                                Активировать
-                                            </button>
-                                        ` : '<span class="btn-active btn btn-sm">✓ Активна</span>'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('embedding-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки embedding моделей:', error);
-            }
-        }
-
-        async function loadAllOllamaModels() {
-            try {
-                const response = await fetch(`${API_BASE}/ollama-models`);
-                const models = await response.json();
-                
-                if (models.length === 0) {
-                    document.getElementById('all-ollama-models').innerHTML = 
-                        '<div class="loading">Нет моделей</div>';
-                    return;
-                }
-
-                const tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Модель</th>
-                                <th>Размер</th>
-                                <th>Изменена</th>
-                                <th>Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${models.map(m => `
-                                <tr>
-                                    <td><strong>${m.name}</strong></td>
-                                    <td>${formatBytes(m.size)}</td>
-                                    <td>${new Date(m.modified_at).toLocaleDateString('ru-RU')}</td>
-                                    <td>
-                                        <button class="btn btn-secondary btn-sm" 
-                                            onclick="deleteModel('${m.name}')" 
-                                            style="background: #ef4444;">
-                                            Удалить
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                
-                document.getElementById('all-ollama-models').innerHTML = tableHtml;
-            } catch (error) {
-                console.error('Ошибка загрузки всех моделей:', error);
-            }
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        async function switchLlmModel(backend, modelName) {
-            try {
-                showNotification(`Переключение на ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/switch-llm`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        backend_type: backend,
-                        model_name: modelName
-                    })
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    const error = await response.json();
-                    showNotification(`✗ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function switchEmbeddingModel(modelName) {
-            try {
-                showNotification(`Переключение embedding на ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/switch-embedding`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Embedding модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    const error = await response.json();
-                    showNotification(`✗ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function pullModel() {
-            const modelName = document.getElementById('model-name-input').value.trim();
-            if (!modelName) {
-                showNotification('Введите название модели', true);
-                return;
-            }
-
-            try {
-                showNotification(`Загрузка ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/pull`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    showNotification(`✓ Модель ${modelName} загружена`);
-                    document.getElementById('model-name-input').value = '';
-                    setTimeout(loadAll, 500);
-                } else {
-                    showNotification(`⚠ ${result.message || result.error}`, true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        async function deleteModel(modelName) {
-            if (!confirm(`Удалить модель ${modelName}?`)) return;
-
-            try {
-                showNotification(`Удаление ${modelName}...`);
-                
-                const response = await fetch(`${API_BASE}/delete/${modelName}`, {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    showNotification(`✓ Модель ${modelName} удалена`);
-                    setTimeout(loadAll, 500);
-                } else {
-                    showNotification('✗ Ошибка удаления', true);
-                }
-            } catch (error) {
-                showNotification(`✗ Ошибка: ${error.message}`, true);
-            }
-        }
-
-        function showNotification(message, isError = false) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.style.background = isError ? '#ef4444' : '#22c55e';
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 3000);
-        }
-
-        async function loadAll() {
-            await Promise.all([
-                loadStatus(),
-                loadLlmModels(),
-                loadEmbeddingModels(),
-                loadAllOllamaModels()
-            ]);
-        }
-
-        // Загрузка при старте
-        loadAll();
-        
-        // Автообновление каждые 30 секунд
-        setInterval(loadStatus, 30000);
-    </script>
-</body>
-</html>
-"""
 
 
 # ===========================================
@@ -1115,13 +551,31 @@ async def list_ollama_models():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+
+@router.get("/llm-config", summary="Получить сохранённые настройки активной LLM")
+async def get_llm_config():
+    """Вернуть сохранённые настройки активной LLM из PostgreSQL."""
+    cfg = config_store.get("llm_config", "active") or {}
+    return {
+        "backend_type": cfg.get("backend_type", "ollama"),
+        "model_name": cfg.get("model_name", "phi4-mini:latest"),
+        "url": cfg.get("url", "http://192.168.50.41:11434"),
+        "api_key": cfg.get("api_key", ""),
+        "provider": cfg.get("provider", "ollama"),
+    }
+
 @router.post("/switch-llm", summary="Переключить активную LLM модель")
 async def switch_llm_model(request: SwitchModelRequest):
     """
-    Переключить активную LLM модель.
+    Переключить активную LLM модель и сохранить настройки в PostgreSQL.
 
-    - **backend_type**: Тип бэкенда (ollama, vllm, openai)
+    - **backend_type**: Тип бэкенда (ollama, vllm, openai, deepseek, openrouter)
     - **model_name**: Название модели
+    - **url**: URL API (опционально)
+    - **api_key**: API ключ (опционально)
+    - **provider**: Провайдер (опционально)
     """
     try:
         success = await model_manager.switch_llm_model(
@@ -1129,10 +583,21 @@ async def switch_llm_model(request: SwitchModelRequest):
             request.model_name
         )
         
+        # Сохраняем настройки в PostgreSQL
+        cfg = {
+            "backend_type": request.backend_type.value if hasattr(request.backend_type, 'value') else str(request.backend_type),
+            "model_name": request.model_name,
+            "url": request.url or "",
+            "api_key": request.api_key or "",
+            "provider": request.provider or "",
+        }
+        config_store.set("llm_config", "active", cfg)
+        
         if success:
             return {
                 "status": "success",
-                "message": f"Модель переключена на {request.model_name}"
+                "message": f"Модель переключена на {request.model_name}",
+                "config": cfg
             }
         else:
             raise HTTPException(status_code=400, detail="Не удалось переключить модель")
@@ -1152,6 +617,15 @@ async def switch_embedding_model(request: SwitchEmbeddingRequest):
     """
     try:
         success = await model_manager.switch_embedding_model(request.model_name)
+        
+        # Сохраняем в config_store
+        try:
+            from src.api.services.config_store import config_store
+            config = config_store.get("embedding", "default") or {}
+            config["model"] = request.model_name
+            config_store.set("embedding", "default", config)
+        except Exception as e:
+            logger.warning(f"Не удалось сохранить embedding модель в config_store: {e}")
         
         if success:
             return {
@@ -1204,3 +678,1108 @@ async def delete_model(model_name: str):
     except Exception as e:
         logger.error(f"Ошибка удаления модели: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# === Внешние LLM для анализа документов ===
+
+from pydantic import BaseModel
+from typing import Optional as Opt
+
+class ExtLLMConfig(BaseModel):
+    url: str = "http://192.168.50.41:11434"
+    model: str = "phi4-mini"
+    api_key: Opt[str] = None
+    provider: str = "ollama"
+
+_ext_llm_config: ExtLLMConfig = ExtLLMConfig()
+
+# Инициализация из БД при старте модуля
+try:
+    from src.api.services.config_store import config_store
+    saved = config_store.get("ext_llm", "default")
+    if saved and (saved.get("model") or saved.get("api_key")):
+        _ext_llm_config = ExtLLMConfig(
+            url=saved.get("url", ""),
+            model=saved.get("model", ""),
+            provider=saved.get("provider", "ollama"),
+            api_key=saved.get("api_key", "")
+        )
+except Exception:
+    pass
+
+
+@router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
+async def save_ext_llm(config: ExtLLMConfig):
+    """Сохранить настройки внешнего LLM в config_store (PostgreSQL)."""
+    global _ext_llm_config
+    _ext_llm_config = config
+    # Персистентное сохранение в БД
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("ext_llm", "default", {
+            "url": config.url,
+            "model": config.model,
+            "provider": config.provider,
+            "api_key": config.api_key
+        })
+    except Exception as e:
+        logger.warning(f"Не удалось сохранить ext_llm в config_store: {e}")
+    logger.info(f"Внешний LLM настроен: {config.provider}/{config.model} @ {config.url}")
+    return {"status": "ok", "message": "Настройки сохранены"}
+
+
+@router.get("/ext-llm", summary="Получить настройки внешнего LLM")
+async def get_ext_llm():
+    """Получить текущие настройки внешнего LLM.
+    
+    ВСЕГДА загружает из config_store (PostgreSQL) приоритетно.
+    Глобальная переменная — только fallback если БД недоступна.
+    """
+    global _ext_llm_config
+    # Всегда пробуем загрузить из БД
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("ext_llm", "default")
+        if saved and (saved.get("model") or saved.get("api_key")):
+            _ext_llm_config = ExtLLMConfig(
+                url=saved.get("url", ""),
+                model=saved.get("model", ""),
+                provider=saved.get("provider", "ollama"),
+                api_key=saved.get("api_key", "")
+            )
+    except Exception:
+        pass
+    return {
+        "url": _ext_llm_config.url,
+        "model": _ext_llm_config.model,
+        "provider": _ext_llm_config.provider,
+        "api_key": _ext_llm_config.api_key
+    }
+
+
+@router.post("/ext-llm/test", summary="Тест подключения к внешнему LLM")
+async def test_ext_llm():
+    """Проверить подключение к внешнему LLM."""
+    import aiohttp
+    
+    try:
+        if _ext_llm_config.provider == "ollama":
+            url = f"{_ext_llm_config.url}/api/generate"
+            payload = {
+                "model": _ext_llm_config.model,
+                "prompt": "Ответь одним словом: ОК",
+                "stream": False,
+                "options": {"max_tokens": 5}
+            }
+            headers = {}
+        elif _ext_llm_config.provider in ("openai", "deepseek", "openrouter"):
+            # OpenAI-совместимый API
+            url = f"{_ext_llm_config.url}/v1/chat/completions"
+            payload = {
+                "model": _ext_llm_config.model,
+                "messages": [{"role": "user", "content": "Say OK"}],
+                "max_tokens": 5
+            }
+            headers = {"Authorization": f"Bearer {_ext_llm_config.api_key}"} if _ext_llm_config.api_key else {}
+        else:
+            return {"ok": False, "error": f"Провайдер {_ext_llm_config.provider} пока не поддерживается для теста"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response_text = data.get("response") or data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return {"ok": True, "response": response_text[:100]}
+                else:
+                    body = await resp.text()
+                    return {"ok": False, "error": f"HTTP {resp.status}: {body[:100]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/ext-llm/models", summary="Список моделей внешнего провайдера")
+async def list_ext_llm_models(provider: str = "ollama"):
+    """Получить список доступных моделей для указанного провайдера.
+    
+    Для Ollama — возвращает локально загруженные модели.
+    Для OpenAI/DeepSeek/OpenRouter — обращается к API провайдера с сохранённым ключом.
+    """
+    import aiohttp
+    try:
+        if provider == "ollama":
+            # Локальные модели
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/api/tags",
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        models = [{"id": m.get("name", m.get("model", "")), "name": m.get("name", "")}
+                                  for m in data.get("models", [])]
+                        return {"models": models, "provider": "ollama"}
+                    return {"models": [], "error": f"Ollama: HTTP {resp.status}"}
+        
+        # Внешние провайдеры — OpenAI-совместимый API
+        api_key = _ext_llm_config.api_key
+        if not api_key:
+            return {"models": [], "error": "API ключ не указан. Сохраните ключ в настройках."}
+        
+        headers = {"Authorization": f"Bearer {api_key}"}
+        # OpenRouter и OpenAI используют /v1/models
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{_ext_llm_config.url}/v1/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    # OpenAI формат: {"data": [{"id": "gpt-4", ...}, ...]}
+                    # OpenRouter: {"data": [{"id": "openai/gpt-4o", "name": "GPT-4o", ...}, ...]}
+                    models = []
+                    for m in data.get("data", []):
+                        models.append({
+                            "id": m.get("id", ""),
+                            "name": m.get("name", m.get("id", ""))
+                        })
+                    return {"models": models, "provider": provider}
+                else:
+                    text = await resp.text()
+                    return {"models": [], "error": f"HTTP {resp.status}: {text[:200]}"}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+
+@router.get("/ext-llm/balance", summary="Проверить баланс провайдера")
+async def check_ext_llm_balance():
+    """Проверить состояние баланса/кредитов внешнего провайдера.
+    
+    Поддерживает:
+    - OpenAI: GET /v1/dashboard/billing/subscription (остаток кредитов)
+    - DeepSeek: GET /v1/user/balance (баланс в токенах)
+    - OpenRouter: GET /api/v1/credits (оставшиеся кредиты)
+    - Ollama: всегда возвращает ok (локальный — безлимитный)
+    """
+    import aiohttp
+    prov = _ext_llm_config.provider
+    api_key = _ext_llm_config.api_key
+    
+    try:
+        if prov == "ollama":
+            return {"provider": "ollama", "balance_ok": True, "message": "Локальный сервер — без ограничений"}
+        
+        if not api_key:
+            return {"provider": prov, "balance_ok": False, "message": "API ключ не указан", "balance": 0}
+        
+        headers = {"Authorization": f"Bearer {api_key}"}
+        
+        if prov == "openrouter":
+            # OpenRouter: GET /api/v1/credits
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/api/v1/credits",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        credits = data.get("data", {}).get("total_credits", 0)
+                        used = data.get("data", {}).get("total_usage", 0)
+                        remaining = credits - used
+                        return {
+                            "provider": prov,
+                            "balance_ok": remaining > 0,
+                            "balance": round(remaining, 4),
+                            "total_credits": credits,
+                            "total_usage": round(used, 4),
+                            "message": f"Остаток: ${remaining:.4f} из ${credits:.2f}"
+                        }
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        elif prov == "openai":
+            # OpenAI: пробуем usage endpoint
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.openai.com/v1/usage?date=" + __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d'),
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        return {"provider": prov, "balance_ok": True, "message": "API доступен"}
+                    # Fallback: проверяем просто доступность
+                    if resp.status in (401, 403):
+                        return {"provider": prov, "balance_ok": False, "message": "API ключ недействителен", "balance": 0}
+                # Простой тест — список моделей
+                async with session.get(
+                    f"{_ext_llm_config.url}/v1/models",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        return {"provider": prov, "balance_ok": True, "message": "API доступен (проверьте баланс в панели OpenAI)"}
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        elif prov == "deepseek":
+            # DeepSeek: GET /v1/user/balance
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_ext_llm_config.url}/v1/user/balance",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        balance = data.get("balance", data.get("data", {}).get("balance", 0))
+                        return {
+                            "provider": prov,
+                            "balance_ok": float(balance) > 0 if balance else True,
+                            "balance": balance,
+                            "message": f"Баланс: {balance} токенов"
+                        }
+                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка баланса не реализована"}
+    
+    except Exception as e:
+        return {"provider": prov, "balance_ok": False, "message": str(e), "balance": 0}
+
+
+
+
+
+@router.get("/graph/balance", summary="Проверить баланс провайдера граф-модели")
+async def check_graph_balance():
+    """Проверить баланс провайдера граф-модели (OpenAI/DeepSeek/OpenRouter).
+    Возвращает баланс в долларах или юанях."""
+    import aiohttp
+    prov = _graph_model_config.get("provider", "ollama")
+    api_key = _graph_model_config.get("api_key", "")
+    
+    if prov == "ollama":
+        return {"provider": "ollama", "balance_ok": True, "message": "Локальный — безлимитный", "display": "∞"}
+    
+    if not api_key:
+        return {"provider": prov, "balance_ok": False, "message": "API ключ не указан"}
+    
+    try:
+        if prov == "openrouter":
+            url = "https://openrouter.ai/api/v1/credits"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        credits = data.get("data", {}).get("total_credits", 0)
+                        used = data.get("data", {}).get("total_usage", 0)
+                        remaining = credits - used
+                        return {"provider": "openrouter", "balance_ok": True, "balance_usd": remaining, "display": f"${remaining:.2f} (из ${credits:.2f})"}
+        
+        elif prov == "deepseek":
+            url = f"{_graph_model_config.get('url', 'https://api.deepseek.com')}/v1/user/balance"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        bal = data.get("balance_infos", data.get("data", []))
+                        if isinstance(bal, list) and bal:
+                            b = bal[0]
+                            currency = b.get("currency", "USD")
+                            amount = float(b.get("total_balance", b.get("balance", 0)))
+                            return {"provider": "deepseek", "balance_ok": True, "balance_usd": amount, "display": f"{currency} {amount:.2f}"}
+        
+        elif prov == "openai":
+            # OpenAI не отдаёт баланс напрямую — просто проверяем доступность ключа
+            url = f"{_graph_model_config.get('url', 'https://api.openai.com')}/v1/models"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        return {"provider": "openai", "balance_ok": True, "display": "✅ API ключ активен", "message": "OpenAI не предоставляет баланс через API"}
+                    return {"provider": "openai", "balance_ok": False, "message": f"HTTP {resp.status}"}
+        
+        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка не реализована"}
+    except Exception as e:
+        return {"provider": prov, "balance_ok": False, "message": str(e)}
+
+_graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
+
+# Инициализация из БД при старте
+try:
+    from src.api.services.config_store import config_store
+    saved = config_store.get("graph_model", "default")
+    if saved and saved.get("model"):
+        _graph_model_config = saved
+except Exception:
+    pass
+
+@router.get("/graph", summary="Получить модель для графа")
+async def get_graph_model():
+    # Пробуем загрузить из config_store
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("graph_model", "default")
+        if saved and saved.get("model"):
+            return saved
+    except Exception:
+        pass
+    return _graph_model_config
+
+@router.post("/graph", summary="Сохранить модель для графа")
+async def save_graph_model(config: dict):
+    global _graph_model_config
+    _graph_model_config = config
+    # Сохраняем в config_store
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("graph_model", "default", config)
+    except Exception as e:
+        logger.warning(f"Не удалось сохранить в config_store: {e}")
+    logger.info(f"Graph model set: model={config.get('model')} provider={config.get('provider')}")
+    return {"status": "ok", "message": "Модель для графа сохранена"}
+
+
+# ===========================================
+# Деплой (обновление из Git)
+# ===========================================
+
+class DeployRequest(BaseModel):
+    file_content: Optional[str] = Field(default=None, description="Содержимое файла для записи (base64 или текст)")
+    file_path: Optional[str] = Field(default=None, description="Путь к файлу относительно /app/src/")
+    action: str = Field(default="write_file", description="Действие: write_file | git_pull | restart")
+
+@router.post("/deploy", summary="Деплой: запись файла, git pull или перезапуск")
+async def deploy_action(req: DeployRequest):
+    """
+    Универсальный endpoint для деплоя:
+    - write_file: записать содержимое в файл на диске
+    - git_pull: выполнить git pull в /home/yartsevn/kag-system
+    - restart: перезапустить Docker-контейнер api
+    """
+    import subprocess
+    import os
+    import base64
+
+    if req.action == "write_file":
+        if not req.file_content or not req.file_path:
+            return {"status": "error", "message": "file_content и file_path обязательны для write_file"}
+
+        full_path = os.path.join("/app/src", req.file_path)
+        # Безопасность: только внутри /app/src
+        if not os.path.realpath(full_path).startswith("/app/src"):
+            return {"status": "error", "message": "Недопустимый путь"}
+
+        try:
+            content = req.file_content
+            # Пробуем декодировать base64
+            try:
+                content = base64.b64decode(req.file_content).decode("utf-8")
+            except Exception:
+                pass  # Не base64 — используем как есть
+
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            logger.info(f"Deploy: записан файл {full_path} ({len(content)} байт)")
+            return {"status": "ok", "message": f"Файл {req.file_path} записан ({len(content)} байт)"}
+        except Exception as e:
+            logger.error(f"Deploy: ошибка записи {req.file_path}: {e}")
+            return {"status": "error", "message": str(e)}
+
+    elif req.action == "git_pull":
+        try:
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd="/home/yartsevn/kag-system",
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            logger.info(f"Git pull: {result.stdout}")
+            return {
+                "status": "ok" if result.returncode == 0 else "error",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    elif req.action == "restart":
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "api"],
+                cwd="/home/yartsevn/kag-system",
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            logger.info(f"Docker restart: {result.stdout}")
+            return {
+                "status": "ok" if result.returncode == 0 else "error",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    return {"status": "error", "message": f"Неизвестное действие: {req.action}"}
+
+
+# ===========================================
+# Конфигурация разрешённых форматов загрузки
+# ===========================================
+
+# Все поддерживаемые форматы
+ALL_SUPPORTED_EXTENSIONS = {
+    ".pdf":  "PDF",
+    ".docx": "DOCX",
+    ".doc":  "DOC",
+    ".txt":  "TXT",
+    ".md":   "MD",
+    ".csv":  "CSV",
+    ".odt":  "ODT",
+    ".rtf":  "RTF",
+    ".png":  "PNG",
+    ".jpg":  "JPG",
+    ".jpeg": "JPEG",
+    ".gif":  "GIF",
+}
+
+def _get_allowed_extensions() -> dict:
+    """Загрузить разрешённые расширения из config_store."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("upload_config", "allowed_extensions")
+        if saved and isinstance(saved, dict):
+            return saved
+    except Exception:
+        pass
+    # Default: all except image formats
+    return {ext: True for ext in ALL_SUPPORTED_EXTENSIONS if ext not in ('.png', '.jpg', '.jpeg', '.gif')}
+
+
+@router.get("/upload-config", summary="Разрешённые форматы загрузки")
+async def get_upload_config():
+    """Получить список разрешённых форматов."""
+    allowed = _get_allowed_extensions()
+    return {
+        "all_formats": ALL_SUPPORTED_EXTENSIONS,
+        "allowed": allowed
+    }
+
+
+class UploadConfigRequest(BaseModel):
+    allowed: dict = Field(default={}, description="Словарь {'.ext': True/False}")
+
+@router.post("/upload-config", summary="Сохранить разрешённые форматы")
+async def save_upload_config(req: UploadConfigRequest):
+    """Сохранить список разрешённых форматов."""
+    try:
+        from src.api.services.config_store import config_store
+        config_store.set("upload_config", "allowed_extensions", req.allowed)
+        return {"status": "ok", "message": "Настройки форматов сохранены"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ===========================================
+# Мониторинг системы и Docker
+# ===========================================
+
+@router.get("/system/info", summary="Информация о системе")
+async def get_system_info():
+    """CPU, память, диск, ОС."""
+    try:
+        from src.api.services.system_monitor import system_monitor
+        info = system_monitor.get_system_info()
+        
+        # Добавляем моментальные метрики
+        try:
+            import psutil
+            info["cpu_pct"] = psutil.cpu_percent(interval=0.1)
+            info["mem"] = {
+                "used": psutil.virtual_memory().used,
+                "total": psutil.virtual_memory().total,
+                "percent": psutil.virtual_memory().percent,
+                "available": psutil.virtual_memory().available,
+            }
+            info["dsk"] = {
+                "used": psutil.disk_usage('/').used,
+                "total": psutil.disk_usage('/').total,
+                "free": psutil.disk_usage('/').free,
+                "percent": psutil.disk_usage('/').percent,
+            }
+        except Exception:
+            # Fallback to system_monitor data
+            cpu_data = info.get("cpu", {})
+            info["cpu_pct"] = cpu_data.get("usage_percent", 0)
+            mem_data = info.get("memory", {})
+            info["mem"] = {
+                "used": mem_data.get("used", 0),
+                "total": mem_data.get("total", 0),
+                "percent": mem_data.get("percent", 0),
+                "available": mem_data.get("available", 0),
+            }
+            dsk_list = info.get("disk", [])
+            dsk = dsk_list[0] if dsk_list else {}
+            info["dsk"] = {
+                "used": dsk.get("used", 0),
+                "total": dsk.get("total", 0),
+                "free": dsk.get("free", 0),
+                "percent": dsk.get("percent", 0),
+            }
+        return info
+    except Exception as e:
+        return {"error": str(e), "hostname": "unknown", "cpu_pct": 0, "mem": {}, "dsk": {}}
+
+
+@router.get("/docker/stats", summary="Статистика Docker")
+async def get_docker_stats():
+    """Список контейнеров через docker CLI или psutil."""
+    import subprocess, os
+    result = {"containers": [], "system": {}}
+    
+    # Try docker CLI
+    try:
+        ps_out = subprocess.check_output(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.ID}}", "--no-trunc"],
+            timeout=5, stderr=subprocess.DEVNULL
+        ).decode().strip()
+        for line in ps_out.split('\n'):
+            if line.strip():
+                parts = line.split('\t')
+                if len(parts) >= 3:
+                    state = "running" if "Up" in parts[1] else "stopped"
+                    result["containers"].append({
+                        "name": parts[0], "state": state, "status": parts[1],
+                        "image": parts[2], "id": parts[3][:12] if len(parts) > 3 else ""
+                    })
+        # Docker system info
+        info_out = subprocess.check_output(["docker", "info", "--format", "{{.ContainersRunning}}/{{.Containers}}"], timeout=5, stderr=subprocess.DEVNULL).decode().strip()
+        parts = info_out.split('/')
+        result["system"] = {"containers_running": int(parts[0]) if parts[0].isdigit() else 0, "containers_total": int(parts[1]) if len(parts)>1 and parts[1].isdigit() else 0}
+    except Exception:
+        # Fallback: return self + host system info
+        import psutil
+        result["containers"].append({
+            "name": "kag-api", "state": "running",
+            "image": "kag-system_api:latest",
+            "stats": {
+                "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
+                "mem_used": psutil.virtual_memory().used,
+                "mem_limit": psutil.virtual_memory().total,
+                "pids": len(psutil.pids())
+            }
+        })
+        result["system"] = {"containers_running": 1, "containers_total": 1}
+        result["note"] = "Docker socket not available — showing kag-api only"
+    return result
+
+
+@router.get("/docker/{container_name}/logs", summary="Логи контейнера")
+async def get_container_logs(container_name: str, lines: int = 30):
+    """Последние N строк логов контейнера. Только безопасные имена."""
+    import re, subprocess
+    # Sanitize: only allow alphanumeric, hyphens, underscores
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]*$', container_name):
+        return {"container": container_name, "logs": "", "error": "Invalid container name"}
+    try:
+        out = subprocess.check_output(
+            ["docker", "logs", "--tail", str(max(1, min(lines, 200))), container_name],
+            timeout=10, stderr=subprocess.STDOUT
+        ).decode(errors='replace')
+        return {"container": container_name, "logs": out[-10000:]}
+    except Exception as e:
+        return {"container": container_name, "logs": "", "error": str(e)}
+
+
+# ============================================================
+# Системный промпт для чата
+# ============================================================
+
+@router.get("/chat-prompt", summary="Получить системный промпт чата")
+async def get_chat_prompt():
+    """Получить текущий системный промпт для чата."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("llm", "default") or {}
+        prompt = saved.get("system_prompt", "")
+        return {"prompt": prompt}
+    except Exception as e:
+        return {"prompt": "", "error": str(e)}
+
+
+@router.post("/chat-prompt", summary="Сохранить системный промпт чата")
+async def save_chat_prompt(data: dict):
+    """Сохранить системный промпт для чата в config_store."""
+    try:
+        from src.api.services.config_store import config_store
+        prompt = data.get("prompt", "")
+        existing = config_store.get("llm", "default") or {}
+        existing["system_prompt"] = prompt
+        config_store.set("llm", "default", existing)
+        logger.info(f"Системный промпт чата сохранён ({len(prompt)} символов)")
+        return {"status": "ok", "message": "Промпт сохранён"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+
+# ============================================================
+# Единая система управления провайдерами LLM
+# ============================================================
+# Новая архитектура: каждый провайдер (Ollama, OpenAI, DeepSeek...)
+# хранится отдельно в config_store("providers", id).
+# Каждая функция (chat, embedding, graph, doc_analysis) привязана
+# к провайдеру + модели через config_store("function_map", function).
+#
+# Провайдер — это источник LLM (credentials, URL).
+# Функция — это роль (чат, эмбеддинг, граф, анализ).
+# ============================================================
+
+from src.api.services.provider_service import (
+    provider_service, ProviderConfig, FunctionMap,
+    PROVIDER_TYPES, FUNCTION_DEFINITIONS,
+)
+
+
+@router.get("/provider-types", summary="Типы провайдеров")
+async def get_provider_types():
+    """Вернуть список поддерживаемых типов провайдеров с метаданными."""
+    return PROVIDER_TYPES
+
+
+@router.get("/function-definitions", summary="Определения функций")
+async def get_function_definitions():
+    """Вернуть список функций, которые могут использовать LLM."""
+    return FUNCTION_DEFINITIONS
+
+
+@router.get("/providers", summary="Список всех провайдеров")
+async def list_providers():
+    """Вернуть список всех провайдеров (без API-ключей)."""
+    return provider_service.list_providers()
+
+
+@router.get("/providers/{provider_id}", summary="Получить провайдера")
+async def get_provider(provider_id: str):
+    """Вернуть провайдера по ID (без API-ключа)."""
+    p = provider_service.get_provider(provider_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+    return p
+
+
+class ProviderSaveRequest(BaseModel):
+    """Запрос на сохранение провайдера"""
+    id: str = Field(default="", description="ID провайдера (пусто = создать новый)")
+    name: str = Field(default="", description="Название")
+    type: str = Field(default="ollama", description="Тип: ollama, openai, deepseek, openrouter, custom")
+    url: str = Field(default="", description="URL API")
+    api_key: str = Field(default="", description="API ключ (опционально)")
+    enabled: bool = Field(default=True, description="Включён")
+
+
+@router.post("/providers", summary="Сохранить провайдера")
+async def save_provider(req: ProviderSaveRequest):
+    """Создать или обновить провайдера."""
+    import uuid
+
+    config = ProviderConfig(
+        id=req.id or f"provider-{uuid.uuid4().hex[:8]}",
+        name=req.name,
+        type=req.type,
+        url=req.url,
+        api_key=req.api_key,
+        enabled=req.enabled,
+    )
+
+    success = provider_service.save_provider(config)
+    if not success:
+        raise HTTPException(status_code=500, detail="Ошибка сохранения провайдера")
+
+    return {
+        "status": "success",
+        "message": f"Провайдер {config.name} сохранён",
+        "provider": config.to_dict(include_secret=False),
+    }
+
+
+@router.delete("/providers/{provider_id}", summary="Удалить провайдера")
+async def delete_provider(provider_id: str):
+    """Удалить провайдера и все его привязки."""
+    success = provider_service.delete_provider(provider_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+    return {"status": "success", "message": f"Провайдер {provider_id} удалён"}
+
+
+@router.post("/providers/{provider_id}/fetch-models", summary="Запросить модели провайдера")
+async def fetch_provider_models(provider_id: str):
+    """Получить список моделей провайдера через его API и обновить кэш."""
+    models = await provider_service.fetch_provider_models(provider_id)
+    return {
+        "provider_id": provider_id,
+        "models": models,
+        "count": len(models),
+    }
+
+
+@router.post("/providers/{provider_id}/test", summary="Проверить подключение к провайдеру")
+async def test_provider_connection(provider_id: str):
+    """Проверить, что провайдер отвечает."""
+    provider = provider_service.get_provider_with_key(provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+
+    import httpx
+    try:
+        if provider.type == "ollama":
+            url = f"{provider.url}/api/tags"
+        else:
+            url = f"{provider.url.rstrip('/')}/v1/models"
+
+        headers = {}
+        if provider.api_key:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                model_count = 0
+                if provider.type == "ollama":
+                    model_count = len(data.get("models", []))
+                else:
+                    model_count = len(data.get("data", []))
+
+                return {
+                    "ok": True,
+                    "message": f"✅ Подключение успешно, {model_count} моделей",
+                    "model_count": model_count,
+                    "response_time_ms": resp.elapsed.total_seconds() * 1000,
+                }
+            else:
+                body = await resp.text()
+                return {
+                    "ok": False,
+                    "message": f"❌ HTTP {resp.status_code}: {body[:200]}",
+                }
+    except Exception as e:
+        return {"ok": False, "message": f"❌ {str(e)}"}
+
+
+@router.post("/providers/{provider_id}/balance", summary="Проверить баланс провайдера")
+async def check_provider_balance(provider_id: str):
+    """Проверить баланс API провайдера (OpenAI, DeepSeek, OpenRouter)."""
+    provider = provider_service.get_provider_with_key(provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Провайдер не найден")
+
+    if provider.type == "ollama":
+        return {"ok": True, "message": "Локальный сервер — без ограничений", "balance_ok": True, "display": "∞"}
+
+    if not provider.api_key:
+        return {"ok": False, "message": "API ключ не указан", "balance_ok": False}
+
+    import httpx
+    try:
+        base_url = provider.url.rstrip("/")
+        headers = {"Authorization": f"Bearer {provider.api_key}"}
+
+        if provider.type == "openrouter":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/api/v1/auth/key", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    credits = float(data.get("data", {}).get("credits", 0))
+                    return {"ok": True, "balance_ok": True, "balance_usd": credits, "display": f"${credits:.2f}", "message": f"Баланс OpenRouter: ${credits:.2f}"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        elif provider.type == "deepseek":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/v1/user/balance", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    bal = float(data.get("balance", data.get("data", {}).get("balance", 0)))
+                    return {"ok": True, "balance_ok": bal > 0, "balance": bal, "display": f"{bal} токенов", "message": f"Баланс DeepSeek: {bal} токенов"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        elif provider.type == "openai":
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base_url}/v1/models", headers=headers)
+                if resp.status_code == 200:
+                    return {"ok": True, "balance_ok": True, "display": "✅ Ключ активен", "message": "API ключ работает"}
+                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
+
+        return {"ok": True, "balance_ok": None, "message": f"Тип {provider.type} — проверка не реализована"}
+    except Exception as e:
+        return {"ok": False, "balance_ok": False, "message": str(e)}
+
+
+# ===========================================
+# Привязка функций к провайдерам
+# ===========================================
+
+@router.get("/functions", summary="Список привязок функций")
+async def list_function_maps():
+    """Вернуть все привязки функций к провайдерам."""
+    return provider_service.list_function_maps()
+
+
+@router.get("/functions/{function_name}", summary="Получить привязку функции")
+async def get_function_map(function_name: str):
+    """Вернуть привязку функции к провайдеру."""
+    fm = provider_service.get_function_map(function_name)
+    if not fm:
+        # Возвращаем пустой шаблон для функции
+        func_def = FUNCTION_DEFINITIONS.get(function_name, {})
+        return {
+            "function": function_name,
+            "provider_id": provider_service.get_default_provider_id() or "",
+            "model": "",
+            "system_prompt": "",
+            "parameters": {"temperature": 0.7, "max_tokens": 4096},
+            "is_default": True,
+        }
+    return fm
+
+
+class FunctionMapSaveRequest(BaseModel):
+    """Запрос на сохранение привязки функции"""
+    function: str = Field(default="", description="Название функции")
+    provider_id: str = Field(default="", description="ID провайдера")
+    model: str = Field(default="", description="Модель")
+    system_prompt: str = Field(default="", description="Системный промпт")
+    parameters: dict = Field(default_factory=lambda: {"temperature": 0.7, "max_tokens": 4096})
+
+
+@router.post("/functions", summary="Сохранить привязку функции")
+async def save_function_map(req: FunctionMapSaveRequest):
+    """Сохранить привязку функции к провайдеру."""
+    # Валидация
+    if req.function not in FUNCTION_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Неизвестная функция: {req.function}")
+
+    fm = FunctionMap(
+        function=req.function,
+        provider_id=req.provider_id,
+        model=req.model,
+        system_prompt=req.system_prompt,
+        parameters=req.parameters or {"temperature": 0.7, "max_tokens": 4096},
+    )
+
+    success = provider_service.save_function_map(fm)
+    if not success:
+        raise HTTPException(status_code=500, detail="Ошибка сохранения привязки")
+
+    return {
+        "status": "success",
+        "message": f"Привязка функции {req.function} сохранена",
+        "mapping": fm.to_dict(),
+    }
+
+
+@router.post("/ensure-default-provider", summary="Создать провайдера по умолчанию")
+async def ensure_default_provider():
+    """Создать провайдера по умолчанию (Ollama) и дефолтные привязки, если пусто."""
+    success = provider_service.ensure_defaults()
+    return {
+        "status": "success" if success else "error",
+        "providers": provider_service.list_providers(),
+        "functions": provider_service.list_function_maps(),
+    }
+
+
+@router.post("/migrate-old-config", summary="Мигрировать старые настройки в новую систему")
+async def migrate_old_config():
+    """Прочитать старые конфиги (llm_config, ext_llm, graph_model, embedding)
+    и импортировать их в новую систему провайдеров."""
+    from src.api.services.config_store import config_store as cs
+    import uuid
+
+    results = {"migrated": [], "errors": []}
+    providers_map = {}  # old key -> new provider_id
+
+    # 1. LLM config (чат)
+    try:
+        llm_cfg = cs.get("llm_config", "active") or {}
+        if llm_cfg and llm_cfg.get("model_name"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = llm_cfg.get("backend_type", llm_cfg.get("provider", "ollama"))
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (чат)",
+                type=ptype,
+                url=llm_cfg.get("url", ""),
+                api_key=llm_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                providers_map["llm_config/active"] = pid
+                fm = FunctionMap(
+                    function="chat",
+                    provider_id=pid,
+                    model=llm_cfg.get("model_name", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"llm_config → провайдер {pid} (чат)")
+    except Exception as e:
+        results["errors"].append(f"llm_config: {e}")
+
+    # 2. Embedding config
+    try:
+        emb_cfg = cs.get("embedding", "default") or {}
+        emb_model = emb_cfg.get("model", "")
+        if emb_model:
+            # Используем тот же провайдер, если он уже есть
+            chat_pid = providers_map.get("llm_config/active")
+            if chat_pid:
+                fm = FunctionMap(
+                    function="embedding",
+                    provider_id=chat_pid,
+                    model=emb_model,
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"embedding → привязан к {chat_pid}")
+    except Exception as e:
+        results["errors"].append(f"embedding: {e}")
+
+    # 3. Graph model
+    try:
+        graph_cfg = cs.get("graph_model", "default") or {}
+        if graph_cfg and graph_cfg.get("model"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = graph_cfg.get("provider", "ollama")
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (граф)",
+                type=ptype,
+                url=graph_cfg.get("url", ""),
+                api_key=graph_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                providers_map["graph_model/default"] = pid
+                fm = FunctionMap(
+                    function="graph",
+                    provider_id=pid,
+                    model=graph_cfg.get("model", ""),
+                    system_prompt=graph_cfg.get("system_prompt", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"graph_model → провайдер {pid}")
+    except Exception as e:
+        results["errors"].append(f"graph_model: {e}")
+
+    # 4. Ext LLM (анализ документов)
+    try:
+        ext_cfg = cs.get("ext_llm", "default") or {}
+        if ext_cfg and ext_cfg.get("model"):
+            pid = f"migrated-{uuid.uuid4().hex[:6]}"
+            ptype = ext_cfg.get("provider", "ollama")
+            provider_config = ProviderConfig(
+                id=pid,
+                name=f"Мигрированный: {ptype} (анализ доков)",
+                type=ptype,
+                url=ext_cfg.get("url", ""),
+                api_key=ext_cfg.get("api_key", ""),
+                enabled=True,
+            )
+            if provider_service.save_provider(provider_config):
+                fm = FunctionMap(
+                    function="doc_analysis",
+                    provider_id=pid,
+                    model=ext_cfg.get("model", ""),
+                )
+                provider_service.save_function_map(fm)
+                results["migrated"].append(f"ext_llm → провайдер {pid}")
+    except Exception as e:
+        results["errors"].append(f"ext_llm: {e}")
+
+    return {
+        "status": "ok",
+        "results": results,
+        "providers": provider_service.list_providers(),
+        "functions": provider_service.list_function_maps(),
+    }
+
+
+# ============================================================
+# Типы документов (авто-пополняемый список)
+# ============================================================
+
+@router.get("/doc-types", summary="Получить список типов документов")
+async def get_doc_types():
+    try:
+        from src.api.services.config_store import config_store
+        type_list = config_store.get("kg_config", "doc_types") or {}
+        types = type_list.get("types", []) if isinstance(type_list, dict) else []
+        return {"types": types}
+    except Exception as e:
+        return {"types": [], "error": str(e)}
+
+
+@router.post("/doc-types", summary="Изменить список типов")
+async def update_doc_types(data: dict):
+    try:
+        from src.api.services.config_store import config_store
+        action = data.get("action", "add")
+        name = data.get("name", "").strip().lower()
+        if not name:
+            return {"status": "error", "message": "Имя типа не указано"}
+        
+        type_list = config_store.get("kg_config", "doc_types") or {}
+        types = type_list.get("types", []) if isinstance(type_list, dict) else []
+        
+        if action == "add" and name not in types:
+            types.append(name)
+        elif action == "remove" and name in types:
+            types.remove(name)
+        else:
+            return {"status": "ok", "message": "Без изменений"}
+        
+        config_store.set("kg_config", "doc_types", {"types": types})
+        return {"status": "ok", "message": f"Тип '{name}' {'добавлен' if action == 'add' else 'удалён'}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# Theme API
+from pydantic import BaseModel
+
+class ThemeRequest(BaseModel):
+    theme: str  # "light" or "dark"
+
+@router.get("/theme", summary="Получить тему пользователя")
+async def get_theme():
+    """Возвращает сохранённую тему (light/dark). По умолчанию light."""
+    try:
+        from src.api.services.config_store import config_store
+        theme = config_store.get("ui", "theme") or {"value": "light"}
+        return theme
+    except Exception:
+        return {"value": "light"}
+
+@router.post("/theme", summary="Сохранить тему пользователя")
+async def save_theme(body: ThemeRequest):
+    """Сохраняет выбранную тему в PostgreSQL."""
+    from src.api.services.config_store import config_store
+    config_store.set("ui", "theme", {"value": body.theme})
+    return {"status": "ok", "theme": body.theme}
+
+# OCR Settings API
+class OcrSettingsRequest(BaseModel):
+    force_ocr: bool = False
+    dpi: int = 200
+    enable_summarization: bool = False
+
+@router.get("/ocr-settings", summary="Получить настройки OCR")
+async def get_ocr_settings():
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("ocr", "settings") or {"force_ocr": False, "dpi": 200}
+    return cfg
+
+@router.post("/ocr-settings", summary="Сохранить настройки OCR")
+async def save_ocr_settings(body: OcrSettingsRequest):
+    from src.api.services.config_store import config_store
+    config_store.set("ocr", "settings", {"force_ocr": body.force_ocr, "dpi": body.dpi, "enable_summarization": body.enable_summarization})
+    return {"status": "ok"}

@@ -402,32 +402,28 @@ class ModelManager:
     async def get_ollama_models_detailed(self) -> List[Dict[str, Any]]:
         """
         Получить детальную информацию о моделях Ollama.
-
-        Returns:
-            Список с детальной информацией
+        Использует прямой HTTP запрос для надежности.
         """
-        if not self._embedding_client:
-            return []
-
         try:
-            from src.llm.ollama_client import OllamaClient
-            ollama = OllamaClient(base_url=self._embedding_client.base_url)
-            client = await ollama._get_client()
+            import os
+            import httpx
             
-            response = await client.get("/api/tags")
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://192.168.50.41:11434")
+            if not base_url or "host.docker.internal" in base_url:
+                base_url = "http://192.168.50.41:11434"
             
-            if response.status_code == 200:
-                data = response.json()
-                models = data.get("models", [])
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{base_url}/api/tags")
                 
-                await ollama.close()
-                return models
-            
-            await ollama.close()
-            return []
-
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("models", [])
+                
+                logger.error(f"Ollama вернул статус {response.status_code}: {response.text}")
+                return []
+                
         except Exception as e:
-            logger.error(f"Ошибка получения детальной информации: {e}")
+            logger.error(f"Ошибка получения детальной информации об Ollama моделях: {e}")
             return []
 
     async def switch_llm_model(

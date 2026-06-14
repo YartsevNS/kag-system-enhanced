@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Лента новостей</title>
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:16px 24px;max-width:100%}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.sub{font-size:12px;color:var(--text4);margin-bottom:14px}
+
+/* Top controls */
+.top-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.top-bar select,.top-bar input{background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:13px;outline:none}
+.top-bar select:focus,.top-bar input:focus{border-color:var(--accent)}
+.btn{background:var(--accent);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.btn:hover{opacity:0.85}
+.btn-sm{background:transparent;border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px}
+.btn-sm:hover{border-color:var(--text4)}
+
+/* News grid — masonry-like */
+.news-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;transition:all 0.35s ease}
+.news-grid.focused{grid-template-columns:1fr}
+
+/* News card */
+.news-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:all 0.35s ease;display:flex;flex-direction:column}
+.news-card:hover{border-color:var(--border)}
+.news-card.expanded{grid-column:1/-1;max-width:100%;cursor:default}
+.news-card .card-header{padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border-s);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.news-card .card-source{font-size:11px;color:var(--accent-h);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.news-card .card-date{font-size:10px;color:var(--text4);white-space:nowrap}
+.news-card .card-body{padding:10px 12px;flex:1;overflow:hidden}
+.news-card .card-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:4px;line-height:1.4}
+.news-card .card-text{font-size:11px;color:var(--text4);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.news-card.expanded .card-text{-webkit-line-clamp:unset;overflow:visible}
+.news-card .card-footer{padding:6px 12px;border-top:1px solid var(--border-s);display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text4)}
+.news-card .card-link{color:var(--accent-h);text-decoration:none;font-size:10px}
+.news-card .card-link:hover{text-decoration:underline}
+.news-card .card-keywords{display:flex;gap:4px;flex-wrap:wrap}
+.news-card .kw{background:rgba(94,106,210,0.1);color:var(--accent-h);padding:1px 6px;border-radius:9999px;font-size:9px}
+
+/* Expanded detail */
+.news-card.expanded .card-title{font-size:18px}
+.news-card.expanded .card-text{font-size:14px;max-height:none}
+.news-card.expanded .card-body{max-height:none;overflow-y:auto}
+
+/* Source panel */
+.src-panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px;margin-bottom:14px;display:none}
+.src-panel.active{display:block}
+.src-panel h3{font-size:14px;font-weight:600;margin-bottom:10px;color:var(--text2)}
+.src-list{display:flex;flex-wrap:wrap;gap:6px}
+.src-chip{background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text3);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.15s}
+.src-chip:hover{border-color:var(--accent);color:var(--text2)}
+.src-chip.on{background:rgba(94,106,210,0.1);border-color:var(--accent);color:var(--text)}
+.src-chip .dot{width:6px;height:6px;border-radius:50%}
+.src-chip .dot.on{background:var(--emerald)}
+
+.empty{text-align:center;padding:60px;color:var(--text4);grid-column:1/-1}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:10px}.news-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+  <h1>📰 Лента новостей</h1>
+  <div class="sub">Новости в реальном времени из подключённых источников. Нажмите на блок чтобы развернуть</div>
+
+  <!-- Управление -->
+  <div class="top-bar">
+    <select id="filter-source" onchange="applyFilter()">
+      <option value="">Все источники</option>
+    </select>
+    <input type="text" id="filter-search" placeholder="🔍 Поиск по тексту..." oninput="applyFilter()">
+    <button class="btn-sm" onclick="toggleSourcePanel()">📡 Источники</button>
+    <button class="btn" onclick="refreshNews()">🔄 Обновить</button>
+    <span id="news-count" style="font-size:11px;color:var(--text4)"></span>
+  </div>
+
+  <!-- Панель источников -->
+  <div class="src-panel" id="src-panel">
+    <h3>📡 Подключение источников новостей</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="new-source-url" placeholder="URL RSS-ленты..." style="flex:1;min-width:200px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none">
+      <input type="text" id="new-source-name" placeholder="Название" style="width:160px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none">
+      <button class="btn" onclick="addNewsSource()">➕ Добавить</button>
+    </div>
+    <div class="src-list" id="src-list"></div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text4)">
+      Тестовые источники:
+      <a href="#" onclick="addTestSources();return false" style="color:var(--accent-h)">Securelist</a> |
+      <a href="#" onclick="quickAdd('https://securelist.com/feed/','Securelist');return false" style="color:var(--accent-h)">+Securelist</a>
+    </div>
+  </div>
+
+  <!-- Сетка новостей -->
+  <div class="news-grid" id="news-grid"><div class="empty"><div class="spinner"></div></div></div>
+</main>
+
+<script>
+const API = '/api/v1/monitor';
+var allNews = [];
+var newsSources = [];
+var expandedCard = null;
+
+function getToken(){var m=document.cookie.match(/kag_token=([^;]+)/);return m?m[1]:localStorage.getItem('kag_token');}
+function ah(){var t=getToken();return t?{'Content-Type':'application/json','Authorization':'Bearer '+t}:{'Content-Type':'application/json'};}
+
+// ============================================================
+// Загрузка источников из localStorage + API
+// ============================================================
+function loadSources(){
+  var saved = localStorage.getItem('news_sources');
+  newsSources = saved ? JSON.parse(saved) : [];
+  // Default test source
+  if(!newsSources.length){
+    newsSources = [{name:'Securelist',url:'https://securelist.com/feed/'}];
+    saveSources();
+  }
+  renderSourceChips();
+  updateSourceFilter();
+}
+
+function saveSources(){localStorage.setItem('news_sources',JSON.stringify(newsSources));}
+
+function addNewsSource(){
+  var url=document.getElementById('new-source-url').value.trim();
+  var name=document.getElementById('new-source-name').value.trim();
+  if(!url)return;
+  if(!name) name = url.replace(/https?:\/\//,'').split('/')[0];
+  if(newsSources.find(function(s){return s.url===url})){alert('Уже добавлен');return;}
+  newsSources.push({name:name,url:url});
+  saveSources();
+  document.getElementById('new-source-url').value='';
+  document.getElementById('new-source-name').value='';
+  renderSourceChips();
+  updateSourceFilter();
+  refreshNews();
+}
+
+function removeSource(url){
+  newsSources=newsSources.filter(function(s){return s.url!==url;});
+  saveSources();
+  allNews=allNews.filter(function(n){return n.sourceUrl!==url;});
+  renderSourceChips();
+  updateSourceFilter();
+  applyFilter();
+}
+
+function toggleSource(url){
+  var s=newsSources.find(function(s){return s.url===url;});
+  if(s){s.enabled=!s.enabled;saveSources();renderSourceChips();refreshNews();}
+}
+
+function renderSourceChips(){
+  var div=document.getElementById('src-list');
+  div.innerHTML=newsSources.map(function(s){
+    var on=s.enabled!==false;
+    return '<div class="src-chip '+(on?'on':'')+'" onclick="toggleSource(\''+s.url+'\')" title="'+s.url+'">'+
+      '<span class="dot '+(on?'on':'')+'"></span>'+s.name+
+      ' <span style="font-size:9px;color:var(--text4);margin-left:auto;cursor:pointer" onclick="event.stopPropagation();removeSource(\''+s.url+'\')">✕</span>'+
+      '</div>';
+  }).join('');
+}
+
+function updateSourceFilter(){
+  var sel=document.getElementById('filter-source');
+  var val=sel.value;
+  sel.innerHTML='<option value="">Все источники</option>';
+  newsSources.forEach(function(s){
+    sel.innerHTML+='<option value="'+s.name+'"'+(s.name===val?' selected':'')+'>'+s.name+'</option>';
+  });
+}
+
+function toggleSourcePanel(){
+  document.getElementById('src-panel').classList.toggle('active');
+}
+
+// ============================================================
+// Загрузка новостей
+// ============================================================
+async function refreshNews(){
+  var grid=document.getElementById('news-grid');
+  grid.innerHTML='<div class="empty"><div class="spinner"></div></div>';
+  
+  var active=newsSources.filter(function(s){return s.enabled!==false;});
+  if(!active.length){grid.innerHTML='<div class="empty">📡 Нет активных источников</div>';return;}
+  
+  var newItems=[];
+  for(var si=0; si<active.length; si++){
+    var src=active[si];
+    try{
+      // Прокси через наш API чтобы обойти CORS
+      var r=await fetch(API+'/sources',{method:'POST',headers:ah(),body:JSON.stringify({
+        name:'temp-'+src.name, url:src.url, type:'rss', enabled:true, check_interval_minutes:0
+      })});
+      var d=await r.json();
+      if(d.status!=='ok'){console.warn('Source create failed:',src.name);continue;}
+      var sid=d.source.id;
+      
+      // Запускаем проверку
+      var r2=await fetch(API+'/check',{method:'POST',headers:ah(),body:JSON.stringify({source_id:sid})});
+      var d2=await r2.json();
+      
+      // Удаляем временный источник
+      await fetch(API+'/sources/'+sid,{method:'DELETE',headers:ah()});
+      
+      // Берём найденные элементы
+      var result=(d2.results||[])[0]||{};
+      if(result.items){
+        result.items.forEach(function(item){
+          item.sourceName=src.name;
+          item.sourceUrl=src.url;
+          // Извлекаем дату из текста если есть
+          var dateMatch=(item.text_content||'').match(/(\d{2}\.\d{2}\.\d{4})/);
+          item._ts=Date.now();
+          newItems.push(item);
+        });
+      }
+    }catch(e){console.warn('Fetch failed for',src.name,e);}
+  }
+  
+  // Дедупликация по тексту
+  var seen=new Set();
+  allNews=[];
+  newItems.forEach(function(item){
+    var key=(item.title||'').substring(0,80)+(item.text_content||'').substring(0,80);
+    if(!seen.has(key)){seen.add(key);allNews.push(item);}
+  });
+  
+  applyFilter();
+}
+
+// ============================================================
+// Отображение
+// ============================================================
+function applyFilter(){
+  var srcFilter=document.getElementById('filter-source').value;
+  var search=document.getElementById('filter-search').value.toLowerCase();
+  
+  var filtered=allNews;
+  if(srcFilter) filtered=filtered.filter(function(n){return n.sourceName===srcFilter;});
+  if(search) filtered=filtered.filter(function(n){
+    return (n.title||'').toLowerCase().includes(search)||(n.text_content||'').toLowerCase().includes(search);
+  });
+  
+  document.getElementById('news-count').textContent='Показано '+filtered.length+' из '+allNews.length;
+  
+  var grid=document.getElementById('news-grid');
+  if(!filtered.length){
+    grid.innerHTML='<div class="empty">📭 Нет новостей</div>';
+    return;
+  }
+  
+  grid.innerHTML=filtered.map(function(n,i){
+    var title=n.title||'Без названия';
+    var text=(n.text_content||'').replace(/\n/g,'<br>');
+    var source=n.sourceName||'?';
+    var keywords=(n.keywords||[]).slice(0,5);
+    return '<div class="news-card" id="card-'+i+'" onclick="toggleCard('+i+')">'+
+      '<div class="card-header">'+
+        '<span class="card-source">'+source+'</span>'+
+        '<span class="card-date">'+new Date(n._ts).toLocaleString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'</span>'+
+      '</div>'+
+      '<div class="card-body">'+
+        '<div class="card-title">'+title+'</div>'+
+        '<div class="card-text">'+text+'</div>'+
+      '</div>'+
+      (keywords.length ? '<div class="card-footer"><div class="card-keywords">'+keywords.map(function(k){return '<span class="kw">'+k+'</span>';}).join('')+'</div></div>' : '')+
+      '</div>';
+  }).join('');
+}
+
+// ============================================================
+// Разворачивание / сворачивание карточки
+// ============================================================
+function toggleCard(idx){
+  var card=document.getElementById('card-'+idx);
+  if(!card)return;
+  
+  if(expandedCard===idx){
+    // Сворачиваем
+    card.classList.remove('expanded');
+    document.getElementById('news-grid').classList.remove('focused');
+    expandedCard=null;
+  }else{
+    // Сворачиваем предыдущую если есть
+    if(expandedCard!==null){
+      var prev=document.getElementById('card-'+expandedCard);
+      if(prev) prev.classList.remove('expanded');
+    }
+    // Разворачиваем эту
+    card.classList.add('expanded');
+    document.getElementById('news-grid').classList.add('focused');
+    expandedCard=idx;
+    card.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+
+// ============================================================
+// Быстрое добавление тестовых источников
+// ============================================================
+function quickAdd(url,name){
+  document.getElementById('new-source-url').value=url;
+  document.getElementById('new-source-name').value=name;
+  document.getElementById('src-panel').classList.add('active');
+}
+
+function addTestSources(){
+  newsSources=[
+    {name:'Securelist',url:'https://securelist.com/feed/',enabled:true},
+    {name:'ЦБ РФ — Новое',url:'http://www.cbr.ru/rss/RssNews',enabled:true},
+    {name:'SecurityNews — Все',url:'http://feeds.feedburner.com/security_news_ru',enabled:true},
+    {name:'Роскомнадзор',url:'https://rkn.gov.ru/_services/rss/',enabled:true},
+  ];
+  saveSources();
+  renderSourceChips();
+  updateSourceFilter();
+  refreshNews();
+}
+
+// Auto-load
+loadSources();
+refreshNews();
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+</body>
+</html>

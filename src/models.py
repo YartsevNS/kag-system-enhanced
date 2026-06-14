@@ -64,6 +64,7 @@ class DocumentStatus(BaseModel):
     status: str  # pending, processing, completed, failed
     progress: float = 0.0
     error: Optional[str] = None
+    upload_id: Optional[str] = None  # UUID загрузки (для связывания логов)
     created_at: datetime
     updated_at: datetime
 

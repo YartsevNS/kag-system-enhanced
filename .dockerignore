@@ -1,0 +1,9 @@
+# Docker build context — exclude runtime data
+data/
+user_data/
+docker/nginx/ssl/
+.env
+.git
+*.pyc
+__pycache__/
+.pytest_cache/

@@ -10,10 +10,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 import os
 
-from src.api.routes import chat, upload, admin, health, admin_models
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor
 from src.api.routes.chat import router_export
 from src.api.routes import setup
-from src.api.middleware.auth import AuthMiddleware
+from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
@@ -54,9 +54,41 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"EmbeddingsService не инициализирован: {e}")
     
+    # Запуск сторожа перестроения графа (если есть необработанные документы)
+    try:
+        from src.api.services.config_store import config_store
+        docs = config_store.get_all("documents") or {}
+        completed = sum(1 for d in docs.values() if isinstance(d, dict) and d.get("status") == "completed")
+        from src.indexing.knowledge_graph import kg_service
+        kg_stats = kg_service.get_stats()
+        kg_docs = kg_stats.get("documents", 0)
+        if completed > 0 and (kg_docs < completed * 0.8 or kg_stats.get("entities", 0) < 10):
+            logger.info(f"Запуск Watchdog: {kg_docs}/{completed} документов в графе")
+            from src.indexing.rebuild_watchdog import rebuild_watchdog
+            rebuild_watchdog.start()
+        else:
+            logger.info(f"Watchdog не нужен: {kg_docs}/{completed} доков в графе")
+    except Exception as e:
+        logger.warning(f"Watchdog не запущен: {e}")
+    
+    # Запуск Hot Folder Watcher
+    try:
+        from src.indexing.hot_folder_watcher import hot_folder_watcher
+        await hot_folder_watcher.start()
+        logger.info("HotFolderWatcher запущен")
+    except Exception as e:
+        logger.warning(f"HotFolderWatcher не запущен: {e}")
+    
     yield
     
-    # Очистка при завершении
+    # Остановка Hot Folder Watcher
+    try:
+        from src.indexing.hot_folder_watcher import hot_folder_watcher
+        await hot_folder_watcher.stop()
+    except Exception:
+        pass
+    
+    # Закрытие сервисов
     try:
         from src.indexing.embeddings_service import embeddings_service
         await embeddings_service.close()
@@ -77,24 +109,26 @@ app = FastAPI(
     description="API для системы многоагентной обработки знаний (KAG)",
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    docs_url="/api/docs",       # Swagger → /api/docs
+    redoc_url="/api/redoc",     # ReDoc → /api/redoc
 )
 
 # Middleware для проверки setup (должен быть первым)
 app.add_middleware(SetupCheckMiddleware)
 
-# CORS middleware (включен для разработки)
-cors_origins = os.getenv("CORS_ORIGINS", "*")
+# CORS middleware — конкретные origin для безопасности (cookie с credentials)
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8000,http://192.168.50.18:8000,https://qd.gostsecret.ru")
 if cors_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in cors_origins.split(",")],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
-# Middleware аутентификации (все запросы разрешены для разработки)
-app.add_middleware(AuthMiddleware)
+# SecurityMiddleware (JWT через JWKS + локальный fallback)
+app.add_middleware(SecurityMiddleware)
 
 # Подключение роутеров
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
@@ -104,6 +138,12 @@ app.include_router(router_export, prefix="/api/v1/chat/export", tags=["export"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_models.router, prefix="/api/v1/admin/models", tags=["models"])
+app.include_router(knowledge_graph.router, prefix="/api/v1/kg", tags=["knowledge-graph"])
+app.include_router(process_logs.router, prefix="/api/v1/process-logs", tags=["process-logs"])
+app.include_router(web_monitor.router, prefix="/api/v1/monitor", tags=["web-monitor"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 
 # Статические файлы и веб-интерфейс
 static_path = os.path.join(os.path.dirname(__file__), "static")
@@ -111,19 +151,34 @@ if os.path.exists(static_path):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 
+# ── Общая функция отдачи HTML с no-cache ─────────────────────────────
+
+def _html_response(path: str) -> FileResponse:
+    """Отдать HTML-файл с заголовками против кеширования."""
+    if os.path.exists(path):
+        return FileResponse(
+            path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    return JSONResponse({"error": "Page not found"}, status_code=404)
+
+
 @app.get("/", summary="Веб-интерфейс KAG")
 async def root_web():
-    """Главная страница - веб-интерфейс чата"""
-    index_path = os.path.join(static_path, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {
-        "service": "KAG API",
-        "version": settings.APP_VERSION,
-        "status": "running",
-        "docs": "/docs",
-        "web_ui": "/"
-    }
+    """Перенаправление на /documents (если настроено) или /setup."""
+    from starlette.responses import RedirectResponse
+    try:
+        from src.api.services.config_store import config_store
+        status = config_store.get("setup", "status", {})
+        if status.get("configured"):
+            return RedirectResponse(url="/documents")
+    except Exception:
+        pass
+    return RedirectResponse(url="/setup")
 
 
 @app.get("/admin", summary="Админ-панель управления моделями")
@@ -147,10 +202,13 @@ async def docker_dashboard():
 @app.get("/setup", summary="Страница первоначальной настройки")
 async def setup_page():
     """Страница Setup Wizard"""
-    setup_path = os.path.join(static_path, "setup.html")
-    if os.path.exists(setup_path):
-        return FileResponse(setup_path)
-    return {"error": "Setup page not found"}
+    return _html_response(os.path.join(static_path, "setup.html"))
+
+
+@app.get("/login", summary="Страница входа")
+async def login_page():
+    """Страница аутентификации"""
+    return _html_response(os.path.join(static_path, "login.html"))
 
 
 @app.get("/documents", summary="Управление документами")
@@ -178,3 +236,113 @@ async def chunks_page():
     if os.path.exists(chunks_path):
         return FileResponse(chunks_path, media_type="text/html")
     return {"error": "Chunks page not found"}
+
+
+@app.get("/chat", summary="Чат с AI")
+async def chat_page():
+    """Страница чата"""
+    chat_path = os.path.join(static_path, "chat.html")
+    if os.path.exists(chat_path):
+        return FileResponse(chat_path)
+    return {"error": "Chat page not found"}
+
+
+@app.get("/ocr", summary="OCR Демо")
+async def ocr_page():
+    """Страница демонстрации OCR"""
+    ocr_path = os.path.join(static_path, "ocr.html")
+    if os.path.exists(ocr_path):
+        return FileResponse(ocr_path)
+    return {"error": "OCR page not found"}
+
+
+@app.get("/monitoring", summary="Мониторинг")
+async def monitoring_page():
+    """Страница мониторинга"""
+    mon_path = os.path.join(static_path, "monitoring.html")
+    if os.path.exists(mon_path):
+        return FileResponse(mon_path)
+    return {"error": "Monitoring page not found"}
+
+
+@app.get("/users", summary="Пользователи и группы")
+async def users_page():
+    """Страница управления пользователями"""
+    users_path = os.path.join(static_path, "users.html")
+    if os.path.exists(users_path):
+        return FileResponse(users_path)
+    return {"error": "Users page not found"}
+
+
+@app.get("/know", summary="База знаний KAG")
+async def know_web():
+    return _html_response(os.path.join(static_path, "know.html"))
+
+
+@app.get("/logs", summary="Логи системы")
+async def logs_page():
+    """Страница просмотра логов"""
+    logs_path = os.path.join(static_path, "logs.html")
+    if os.path.exists(logs_path):
+        return FileResponse(logs_path)
+    return {"error": "Logs page not found"}
+
+
+@app.get("/search", summary="Поиск по метаданным")
+async def search_page():
+    """Страница поиска документов по метаданным"""
+    search_path = os.path.join(static_path, "search.html")
+    if os.path.exists(search_path):
+        return FileResponse(search_path)
+    return {"error": "Search page not found"}
+
+
+@app.get("/viewer", summary="Просмотр документа")
+async def viewer_page():
+    """Страница просмотра документа"""
+    viewer_path = os.path.join(static_path, "viewer.html")
+    if os.path.exists(viewer_path):
+        return FileResponse(viewer_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "Viewer page not found"}
+
+@app.get("/api", summary="API и архитектура")
+async def api_page():
+    """Техническая документация API и архитектуры"""
+    api_path = os.path.join(static_path, "docs.html")
+    if os.path.exists(api_path):
+        return FileResponse(api_path)
+    return {"error": "API page not found"}
+
+@app.get("/docs", summary="Документация проекта")
+async def docs_page():
+    """Читаемая документация по проекту"""
+    guide_path = os.path.join(static_path, "guide.html")
+    if os.path.exists(guide_path):
+        return FileResponse(guide_path)
+    return {"error": "Docs page not found"}
+
+@app.get("/kg", summary="Граф знаний")
+async def kg_page():
+    """Страница графа знаний Neo4j"""
+    kg_path = os.path.join(static_path, "kg.html")
+    if os.path.exists(kg_path):
+        return FileResponse(kg_path)
+    return {"error": "KG page not found"}
+
+
+@app.get("/monitor", summary="Веб-мониторинг")
+async def monitor_page():
+    monitor_path = os.path.join(static_path, "monitor.html")
+    if os.path.exists(monitor_path):
+        return FileResponse(monitor_path)
+    return {"error": "Monitor page not found"}
+
+
+@app.get("/news", summary="Лента новостей")
+async def news_page():
+    news_path = os.path.join(static_path, "news.html")
+    if os.path.exists(news_path):
+        return FileResponse(news_path)
+    return {"error": "News page not found"}
+
+

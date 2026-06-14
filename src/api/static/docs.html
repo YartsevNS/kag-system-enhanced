@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Архитектура проекта</title>
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;line-height:1.6}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 48px;max-width:1100px}
+h1{font-size:32px;font-weight:700;letter-spacing:-0.6px;margin-bottom:8px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+h2{font-size:22px;font-weight:600;margin:36px 0 12px;color:var(--text);letter-spacing:-0.3px}
+h3{font-size:16px;font-weight:600;margin:24px 0 8px;color:var(--text2)}
+p{font-size:14px;color:var(--text3);margin-bottom:8px}
+a{color:var(--accent-h);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;background:var(--surface);padding:2px 6px;border-radius:3px;color:var(--accent-h)}
+pre.code-block{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px;overflow-x:auto;margin:8px 0 16px;font-size:12px;line-height:1.5}
+pre.code-block code{background:none;padding:0;color:var(--text2)}
+table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:13px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border-s)}
+th{color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;background:var(--panel)}
+td{color:var(--text2)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+li{font-size:14px;color:var(--text3);margin-left:20px;margin-bottom:4px}
+blockquote{border-left:3px solid var(--accent);padding:6px 16px;margin:12px 0;background:var(--surface);border-radius:0 var(--radius) var(--radius) 0;font-size:14px;color:var(--text3)}
+hr{border:none;border-top:1px solid var(--border-s);margin:24px 0}
+strong{color:var(--text);font-weight:600}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+<p>     1|# KAG System — Архитектура проекта</p>
+<p>     2|</p>
+<p>     3|> <strong>KAG (Knowledge Augmentation Generation)</strong> — AI-система управления документами с RAG (Retrieval-Augmented Generation).  </p>
+<p>     4|> Версия: 0.3.0 | Ветка: feature/docling-integration | Сервер: 192.168.50.18</p>
+<p>     5|</p>
+<p>     6|---</p>
+<p>     7|</p>
+<p>     8|## 1. Оглавление</p>
+<p>     9|</p>
+<p>    10|1. <a href="#2-общая-архитектура">Общая архитектура</a></p>
+<p>    11|2. <a href="#3-контейнеры-и-инфраструктура">Контейнеры и инфраструктура</a></p>
+<p>    12|3. <a href="#4-поток-данных-от-загрузки-до-поиска">Поток данных: от загрузки до поиска</a></p>
+<p>    13|4. <a href="#5-структура-исходного-кода">Структура исходного кода</a></p>
+<p>    14|5. <a href="#6-frontend-страницы-и-их-назначение">Frontend: страницы и их назначение</a></p>
+<p>    15|6. <a href="#7-api-эндпоинты-и-маршруты">API: эндпоинты и маршруты</a></p>
+<p>    16|7. <a href="#8-безопасность-и-шифрование">Безопасность и шифрование</a></p>
+<p>    17|8. <a href="#9-базы-данных-и-хранение">Базы данных и хранение</a></p>
+<p>    18|9. <a href="#10-qdrant-векторный-поиск">Qdrant: векторный поиск</a></p>
+<p>    19|10. <a href="#11-анализатор-документов">Анализатор документов</a></p>
+<p>    20|11. <a href="#12-развёртывание">Развёртывание</a></p>
+<p>    21|</p>
+<p>    22|---</p>
+<p>    23|</p>
+<p>    24|## 2. Общая архитектура</p>
+<p>    25|</p>
+<p>    26|```</p>
+<p>    27|┌─────────────────────────────────────────────────────────┐</p>
+<p>    28|│                    Пользователь                          │</p>
+<p>    29|│  Браузер → https://qd.gostsecret.ru (Nginx :80/:443)    │</p>
+<p>    30|└────────────────────┬────────────────────────────────────┘</p>
+<p>    31|                     │</p>
+<p>    32|┌────────────────────▼────────────────────────────────────┐</p>
+<p>    33|│  Nginx (kag-nginx) — обратный прокси                     │</p>
+<p>    34|│  Проксирует: / → kag-api:8000                           │</p>
+<p>    35|│  Статика: /static/ → встроена в kag-api                 │</p>
+<p>    36|└────────────────────┬────────────────────────────────────┘</p>
+<p>    37|                     │</p>
+<p>    38|┌────────────────────▼────────────────────────────────────┐</p>
+<p>    39|│  API (kag-api) — FastAPI + Uvicorn :8000                 │</p>
+<p>    40|│  • Загрузка/обработка документов                         │</p>
+<p>    41|│  • Поиск по чанкам (RAG)                                 │</p>
+<p>    42|│  • Чат с AI                                              │</p>
+<p>    43|│  • Управление моделями                                   │</p>
+<p>    44|│  • Админ-панель                                          │</p>
+<p>    45|└──┬──────────┬──────────┬──────────┬─────────────────────┘</p>
+<p>    46|   │          │          │          │</p>
+<p>    47|   ▼          ▼          ▼          ▼</p>
+<p>    48|┌──────┐ ┌──────┐ ┌────────┐ ┌──────────────┐</p>
+<p>    49|│Qdrant│ │Redis │ │Keycloak│ │Keycloak-DB   │</p>
+<p>    50|│:6333 │ │:6379 │ │:8080   │ │PostgreSQL:5432│</p>
+<p>    51|│вектор│ │кэш + │ │Auth    │ │Пользователи,  │</p>
+<p>    52|│ БД   │ │брокер│ │OIDC    │ │config_store   │</p>
+<p>    53|└──────┘ └──────┘ └────────┘ └──────────────┘</p>
+<p>    54|   │</p>
+<p>    55|   ▼</p>
+<p>    56|┌──────────────────────────────────────┐</p>
+<p>    57|│  Ollama (192.168.50.41:11434)        │</p>
+<p>    58|│  • phi4-mini (LLM)                   │</p>
+<p>    59|│  • nomic-embed-text (Embeddings 768d)│</p>
+<p>    60|│  • 40+ моделей доступно              │</p>
+<p>    61|└──────────────────────────────────────┘</p>
+<p>    62|```</p>
+<p>    63|</p>
+<p>    64|---</p>
+<p>    65|</p>
+<p>    66|## 3. Контейнеры и инфраструктура</p>
+<p>    67|</p>
+<p>    68|### 3.1. Профили Docker Compose</p>
+<p>    69|</p>
+<p>    70|| Профиль | Контейнеры |</p>
+<p>    71||---------|-----------|</p>
+<p>    72|| <code>dev</code> (по умолчанию) | api, worker, mcp-server, qdrant, redis, keycloak, keycloak-db, scheduler |</p>
+<p>    73|| <code>prod</code> | всё из dev + nginx |</p>
+<p>    74|| <code>monitoring</code> | prometheus, grafana, loki, otel-collector |</p>
+<p>    75|</p>
+<p>    76|Запуск: <code>docker-compose --profile dev up -d</code></p>
+<p>    77|</p>
+<p>    78|### 3.2. Контейнеры</p>
+<p>    79|</p>
+<p>    80|| Контейнер | Образ | Порт | CPU | RAM | Назначение |</p>
+<p>    81||-----------|-------|------|-----|-----|-----------|</p>
+<p>    82|| <strong>kag-api</strong> | Dockerfile | 8000 | 2.0 | 2G | FastAPI-сервер, основной API |</p>
+<p>    83|| <strong>kag-worker</strong> | Dockerfile.worker | — | 2.0 | 4G | Celery-воркер для фоновых задач |</p>
+<p>    84|| <strong>kag-mcp</strong> | Dockerfile.mcp | 8001 | 2.0 | 2G | MCP-сервер для тестирования |</p>
+<p>    85|| <strong>kag-qdrant</strong> | qdrant/qdrant:v1.12.1 | 6333-6334 | 4.0 | 8G | Векторная БД |</p>
+<p>    86|| <strong>kag-redis</strong> | redis:7-alpine | 6379 | 2.0 | 2G | Кэш + брокер Celery (maxmemory 2GB, allkeys-lru) |</p>
+<p>    87|| <strong>kag-keycloak</strong> | keycloak:24.0 | 8080 | 2.0 | 4G | Identity Provider (OIDC) |</p>
+<p>    88|| <strong>kag-keycloak-db</strong> | postgres:16-alpine | 5432 | 2.0 | 2G | PostgreSQL для Keycloak + config_store |</p>
+<p>    89|| <strong>kag-scheduler</strong> | Dockerfile | — | 1.0 | 1G | Планировщик задач (APScheduler) |</p>
+<p>    90|| <strong>kag-nginx</strong> | nginx:1.25-alpine | 80,443 | 1.0 | 512M | Прокси (только prod) |</p>
+<p>    91|</p>
+<p>    92|### 3.3. Docker-тома (bind mounts)</p>
+<p>    93|</p>
+<p>    94|| Хост | Контейнер | Назначение |</p>
+<p>    95||------|-----------|-----------|</p>
+<p>    96|| <code>./src</code> | <code>/app/src</code> | Исходный код (live-reload) |</p>
+<p>    97|| <code>./data</code> | <code>/app/data</code> | Данные: uploads, thumbnails, audit, encryption_key |</p>
+<p>    98|| <code>./user_data</code> | <code>/app/user_data</code> | Пользовательские файлы: originals, uploads |</p>
+<p>    99|</p>
+<p>   100|### 3.4. Сеть</p>
+<p>   101|</p>
+<p>   102|Все контейнеры в сети <code>kag_internal</code> (bridge). API доступен снаружи через проброс порта 8000 (dev) или через Nginx (prod).</p>
+<p>   103|</p>
+<p>   104|### 3.5. Переменные окружения (ключевые)</p>
+<p>   105|</p>
+<p>   106|| Переменная | Значение | Назначение |</p>
+<p>   107||-----------|----------|-----------|</p>
+<p>   108|| <code>OLLAMA_BASE_URL</code> | <code>http://192.168.50.41:11434</code> | Сервер Ollama |</p>
+<p>   109|| <code>EMBEDDING_MODEL</code> | <code>nomic-embed-text:latest</code> | Модель эмбеддингов (768d) |</p>
+<p>   110|| <code>KC_DB_USERNAME</code> / <code>KC_DB_PASSWORD</code> | keycloak / *** | Доступ к PostgreSQL |</p>
+<p>   111|| <code>AUTH_ENABLED</code> | false | Аутентификация (JWT + cookie) |</p>
+<p>   112|</p>
+<p>   113|---</p>
+<p>   114|</p>
+<p>   115|## 4. Поток данных: от загрузки до поиска</p>
+<p>   116|</p>
+<p>   117|### 4.1. Загрузка документа</p>
+<p>   118|</p>
+<p>   119|```</p>
+<p>   120|POST /api/v1/upload/  (multipart/form-data)</p>
+<p>   121|         │</p>
+<p>   122|         ▼</p>
+<p>   123|┌──────────────────────────────────────┐</p>
+<p>   124|│ 1. upload_document()                 │  upload.py:20</p>
+<p>   125|│    • Валидация (SecurityValidator)    │</p>
+<p>   126|│    • Сохранение файла на диск        │  storage_service.py</p>
+<p>   127|│      → /app/user_data/uploads/       │</p>
+<p>   128|│    • Создание записи в config_store   │  system_configs (PostgreSQL)</p>
+<p>   129|│    • Запуск process_document() в фоне│  BackgroundTasks</p>
+<p>   130|└──────────────────────────────────────┘</p>
+<p>   131|         │ (фон)</p>
+<p>   132|         ▼</p>
+<p>   133|┌──────────────────────────────────────┐</p>
+<p>   134|│ 2. process_document()                │  document_service.py:205</p>
+<p>   135|│    Прогресс: 10% → 30% → 50% → 90% → 100%</p>
+<p>   136|│                                       │</p>
+<p>   137|│    [30%] Парсинг                      │</p>
+<p>   138|│    • document_parser.parse()          │  parsers.py</p>
+<p>   139|│    • PDF → pdfplumber + Docling       │</p>
+<p>   140|│    • DOCX → python-docx              │</p>
+<p>   141|│    • OCR: Tesseract + Occular-ocr    │  ocr_engine.py</p>
+<p>   142|│    • Возвращает segments[]           │</p>
+<p>   143|│                                       │</p>
+<p>   144|│    [50%] Чанкинг                      │</p>
+<p>   145|│    • DocumentChunker.chunk()          │  chunking.py</p>
+<p>   146|│    • Размер: 1000 символов            │</p>
+<p>   147|│    • Перекрытие: 200 символов         │</p>
+<p>   148|│    • chunk_id: chunk_00001, ...      │</p>
+<p>   149|│    • chunk_seq: 1, 2, 3...           │</p>
+<p>   150|│                                       │</p>
+<p>   151|│    [90%] Векторизация                 │</p>
+<p>   152|│    • EmbeddingsService                │  embeddings_service.py</p>
+<p>   153|│    • nomic-embed-text (768d)          │  → Ollama API</p>
+<p>   154|│    • Сохранение в Qdrant             │  коллекция kag_documents</p>
+<p>   155|│      payload: {document_id, chunk_id, │</p>
+<p>   156|│                text, chunk_seq, ...}  │</p>
+<p>   157|│                                       │</p>
+<p>   158|│    [100%] Завершение                  │</p>
+<p>   159|│    • Миниатюра (WebP, 500px)          │</p>
+<p>   160|│    • Статус: completed               │</p>
+<p>   161|│                                       │</p>
+<p>   162|│    [ФОН] Анализ первого чанка         │</p>
+<p>   163|│    • DocumentAnalyzer                 │  document_analyzer.py</p>
+<p>   164|│    • LLM (phi4-mini) → title, type,   │</p>
+<p>   165|│      summary, topics                 │</p>
+<p>   166|│    • Сохранение в config_store +      │</p>
+<p>   167|│      обновление Qdrant payload       │</p>
+<p>   168|└──────────────────────────────────────┘</p>
+<p>   169|```</p>
+<p>   170|</p>
+<p>   171|### 4.2. Поиск (RAG)</p>
+<p>   172|</p>
+<p>   173|```</p>
+<p>   174|POST /api/v1/chat/search  {"query": "...", "filters": {...}}</p>
+<p>   175|         │</p>
+<p>   176|         ▼</p>
+<p>   177|┌──────────────────────────────────────┐</p>
+<p>   178|│ 1. Векторизация запроса              │</p>
+<p>   179|│    • nomic-embed-text → vector[768]  │</p>
+<p>   180|└──────────────────────────────────────┘</p>
+<p>   181|         │</p>
+<p>   182|         ▼</p>
+<p>   183|┌──────────────────────────────────────┐</p>
+<p>   184|│ 2. Поиск в Qdrant                    │</p>
+<p>   185|│    • Cosine distance                 │</p>
+<p>   186|│    • HNSW (m=32, ef_construct=128)   │</p>
+<p>   187|│    • INT8 квантование               │</p>
+<p>   188|│    • Фильтр: document_id, file_type  │</p>
+<p>   189|└──────────────────────────────────────┘</p>
+<p>   190|         │</p>
+<p>   191|         ▼</p>
+<p>   192|┌──────────────────────────────────────┐</p>
+<p>   193|│ 3. Сборка контекста                  │</p>
+<p>   194|│    • top-K чанков (по умолчанию 5)   │</p>
+<p>   195|│    • Сортировка по chunk_seq         │</p>
+<p>   196|│    • Сборка в промпт                 │</p>
+<p>   197|└──────────────────────────────────────┘</p>
+<p>   198|         │</p>
+<p>   199|         ▼</p>
+<p>   200|┌──────────────────────────────────────┐</p>
+<p>   201|│ 4. Генерация ответа                  │</p>
+<p>   202|│    • phi4-mini (или другая LLM)      │</p>
+<p>   203|│    • Контекст: чанки + системный     │</p>
+<p>   204|│      промпт                          │</p>
+<p>   205|│    • Стриминг ответа                 │</p>
+<p>   206|└──────────────────────────────────────┘</p>
+<p>   207|```</p>
+<p>   208|</p>
+<p>   209|---</p>
+<p>   210|</p>
+<p>   211|## 5. Структура исходного кода</p>
+<p>   212|</p>
+<p>   213|```</p>
+<p>   214|kag-system-enhanced/</p>
+<p>   215|├── docker-compose.yml          # Оркестрация контейнеров (dev/prod/monitoring)</p>
+<p>   216|├── Dockerfile                  # Основной образ (FastAPI)</p>
+<p>   217|├── Dockerfile.worker           # Celery-воркер</p>
+<p>   218|├── Dockerfile.mcp              # MCP-сервер</p>
+<p>   219|├── requirements.txt            # Python-зависимости</p>
+<p>   220|├── .env                        # Переменные окружения</p>
+<p>   221|├── data/                       # Данные на хосте (uploads, thumbnails, audit)</p>
+<p>   222|├── user_data/                  # Пользовательские файлы</p>
+<p>   223|├── docker/                     # Конфиги Nginx, Keycloak, Prometheus, Grafana</p>
+<p>   224|│</p>
+<p>   225|└── src/</p>
+<p>   226|    ├── config.py               # Настройки (Settings: pydantic BaseSettings)</p>
+<p>   227|    ├── models.py               # Pydantic-модели (DocumentUpload, SystemStatus, ...)</p>
+<p>   228|    │</p>
+<p>   229|    ├── api/                    # === FastAPI-приложение ===</p>
+<p>   230|    │   ├── main.py             # Точка входа: app = FastAPI(), монтирование роутеров</p>
+<p>   231|    │   ├── middleware/         # Промежуточные слои</p>
+<p>   232|    │   │   ├── auth.py         # Базовая auth (устарела)</p>
+<p>   233|    │   │   ├── auth_v2.py      # JWT + cookie auth (текущая)</p>
+<p>   234|    │   │   ├── auth_gate.py    # Auth gate: редирект на /login</p>
+<p>   235|    │   │   └── setup_checker.py# Проверка что setup wizard пройден</p>
+<p>   236|    │   ├── routes/             # API-эндпоинты</p>
+<p>   237|    │   │   ├── upload.py       # Загрузка, детали, чанки, превью, миниатюры</p>
+<p>   238|    │   │   ├── chat.py         # Чат + поиск (RAG)</p>
+<p>   239|    │   │   ├── admin.py        # Статус системы</p>
+<p>   240|    │   │   ├── admin_models.py # Управление LLM/Embedding моделями + внешние LLM</p>
+<p>   241|    │   │   ├── auth.py         # Логин/логаут</p>
+<p>   242|    │   │   ├── setup.py        # Мастер настройки</p>
+<p>   243|    │   │   ├── watchers.py     # Web- и folder-наблюдатели</p>
+<p>   244|    │   │   ├── notifications.py# Уведомления</p>
+<p>   245|    │   │   └── health.py       # Health-check</p>
+<p>   246|    │   ├── services/           # Бизнес-логика</p>
+<p>   247|    │   │   ├── document_service.py    # Загрузка → чанкинг → векторизация</p>
+<p>   248|    │   │   ├── document_analyzer.py   # LLM-анализ первого чанка → метаданные</p>
+<p>   249|    │   │   ├── chat_service.py        # Чат + RAG-поиск</p>
+<p>   250|    │   │   ├── config_store.py        # PostgreSQL key-value хранилище (system_configs)</p>
+<p>   251|    │   │   ├── storage_service.py     # Файловое хранилище (SHA-256, hash-based naming)</p>
+<p>   252|    │   │   ├── model_manager.py       # Управление Ollama-моделями</p>
+<p>   253|    │   │   ├── docker_monitor.py      # Мониторинг Docker</p>
+<p>   254|    │   │   ├── ssh_manager.py         # SSH-подключения</p>
+<p>   255|    │   │   ├── export_service.py      # Экспорт документов</p>
+<p>   256|    │   │   ├── system_monitor.py      # Системный мониторинг</p>
+<p>   257|    │   │   ├── qdrant_monitor.py      # Мониторинг Qdrant</p>
+<p>   258|    │   │   └── notification_service.py# Сервис уведомлений</p>
+<p>   259|    │   └── static/            # HTML/CSS/JS страницы (см. раздел 6)</p>
+<p>   260|    │</p>
+<p>   261|    ├── indexing/              # === Индексация документов ===</p>
+<p>   262|    │   ├── chunking.py        # DocumentChunker: разбивка текста на чанки</p>
+<p>   263|    │   ├── embeddings_service.py # EmbeddingsService: векторизация + Qdrant</p>
+<p>   264|    │   ├── qdrant_service.py  # QdrantService: REST-клиент для Qdrant</p>
+<p>   265|    │   ├── parsers.py         # DocumentParser: PDF, DOCX, TXT, CSV</p>
+<p>   266|    │   ├── hybrid_parser.py   # Docling + Occular-ocr гибрид</p>
+<p>   267|    │   ├── ocr_engine.py      # Tesseract + Occular-ocr</p>
+<p>   268|    │   ├── llm_ocr.py         # LLM-based OCR</p>
+<p>   269|    │   ├── auto_tagger.py     # Авто-классификатор (8 типов документов)</p>
+<p>   270|    │   ├── vectorizer.py      # Векторизатор текста</p>
+<p>   271|    │   ├── celery_app.py      # Celery-приложение</p>
+<p>   272|    │   ├── scheduler.py       # APScheduler</p>
+<p>   273|    │   └── tasks.py           # Celery-задачи</p>
+<p>   274|    │</p>
+<p>   275|    ├── llm/                   # === LLM-клиенты ===</p>
+<p>   276|    │   ├── base.py            # Базовый класс LLMClient</p>
+<p>   277|    │   ├── ollama_client.py   # Ollama API клиент</p>
+<p>   278|    │   ├── openai_client.py   # OpenAI API клиент</p>
+<p>   279|    │   ├── vllm_client.py     # vLLM API клиент</p>
+<p>   280|    │   ├── embeddings.py      # EmbeddingClient: генерация эмбеддингов</p>
+<p>   281|    │   ├── router.py          # LLMRouter: маршрутизация между провайдерами</p>
+<p>   282|    │   ├── models.py          # Модели данных LLM</p>
+<p>   283|    │   └── exceptions.py      # Исключения</p>
+<p>   284|    │</p>
+<p>   285|    ├── database/              # === Базы данных ===</p>
+<p>   286|    │   ├── models.py          # Базовые модели (SystemConfig, Base)</p>
+<p>   287|    │   ├── document_models.py # Document, DocumentVersion (SQLAlchemy)</p>
+<p>   288|    │   ├── user_models.py     # User, Group (Keycloak-совместимые)</p>
+<p>   289|    │   ├── monitoring_models.py # Модели мониторинга</p>
+<p>   290|    │   └── session.py         # Сессии БД</p>
+<p>   291|    │</p>
+<p>   292|    ├── security/              # === Безопасность ===</p>
+<p>   293|    │   ├── gost_crypto.py     # GOST-шифрование (см. раздел 8)</p>
+<p>   294|    │   ├── validator.py       # Валидатор файлов (SecurityValidator)</p>
+<p>   295|    │   └── audit.py           # Аудит-логгер</p>
+<p>   296|    │</p>
+<p>   297|    ├── auth/                  # === Авторизация ===</p>
+<p>   298|    │   ├── keycloak.py        # Keycloak OIDC-клиент</p>
+<p>   299|    │   ├── casbin.py          # Casbin RBAC</p>
+<p>   300|    │   └── permissions.py     # Модели прав доступа</p>
+<p>   301|    │</p>
+<p>   302|    ├── monitoring/            # === Мониторинг ===</p>
+<p>   303|    │   ├── prometheus.py      # Prometheus-метрики</p>
+<p>   304|    │   ├── opentelemetry.py   # OpenTelemetry-трейсинг</p>
+<p>   305|    │   ├── folder_watcher.py  # Наблюдатель папок (авто-импорт)</p>
+<p>   306|    │   └── web_watcher.py     # Web-наблюдатель</p>
+<p>   307|    │</p>
+<p>   308|    ├── agents/                # === AI-агенты (планирование) ===</p>
+<p>   309|    │   ├── planner.py         # Планировщик задач</p>
+<p>   310|    │   ├── executor.py        # Исполнитель</p>
+<p>   311|    │   └── evaluator.py       # Оценщик качества</p>
+<p>   312|    │</p>
+<p>   313|    ├── evaluation/            # === Оценка качества ===</p>
+<p>   314|    │   ├── ab_testing.py      # A/B-тестирование</p>
+<p>   315|    │   └── quality.py         # Метрики качества</p>
+<p>   316|    │</p>
+<p>   317|    └── mcp/                   # === MCP-сервер ===</p>
+<p>   318|        ├── server.py          # Model Context Protocol сервер</p>
+<p>   319|        └── tools.py           # MCP-инструменты</p>
+<p>   320|```</p>
+<p>   321|</p>
+<p>   322|---</p>
+<p>   323|</p>
+<p>   324|## 6. Frontend: страницы и их назначение</p>
+<p>   325|</p>
+<p>   326|Все страницы в <code>src/api/static/</code>. Linear Dark Theme (#08090a, accent #5e6ad2, Inter).</p>
+<p>   327|</p>
+<p>   328|| Страница | Файл | Назначение | Ключевые функции |</p>
+<p>   329||----------|------|-----------|-----------------|</p>
+<p>   330|| <strong>Дашборд</strong> | index.html | Главная страница, сводка | Статистика, статус системы |</p>
+<p>   331|| <strong>Документы</strong> | documents.html | Загрузка, список, фильтрация | Drag&drop, прогресс-бар, карточки A4, поиск |</p>
+<p>   332|| <strong>Просмотр PDF</strong> | viewer.html | Canvas-просмотрщик | PDF.js 3.11, зум, клавиатура, постранично |</p>
+<p>   333|| <strong>Чанки</strong> | chunks.html | Просмотр чанков документа | Пагинация, limit-селектор, Чанк #N |</p>
+<p>   334|| <strong>Поиск</strong> | search.html | Семантический поиск | RAG + фильтры |</p>
+<p>   335|| <strong>Чат с AI</strong> | chat.html | Диалог с LLM | Стриминг, контекст из документов |</p>
+<p>   336|| <strong>OCR-демо</strong> | ocr.html | Тест OCR-движка | Occular-ocr, Tesseract |</p>
+<p>   337|| <strong>Логи</strong> | logs.html | Системные логи | Фильтрация, поиск |</p>
+<p>   338|| <strong>Мониторинг</strong> | monitoring.html | Метрики системы | Prometheus, Grafana |</p>
+<p>   339|| <strong>Пользователи</strong> | users.html | Управление пользователями | Keycloak-интеграция |</p>
+<p>   340|| <strong>Админ</strong> | admin.html | Управление моделями | Ollama pull/delete, внешние LLM |</p>
+<p>   341|| <strong>Qdrant</strong> | qdrant.html | Просмотр Qdrant | Коллекции, точки |</p>
+<p>   342|| <strong>Docker</strong> | docker.html | Мониторинг контейнеров | Статусы, логи |</p>
+<p>   343|| <strong>Вход</strong> | login.html | Аутентификация | JWT + cookie |</p>
+<p>   344|| <strong>Setup</strong> | setup.html | Мастер первой настройки | Генерация паролей, GOST |</p>
+<p>   345|</p>
+<p>   346|---</p>
+<p>   347|</p>
+<p>   348|## 7. API: эндпоинты и маршруты</p>
+<p>   349|</p>
+<p>   350|### 7.1. Документы (<code>/api/v1/upload/</code>)</p>
+<p>   351|</p>
+<p>   352|| Метод | Путь | Назначение | Ключевые поля ответа |</p>
+<p>   353||-------|------|-----------|---------------------|</p>
+<p>   354|| POST | <code>/</code> | Загрузить документ | document_id, status |</p>
+<p>   355|| GET | <code>/list</code> | Список документов | documents[], total |</p>
+<p>   356|| GET | <code>/{id}/details</code> | Детали (тип, тэги, чанки) | document_type, tags, chunks_count, recognized_title |</p>
+<p>   357|| GET | <code>/{id}/chunks</code> | Чанки документа (пагинация) | chunks[], total |</p>
+<p>   358|| GET | <code>/{id}/preview</code> | Файл для просмотра (inline) | FileResponse (PDF) |</p>
+<p>   359|| GET | <code>/{id}/thumbnail</code> | Миниатюра (WebP) | FileResponse |</p>
+<p>   360|| GET | <code>/{id}/status</code> | Статус обработки | status, progress |</p>
+<p>   361|| DELETE | <code>/{id}</code> | Удалить документ | — |</p>
+<p>   362|</p>
+<p>   363|### 7.2. Чат и поиск (<code>/api/v1/chat/</code>)</p>
+<p>   364|</p>
+<p>   365|| Метод | Путь | Назначение |</p>
+<p>   366||-------|------|-----------|</p>
+<p>   367|| POST | <code>/search</code> | Семантический поиск по чанкам |</p>
+<p>   368|| POST | <code>/ask</code> | Задать вопрос с контекстом (RAG) |</p>
+<p>   369|| GET | <code>/history</code> | История диалогов |</p>
+<p>   370|</p>
+<p>   371|### 7.3. Админ (<code>/api/v1/admin/</code>, <code>/api/v1/admin/models/</code>)</p>
+<p>   372|</p>
+<p>   373|| Метод | Путь | Назначение |</p>
+<p>   374||-------|------|-----------|</p>
+<p>   375|| GET | <code>/status</code> | Статус системы |</p>
+<p>   376|| GET | <code>/models/status</code> | Статус LLM/Embedding |</p>
+<p>   377|| GET | <code>/models/list</code> | Список моделей Ollama |</p>
+<p>   378|| POST | <code>/models/pull</code> | Загрузить модель |</p>
+<p>   379|| DELETE | <code>/models/{name}</code> | Удалить модель |</p>
+<p>   380|| POST | <code>/models/switch</code> | Переключить активную модель |</p>
+<p>   381|| GET/POST | <code>/models/ext-llm</code> | Внешний LLM для анализа |</p>
+<p>   382|| POST | <code>/models/ext-llm/test</code> | Тест внешнего LLM |</p>
+<p>   383|</p>
+<p>   384|### 7.4. Auth (<code>/api/v1/auth/</code>)</p>
+<p>   385|</p>
+<p>   386|| Метод | Путь | Назначение |</p>
+<p>   387||-------|------|-----------|</p>
+<p>   388|| POST | <code>/login</code> | JWT-логин |</p>
+<p>   389|| POST | <code>/logout</code> | Выход |</p>
+<p>   390|| GET | <code>/me</code> | Текущий пользователь |</p>
+<p>   391|</p>
+<p>   392|---</p>
+<p>   393|</p>
+<p>   394|## 8. Безопасность и шифрование</p>
+<p>   395|</p>
+<p>   396|### 8.1. Библиотеки шифрования</p>
+<p>   397|</p>
+<p>   398|| Библиотека | Версия | Назначение |</p>
+<p>   399||-----------|--------|-----------|</p>
+<p>   400|| <strong>cryptography</strong> | 44.0.0 | Криптографические примитивы (AES, хэши) |</p>
+<p>   401|| <strong>python-jose</strong> | 3.3.0 | JWT-токены (HS256/RS256) |</p>
+<p>   402|| <strong>passlib[bcrypt]</strong> | 1.7.4 | Хэширование паролей (bcrypt) |</p>
+<p>   403|| <strong>casbin</strong> | 1.36.0 | RBAC-авторизация |</p>
+<p>   404|</p>
+<p>   405|### 8.2. GOST-шифрование (<code>src/security/gost_crypto.py</code>)</p>
+<p>   406|</p>
+<p>   407|<strong>Назначение:</strong> шифрование конфиденциальных данных (пароли, ключи) в соответствии с ГОСТ Р 34.12-2015 для совместимости с 152-ФЗ.</p>
+<p>   408|</p>
+<p>   409|<strong>Реализация:</strong></p>
+<p>   410|- <strong>Шифрование</strong>: ГОСТ Р 34.12-2015 (Kuznyechik — 128-битный блочный шифр, Magma — 64-битный) через <code>cryptography.hazmat.primitives.ciphers</code></p>
+<p>   411|- <strong>Хэширование</strong>: ГОСТ Р 34.11-2012 (Streebog — 256/512 бит) через <code>hashlib</code></p>
+<p>   412|- <strong>Режим</strong>: CBC (Cipher Block Chaining)</p>
+<p>   413|- <strong>Ключ</strong>: хранится в <code>/app/data/.encryption_key</code> (256 бит), генерируется при первом запуске</p>
+<p>   414|- <strong>Использование</strong>: <code>GOSTCrypto.encrypt(data)</code>, <code>GOSTCrypto.decrypt(data)</code></p>
+<p>   415|</p>
+<p>   416|<strong>Класс <code>GOSTCrypto</code>:</strong></p>
+<p>   417|```python</p>
+<p>   418|class GOSTCrypto:</p>
+<p>   419|    def encrypt(self, plaintext: str) -> str      # → base64</p>
+<p>   420|    def decrypt(self, ciphertext: str) -> str     # ← base64</p>
+<p>   421|    def hash_streebog(self, data: bytes) -> str   # hex-digest</p>
+<p>   422|    def generate_key(self) -> bytes               # 32 байта</p>
+<p>   423|```</p>
+<p>   424|</p>
+<p>   425|### 8.3. Валидация файлов (<code>src/security/validator.py</code>)</p>
+<p>   426|</p>
+<p>   427|<strong>SecurityValidator</strong> проверяет:</p>
+<p>   428|- Размер файла (макс. 50MB для PDF, 10MB для остальных)</p>
+<p>   429|- MIME-тип (whitelist: PDF, DOCX, TXT, MD, CSV)</p>
+<p>   430|- Content-type заголовок</p>
+<p>   431|- Имя файла (без path traversal)</p>
+<p>   432|</p>
+<p>   433|### 8.4. Аудит (<code>src/security/audit.py</code>)</p>
+<p>   434|</p>
+<p>   435|<strong>AuditLogger</strong> пишет в <code>/app/data/audit/audit.log</code>:</p>
+<p>   436|- Загрузка/удаление документов</p>
+<p>   437|- Изменение настроек</p>
+<p>   438|- Попытки входа</p>
+<p>   439|</p>
+<p>   440|### 8.5. Аутентификация</p>
+<p>   441|</p>
+<p>   442|- <strong>JWT</strong> (python-jose): токены с временем жизни</p>
+<p>   443|- <strong>Cookie</strong>: <code>kag_token</code> + <code>localStorage</code></p>
+<p>   444|- <strong>Keycloak OIDC</strong>: опционально (AUTH_ENABLED=false по умолчанию)</p>
+<p>   445|- <strong>RBAC</strong>: Casbin (роли: admin, user)</p>
+<p>   446|</p>
+<p>   447|---</p>
+<p>   448|</p>
+<p>   449|## 9. Базы данных и хранение</p>
+<p>   450|</p>
+<p>   451|### 9.1. PostgreSQL (keycloak-db)</p>
+<p>   452|</p>
+<p>   453|<strong>Таблицы KAG:</strong></p>
+<p>   454|</p>
+<p>   455|| Таблица | Назначение | Ключевые поля |</p>
+<p>   456||---------|-----------|--------------|</p>
+<p>   457|| <code>system_configs</code> | Key-value хранилище (config_store) | id (category:key), category, key, value (JSON) |</p>
+<p>   458|| <code>documents</code> | Документы (SQLAlchemy, задел) | id, filename, file_hash, status, uploaded_by |</p>
+<p>   459|| <code>users</code> | Пользователи (Keycloak-совместимые) | id, username, email |</p>
+<p>   460|| <code>groups</code> | Группы | id, name |</p>
+<p>   461|</p>
+<p>   462|<strong>config_store</strong> (<code>src/api/services/config_store.py</code>):</p>
+<p>   463|- Ключи: <code>{category}:{key}</code>, например <code>documents:445e6794-...</code></p>
+<p>   464|- Категории: <code>documents</code>, <code>chunking</code>, <code>features</code></p>
+<p>   465|- Значения: JSON-сериализованные dict</p>
+<p>   466|- Подключение: <code>postgresql://keycloak:***@keycloak-db:5432/keycloak</code></p>
+<p>   467|</p>
+<p>   468|### 9.2. Redis</p>
+<p>   469|</p>
+<p>   470|| БД | Назначение |</p>
+<p>   471||----|-----------|</p>
+<p>   472|| 0 | Кэш (по умолчанию) |</p>
+<p>   473|| 1 | Celery broker |</p>
+<p>   474|| 2 | Celery result backend |</p>
+<p>   475|</p>
+<p>   476|Политика: <code>allkeys-lru</code>, maxmemory 2GB.</p>
+<p>   477|</p>
+<p>   478|### 9.3. Файловое хранилище</p>
+<p>   479|</p>
+<p>   480|<strong>StorageService</strong> (<code>src/api/services/storage_service.py</code>):</p>
+<p>   481|- Путь: <code>/app/user_data/originals/{doc_id[:2]}/{doc_id}_{filename}</code></p>
+<p>   482|- Хэширование: SHA-256 для проверки целостности</p>
+<p>   483|- Методы: <code>store_original()</code>, <code>get_original()</code>, <code>delete_original()</code></p>
+<p>   484|</p>
+<p>   485|<strong>Загрузки</strong>: <code>/app/data/uploads/{doc_id}_{filename}</code></p>
+<p>   486|<strong>Миниатюры</strong>: <code>/app/data/thumbnails/{doc_id}.webp</code> (500px, WebP)</p>
+<p>   487|</p>
+<p>   488|---</p>
+<p>   489|</p>
+<p>   490|## 10. Qdrant: векторный поиск</p>
+<p>   491|</p>
+<p>   492|### 10.1. Конфигурация коллекции</p>
+<p>   493|</p>
+<p>   494|| Параметр | Значение | Обоснование |</p>
+<p>   495||----------|---------|------------|</p>
+<p>   496|| Коллекция | <code>kag_documents</code> | — |</p>
+<p>   497|| Размерность | 768 | nomic-embed-text |</p>
+<p>   498|| Distance | Cosine | Лучше для текстов |</p>
+<p>   499|| HNSW m | 32 | Больше связей = точнее |</p>
+<p>   500|| HNSW ef_construct | 128 | Качественнее построение |</p>
+<p>   501|| Квантование | INT8 scalar | Сжатие в 4 раза, быстрее поиск |</p>
+<p>   502|| Payload on_disk | true | Экономия RAM |</p>
+<p>   503|| Индексация | после 5000 точек | Групповая оптимизация |</p>
+<p>   504|</p>
+<p>   505|### 10.2. Payload-индексы</p>
+<p>   506|</p>
+<p>   507|Для быстрой фильтрации созданы индексы на поля:</p>
+<p>   508|- <code>document_id</code> (keyword)</p>
+<p>   509|- <code>chunk_id</code> (keyword)</p>
+<p>   510|- <code>file_type</code> (keyword)</p>
+<p>   511|- <code>group_ids</code> (keyword)</p>
+<p>   512|</p>
+<p>   513|### 10.3. Структура точки в Qdrant</p>
+<p>   514|</p>
+<p>   515|```json</p>
+<p>   516|{</p>
+<p>   517|  "id": "uuid",</p>
+<p>   518|  "vector": [0.123, -0.456, ...],  // 768d</p>
+<p>   519|  "payload": {</p>
+<p>   520|    "document_id": "445e6794-...",</p>
+<p>   521|    "chunk_id": "chunk_00001",</p>
+<p>   522|    "chunk_seq": 1,</p>
+<p>   523|    "text": "Текст чанка...",</p>
+<p>   524|    "filename": "документ.pdf",</p>
+<p>   525|    "file_type": "application/pdf",</p>
+<p>   526|    "document_type": "contract",</p>
+<p>   527|    "summary": "Договор на оказание услуг...",</p>
+<p>   528|    "topics": ["договор", "услуги"]</p>
+<p>   529|  }</p>
+<p>   530|}</p>
+<p>   531|```</p>
+<p>   532|</p>
+<p>   533|---</p>
+<p>   534|</p>
+<p>   535|## 11. Анализатор документов</p>
+<p>   536|</p>
+<p>   537|### 11.1. DocumentAnalyzer (<code>src/api/services/document_analyzer.py</code>)</p>
+<p>   538|</p>
+<p>   539|<strong>Назначение:</strong> фоновый анализ первого чанка через LLM для извлечения метаданных.</p>
+<p>   540|</p>
+<p>   541|<strong>Процесс:</strong></p>
+<p>   542|1. После завершения чанкинга → <code>asyncio.create_task(_analyze_document_async)</code></p>
+<p>   543|2. Первый чанк → LLM (phi4-mini на 192.168.50.41)</p>
+<p>   544|3. Промпт: «Проанализируй начало документа и верни JSON»</p>
+<p>   545|4. Ответ: <code>{title, type, summary, topics}</code></p>
+<p>   546|5. Сохранение: config_store + Qdrant payload</p>
+<p>   547|</p>
+<p>   548|<strong>Типы документов (10):</strong> invoice, contract, report, letter, form, identity, medical, legal, financial, technical, other</p>
+<p>   549|</p>
+<p>   550|<strong>Настройка:</strong> через админку → раздел «Внешние LLM» (URL, модель, провайдер)</p>
+<p>   551|</p>
+<p>   552|---</p>
+<p>   553|</p>
+<p>## 11.1. Поток данных в Neo4j (Граф знаний)</p>
+<p></p>
+<p>### Общая схема</p>
+<p></p>
+<p>Данные попадают в Neo4j <strong>асинхронно</strong> после загрузки и векторизации документа.</p>
+<p></p>
+<p><code>Загрузка файла</code> → <code>Парсинг (Hybrid)</code> → <code>Чанкинг</code> → <code>Векторизация (Qdrant)</code> → <code>Построение графа (Neo4j)</code></p>
+<p></p>
+<p>### Ключевые файлы</p>
+<p></p>
+<p>- <strong><code>src/indexing/knowledge_graph.py</code></strong>: Сервис <code>KnowledgeGraphService</code>.</p>
+<p>- <strong><code>src/indexing/entity_extractor.py</code></strong>: Класс <code>EntityExtractor</code>.</p>
+<p>- <strong><code>src/api/services/document_service.py</code></strong>: Метод <code>_build_knowledge_graph_async()</code>.</p>
+<p></p>
+<p>### Почему гибридный поиск может не работать?</p>
+<p></p>
+<p>- В системе <strong>нет документов</strong> (<code>documents: 0</code>).</p>
+<p>- Граф знаний пуст (<code>entities: 0, relations: 0</code>).</p>
+<p>- Гибридный поиск возвращает пустой результат, так как искать нечего.</p>
+<p></p>
+<p>---</p>
+<p></p>
+<p>   554|## 12. Развёртывание</p>
+<p>   555|</p>
+<p>   556|### 12.1. Быстрый старт (dev)</p>
+<p>   557|</p>
+<p>   558|```bash</p>
+<p>   559|cd /home/yartsevn/kag-system</p>
+<p>   560|git pull</p>
+<p>   561|docker-compose --profile dev up -d --no-deps --build api</p>
+<p>   562|```</p>
+<p>   563|</p>
+<p>   564|### 12.2. Проверка</p>
+<p>   565|</p>
+<p>   566|```bash</p>
+<p>   567|# Статус контейнеров</p>
+<p>   568|docker ps --format '{{.Names}} {{.Status}}'</p>
+<p>   569|</p>
+<p>   570|# Health-check API</p>
+<p>   571|curl http://localhost:8000/api/v1/health</p>
+<p>   572|</p>
+<p>   573|# Qdrant</p>
+<p>   574|curl http://localhost:6333/collections/kag_documents</p>
+<p>   575|```</p>
+<p>   576|</p>
+<p>   577|### 12.3. Адреса</p>
+<p>   578|</p>
+<p>   579|| Сервис | Dev | Prod |</p>
+<p>   580||--------|-----|------|</p>
+<p>   581|| API | http://192.168.50.18:8000 | https://qd.gostsecret.ru |</p>
+<p>   582|| Qdrant | http://192.168.50.18:6333 | (внутренний) |</p>
+<p>   583|| Admin | http://192.168.50.18:8000/admin | https://qd.gostsecret.ru/admin |</p>
+<p>   584|| Документы | http://192.168.50.18:8000/documents | https://qd.gostsecret.ru/documents |</p>
+<p>   585|</p>
+<p>   586|### 12.4. SSH</p>
+<p>   587|</p>
+<p>   588|```bash</p>
+<p>   589|ssh yartsevn@192.168.50.18  # локальная сеть</p>
+<p>   590|ssh yartsevn@37.204.20.233  # внешний IP</p>
+<p>   591|```</p>
+<p>   592|</p>
+<p>   593|---</p>
+<p>   594|</p>
+<p>   595|> <strong>Последнее обновление:</strong> 15 мая 2026  </p>
+<p>   596|> <strong>Ветка:</strong> feature/docling-integration (20+ коммитов)  </p>
+<p>   597|> <strong>Автор:</strong> KAG Team / YartsevNS</p>
+<p>   598|</p>
+<p style="margin-top:48px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text4)">
+Последнее обновление: 15 мая 2026 · Ветка: feature/docling-integration
+</p>
+</main>
+<script>
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+</script>
+</body>
+</html>

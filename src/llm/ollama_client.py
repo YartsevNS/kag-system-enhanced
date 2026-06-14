@@ -348,8 +348,8 @@ class OllamaClient(LLMBackend):
         try:
             client = await self._get_client()
 
-            # Ollama root endpoint отвечает OK
-            response = await client.get("/")
+            # Ollama /api/tags — надёжнее чем корень
+            response = await client.get("/api/tags")
             response_time_ms = (time.time() - start_time) * 1000
 
             healthy = response.status_code == 200

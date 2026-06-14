@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-rus \
     poppler-utils \
+    # OpenCV/GL для Occular-ocr
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание виртуального окружения
@@ -25,7 +28,15 @@ COPY requirements.txt .
 
 # Установка Python зависимостей
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git && \
+    mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth
 
 # ===========================================
 # Stage 2: Production - финальный образ
@@ -48,6 +59,9 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-rus \
     poppler-utils \
+    # OpenCV/GL для Occular-ocr
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование виртуального окружения из builder
@@ -55,7 +69,12 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Создание непривилегированного пользователя
-RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag
+RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag && \
+    mkdir -p /opt/venv/lib/python3.11/site-packages/rapidocr/models && \
+    mkdir -p /app/.cache/huggingface && \
+    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/rapidocr && \
+    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    chown -R kag:kag /app/.cache
 
 # Установка рабочей директории
 WORKDIR /app
@@ -76,6 +95,7 @@ RUN mkdir -p /app/data/audit /app/data/annotations /app/data/quality_tracking /a
 ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/.cache/huggingface
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Порт приложения

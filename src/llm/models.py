@@ -44,6 +44,8 @@ class LLMBackendType(str, Enum):
     VLLM = "vllm"
     OLLAMA = "ollama"
     OPENAI = "openai"
+    DEEPSEEK = "deepseek"
+    OPENROUTER = "openrouter"
 
 
 class LLMRequest(BaseModel):

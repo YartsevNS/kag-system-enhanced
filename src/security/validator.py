@@ -32,8 +32,13 @@ DANGEROUS_PATTERNS = [
 ALLOWED_MIME_TYPES = {
     'application/pdf',
     'text/plain',
+    'text/markdown',
+    'text/csv',
+    'text/x-markdown',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.oasis.opendocument.text',
+    'application/rtf',
     'audio/mpeg',
     'audio/wav',
     'audio/ogg',
@@ -45,7 +50,7 @@ ALLOWED_MIME_TYPES = {
 
 # Разрешенные расширения файлов
 ALLOWED_EXTENSIONS = {
-    '.pdf', '.txt', '.doc', '.docx',
+    '.pdf', '.txt', '.md', '.csv', '.doc', '.docx', '.odt', '.rtf',
     '.mp3', '.wav', '.ogg', '.flac',
     '.png', '.jpg', '.jpeg', '.gif'
 }
@@ -164,17 +169,22 @@ class SecurityValidator:
             raise SecurityValidationError("Пустой файл", "file")
 
         ext = Path(filename).suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
+        # Динамическая проверка: разрешённые форматы из config_store (админка)
+        allowed = _get_dynamic_allowed_extensions()
+        if ext not in allowed:
             raise SecurityValidationError(
                 f"Недопустимое расширение файла: {ext}",
                 "file"
             )
 
-        if mime_type and mime_type not in ALLOWED_MIME_TYPES:
+        if mime_type and mime_type not in ALLOWED_MIME_TYPES and ext not in allowed:
             raise SecurityValidationError(
                 f"Недопустимый MIME тип: {mime_type}",
                 "file"
             )
+        # Always allow known extensions regardless of MIME (browsers/curl send generic types)
+        if ext in allowed:
+            pass  # MIME check skipped for known extensions
 
         if re.search(r'[<>"\'|?*\\]', filename):
             raise SecurityValidationError(
@@ -306,3 +316,16 @@ class SecureInputMixin(BaseModel):
         if isinstance(v, str):
             return SecurityValidator.sanitize_text(v)
         return v
+
+
+def _get_dynamic_allowed_extensions() -> set:
+    """Загрузить разрешённые расширения из config_store (админка)."""
+    try:
+        from src.api.services.config_store import config_store
+        saved = config_store.get("upload_config", "allowed_extensions")
+        if saved and isinstance(saved, dict):
+            return {ext for ext, enabled in saved.items() if enabled}
+    except Exception:
+        pass
+    # Fallback: статический список
+    return ALLOWED_EXTENSIONS

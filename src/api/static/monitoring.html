@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Мониторинг</title>
+
+<style>:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1000px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
+.section{margin-bottom:32px}
+.section-title{font-size:16px;font-weight:600;color:var(--text2);margin-bottom:14px}
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:12px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:600;color:var(--text)}
+/* URL list */
+.url-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-s)}
+.url-row:last-child{border-bottom:none}
+.url-text{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:13px;color:var(--text2)}
+.url-status{font-size:12px;padding:3px 10px;border-radius:9999px;font-weight:500}
+.url-status.ok{background:rgba(39,166,68,0.15);color:var(--green)}
+.url-status.changed{background:rgba(113,112,255,0.15);color:var(--accent-h)}
+.url-status.error{background:rgba(220,38,38,0.15);color:var(--red)}
+.url-date{font-size:11px;color:var(--text4)}
+/* Form */
+.form-row{display:flex;gap:8px;margin-top:12px}
+input,select{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none;flex:1}
+input:focus,select:focus{border-color:var(--accent-h)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
+.btn:hover{opacity:0.85}
+.btn-sm{background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border-s);padding:6px 10px;border-radius:4px;font-size:12px;font-weight:500;cursor:pointer}
+.btn-sm:hover{color:var(--text2)}
+.btn-sm.danger{color:#f87171}.btn-sm.danger:hover{background:rgba(220,38,38,0.1)}
+/* Notifications */
+.notif-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-s)}
+.notif-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.notif-dot.unread{background:var(--accent-h)}
+.notif-dot.read{background:var(--text4)}
+.notif-text{font-size:13px;color:var(--text2);flex:1}
+.notif-date{font-size:11px;color:var(--text4);white-space:nowrap}
+.empty{text-align:center;padding:40px;color:var(--text4);font-size:14px}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.form-row{flex-direction:column}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+  <h1>📡 Мониторинг</h1>
+  <div class="sub">Отслеживание изменений веб-страниц и файлов в папках</div>
+
+  <div class="section">
+    <div class="section-title">🌐 Отслеживаемые URL</div>
+    <div class="card">
+      <div id="urls-list"><div class="empty">Загрузка...</div></div>
+      <div class="form-row">
+        <input type="url" id="new-url" placeholder="https://example.com/page">
+        <button class="btn" onclick="addUrl()">+ Добавить URL</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">📁 Отслеживаемые папки</div>
+    <div class="card">
+      <div id="folders-list"><div class="empty">Загрузка...</div></div>
+      <div class="form-row">
+        <input type="text" id="new-folder" placeholder="/data/docs">
+        <button class="btn" onclick="addFolder()">+ Добавить папку</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🔔 Уведомления</div>
+    <div class="card"><div id="notifications-list"><div class="empty">Загрузка...</div></div></div>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1';
+
+async function loadUrls() {
+  try {
+    const res = await fetch(`${API}/watchers/urls`);
+    const urls = await res.json();
+    const container = document.getElementById('urls-list');
+    if (!urls || urls.length === 0) {
+      container.innerHTML = '<div class="empty">Нет отслеживаемых URL</div>';
+      return;
+    }
+    container.innerHTML = urls.map(u => `
+      <div class="url-row">
+        <div><div class="url-text">${u.url || u.id}</div><div class="url-date">Проверено: ${u.last_checked || '—'}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="url-status ${u.last_hash ? 'ok' : 'changed'}">${u.last_hash ? 'OK' : 'New'}</span>
+          <button class="btn-sm danger" onclick="deleteUrl('${u.id || u.url}')">×</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { document.getElementById('urls-list').innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
+}
+
+async function addUrl() {
+  const url = document.getElementById('new-url').value.trim();
+  if (!url) return;
+  try {
+    await fetch(`${API}/watchers/urls`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url, group_id: 'default'})
+    });
+    document.getElementById('new-url').value = '';
+    loadUrls();
+  } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+async function deleteUrl(id) {
+  try {
+    await fetch(`${API}/watchers/urls/${id}`, {method:'DELETE'});
+    loadUrls();
+  } catch(e) {}
+}
+
+async function loadFolders() {
+  try {
+    const res = await fetch(`${API}/watchers/folders`);
+    const folders = await res.json();
+    const container = document.getElementById('folders-list');
+    if (!folders || folders.length === 0) {
+      container.innerHTML = '<div class="empty">Нет отслеживаемых папок</div>';
+      return;
+    }
+    container.innerHTML = folders.map(f => `
+      <div class="url-row">
+        <div><div class="url-text">${f.path || f.id}</div><div class="url-date">Рекурсивно: ${f.recursive ? 'да' : 'нет'}</div></div>
+        <button class="btn-sm danger" onclick="deleteFolder('${f.id || f.path}')">×</button>
+      </div>`).join('');
+  } catch(e) { document.getElementById('folders-list').innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
+}
+
+async function addFolder() {
+  const path = document.getElementById('new-folder').value.trim();
+  if (!path) return;
+  try {
+    await fetch(`${API}/watchers/folders`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({path, recursive: true, group_id: 'default'})
+    });
+    document.getElementById('new-folder').value = '';
+    loadFolders();
+  } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+async function deleteFolder(id) {
+  try {
+    await fetch(`${API}/watchers/folders/${id}`, {method:'DELETE'});
+    loadFolders();
+  } catch(e) {}
+}
+
+async function loadNotifications() {
+  try {
+    const res = await fetch(`${API}/notifications`);
+    const notifs = await res.json();
+    const container = document.getElementById('notifications-list');
+    if (!notifs || notifs.length === 0) {
+      container.innerHTML = '<div class="empty">Нет уведомлений</div>';
+      return;
+    }
+    container.innerHTML = notifs.slice(0,20).map(n => `
+      <div class="notif-row">
+        <div class="notif-dot ${n.read ? 'read' : 'unread'}"></div>
+        <div class="notif-text">${n.message || n.type || '—'}</div>
+        <div class="notif-date">${n.created_at ? new Date(n.created_at).toLocaleString() : '—'}</div>
+      </div>`).join('');
+  } catch(e) { document.getElementById('notifications-list').innerHTML = '<div class="empty">Нет уведомлений</div>'; }
+}
+
+loadUrls(); loadFolders(); loadNotifications();
+setInterval(() => { loadUrls(); loadFolders(); loadNotifications(); }, 30000);
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+</body>
+</html>

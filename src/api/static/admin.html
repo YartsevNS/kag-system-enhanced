@@ -3,195 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление моделями</title>
+    <title>KAG — Управление моделями</title>
+    
     <style>
+        :root[data-theme=light] {
+            --bg: #F5F7FA; --panel: #FFFFFF; --surface: #F0F2F5; --elevated: #FFFFFF;
+            --text: #1A1C1E; --text2: #4A5058; --text3: #6C7278; --text4: #8A8F98;
+            --accent: #08A652; --accent-h: #069945; --accent-l: #0AB85E;
+            --green: #27A644; --emerald: #10B981;
+            --red: #DC2626; --red2: #EF4444;
+            --border: rgba(0,0,0,0.10); --border-s: rgba(0,0,0,0.06);
+            --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        :root[data-theme=dark] {
+            --bg: #08090A; --panel: #0F1011; --surface: #121315; --elevated: #1A1C1E;
+            --text: #F0F2F5; --text2: #B0B8C1; --text3: #6C7278; --text4: #505860;
+            --accent: #08A652; --accent-h: #0AB85E; --accent-l: #0CC96A;
+            --green: #27A644; --emerald: #10B981;
+            --red: #DC2626; --red2: #EF4444;
+            --border: rgba(255,255,255,0.10); --border-s: rgba(255,255,255,0.06);
+            --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-        }
-        .header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+
+        /* ---- Sidebar ---- */
+        nav {
+            width: 240px; background: var(--panel);
+            border-right: 1px solid var(--border-s);
+            display: flex; flex-direction: column;
+            position: fixed; height: 100vh; z-index: 10; overflow-y: auto;
         }
-        .back-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            text-decoration: none;
-            display: inline-block;
+        nav .logo {
+            padding: 20px 24px; font-size: 18px; font-weight: 600;
+            letter-spacing: -0.4px; color: var(--text);
+            border-bottom: 1px solid var(--border-s);
         }
-        .back-btn:hover { background: #64748b; }
-        .container {
+        nav .logo span { color: var(--accent-h); }
+        nav .nav-items { flex: 1; padding: 12px 8px; }
+        nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px; border-radius: var(--radius-sm);
+            color: var(--text3); font-size: 14px; font-weight: 500;
+            text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
+        }
+        nav .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text2); }
+        nav .nav-item.active { background: rgba(255,255,255,0.06); color: var(--text); }
+        nav .nav-item .icon { width: 18px; text-align: center; font-size: 15px; }
+
+        /* ---- Main ---- */
+        main {
+            margin-left: 240px; flex: 1; padding: 32px 40px;
             max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 2rem;
         }
+        header { margin-bottom: 32px; }
+        h1 {
+            font-size: 28px; font-weight: 600; letter-spacing: -0.6px;
+            color: var(--text); margin-bottom: 8px;
+        }
+        .subtitle { font-size: 15px; color: var(--text3); font-weight: 400; }
+
+        /* ---- Status Bar ---- */
         .status-bar {
-            background: #1e293b;
-            padding: 1.5rem;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            margin-bottom: 2rem;
+            background: var(--surface); border: 1px solid var(--border-s);
+            border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
         }
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
         }
         .status-item {
-            background: #0f172a;
-            padding: 1rem;
-            border-radius: 8px;
+            background: var(--elevated); border: 1px solid var(--border-s);
+            padding: 16px; border-radius: var(--radius);
         }
         .status-label {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-bottom: 0.25rem;
+            font-size: 12px; color: var(--text4); margin-bottom: 6px;
+            font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;
         }
         .status-value {
-            font-size: 1.125rem;
-            font-weight: 600;
+            font-size: 16px; font-weight: 600; color: var(--text2);
         }
+
+        /* ---- Badges ---- */
         .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
+            display: inline-block; padding: 3px 10px; border-radius: 9999px;
+            font-size: 11px; font-weight: 500;
         }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        .badge-warning { background: #78350f; color: #fcd34d; }
+        .badge-success { background: rgba(39,166,68,0.15); color: var(--green); }
+        .badge-error { background: rgba(220,38,38,0.15); color: var(--red); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+        /* ---- Sections ---- */
         .section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            margin-bottom: 2rem;
-            padding: 1.5rem;
+            background: var(--surface); border: 1px solid var(--border-s);
+            border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
         }
         .section-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 16px; font-weight: 600; color: var(--text2);
+            margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+            letter-spacing: -0.3px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+
+        /* ---- Table ---- */
+        table { width: 100%; border-collapse: collapse; }
         th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #334155;
+            padding: 10px 14px; text-align: left;
+            border-bottom: 1px solid var(--border-s);
         }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        tr:hover { background: #334155; }
+        th {
+            color: var(--text4); font-weight: 500; font-size: 12px;
+            text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        td { font-size: 13px; color: var(--text2); }
+        tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* ---- Buttons ---- */
         .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.2s;
+            padding: 8px 16px; border-radius: var(--radius-sm); border: none;
+            cursor: pointer; font-size: 13px; font-weight: 500;
+            font-family: system-ui, -apple-system, sans-serif;
+            transition: all 0.15s; display: inline-flex; align-items: center;
+            gap: 6px; letter-spacing: -0.1px;
         }
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-secondary { background: #475569; color: white; }
-        .btn-secondary:hover { background: #64748b; }
-        .btn-success { background: #22c55e; color: white; }
-        .btn-success:hover { background: #16a34a; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-danger:hover { background: #dc2626; }
-        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .form-group { margin-bottom: 1rem; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-h); }
+        .btn-secondary {
+            background: var(--elevated); color: var(--text2);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: #2a2d33; color: var(--text); }
+        .btn-success { background: var(--green); color: #fff; }
+        .btn-success:hover { background: #1e8a38; }
+        .btn-danger { background: var(--red); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 4px; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ---- Forms ---- */
+        .form-group { margin-bottom: 16px; }
         .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
+            display: block; margin-bottom: 6px;
+            color: var(--text4); font-size: 13px; font-weight: 500;
         }
         input, select {
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            width: 100%;
+            background: var(--elevated); border: 1px solid var(--border);
+            color: var(--text); padding: 9px 12px; border-radius: var(--radius-sm);
+            font-size: 14px; font-family: system-ui, -apple-system, sans-serif;
+            width: 100%; transition: border-color 0.15s;
         }
         input:focus, select:focus {
-            outline: none;
-            border-color: #3b82f6;
+            outline: none; border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(94,106,210,0.15);
         }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: #1e293b;
-            padding: 2rem;
-            border-radius: 12px;
-            max-width: 500px;
-            width: 90%;
-        }
-        .modal-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #334155;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 1rem 0;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #3b82f6;
-            transition: width 0.3s;
-        }
+        input::placeholder { color: var(--text4); }
+        select { cursor: pointer; }
+
+        /* ---- Loading ---- */
         .loading {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #94a3b8;
+            display: flex; align-items: center; gap: 10px;
+            color: var(--text4); font-size: 14px;
         }
-        .loading-dots { display: flex; gap: 0.25rem; }
+        .loading-dots { display: flex; gap: 4px; }
         .loading-dots span {
-            width: 6px; height: 6px;
-            background: #3b82f6;
-            border-radius: 50%;
-            animation: bounce 1.4s infinite;
+            width: 5px; height: 5px; background: var(--accent);
+            border-radius: 50%; animation: bounce 1.4s infinite;
         }
         .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
         .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
@@ -199,47 +185,190 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+
+        /* ---- Progress ---- */
+        .progress-bar {
+            width: 100%; height: 6px; background: var(--elevated);
+            border-radius: 3px; overflow: hidden; margin: 12px 0;
+        }
+        .progress-fill {
+            height: 100%; background: var(--accent);
+            border-radius: 3px; transition: width 0.3s;
+        }
+
+        /* ---- Notification ---- */
         .notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 2000;
+            position: fixed; top: 24px; right: 24px;
+            padding: 12px 20px; border-radius: var(--radius);
+            background: var(--green); color: #fff;
+            font-size: 14px; font-weight: 500;
+            display: none; z-index: 2000;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
             animation: slideIn 0.3s ease;
         }
         @keyframes slideIn {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+
+        /* ---- Action bar ---- */
+        .action-bar {
+            display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;
+        }
+
+        /* ---- Responsive ---- */
+        @media(max-width:900px) {
+            nav { width: 60px; }
+            nav .logo { font-size: 0; padding: 20px 16px; }
+            nav .nav-item span { display: none; }
+            main { margin-left: 60px; padding: 24px 20px; }
+            .status-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media(max-width:600px) {
+            main { padding: 16px 12px; }
+            .status-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">🎯 KAG - Управление моделями</div>
-        <a href="/" class="back-btn">← Назад к чату</a>
-    </div>
+    <!-- Sidebar Navigation -->
+    <nav>
+        <div class="logo">🎯 <span>KAG</span></div>
+        <div class="nav-items">
+            <a href="/" class="nav-item"><span class="icon">⬡</span> <span>Дашборд</span></a>
+            <a href="/chat" class="nav-item"><span class="icon">💬</span> <span>Чат с AI</span></a>
+            <a href="/documents" class="nav-item"><span class="icon">📄</span> <span>Документы</span></a>
+            <a href="/chunks" class="nav-item"><span class="icon">🧩</span> <span>Чанки</span></a>
+            <a href="/search" class="nav-item"><span class="icon">🔎</span> <span>Поиск</span></a>
+            <a href="/kg" class="nav-item"><span class="icon">🕸️</span> <span>Граф знаний</span></a>
+            <a href="/monitor" class="nav-item"><span class="icon">🌐</span> <span>Веб-монитор</span></a>
+            <a href="/news" class="nav-item"><span class="icon">📰</span> <span>Новости</span></a>
+            <a href="/know" class="nav-item"><span class="icon">📚</span> <span>Know</span></a>
+            <a href="/logs" class="nav-item"><span class="icon">📋</span> <span>Логи</span></a>
+            <a href="/users" class="nav-item"><span class="icon">👥</span> <span>Пользователи</span></a>
+            <a href="/admin" class="nav-item active"><span class="icon">⚙️</span> <span>Админ</span></a>
+            <a href="/qdrant" class="nav-item"><span class="icon">🗄️</span> <span>Qdrant</span></a>
+            <a href="/ocr" class="nav-item"><span class="icon">🔍</span> <span>OCR</span></a>
+            <a href="/viewer" class="nav-item"><span class="icon">👁️</span> <span>Просмотрщик</span></a>
+            <a href="/monitoring" class="nav-item"><span class="icon">📊</span> <span>Мониторинг</span></a>
+            <a href="/docker" class="nav-item"><span class="icon">🐳</span> <span>Docker</span></a>
+            <a href="/docs" class="nav-item"><span class="icon">📖</span> <span>Документация</span></a>
+            <a href="/guide" class="nav-item"><span class="icon">📘</span> <span>Руководство</span></a>
+        </div>
+        <div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px">
+            <button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s">
+                <span id="theme-icon">☀️</span> <span id="theme-label">Светлая</span>
+            </button>
+            <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
+        </div>
+    <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
 
-    <div class="container">
+    <!-- Main Content -->
+    <main>
+        <header>
+            <h1>⚙️ Управление моделями</h1>
+            <div class="subtitle">Настройка LLM, Embedding моделей, SSH подключений и чанкинга</div>
+        </header>
+
         <!-- Статус системы -->
         <div class="status-bar">
-            <h2 style="margin-bottom: 1rem;">📊 Статус системы</h2>
+            <h2 style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:16px;letter-spacing:-0.3px;">📊 Статус системы</h2>
             <div class="status-grid" id="system-status">
                 <div class="loading">
                     <div class="loading-dots"><span></span><span></span><span></span></div>
                     Загрузка...
                 </div>
             </div>
-            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+            <div class="action-bar">
                 <button class="btn btn-primary" onclick="restartOllama()">🔄 Перезапустить Ollama</button>
                 <button class="btn btn-secondary" onclick="loadAll()">🔄 Обновить статус</button>
                 <a href="/docker" class="btn btn-secondary" style="text-decoration: none;">🐳 Docker</a>
                 <a href="/documents" class="btn btn-primary" style="text-decoration: none;">📄 Документы</a>
             </div>
             <div id="restart-status" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ПРОВАЙДЕРЫ LLM (новая система) -->
+        <!-- ========================================== -->
+        <div class="section">
+            <h2 class="section-title">🔌 Провайдеры LLM</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Каждый провайдер (Ollama, OpenAI, DeepSeek...) хранит свои настройки отдельно.
+                Функции (чат, embedding, граф, анализ) привязываются к нужному провайдеру + модели.
+                Настройки сохраняются в БД и не сбрасываются при перезапуске.
+            </p>
+
+            <!-- Список провайдеров -->
+            <div id="providers-list">
+                <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка провайдеров...</div>
+            </div>
+
+            <!-- Кнопка добавить провайдера -->
+            <div style="margin-top:12px">
+                <button class="btn btn-success" onclick="showAddProviderForm()">➕ Добавить провайдера</button>
+                <button class="btn btn-secondary" onclick="loadProviders()">🔄 Обновить</button>
+                <span id="providers-status" style="font-size:13px;margin-left:12px"></span>
+            </div>
+
+            <!-- Форма добавления/редактирования провайдера -->
+            <div id="provider-form" style="display:none;margin-top:16px;padding:16px;background:var(--elevated);border-radius:var(--radius);border:1px solid var(--border)">
+                <h3 style="font-size:14px;font-weight:600;margin-bottom:12px" id="provider-form-title">➕ Новый провайдер</h3>
+                <input type="hidden" id="pf-id" value="">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group">
+                        <label>Название провайдера</label>
+                        <input type="text" id="pf-name" placeholder="Локальная Ollama">
+                    </div>
+                    <div class="form-group">
+                        <label>Тип</label>
+                        <select id="pf-type" onchange="onProviderTypeChange()">
+                            <option value="ollama">Ollama (локальный)</option>
+                            <option value="openai">OpenAI API</option>
+                            <option value="deepseek">DeepSeek API</option>
+                            <option value="openrouter">OpenRouter API</option>
+                            <option value="custom">Custom (OpenAI-совместимый)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label>URL API</label>
+                        <input type="text" id="pf-url" placeholder="http://192.168.50.41:11434">
+                    </div>
+                    <div class="form-group" id="pf-key-group" style="display:none">
+                        <label>API ключ <span id="pf-key-hint" style="font-size:11px;font-weight:normal"></span></label>
+                        <input type="password" id="pf-api-key" placeholder="sk-...">
+                        <div style="font-size:11px;color:var(--text4);margin-top:4px">Оставьте пустым, чтобы сохранить существующий ключ</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                    <button class="btn btn-primary" onclick="saveProvider()">💾 Сохранить провайдера</button>
+                    <button class="btn btn-secondary" onclick="fetchProviderModels(document.getElementById('pf-id').value || '__new__')" id="pf-fetch-btn" style="display:none">📦 Загрузить модели</button>
+                    <button class="btn btn-secondary" onclick="checkProviderBalance(document.getElementById('pf-id').value)" id="pf-balance-btn" style="display:none">💰 Баланс</button>
+                    <button class="btn btn-secondary" onclick="cancelProviderForm()">Отмена</button>
+                    <span id="pf-status" style="font-size:13px"></span>
+                </div>
+                <div id="pf-models-list" style="margin-top:12px;display:none"></div>
+                <div id="pf-balance-result" style="margin-top:8px;display:none"></div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ПРИВЯЗКА ФУНКЦИЙ К ПРОВАЙДЕРАМ -->
+        <!-- ========================================== -->
+        <div class="section">
+            <h2 class="section-title">🎯 Привязка функций к провайдерам</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Укажите, какой провайдер и модель использует каждая функция.
+                Промпты для чата и графа настраиваются здесь же.
+            </p>
+            <div id="functions-list">
+                <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка функций...</div>
+            </div>
+            <div style="margin-top:12px">
+                <button class="btn btn-secondary" onclick="loadFunctionMaps()">🔄 Обновить</button>
+                <span id="functions-status" style="font-size:13px;margin-left:12px"></span>
+            </div>
         </div>
 
         <!-- Настройки SSH подключения -->
@@ -293,43 +422,105 @@
                 <div class="form-group">
                     <label>Размер чанка (символы)</label>
                     <input type="number" id="chunk-size" placeholder="1000" value="1000">
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
                         Рекомендуемо: 500-2000
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Перекрытие чанков (символы)</label>
                     <input type="number" id="chunk-overlap" placeholder="200" value="200">
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
                         Рекомендуемо: 100-300
                     </div>
                 </div>
+            </div>
+            <div style="margin-top:1rem;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.5">
+                <strong style="color:var(--amber)">⚠️ Важно:</strong> размер чанка и перекрытия должны соответствовать рекомендациям авторов embedding-модели.
+                Проверьте документацию модели в разделе «Привязка функций» (Ollama, HuggingFace, сайт разработчика).
+                <strong>Неправильные значения снижают качество поиска</strong> — модель может не «увидеть» нужный контекст или потерять связность текста.
+                <br>Текущая модель: <strong>bge-m3</strong> — рекомендовано 512–1024 токенов на чанк, перекрытие 10–20% от размера.
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
                 <button class="btn btn-primary" onclick="saveChunkingSettings()">💾 Сохранить настройки</button>
             </div>
             <div id="chunking-status" style="margin-top: 1rem;"></div>
         </div>
-        
-        <!-- Активная LLM модель -->
+
+
+        <!-- Настройки OCR -->
         <div class="section">
-            <h2 class="section-title">🤖 Активная LLM модель</h2>
-            <div id="active-llm">
-                <div class="loading">
-                    <div class="loading-dots"><span></span><span></span><span></span></div>
-                    Загрузка...
+            <h2 class="section-title">🔍 Настройки OCR (Occular)</h2>
+            <p style="font-size:12px;color:var(--text4);margin-bottom:12px">
+                <strong>Docling</strong> извлекает текст из текстовых PDF быстро (1-2 сек/стр). 
+                <strong>Occular OCR</strong> распознаёт отсканированные документы (10-15 сек/стр). 
+                Если Docling уже нашёл текст — можно пропустить Occular для ускорения.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="ocr-force" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                        <span><strong>Всегда запускать Occular OCR</strong> (force_ocr)</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px">
+                        Включите для отсканированных документов. Для текстовых PDF — оставьте выключенным (быстрее).
+                    </div>
                 </div>
+                <div class="form-group">
+                    <label>DPI для OCR (качество распознавания)</label>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <input type="range" id="ocr-dpi" min="100" max="400" value="200" step="50" oninput="document.getElementById('ocr-dpi-val').textContent=this.value" onchange="saveOcrSettings()" style="flex:1;max-width:200px">
+                        <span id="ocr-dpi-val" style="font-weight:600">200</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        <strong>100-150:</strong> быстро, низкое качество · <strong>200:</strong> оптимально (по умолчанию) · <strong>300-400:</strong> высокое качество, медленно
+                    </div>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="ocr-summarize" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                    <span><strong>🤖 Суммаризация документа через LLM</strong> (enable_summarization)</span>
+                </label>
+                <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px;line-height:1.5">
+                    <strong>Зачем:</strong> embedding-модели теряют точность на длинных текстах (>8000 токенов). 
+                    Суммаризация сжимает документ до 3-5 предложений, создавая «представительский» вектор 
+                    для поиска на уровне документов. Чанки по-прежнему векторизуются отдельно для точного поиска.<br>
+                    <strong>Когда включать:</strong> документы >5 страниц, поиск по общему смыслу документа.<br>
+                    <strong>Когда НЕ включать:</strong> короткие документы, поиск по конкретным фрагментам текста.
+                </div>
+            </div>
+
+            <div id="ocr-settings-status" style="margin-top:1rem;font-size:12px"></div>
+        </div>
+
+        <!-- Системный промпт для чата -->
+        <div class="section">
+            <h2 class="section-title">💬 Системный промпт для чата</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Промпт, который задаёт поведение AI-ассистента в чате. Определяет как нейросеть работает с базами Qdrant (векторный поиск) и Neo4j (граф знаний).
+                <strong>AI получает контекст из обеих баз автоматически</strong> — промпт лишь указывает как его интерпретировать.
+            </p>
+            <textarea id="chat-system-prompt" style="width:100%;min-height:320px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical;line-height:1.6"
+                placeholder="Введите системный промпт...">Загрузка...</textarea>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+                <button class="btn btn-primary" onclick="saveChatPrompt()">💾 Сохранить промпт</button>
+                <button class="btn btn-outline" onclick="resetChatPrompt()">↩ Сбросить на умолчание</button>
+                <span id="chat-prompt-status" style="font-size:13px"></span>
             </div>
         </div>
 
-        <!-- Активная Embedding модель -->
+        <!-- Разрешённые форматы загрузки -->
         <div class="section">
-            <h2 class="section-title">📐 Активная Embedding модель</h2>
-            <div id="active-embedding">
-                <div class="loading">
-                    <div class="loading-dots"><span></span><span></span><span></span></div>
-                    Загрузка...
-                </div>
+            <h2 class="section-title">📎 Разрешённые форматы загрузки</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:12px">
+                Отметьте форматы, разрешённые к загрузке и обработке.
+            </p>
+            <div id="upload-formats-checkboxes" style="display:flex;flex-wrap:wrap;gap:10px 20px;">
+                <span style="color:var(--text4);">Загрузка...</span>
+            </div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary" onclick="saveUploadFormats()">💾 Сохранить форматы</button>
+                <span id="upload-formats-status" style="font-size:13px;margin-left:12px;"></span>
             </div>
         </div>
 
@@ -355,51 +546,91 @@
             <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
             <div id="pull-status" style="margin-top: 1rem;"></div>
         </div>
-    </div>
+
+        <!-- Типы документов -->
+        <div class="section">
+            <h2 class="section-title">🏷️ Типы документов</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:16px">
+                Список типов для классификации. <strong>Авто-пополняется</strong> (TypeWatchdog).
+                Можно добавлять и удалять вручную.
+            </p>
+            <div style="display:flex;gap:10px;margin-bottom:12px">
+                <input type="text" id="new-doc-type" placeholder="Новый тип" style="flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px">
+                <button class="btn btn-sm" onclick="addDocType()">➕ Добавить</button>
+            </div>
+            <div id="doc-types-list" style="display:flex;flex-wrap:wrap;gap:6px">Загрузка...</div>
+        </div>
+
+        <!-- Доменная схема сущностей -->
+        <div class="section">
+            <h2 class="section-title">🎯 Доменная схема сущностей</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:12px">
+                <strong>Доменная схема</strong> — какие типы сущностей и связей извлекать из документов.
+                Выберите пресет под ваш тип документов. Для старых — «Перестроить граф» на странице Графа знаний.
+            </p>
+            <select id="domain-preset-select" onchange="previewDomainPreset()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;margin-bottom:10px">
+                <option value="">⏳ Загрузка...</option>
+            </select>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="switchDomainPreset()">🔄 Применить схему</button>
+                <span id="domain-preset-status" style="font-size:13px"></span>
+            </div>
+            <div id="domain-preset-info" style="font-size:12px;color:var(--text3);margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--radius);display:none"></div>
+            <div id="domain-preset-detail" style="font-size:12px;margin-top:8px;display:none"></div>
+        </div>
+    </main>
 
     <div class="notification" id="notification"></div>
 
     <script>
         const API_URL = '/api/v1/admin/models';
+        
+        // Обёртка fetch с токеном из localStorage
+        function apiFetch(url, opts) {
+            opts = opts || {};
+            opts.credentials = 'include';
+            var h = new Headers(opts.headers || {});
+            var t = localStorage.getItem('kag_token');
+            if (t) h.set('Authorization', 'Bearer ' + t);
+            opts.headers = h;
+            return fetch(url, opts);
+        }
 
         async function loadStatus() {
             try {
-                const response = await fetch(`${API_URL}/status`);
-                const data = await response.json();
-                
-                const llmStatus = data.llm_backends?.ollama || {};
-                const embedding = data.embedding || {};
-                const config = data.active_config || {};
+                // Статус из Provider Architecture: функция чата + провайдер
+                const [fmResp, provResp] = await Promise.all([
+                    apiFetch(`${API_URL}/functions/chat`).then(r => r.json()).catch(() => ({})),
+                    apiFetch(`${API_URL}/providers`).then(r => r.json()).catch(() => [])
+                ]);
+
+                const modelName = fmResp.model || '—';
+                const providerId = fmResp.provider_id || null;
+                const provider = (provResp || []).find(p => p.id === providerId);
+                const providerName = provider ? provider.name : (providerId || 'не выбран');
+                const providerType = provider ? provider.type : '—';
+                const hasKey = provider ? provider.has_api_key : false;
 
                 document.getElementById('system-status').innerHTML = `
                     <div class="status-item">
-                        <div class="status-label">Ollama сервер</div>
+                        <div class="status-label">Модель чата</div>
                         <div class="status-value">
-                            ${llmStatus.healthy ? '✅ Подключен' : '❌ Недоступен'}
-                            ${llmStatus.response_time_ms ? `(${llmStatus.response_time_ms.toFixed(0)}ms)` : ''}
+                            <span class="badge ${modelName !== '—' ? 'badge-success' : 'badge-error'}">${modelName}</span>
                         </div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">Embedding модель</div>
+                        <div class="status-label">Провайдер</div>
+                        <div class="status-value">${providerName}</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Тип</div>
                         <div class="status-value">
-                            ${embedding.healthy ? '✅ Активна' : '❌ Неактивна'}
+                            <span class="badge badge-success">${providerType}</span>
                         </div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">LLM модель</div>
-                        <div class="status-value">
-                            <span class="badge ${llmStatus.healthy ? 'badge-success' : 'badge-error'}">
-                                ${config.llm_model || 'N/A'}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="status-item">
-                        <div class="status-label">Embedding</div>
-                        <div class="status-value">
-                            <span class="badge ${embedding.healthy ? 'badge-success' : 'badge-error'}">
-                                ${config.embedding_model || 'N/A'}
-                            </span>
-                        </div>
+                        <div class="status-label">API ключ</div>
+                        <div class="status-value">${hasKey ? '✅ есть' : (providerType === 'ollama' ? '✅ не требуется' : '❌ нет')}</div>
                     </div>
                 `;
             } catch (error) {
@@ -407,68 +638,23 @@
             }
         }
 
+        var llmModels = [];
+
+
         async function loadActiveModels() {
             try {
-                const [llmModels, embModels] = await Promise.all([
-                    fetch(`${API_URL}/llm`).then(r => r.json()),
-                    fetch(`${API_URL}/embeddings`).then(r => r.json())
-                ]);
-
-                // Активная LLM модель
-                const activeLlm = llmModels.find(m => m.is_active);
-                document.getElementById('active-llm').innerHTML = activeLlm ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
-                        <div style="font-size: 2rem;">🤖</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeLlm.name}</div>
-                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeLlm.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="llm-select" style="flex: 1;">
-                                ${llmModels.map(m => `<option value="${m.backend}|${m.name}" ${m.is_active ? 'selected' : ''}>${m.name} (${m.backend})</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchLlmModel()">Применить</button>
-                        </div>
-                    </div>
-                ` : '<div style="color: #94a3b8;">Нет доступных LLM моделей</div>';
-
-                // Активная Embedding модель
-                const activeEmb = embModels.find(m => m.is_active);
-                document.getElementById('active-embedding').innerHTML = activeEmb ? `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px;">
-                        <div style="font-size: 2rem;">📐</div>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 1.125rem;">${activeEmb.name}</div>
-                            <div style="color: #94a3b8; font-size: 0.875rem;">Бэкенд: ${activeEmb.backend}</div>
-                        </div>
-                        <span class="badge badge-success">Активна</span>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Сменить embedding модель:</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="emb-select" style="flex: 1;">
-                                ${embModels.map(m => `<option value="${m.name}" ${m.is_active ? 'selected' : ''}>${m.name}</option>`).join('')}
-                            </select>
-                            <button class="btn btn-primary" onclick="switchEmbeddingModel()">Применить</button>
-                        </div>
-                    </div>
-                ` : '<div style="color: #94a3b8;">Нет доступных embedding моделей</div>';
-
+                const lm = await apiFetch(`${API_URL}/llm`).then(r => r.json());
+                llmModels = lm;
             } catch (error) {
                 console.error('Ошибка загрузки активных моделей:', error);
             }
         }
-
         async function loadModels() {
             try {
-                const models = await fetch(`${API_URL}/ollama-models`).then(r => r.json());
+                const models = await apiFetch(`${API_URL}/ollama-models`).then(r => r.json());
                 
                 if (models.length === 0) {
-                    document.getElementById('ollama-models').innerHTML = '<div style="color: #94a3b8; padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
+                    document.getElementById('ollama-models').innerHTML = '<div style="color: var(--text4); padding: 2rem; text-align: center;">Нет загруженных моделей</div>';
                     return;
                 }
 
@@ -518,7 +704,7 @@
             showNotification(`Переключение на ${modelName}...`);
             
             try {
-                const response = await fetch(`${API_URL}/switch-llm`, {
+                const response = await apiFetch(`${API_URL}/switch-llm`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ backend_type: backend, model_name: modelName })
@@ -526,7 +712,7 @@
 
                 if (response.ok) {
                     showNotification(`✅ Модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     const error = await response.json();
                     showNotification(`❌ Ошибка: ${error.detail}`, true);
@@ -536,30 +722,6 @@
             }
         }
 
-        async function switchEmbeddingModel() {
-            const select = document.getElementById('emb-select');
-            const modelName = select.value;
-            
-            showNotification(`Переключение embedding на ${modelName}...`);
-            
-            try {
-                const response = await fetch(`${API_URL}/switch-embedding`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ model_name: modelName })
-                });
-
-                if (response.ok) {
-                    showNotification(`✅ Embedding модель переключена на ${modelName}`);
-                    setTimeout(loadAll, 1000);
-                } else {
-                    const error = await response.json();
-                    showNotification(`❌ Ошибка: ${error.detail}`, true);
-                }
-            } catch (error) {
-                showNotification(`❌ Ошибка: ${error.message}`, true);
-            }
-        }
 
         async function pullModel() {
             const modelName = document.getElementById('model-name-input').value.trim();
@@ -580,7 +742,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/pull`, {
+                const response = await apiFetch(`${API_URL}/pull`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ model_name: modelName })
@@ -591,7 +753,7 @@
                 if (result.status === 'success') {
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ Модель ${modelName} загружена</div>`;
                     document.getElementById('model-name-input').value = '';
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message || result.error}</div>`;
                 }
@@ -604,13 +766,13 @@
             if (!confirm(`Удалить модель ${modelName}?`)) return;
 
             try {
-                const response = await fetch(`${API_URL}/delete/${modelName}`, {
+                const response = await apiFetch(`${API_URL}/delete/${modelName}`, {
                     method: 'DELETE'
                 });
 
                 if (response.ok) {
                     showNotification(`✅ Модель ${modelName} удалена`);
-                    setTimeout(loadAll, 1000);
+                    await loadAll();
                 } else {
                     showNotification('❌ Ошибка удаления', true);
                 }
@@ -630,19 +792,478 @@
             }, 3000);
         }
 
+        // ===========================================
+        // ПРОВАЙДЕРЫ LLM (новая система)
+        // ===========================================
+
+        async function loadProviders() {
+            try {
+                var prov = await apiFetch('/api/v1/admin/models/providers').then(function(r) { return r.json(); });
+                var list = document.getElementById('providers-list');
+
+                if (!prov || prov.length === 0) {
+                    list.innerHTML = '<div style="color:var(--text4);padding:1rem;text-align:center">Нет провайдеров. Нажмите «Добавить провайдера».</div>';
+                    return;
+                }
+
+                list.innerHTML = '<table><thead><tr><th>Название</th><th>Тип</th><th>URL</th><th>Модели</th><th>Статус</th><th>Действия</th></tr></thead><tbody>' +
+                    prov.map(function(p) {
+                        var badge = p.has_api_key
+                            ? '<span class="badge badge-success">✅ Ключ есть</span>'
+                            : (p.type === 'ollama' ? '<span class="badge badge-success">✅ Без ключа</span>' : '<span class="badge badge-warning">⚠️ Ключа нет</span>');
+                        var modelCount = (p.models || []).length;
+                        return '<tr>' +
+                            '<td><strong>' + escHtml(p.name) + '</strong></td>' +
+                            '<td><span class="badge badge-success">' + escHtml(p.type) + '</span></td>' +
+                            '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + escHtml(p.url) + '</td>' +
+                            '<td>' + modelCount + ' моделей</td>' +
+                            '<td>' + badge + '</td>' +
+                            '<td>' +
+                            '<button class="btn btn-secondary btn-sm" onclick="editProvider(\'' + escHtml(p.id) + '\')">✏️</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="testProvider(\'' + escHtml(p.id) + '\')">🔍</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="fetchProviderModels(\'' + escHtml(p.id) + '\')">📦</button> ' +
+                            '<button class="btn btn-secondary btn-sm" onclick="checkProviderBalance(\'' + escHtml(p.id) + '\')">💰</button> ' +
+                            '<button class="btn btn-danger btn-sm" onclick="deleteProvider(\'' + escHtml(p.id) + '\')">🗑️</button>' +
+                            '</td></tr>';
+                    }).join('') +
+                    '</tbody></table>';
+            } catch (e) {
+                console.error('Ошибка загрузки провайдеров:', e);
+                document.getElementById('providers-list').innerHTML = '<div style="color:var(--red2);padding:1rem">❌ Ошибка загрузки провайдеров</div>';
+            }
+        }
+
+        function showAddProviderForm() {
+            document.getElementById('pf-id').value = '';
+            document.getElementById('pf-name').value = '';
+            document.getElementById('pf-type').value = 'ollama';
+            document.getElementById('pf-url').value = 'http://192.168.50.41:11434';
+            document.getElementById('pf-api-key').value = '';
+            document.getElementById('pf-key-group').style.display = 'none';
+            document.getElementById('provider-form-title').textContent = '➕ Новый провайдер';
+            document.getElementById('provider-form').style.display = 'block';
+            document.getElementById('pf-status').textContent = '';
+            document.getElementById('pf-fetch-btn').style.display = 'none';
+            document.getElementById('pf-balance-btn').style.display = 'none';
+            document.getElementById('pf-models-list').style.display = 'none';
+            document.getElementById('pf-balance-result').style.display = 'none';
+        }
+
+        function cancelProviderForm() {
+            document.getElementById('provider-form').style.display = 'none';
+        }
+
+        function onProviderTypeChange() {
+            var type = document.getElementById('pf-type').value;
+            var keyGroup = document.getElementById('pf-key-group');
+            var urlField = document.getElementById('pf-url');
+
+            keyGroup.style.display = (type === 'ollama') ? 'none' : '';
+
+            var defaults = {
+                'ollama': 'http://192.168.50.41:11434',
+                'openai': 'https://api.openai.com',
+                'deepseek': 'https://api.deepseek.com',
+                'openrouter': 'https://openrouter.ai/api',
+                'custom': 'https://'
+            };
+            if (!document.getElementById('pf-id').value) {
+                urlField.value = defaults[type] || '';
+            }
+        }
+
+        async function saveProvider() {
+            var status = document.getElementById('pf-status');
+            status.textContent = '⏳ Сохраняю...';
+
+            var id = document.getElementById('pf-id').value;
+            var data = {
+                id: id,
+                name: document.getElementById('pf-name').value.trim(),
+                type: document.getElementById('pf-type').value,
+                url: document.getElementById('pf-url').value.trim(),
+                api_key: document.getElementById('pf-api-key').value,
+                enabled: true,
+            };
+
+            if (!data.name) { status.innerHTML = '<span style="color:var(--red2)">❌ Укажите название</span>'; return; }
+            if (!data.url) { status.innerHTML = '<span style="color:var(--red2)">❌ Укажите URL</span>'; return; }
+
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style="color:var(--green)">✅ Сохранено!</span>';
+                    // Показываем кнопки работы с провайдером
+                    document.getElementById('pf-fetch-btn').style.display = '';
+                    document.getElementById('pf-balance-btn').style.display = '';
+                    document.getElementById('pf-models-list').style.display = 'none';
+                    document.getElementById('pf-balance-result').style.display = 'none';
+                    // Авто-загрузка моделей
+                    var savedId = document.getElementById('pf-id').value;
+                    if (savedId) await fetchProviderModels(savedId);
+                    loadProviders();
+                    loadFunctionMaps();
+                    setTimeout(function() { status.textContent = ''; }, 2000);
+                } else {
+                    var err = await r.json();
+                    status.innerHTML = '<span style="color:var(--red2)">❌ ' + escHtml(err.detail || 'Ошибка') + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span style="color:var(--red2)">❌ ' + e + '</span>';
+            }
+        }
+
+        async function editProvider(providerId) {
+            try {
+                var p = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId)).then(function(r) { return r.json(); });
+                if (!p) return;
+
+                document.getElementById('pf-id').value = p.id;
+                document.getElementById('pf-name').value = p.name;
+                document.getElementById('pf-type').value = p.type;
+                document.getElementById('pf-url').value = p.url;
+                document.getElementById('pf-api-key').value = '';
+                document.getElementById('provider-form-title').textContent = '✏️ Редактировать: ' + p.name;
+                document.getElementById('pf-key-group').style.display = (p.type === 'ollama') ? 'none' : '';
+                // Показываем статус ключа
+                var keyHint = document.getElementById('pf-key-hint');
+                if (keyHint) {
+                    if (p.has_api_key) {
+                        keyHint.innerHTML = '<span style="color:var(--green)">✅ Ключ сохранён</span> — оставьте поле пустым чтобы не менять';
+                    } else {
+                        keyHint.innerHTML = '<span style="color:var(--red2)">⚠️ Ключ не указан</span> — введите API ключ';
+                    }
+                    keyHint.style.display = '';
+                }
+                document.getElementById('provider-form').style.display = 'block';
+                document.getElementById('pf-status').textContent = '';
+                document.getElementById('pf-models-list').style.display = 'none';
+                document.getElementById('pf-balance-result').style.display = 'none';
+                document.getElementById('pf-fetch-btn').style.display = '';
+                document.getElementById('pf-balance-btn').style.display = '';
+                // Показать модели, если есть кэш
+                if (p.models && p.models.length > 0) {
+                    document.getElementById('pf-models-list').innerHTML = '<div style="font-size:12px;color:var(--text4)">📦 ' + p.models.length + ' моделей: <code style="color:var(--text2)">' + p.models.join(', ') + '</code></div>';
+                    document.getElementById('pf-models-list').style.display = '';
+                }
+            } catch (e) {
+                console.error('Ошибка загрузки провайдера:', e);
+            }
+        }
+
+        async function deleteProvider(providerId) {
+            if (!confirm('Удалить провайдера "' + providerId + '"? Все привязки функций к нему тоже будут удалены.')) return;
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId), {method: 'DELETE'});
+                if (r.ok) {
+                    showNotification('✅ Провайдер удалён');
+                    loadProviders();
+                    loadFunctionMaps();
+                } else {
+                    showNotification('❌ Ошибка удаления', true);
+                }
+            } catch (e) {
+                showNotification('❌ ' + e, true);
+            }
+        }
+
+        async function testProvider(providerId) {
+            var status = document.getElementById('providers-status');
+            status.innerHTML = '<span style="color:#f59e0b">🔍 Тестирую...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/test', {method: 'POST'});
+                var d = await r.json();
+                status.innerHTML = d.ok
+                    ? '<span style="color:#10b981">✅ ' + escHtml(d.message) + '</span>'
+                    : '<span style="color:#ef4444">❌ ' + escHtml(d.message) + '</span>';
+            } catch (e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+            setTimeout(function() { status.textContent = ''; }, 5000);
+        }
+
+        async function checkProviderBalance(providerId) {
+            if (!providerId || providerId === '__new__') { showNotification('Сначала сохраните провайдера', true); return; }
+            var el = document.getElementById('pf-balance-result') || document.getElementById('providers-status');
+            if (!el) el = document.getElementById('pf-status');
+            el.style.display = 'block';
+            el.innerHTML = '<span style="color:#f59e0b">💰 Запрашиваю баланс...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/balance', {method: 'POST'});
+                var d = await r.json();
+                el.innerHTML = d.balance_ok
+                    ? '<span style="color:#10b981">💰 ' + (d.display || d.message) + '</span>'
+                    : '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+            } catch(e) {
+                el.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+        }
+
+        async function fetchProviderModels(providerId) {
+            var status = document.getElementById('providers-status');
+            status.innerHTML = '<span style="color:#f59e0b">📦 Запрашиваю модели...</span>';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/fetch-models', {method: 'POST'});
+                var d = await r.json();
+                status.innerHTML = '<span style="color:#10b981">✅ ' + d.count + ' моделей получено</span>';
+                loadProviders();
+                loadFunctionMaps();
+                // Обновить список моделей в форме, если форма открыта
+                if (document.getElementById('pf-id').value === providerId && document.getElementById('provider-form').style.display !== 'none') {
+                    var ml = document.getElementById('pf-models-list');
+                    if (d.models && d.models.length > 0) {
+                        ml.innerHTML = '<div style="font-size:12px;color:var(--text4)">📦 ' + d.models.length + ' моделей: <code style="color:var(--text2)">' + d.models.join(', ') + '</code></div>';
+                        ml.style.display = '';
+                    } else {
+                        ml.innerHTML = '<div style="font-size:12px;color:var(--red2)">❌ Нет моделей</div>';
+                        ml.style.display = '';
+                    }
+                }
+            } catch (e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
+            }
+            setTimeout(function() { status.textContent = ''; }, 5000);
+        }
+
+        // ===========================================
+        // ПРИВЯЗКА ФУНКЦИЙ К ПРОВАЙДЕРАМ
+        // ===========================================
+
+        var providerOptionsCache = [];
+
+        async function loadFunctionMaps() {
+            try {
+                var funcs = await apiFetch('/api/v1/admin/models/functions').then(function(r) { return r.json(); });
+                var providers = await apiFetch('/api/v1/admin/models/providers').then(function(r) { return r.json(); });
+                providerOptionsCache = providers || [];
+
+                var list = document.getElementById('functions-list');
+
+                var defs = {
+                    'chat': { icon: '💬', label: 'Чат с документами', desc: 'Основная LLM для ответов пользователю' },
+                    'embedding': { icon: '📐', label: 'Embedding (векторизация)', desc: 'Модель для векторизации текста' },
+                    'graph': { icon: '🕸️', label: 'Извлечение графа знаний', desc: 'LLM для извлечения сущностей и связей' },
+                    'doc_analysis': { icon: '📄', label: 'Анализ документов', desc: 'LLM для классификации документов' },
+                };
+
+                // Всегда показываем все 4 функции, даже если не настроены
+                var shown = {};
+                (funcs || []).forEach(function(f) { shown[f.function] = true; });
+
+                list.innerHTML = '<table><thead><tr><th>Функция</th><th>Провайдер</th><th>Модель</th><th>Промпт</th><th>Действия</th></tr></thead><tbody>' +
+                    Object.keys(defs).map(function(fn) {
+                        var d = defs[fn];
+                        var f = (funcs || []).find(function(fm) { return fm.function === fn; });
+                        var prov = (providers || []).find(function(p) { return p.id === (f ? f.provider_id : null); });
+                        var provName = prov ? prov.name : (f && f.provider_id ? f.provider_id : '—');
+                        var modelName = f ? (f.model || '—') : '—';
+                        var promptPreview = f && f.system_prompt ? f.system_prompt.substring(0, 40) + (f.system_prompt.length > 40 ? '...' : '') : '—';
+                        var badge = f ? '<span class="badge badge-success">' + escHtml(provName) + '</span>' : '<span class="badge badge-warning" style="color:var(--text4)">не настроена</span>';
+                        var rowStyle = f ? '' : ' style="opacity:0.6"';
+                        return '<tr' + rowStyle + '>' +
+                            '<td><strong>' + d.icon + ' ' + d.label + '</strong><br><span style="font-size:11px;color:var(--text4)">' + escHtml(d.desc) + '</span></td>' +
+                            '<td>' + badge + '</td>' +
+                            '<td><code>' + escHtml(modelName) + '</code></td>' +
+                            '<td style="font-size:12px;color:var(--text4);max-width:150px;overflow:hidden;text-overflow:ellipsis">' + escHtml(promptPreview) + '</td>' +
+                            '<td><button class="btn btn-secondary btn-sm" onclick="editFunctionMap(\'' + escHtml(fn) + '\')">⚙️ Настроить</button></td>' +
+                            '</tr>';
+                    }).join('') +
+                    '</tbody></table>';
+            } catch (e) {
+                console.error('Ошибка загрузки функций:', e);
+                document.getElementById('functions-list').innerHTML = '<div style="color:var(--red2);padding:1rem">❌ Ошибка загрузки функций</div>';
+            }
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function editFunctionMap(functionName) {
+            var fm = await apiFetch('/api/v1/admin/models/functions/' + encodeURIComponent(functionName)).then(function(r) { return r.json(); });
+            var providers = providerOptionsCache;
+            var title = '';
+
+            var defs = {
+                'chat': { icon: '💬', label: 'Чат', prompt: true },
+                'embedding': { icon: '📐', label: 'Embedding', prompt: false },
+                'graph': { icon: '🕸️', label: 'Граф знаний', prompt: true },
+                'doc_analysis': { icon: '📄', label: 'Анализ документов', prompt: true },
+            };
+            var def = defs[functionName] || { icon: '❓', label: functionName, prompt: false };
+
+            var providerOptions = providers.map(function(p) {
+                var selected = (fm && fm.provider_id === p.id) ? 'selected' : '';
+                return '<option value="' + escHtml(p.id) + '" ' + selected + '>' + escHtml(p.name) + ' (' + p.type + ')</option>';
+            }).join('');
+
+            if (!providerOptions) {
+                providerOptions = '<option value="">— Нет провайдеров —</option>';
+            }
+
+            title = def.icon + ' Настройка: ' + def.label;
+
+            var html = '<div id="fm-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.15s">' +
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;max-width:550px;width:90%;max-height:80vh;overflow-y:auto">' +
+                '<h3 style="font-size:16px;font-weight:600;margin-bottom:16px">' + title + '</h3>' +
+                '<input type="hidden" id="fm-name" value="' + escHtml(functionName) + '">' +
+                '<div class="form-group"><label>Провайдер</label>' +
+                '<select id="fm-provider" onchange="onFmProviderChange()" style="width:100%">' + providerOptions + '</select></div>' +
+                '<div class="form-group"><label>Модель <span id="fm-model-loading" style="font-size:11px;color:var(--text4)"></span></label>' +
+                '<select id="fm-model" style="width:100%"><option value="">⏳ Загрузка моделей...</option></select></div>';
+
+            if (def.prompt) {
+                html += '<div class="form-group" id="fm-prompt-group"><label>Системный промпт</label>' +
+                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea></div>';
+            }
+
+            html += '<div class="form-group"><label>Temperature</label>' +
+                '<input type="number" id="fm-temp" value="' + ((fm.parameters && fm.parameters.temperature) || 0.7) + '" step="0.05" min="0" max="2" style="width:100px"></div>' +
+                '<div style="display:flex;gap:10px;margin-top:16px">' +
+                '<button class="btn btn-primary" onclick="saveFunctionMap()">💾 Сохранить</button>' +
+                '<button class="btn btn-secondary" onclick="closeFmModal()">Отмена</button>' +
+                '<span id="fm-status" style="font-size:13px"></span></div></div></div>';
+
+            closeFmModal();
+            var div = document.createElement('div');
+            div.id = 'fm-modal-container';
+            div.innerHTML = html;
+            document.body.appendChild(div);
+
+            // После открытия модалки — подгружаем модели, затем выбираем сохранённую
+            onFmProviderChange(function() {
+                if (fm && fm.model) {
+                    var sel = document.getElementById('fm-model');
+                    if (sel) {
+                        for (var i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === fm.model) {
+                                sel.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function onFmProviderChange(callback) {
+            var provId = document.getElementById('fm-provider').value;
+            var modelSelect = document.getElementById('fm-model');
+            var loading = document.getElementById('fm-model-loading');
+            if (!provId) { if (callback) callback(); return; }
+
+            loading.textContent = '⏳ запрос...';
+            modelSelect.innerHTML = '<option value="">⏳ Загрузка...</option>';
+
+            // ВСЕГДА запрашиваем свежий список моделей через API
+            apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(provId) + '/fetch-models', {method: 'POST'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.models && d.models.length > 0) {
+                        loading.textContent = '✅ ' + d.count + ' моделей';
+                        modelSelect.innerHTML = d.models.map(function(m) {
+                            return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                        }).join('');
+                        // Добавляем опцию для ручного ввода
+                        modelSelect.innerHTML += '<option value="__custom__" disabled>── или введите свою ──</option>';
+                        // Обновляем кэш на будущее
+                        var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                        if (prov) prov.models = d.models;
+                    } else {
+                        loading.textContent = '⚠️ нет моделей';
+                        modelSelect.innerHTML = '<option value="">— нет моделей у провайдера —</option>';
+                        // Пробуем cached модели как fallback
+                        var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                        if (prov && prov.models && prov.models.length > 0) {
+                            loading.textContent = '📦 из кэша: ' + prov.models.length;
+                            modelSelect.innerHTML = prov.models.map(function(m) {
+                                return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                            }).join('');
+                        }
+                    }
+                    if (callback) callback();
+                })
+                .catch(function() {
+                    loading.textContent = '❌ ошибка';
+                    // Fallback: cached models
+                    var prov = providerOptionsCache.find(function(p) { return p.id === provId; });
+                    if (prov && prov.models && prov.models.length > 0) {
+                        modelSelect.innerHTML = prov.models.map(function(m) {
+                            return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+                        }).join('');
+                    }
+                    if (callback) callback();
+                });
+        }
+
+        function closeFmModal() {
+            var el = document.getElementById('fm-modal-container');
+            if (el) el.remove();
+        }
+
+        async function saveFunctionMap() {
+            var fn = document.getElementById('fm-name').value;
+            var status = document.getElementById('fm-status');
+            status.textContent = '⏳ Сохраняю...';
+
+            var data = {
+                function: fn,
+                provider_id: document.getElementById('fm-provider').value,
+                model: document.getElementById('fm-model').value,
+                system_prompt: document.getElementById('fm-prompt') ? document.getElementById('fm-prompt').value : '',
+                parameters: {
+                    temperature: parseFloat(document.getElementById('fm-temp').value) || 0.7,
+                    max_tokens: 4096,
+                },
+            };
+
+            try {
+                var r = await apiFetch('/api/v1/admin/models/functions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data),
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style="color:var(--green)">✅ Сохранено!</span>';
+                    closeFmModal();
+                    loadFunctionMaps();
+                } else {
+                    var err = await r.json();
+                    status.innerHTML = '<span style="color:var(--red2)">❌ ' + (err.detail || 'Ошибка') + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span style="color:var(--red2)">❌ ' + e + '</span>';
+            }
+        }
+
+        // ===========================================
         async function loadAll() {
             await Promise.all([
                 loadStatus(),
                 loadActiveModels(),
                 loadModels(),
                 loadSshConfig(),
-                loadChunkingSettings()
+                loadChunkingSettings(),
+                loadUploadFormats(),
+                loadDomainPresets(),
+                loadProviders(),
+                loadFunctionMaps()
             ]);
         }
         
         async function loadChunkingSettings() {
             try {
-                const response = await fetch(`${API_URL}/chunking-config`);
+                const response = await apiFetch(`${API_URL}/chunking-config`);
                 const config = await response.json();
                 
                 document.getElementById('chunk-size').value = config.chunk_size || 1000;
@@ -657,7 +1278,7 @@
             const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
             
             try {
-                const response = await fetch(`${API_URL}/chunking-config`, {
+                const response = await apiFetch(`${API_URL}/chunking-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -670,7 +1291,7 @@
                     const result = await response.json();
                     const statusDiv = document.getElementById('chunking-status');
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>
-                        <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">
+                        <div style="color: var(--text4); font-size: 0.875rem; margin-top: 0.5rem;">
                             Размер чанка: ${result.config.chunk_size} символов | Перекрытие: ${result.config.chunk_overlap} символов
                         </div>`;
                     
@@ -686,7 +1307,7 @@
         async function loadSshConfig() {
             try {
                 console.log('Загрузка SSH конфигурации из БД...');
-                const response = await fetch(`${API_URL}/ssh-config`);
+                const response = await apiFetch(`${API_URL}/ssh-config`);
                 
                 if (!response.ok) {
                     console.error('API вернул ошибку:', response.status);
@@ -772,7 +1393,7 @@
 
                 console.log('Отправка payload:', JSON.stringify(payload));
 
-                const response = await fetch(`${API_URL}/ssh-config`, {
+                const response = await apiFetch(`${API_URL}/ssh-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload)
@@ -817,7 +1438,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/ssh-test`, {
+                const response = await apiFetch(`${API_URL}/ssh-test`, {
                     method: 'POST'
                 });
 
@@ -855,7 +1476,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}/restart-ollama`, {
+                const response = await apiFetch(`${API_URL}/restart-ollama`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -865,10 +1486,10 @@
                 if (result.status === 'success') {
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>`;
                     showNotification('Ollama перезапущен успешно!');
-                    setTimeout(loadAll, 3000);
+                    await loadAll();
                 } else if (result.status === 'warning') {
                     statusDiv.innerHTML = `<div style="color: #f59e0b;">⚠️ ${result.message}</div>`;
-                    setTimeout(loadAll, 3000);
+                    await loadAll();
                 } else {
                     statusDiv.innerHTML = `<div style="color: #ef4444;">❌ ${result.message}</div>`;
                 }
@@ -878,8 +1499,366 @@
         }
 
         // Автообновление
+        
+        // === Типы документов ===
+        async function loadDocTypes() {
+            try {
+                var r = await apiFetch('/api/v1/admin/models/doc-types');
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDocTypes(d.types || []);
+                }
+            } catch(e) {}
+        }
+
+        function renderDocTypes(types) {
+            var div = document.getElementById('doc-types-list');
+            var html = '';
+            for (var i = 0; i < types.length; i++) {
+                var t = types[i];
+                var label = typeof t === 'object' ? t.label : t;
+                var key = typeof t === 'object' ? t.key : t;
+                html += '<span class="tag" style="cursor:default;display:inline-flex;align-items:center;gap:4px;font-size:11px">🏷️ ' + label + ' <span onclick="removeDocType(\'' + key + '\')" style="cursor:pointer;color:var(--red);margin-left:2px;font-weight:bold">×</span></span>';
+            }
+            if (!types.length) html = '<span style="color:var(--text4);font-size:12px">Нет типов</span>';
+            div.innerHTML = html;
+        }
+
+        async function addDocType() {
+            var inp = document.getElementById('new-doc-type');
+            var name = inp.value.trim();
+            if (!name) return;
+            try {
+                var r = await apiFetch('/api/v1/admin/models/doc-types', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'add', name: name})
+                });
+                if (r.ok) { inp.value = ''; loadDocTypes(); }
+            } catch(e) {}
+        }
+
+        async function removeDocType(name) {
+            if (!confirm('Удалить тип ' + name + '?')) return;
+            try {
+                var r = await apiFetch('/api/v1/admin/models/doc-types', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'remove', name: name})
+                });
+                if (r.ok) loadDocTypes();
+            } catch(e) {}
+        }
+
+        loadDocTypes();
+
         loadAll();
         setInterval(loadStatus, 30000);
-    </script>
+
+        // === Системный промпт для чата ===
+        var DEFAULT_CHAT_PROMPT = `Ты — AI-ассистент с доступом к гибридной базе знаний KAG.
+Ты работаешь с ДВУМЯ источниками данных одновременно:
+
+1. Qdrant (векторная БД) — находит документы по смысловой близости. Контекст из Qdrant помечен как [Источник N] с doc:ID и score:релевантность.
+2. Neo4j (граф знаний) — содержит сущности, их типы, связи между ними и документы-источники. Контекст из Neo4j помечен как [Граф] с именами сущностей и количеством связей.
+
+## Правила работы
+
+### 1. Приоритет источников
+- ВСЕГДА начинай с анализа контекста из Qdrant и Neo4j
+- Если граф (Neo4j) показывает связи между документами — укажи ЭТО ЯВНО: «Согласно графу знаний, сущность X связана с документами A, B, C»
+- Если векторный поиск (Qdrant) дал высокий score (>0.7) — это сильный сигнал релевантности
+
+### 2. Извлечение информации
+- Читай ВЕСЬ предоставленный контекст перед ответом
+- Если сущность найдена в графе — проверь её source_docs (из каких документов она извлечена)
+- Если один и тот же факт подтверждается из Qdrant И Neo4j — это максимально надёжная информация
+- Указывай источник: «Согласно [Источник 1] (документ X, score 0.85)...»
+
+### 3. Метаданные
+- Обращай внимание на типы сущностей в графе: person (человек), organization (организация), date (дата), money (сумма), legal_term (юридический термин) и др.
+- Если сущность имеет высокий confidence (>0.8) — она точно извлечена
+- Если несколько документов ссылаются на одну сущность — это важный перекрёстный факт
+
+### 4. Ответы
+- Структурируй ответ: сначала КЛЮЧЕВОЙ ВЫВОД, затем детали
+- Если информация есть в нескольких документах — перечисли их
+- Если контекст не содержит ответа — скажи: «В загруженных документах информация не найдена» и предложи поискать в других источниках
+- НИКОГДА не выдумывай факты, не присутствующие в контексте
+
+### 5. Стиль
+- Профессиональный, точный, на русском языке
+- Используй термины из документов
+- При цитировании указывай источник
+
+## Формат контекста
+Контекст будет передан в формате:
+[Источник 1] (doc:abc123, score:0.923): текст чанка...
+...
+--- ГРАФ ЗНАНИЙ (Neo4j) ---
+[Граф] Документ: filename.pdf | Связанных сущностей: 5`;
+
+        async function saveChatPrompt() {
+            const prompt = document.getElementById('chat-system-prompt').value;
+            const status = document.getElementById('chat-prompt-status');
+            status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю...</span>';
+            try {
+                const r = await apiFetch('/api/v1/admin/models/chat-prompt', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: prompt})
+                });
+                if (r.ok) {
+                    status.innerHTML = '<span style=\"color:#10b981\">✅ Сохранено</span>';
+                    setTimeout(function() { status.innerHTML = ''; }, 3000);
+                } else {
+                    status.innerHTML = '<span style=\"color:#ef4444\">❌ Ошибка сохранения</span>';
+                }
+            } catch(e) {
+                status.innerHTML = '<span style=\"color:#ef4444\">❌ ' + e.message + '</span>';
+            }
+        }
+
+        async function loadChatPrompt() {
+            try {
+                const r = await apiFetch('/api/v1/admin/models/chat-prompt');
+                if (r.ok) {
+                    const d = await r.json();
+                    document.getElementById('chat-system-prompt').value = d.prompt || DEFAULT_CHAT_PROMPT;
+                } else {
+                    document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+                }
+            } catch(e) {
+                document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+            }
+        }
+
+        async function resetChatPrompt() {
+            document.getElementById('chat-system-prompt').value = DEFAULT_CHAT_PROMPT;
+            var status = document.getElementById('chat-prompt-status');
+            status.innerHTML = '<span style=\"color:#f59e0b\">⏳ Сохраняю умолчание...</span>';
+            await saveChatPrompt();
+        }
+
+        loadChatPrompt();
+
+        // === Типы документов ===
+
+        // === Разрешённые форматы загрузки ===
+        async function loadUploadFormats() {
+            try {
+                const r = await apiFetch('/api/v1/admin/models/upload-config');
+                if (!r.ok) return;
+                const d = await r.json();
+                const formats = d.all_formats || {};
+                const allowed = d.allowed || {};
+                const container = document.getElementById('upload-formats-checkboxes');
+                // Сортируем по алфавиту
+                const sorted = Object.entries(formats).sort((a, b) => a[1].localeCompare(b[1]));
+                container.innerHTML = sorted.map(([ext, label]) => {
+                    const checked = allowed[ext] !== false; // default true
+                    const color = checked ? 'var(--accent-h)' : 'var(--text4)';
+                    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:${color};font-size:13px;">
+                        <input type="checkbox" data-ext="${ext}" ${checked ? 'checked' : ''} 
+                               onchange="this.parentElement.style.color=this.checked?'var(--accent-h)':'var(--text4)'">
+                        <span style="font-family:JetBrains Mono,monospace;font-size:12px;">${ext}</span>
+                        <span style="font-size:12px;">${label}</span>
+                    </label>`;
+                }).join('');
+            } catch(e) { console.error('Upload formats:', e); }
+        }
+
+        async function saveUploadFormats() {
+            const status = document.getElementById('upload-formats-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Сохраняю...</span>';
+            const allowed = {};
+            document.querySelectorAll('#upload-formats-checkboxes input[type=checkbox]').forEach(cb => {
+                allowed[cb.dataset.ext] = cb.checked;
+            });
+            try {
+                const r = await apiFetch('/api/v1/admin/models/upload-config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ allowed })
+                });
+                const d = await r.json();
+                status.innerHTML = r.ok 
+                    ? '<span style="color:#10b981">✅ ' + (d.message || 'Сохранено') + '</span>'
+                    : '<span style="color:#ef4444">❌ Ошибка</span>';
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+        // === Доменные схемы (пресеты) ===
+        let domainPresets = [];
+
+        async function loadDomainPresets() {
+            try {
+                const r = await apiFetch('/api/v1/kg/domain-schema');
+                if (!r.ok) return;
+                const d = await r.json();
+                domainPresets = d.presets || [];
+                const active = d.active_preset || 'universal';
+                const sel = document.getElementById('domain-preset-select');
+                sel.innerHTML = domainPresets.map(function(p) {
+                    return '<option value="' + p.id + '"' + (p.id === active ? ' selected' : '') + '>'
+                        + p.name + ' — ' + p.entity_count + ' типов, ' + p.relation_count + ' связей</option>';
+                }).join('');
+                // Показать инфо о активном пресете
+                showPresetInfo(active);
+            } catch(e) { console.error('Domain presets:', e); }
+        }
+
+        function previewDomainPreset() {
+            var id = document.getElementById('domain-preset-select').value;
+            if (id) showPresetInfo(id);
+        }
+
+        function showPresetInfo(id) {
+            var p = domainPresets.find(function(x) { return x.id === id; });
+            var info = document.getElementById('domain-preset-info');
+            if (!p) { info.style.display = 'none'; return; }
+            info.style.display = 'block';
+            info.innerHTML = '<strong>' + p.name + '</strong><br>'
+                + p.description + '<br>'
+                + '<span style="color:var(--text4)">Применение: ' + p.use_cases + '</span><br>'
+                + '<span style="color:var(--text4)">Типов сущностей: ' + p.entity_count + ' | Типов связей: ' + p.relation_count + '</span>'
+                + (p.is_active ? ' <span style="color:var(--emerald);font-weight:600">✓ Активна</span>' : '');
+        }
+
+        async function switchDomainPreset() {
+            var id = document.getElementById('domain-preset-select').value;
+            if (!id) return;
+            var status = document.getElementById('domain-preset-status');
+            status.innerHTML = '<span style="color:#f59e0b">⏳ Переключаю схему...</span>';
+            try {
+                var r = await apiFetch('/api/v1/kg/domain-schema', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({preset: id})
+                });
+                var d = await r.json();
+                if (r.ok && d.status === 'ok') {
+                    status.innerHTML = '<span style="color:#10b981">✅ ' + d.message + '</span>';
+                    loadDomainPresets(); // обновить активный
+                } else {
+                    status.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                }
+            } catch(e) {
+                status.innerHTML = '<span style="color:#ef4444">❌ ' + e.message + '</span>';
+            }
+        }
+
+    // Автозапуск при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() { loadAll(); });
+    
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+async function loadTheme() {
+  try {
+    var r = await fetch('/api/v1/admin/models/theme', { headers: authHeaders() });
+    var d = await r.json();
+    var theme = d.value || 'light';
+    applyTheme(theme);
+  } catch(e) { applyTheme('light'); }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  var icon = document.getElementById('theme-icon');
+  var label = document.getElementById('theme-label');
+  if (icon && label) {
+    icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    label.textContent = theme === 'dark' ? 'Тёмная' : 'Светлая';
+  }
+}
+
+async function toggleTheme() {
+  var current = document.documentElement.getAttribute('data-theme') || 'light';
+  var next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  try {
+    await fetch('/api/v1/admin/models/theme', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ theme: next })
+    });
+  } catch(e) {}
+}
+
+loadTheme();
+
+async function loadOcrSettings() {
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', { credentials: 'include' });
+    var d = await r.json();
+    document.getElementById('ocr-force').checked = d.force_ocr || false;
+    document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
+    document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
+  } catch(e) {}
+}
+async function saveOcrSettings() {
+  var data = {
+    force_ocr: document.getElementById('ocr-force').checked,
+    enable_summarization: document.getElementById('ocr-summarize').checked,
+    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
+  };
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
+      setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
+    }
+  } catch(e) {}
+}
+loadOcrSettings();
+
+</script>
+
+async function loadOcrSettings() {
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', { credentials: 'include' });
+    var d = await r.json();
+    document.getElementById('ocr-force').checked = d.force_ocr || false;
+    document.getElementById('ocr-dpi').value = d.dpi || 200;
+    document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
+    document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
+  } catch(e) {}
+}
+async function saveOcrSettings() {
+  var data = {
+    force_ocr: document.getElementById('ocr-force').checked,
+    enable_summarization: document.getElementById('ocr-summarize').checked,
+    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
+  };
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
+      setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
+    }
+  } catch(e) {}
+}
+loadOcrSettings();
+
+</script>
 </body>
 </html>

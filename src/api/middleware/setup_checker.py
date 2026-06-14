@@ -28,6 +28,8 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
         "/api/v1/admin_models/",
         "/api/v1/chat/",
         "/api/v1/upload/",
+        "/api/v1/auth",
+        "/api/v1/notifications",
         "/api/v1/documents/",
         "/qdrant",
         "/chunks",

@@ -6,6 +6,14 @@ FROM python:3.11-slim as builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    git \
+    # OCR: Tesseract + русский язык + poppler для pdf2image
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    poppler-utils \
+    # OpenCV/GL для Occular-ocr
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv /opt/venv
@@ -13,7 +21,16 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    # Occular-ocr — русский OCR из GitHub (ставим без зависимостей — torch уже есть)
+    pip install --no-cache-dir --no-deps git+https://github.com/Bodhi42/Occular-ocr.git && \
+    # Веса для Occular
+    mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
+    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth
 
 # ===========================================
 # Stage 2: Production
@@ -26,6 +43,12 @@ LABEL version="0.1.0"
 
 RUN apt-get update && apt-get install -y \
     curl \
+    # OCR runtime
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    poppler-utils \
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
@@ -37,9 +60,7 @@ WORKDIR /app
 
 COPY --chown=kag:kag src/ /app/src/
 
-# models опционально
 RUN mkdir -p /app/models && chown -R kag:kag /app/models || true
-
 RUN mkdir -p /app/data && chown -R kag:kag /app/data
 
 ENV PYTHONPATH=/app
@@ -52,4 +73,4 @@ USER kag
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
     CMD celery -A src.indexing.celery_app inspect ping || exit 1
 
-CMD ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+CMD ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--pool=solo", "-B", "-Q", "documents,celery,maintenance"]

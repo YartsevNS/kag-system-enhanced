@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Просмотр документа</title>
+<style>
+:root {
+  --bg: #08090a;
+  --panel: #0f1011;
+  --surface: #191a1b;
+  --elevated: #23252a;
+  --text: #f7f8f8;
+  --text2: #d0d6e0;
+  --text3: #8a8f98;
+  --text4: #62666d;
+  --accent: #5e6ad2;
+  --accent-h: #7170ff;
+  --green: #27a644;
+  --red: #dc2626;
+  --amber: #f59e0b;
+  --border: rgba(255,255,255,0.08);
+  --border-s: rgba(255,255,255,0.05);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 240px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border-s);
+  padding: 20px 0;
+}
+.sidebar-logo {
+  padding: 0 24px 20px;
+  font-size: 18px; font-weight: 600;
+  letter-spacing: -0.4px;
+  border-bottom: 1px solid var(--border-s);
+  margin-bottom: 12px;
+}
+.sidebar-logo span { color: var(--accent-h); }
+.sidebar a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 24px;
+  color: var(--text3); font-size: 14px; font-weight: 500;
+  text-decoration: none; transition: all 0.15s;
+}
+.sidebar a:hover { color: var(--text2); background: rgba(255,255,255,0.04); }
+.sidebar a.active { color: var(--text); background: rgba(255,255,255,0.06); }
+
+/* Main */
+.main {
+  flex: 1; display: flex; flex-direction: column;
+  min-width: 0; overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border-s);
+  background: var(--panel);
+}
+.toolbar-title {
+  font-size: 14px; font-weight: 600;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toolbar .btn {
+  font-size: 12px; font-weight: 500;
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.15s;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text3);
+  font-family: var(--font);
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.toolbar .btn:hover { color: var(--text2); border-color: var(--text4); }
+.toolbar .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toolbar .btn-accent:hover { opacity: 0.85; }
+
+/* Page controls */
+.page-group {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border-s);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.page-group button {
+  background: transparent; border: none;
+  color: var(--text2); font-size: 14px;
+  padding: 6px 8px; cursor: pointer;
+  font-family: var(--font); line-height: 1;
+  transition: background 0.15s;
+  min-width: 28px;
+}
+.page-group button:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
+.page-group button:disabled { opacity: 0.3; cursor: not-allowed; }
+.page-group .page-input {
+  width: 40px; background: transparent; border: none;
+  color: var(--text); font-size: 12px; text-align: center;
+  font-family: var(--font); padding: 6px 2px;
+}
+.page-group .page-input:focus { outline: none; }
+.page-group .page-total {
+  font-size: 12px; color: var(--text4); padding: 6px 4px;
+}
+
+/* Zoom */
+.zoom-label {
+  font-size: 11px; color: var(--text4);
+  min-width: 36px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Meta bar */
+.meta-bar {
+  display: flex; gap: 8px; padding: 8px 20px;
+  flex-shrink: 0; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-s);
+  background: var(--bg);
+}
+.meta-pill {
+  font-size: 11px; color: var(--text4);
+  padding: 3px 8px; background: var(--surface);
+  border-radius: 9999px; border: 1px solid var(--border-s);
+}
+.meta-pill strong { color: var(--text2); font-weight: 500; }
+.meta-tag {
+  font-size: 10px; padding: 3px 7px; border-radius: 9999px;
+  font-weight: 500; background: rgba(94,106,210,0.15);
+  color: var(--accent);
+}
+
+/* Viewer area */
+.viewer {
+  flex: 1; overflow: auto;
+  background: #1a1c1e;
+  display: flex; align-items: flex-start; justify-content: center;
+  position: relative;
+}
+.viewer canvas {
+  display: block;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.5);
+  margin: 12px auto;
+}
+
+/* States */
+.state-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px;
+  background: var(--panel);
+  z-index: 2;
+  transition: opacity 0.3s;
+}
+.state-overlay.fade { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent-h);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-icon { font-size: 48px; opacity: 0.6; }
+.state-text { font-size: 15px; color: var(--text3); }
+.state-sub { font-size: 12px; color: var(--text4); margin-top: 4px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 10px 18px; border-radius: var(--radius);
+  background: var(--green); color: #fff;
+  font-size: 13px; font-weight: 500;
+  opacity: 0; transform: translateY(8px);
+  transition: all 0.3s;
+  z-index: 100;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { background: var(--red); }
+
+/* Keyboard hint */
+.kbd-hint {
+  position: fixed; bottom: 12px; left: 260px;
+  font-size: 11px; color: var(--text4);
+  opacity: 0; transition: opacity 0.3s;
+}
+.kbd-hint kbd {
+  background: var(--surface); border: 1px solid var(--border-s);
+  border-radius: 3px; padding: 1px 5px;
+  font-family: var(--mono); font-size: 10px;
+}
+
+/* Progress bar */
+.ocr-progress {
+  position: fixed; bottom: 0; left: 240px; right: 0;
+  height: 2px; background: var(--accent);
+  z-index: 100; transition: width 0.4s ease;
+}
+
+@media (max-width: 768px) {
+  .sidebar { width: 56px; }
+  .sidebar a span, .sidebar-logo { display: none; }
+  .toolbar { padding: 8px 12px; gap: 4px; }
+  .meta-bar { padding: 6px 12px; }
+  .kbd-hint { left: 68px; }
+  .zoom-label { display: none; }
+  .toolbar .btn span.label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; opacity: 0.5; }
+  .state-overlay { transition: none; }
+}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+  <a href="/docs">📖 Документация</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+
+<main class="main">
+  <div class="toolbar">
+    <div class="toolbar-title" id="title">Загрузка...</div>
+    <a href="/documents" class="btn">← Назад</a>
+    <a href="#" class="btn" id="btn-chunks" style="display:none">🧩 Чанки</a>
+    <a href="#" class="btn btn-accent" id="btn-download" download>📥 Скачать</a>
+    <div style="flex:1"></div>
+    <div class="page-group">
+      <button onclick="prevPage()" id="btn-prev" disabled title="Предыдущая (←)">◀</button>
+      <input type="number" class="page-input" id="page-num" value="1" min="1" onchange="goToPage()" onkeydown="if(event.key==='Enter')goToPage()">
+      <span class="page-total" id="page-total">/ —</span>
+      <button onclick="nextPage()" id="btn-next" disabled title="Следующая (→)">▶</button>
+    </div>
+    <button class="btn" onclick="zoomOut()" title="Уменьшить">−</button>
+    <span class="zoom-label" id="zoom-label">100%</span>
+    <button class="btn" onclick="zoomIn()" title="Увеличить">+</button>
+    <button class="btn" onclick="zoomFit()" title="По ширине (W)"><span class="label">По ширине</span> ↔</button>
+  </div>
+
+  <div class="meta-bar" id="meta-bar"></div>
+
+  <div class="viewer" id="viewer">
+    <div class="state-overlay" id="loading-overlay">
+      <div class="spinner"></div>
+      <div class="state-text">Загрузка документа...</div>
+    </div>
+  </div>
+
+  <div class="ocr-progress" id="ocr-progress" style="width:5%"></div>
+
+  <div class="kbd-hint" id="kbd-hint">
+    <kbd>←</kbd> <kbd>→</kbd> страницы · <kbd>+</kbd> <kbd>−</kbd> зум · <kbd>W</kbd> по ширине
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/pdf.min.js">function pollOcrProgress() {
+  var bar = document.getElementById('ocr-progress');
+  if (!bar) return;
+  function tick() {
+    fetch('/api/v1/upload/' + docId + '/details').then(function(r) {
+      return r.json();
+    }).then(function(d) {
+      if (d.status === 'completed') { bar.style.width = '100%'; setTimeout(function() { bar.style.width = '0%'; }, 1000); return; }
+      if (d.status === 'error') { bar.style.width = '0%'; return; }
+      bar.style.width = Math.min(95, (d.chunks_count || 0) * 10) + '%';
+      setTimeout(tick, 2000);
+    }).catch(function() { setTimeout(tick, 3000); });
+  }
+  tick();
+}
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/pdf.worker.min.js';
+
+const API = '/api/v1';
+const params = new URLSearchParams(location.search);
+const docId = params.get('id');
+
+let pdfDoc = null, pageNum = 1, scale = 1.5, currentDoc = null;
+
+if (!docId) {
+  showError('Не указан ID документа');
+} else {
+  init();
+}
+
+async function init() {
+  try {
+    const resp = await fetch(API + '/upload/' + docId + '/details');
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Требуется авторизация');
+      throw new Error('Документ не найден');
+    }
+    currentDoc = await resp.json();
+
+    setTitle(currentDoc.recognized_title || currentDoc.filename);
+    setMeta(currentDoc);
+    document.getElementById('btn-chunks').href = '/chunks?doc_id=' + docId + '&name=' + encodeURIComponent(currentDoc.filename);
+    document.getElementById('btn-chunks').style.display = 'inline-flex';
+    document.getElementById('btn-download').href = API + '/upload/' + docId + '/preview';
+    pollOcrProgress();
+
+    // Determine if PDF or text document
+    const fname = (currentDoc.filename || '').toLowerCase();
+    const isPdf = fname.endsWith('.pdf') || (currentDoc.file_type || '').includes('pdf');
+
+    if (isPdf) {
+      await initPdfViewer();
+      showKbdHints();
+    } else {
+      await initTextViewer();
+    }
+
+    fadeOut(document.getElementById('loading-overlay'));
+
+  } catch (err) {
+    console.error(err);
+    showError(getUserMessage(err));
+  }
+}
+
+async function initPdfViewer() {
+  const previewUrl = API + '/upload/' + docId + '/preview';
+  pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
+
+  document.getElementById('page-total').textContent = '/ ' + pdfDoc.numPages;
+  document.getElementById('page-num').max = pdfDoc.numPages;
+  document.getElementById('btn-prev').disabled = false;
+  document.getElementById('btn-next').disabled = pdfDoc.numPages <= 1;
+  renderPage(1);
+}
+
+async function initTextViewer() {
+  // Load chunk text content
+  try {
+    const r = await fetch(API + '/upload/' + docId + '/details');
+    const d = await r.json();
+    
+    // Try to get chunks with text
+    let text = '';
+    try {
+      const cr = await fetch(API + '/chunks?document_id=' + docId);
+      if (cr.ok) {
+        const cd = await cr.json();
+        const chunks = cd.chunks || cd.results || [];
+        text = chunks.map(c => c.content || c.text || '').join('\n\n');
+      }
+    } catch(e) {}
+    
+    if (!text) {
+      // Fallback: fetch raw file
+      try {
+        const fr = await fetch(API + '/upload/' + docId + '/preview');
+        if (fr.ok) text = await fr.text();
+      } catch(e) {}
+    }
+    
+    const viewer = document.getElementById('viewer');
+    viewer.innerHTML = '';
+    
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'width:100%;max-width:900px;margin:0 auto;padding:24px 32px;background:#fff;color:#1a1a1a;font:13px/1.7 JetBrains Mono,monospace;white-space:pre-wrap;word-wrap:break-word;border-radius:8px;min-height:400px;';
+    pre.textContent = text || '(пустой документ)';
+    viewer.appendChild(pre);
+    
+    // Hide page controls
+    document.getElementById('page-controls').style.display = 'none';
+    document.getElementById('zoom-controls').style.display = 'none';
+    document.getElementById('kbd-hint').style.display = 'none';
+  } catch(e) {
+    showError('Не удалось загрузить текст документа');
+  }
+}
+
+async function renderPage(num) {
+  if (!pdfDoc) return;
+  pageNum = num;
+
+  const page = await pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale });
+
+  const viewer = document.getElementById('viewer');
+  // Remove old canvas
+  const old = viewer.querySelector('canvas');
+  if (old) old.remove();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  viewer.appendChild(canvas);
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  document.getElementById('page-num').value = num;
+  document.getElementById('btn-prev').disabled = num <= 1;
+  document.getElementById('btn-next').disabled = num >= pdfDoc.numPages;
+  document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
+
+  viewer.scrollTop = 0;
+}
+
+// Navigation
+function nextPage() { if (pageNum < pdfDoc.numPages) renderPage(pageNum + 1); }
+function prevPage() { if (pageNum > 1) renderPage(pageNum - 1); }
+function goToPage() {
+  const n = parseInt(document.getElementById('page-num').value);
+  if (n >= 1 && n <= pdfDoc.numPages) renderPage(n);
+}
+function zoomIn()  { scale = Math.min(3, scale + 0.25); renderPage(pageNum); }
+function zoomOut() { scale = Math.max(0.5, scale - 0.25); renderPage(pageNum); }
+function zoomFit() {
+  const viewer = document.getElementById('viewer');
+  scale = (viewer.clientWidth - 32) / 612;
+  scale = Math.max(0.5, Math.min(3, scale));
+  renderPage(pageNum);
+}
+
+// Keyboard
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT') return;
+  switch (e.key) {
+    case 'ArrowRight': e.preventDefault(); nextPage(); break;
+    case 'ArrowLeft':  e.preventDefault(); prevPage(); break;
+    case '+': case '=': e.preventDefault(); zoomIn(); break;
+    case '-':          e.preventDefault(); zoomOut(); break;
+    case 'w': case 'W': e.preventDefault(); zoomFit(); break;
+    case '0':          e.preventDefault(); scale = 1.5; renderPage(pageNum); break;
+  }
+});
+
+// UI helpers
+function setTitle(text) {
+  document.getElementById('title').textContent = text;
+  document.title = 'KAG — ' + text;
+}
+
+function setMeta(doc) {
+  const tags = (doc.tags || []).map(t => '<span class="meta-tag">' + t + '</span>').join(' ');
+  document.getElementById('meta-bar').innerHTML =
+    '<div class="meta-pill">Тип: <strong>' + typeLabel(doc.document_type) + '</strong></div>' +
+    '<div class="meta-pill">Размер: <strong>' + fmtBytes(doc.file_size) + '</strong></div>' +
+    '<div class="meta-pill">Чанков: <strong>' + (doc.chunks_count || 0) + '</strong></div>' +
+    '<div class="meta-pill">📅 ' + new Date(doc.created_at).toLocaleDateString('ru-RU') + '</div>' +
+    (tags ? '<div class="meta-pill">' + tags + '</div>' : '');
+}
+
+function showError(msg) {
+  const overlay = document.getElementById('loading-overlay');
+  overlay.innerHTML =
+    '<div class="state-icon">📄</div>' +
+    '<div class="state-text">' + msg + '</div>' +
+    (docId ? '<div class="state-sub">ID: ' + docId.substring(0, 16) + '...</div>' : '') +
+    '<a href="/documents" class="btn" style="margin-top:8px;text-decoration:none">← К документам</a>';
+  document.getElementById('title').textContent = '❌ Ошибка';
+  overlay.classList.remove('fade');
+}
+
+function showKbdHints() {
+  const hint = document.getElementById('kbd-hint');
+  hint.style.opacity = '1';
+  setTimeout(function() { hint.style.opacity = '0'; }, 6000);
+}
+
+function fadeOut(el) {
+  el.classList.add('fade');
+  setTimeout(function() { el.style.display = 'none'; }, 350);
+}
+
+function getUserMessage(err) {
+  const msg = err.message || String(err);
+  if (msg.includes('401') || msg.includes('авторизац')) return 'Требуется авторизация. Войдите заново.';
+  if (msg.includes('404') || msg.includes('Not Found') || msg.includes('не найден')) return 'Файл не найден на сервере';
+  if (msg.includes('InvalidPDF') || msg.includes('PDF')) return 'Файл повреждён или не является PDF';
+  return msg.length > 80 ? msg.substring(0, 80) + '...' : msg;
+}
+
+function toast(text, isErr) {
+  var t = document.getElementById('toast');
+  t.textContent = text;
+  t.className = 'toast' + (isErr ? ' error' : '') + ' show';
+  clearTimeout(t._tid);
+  t._tid = setTimeout(function() { t.classList.remove('show'); }, 3000);
+}
+
+function typeLabel(t) {
+  var m = { invoice: 'Счёт', contract: 'Договор', report: 'Отчёт', letter: 'Письмо',
+            form: 'Форма', identity: 'Удостоверение', medical: 'Медицинский',
+            legal: 'Юридический', financial: 'Финансы' };
+  return m[t] || t || '—';
+}
+
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  var k = 1024, s = ['B','KB','MB','GB'], i = Math.floor(Math.log(b) / Math.log(k));
+  return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+}
+function pollOcrProgress() {
+  var bar = document.getElementById('ocr-progress');
+  if (!bar) return;
+  function tick() {
+    fetch('/api/v1/upload/' + docId + '/details').then(function(r) {
+      return r.json();
+    }).then(function(d) {
+      if (d.status === 'completed') { bar.style.width = '100%'; setTimeout(function() { bar.style.width = '0%'; }, 1000); return; }
+      if (d.status === 'error') { bar.style.width = '0%'; return; }
+      bar.style.width = Math.min(95, (d.chunks_count || 0) * 10) + '%';
+      setTimeout(tick, 2000);
+    }).catch(function() { setTimeout(tick, 3000); });
+  }
+  tick();
+}
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+</body>
+</html>

@@ -1,642 +1,231 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Просмотр чанков</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-        }
-        .header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .back-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .back-btn:hover { background: #64748b; }
-        .container { max-width: 1800px; margin: 2rem auto; padding: 0 2rem; }
-        
-        .stats-bar {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        .stat-card {
-            background: #1e293b;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            border: 1px solid #334155;
-        }
-        .stat-label { font-size: 0.75rem; color: #94a3b8; }
-        .stat-value { font-size: 1.5rem; font-weight: 600; }
-        
-        .controls {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        .search-input, .search-select {
-            background: #1e293b;
-            border: 1px solid #334155;
-            color: #e2e8f0;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-        }
-        .search-input { flex: 1; min-width: 200px; }
-        .search-select { min-width: 150px; }
-        .btn {
-            background: #3b82f6;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-        }
-        .btn:hover { background: #2563eb; }
-        .btn-secondary { background: #475569; }
-        .btn-secondary:hover { background: #64748b; }
-        .btn-save { background: #22c55e; }
-        .btn-save:hover { background: #16a34a; }
-        .btn-cancel { background: #64748b; }
-        
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #94a3b8;
-        }
-        
-        .chunks-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-        }
-        .chunk-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 1rem;
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-        .chunk-card:hover { border-color: #3b82f6; }
-        .chunk-header {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 0.5rem;
-            font-size: 0.75rem;
-            align-items: center;
-        }
-        .chunk-content-preview {
-            font-size: 0.875rem;
-            line-height: 1.5;
-            max-height: 60px;
-            overflow: hidden;
-            margin-bottom: 0.5rem;
-            color: #cbd5e1;
-        }
-        .chunk-meta {
-            display: flex;
-            gap: 0.5rem;
-            font-size: 0.75rem;
-        }
-        .meta-tag {
-            background: #334155;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            color: #94a3b8;
-        }
-        
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            overflow: auto;
-        }
-        .modal-overlay.active { display: block; }
-        .modal {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            max-width: 900px;
-            margin: 2rem auto;
-            max-height: 90vh;
-            overflow: auto;
-        }
-        .modal-large { max-width: 1200px; }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #334155;
-        }
-        .modal-title { font-size: 1.125rem; font-weight: 600; }
-        .modal-close {
-            background: none;
-            border: none;
-            color: #94a3b8;
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-        .modal-body { padding: 1.5rem; }
-        
-        .edit-section { margin-bottom: 1.5rem; }
-        .edit-textarea {
-            width: 100%;
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            color: #e2e8f0;
-            padding: 1rem;
-            font-size: 0.875rem;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 200px;
-        }
-        .edit-textarea:focus { outline: none; border-color: #3b82f6; }
-        .edit-buttons {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 1rem;
-            align-items: center;
-        }
-        .save-status { margin-left: 1rem; color: #94a3b8; }
-        
-        .full-content {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 1rem;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow: auto;
-            margin-bottom: 1rem;
-        }
-        .metadata-section { margin-top: 1rem; }
-        .metadata-title {
-            font-size: 0.875rem;
-            color: #94a3b8;
-            margin-bottom: 0.5rem;
-        }
-        .metadata-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 0.5rem;
-        }
-        .metadata-item {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            padding: 0.5rem;
-            font-size: 0.75rem;
-        }
-        .metadata-key { color: #94a3b8; }
-        .metadata-value { color: #e2e8f0; word-break: break-all; }
-        
-        .score-badge {
-            background: #22c55e;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            margin-left: 0.5rem;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Чанки документа</title>
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:4px}
+.breadcrumb{font-size:13px;color:var(--text4);margin-bottom:24px}
+.breadcrumb a{color:var(--accent-h);text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+/* Controls */
+.controls{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.limit-select{display:flex;align-items:center;gap:8px}
+.limit-select label{font-size:13px;color:var(--text4)}
+.limit-select select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;font-family:system-ui, -apple-system, sans-serif;outline:none;cursor:pointer}
+.limit-select select:focus{border-color:var(--accent-h)}
+.chunk-count{font-size:13px;color:var(--text4)}
+.chunk-count strong{color:var(--text2)}
+/* Chunk card */
+.chunk-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.chunk-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border-s)}
+.chunk-header .chunk-id{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--accent-l);font-weight:500}
+.chunk-header .chunk-meta{font-size:11px;color:var(--text4)}
+.chunk-body{padding:16px 20px}
+.chunk-body pre{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;max-height:300px;overflow-y:auto}
+.chunk-body pre::-webkit-scrollbar{width:6px}
+.chunk-body pre::-webkit-scrollbar-track{background:transparent}
+.chunk-body pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Empty */
+.empty{text-align:center;padding:60px 20px;color:var(--text4)}
+.empty-icon{font-size:48px;margin-bottom:16px}
+.empty-text{font-size:15px;color:var(--text4)}
+/* Pagination */
+.pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:20px}
+.pagination button{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:8px 14px;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s}
+.pagination button:hover:not(:disabled){background:var(--elevated);border-color:var(--border)}
+.pagination button:disabled{opacity:0.4;cursor:not-allowed}
+.pagination .page-info{font-size:13px;color:var(--text4);min-width:80px;text-align:center}
+/* Loading */
+.loading{text-align:center;padding:40px}
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top:2px solid var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.controls{flex-direction:column;align-items:flex-start}}
+</style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">KAG</div>
-        <a href="/" class="back-btn">← Назад</a>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+
+<main>
+  <h1 id="page-title">📄 Чанки документов</h1>
+  <div class="breadcrumb" id="breadcrumb">
+    <a href="/documents">← К списку документов</a>
+  </div>
+
+  <div class="controls">
+    <div class="limit-select">
+      <label>Показывать:</label>
+      <select id="limit-select" onchange="changeLimit()">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      <label>чанков</label>
     </div>
-    
-    <div class="container">
-        <div class="stats-bar" id="stats"></div>
-        
-        <div class="controls">
-            <input type="text" id="search" class="search-input" placeholder="Поиск по тексту или ID..." onkeyup="handleSearch(event)">
-            <select id="search-type" class="search-select" onchange="handleSearchType()">
-                <option value="text">Поиск по тексту</option>
-                <option value="semantic">Семантический поиск</option>
-            </select>
-            <button class="btn" onclick="runSearch()">🔍 Найти</button>
-            <button class="btn btn-secondary" onclick="loadAllChunks()">🔄 Обновить</button>
-        </div>
-        
-        <div id="loading" class="loading">Загрузка чанков...</div>
-        <div class="chunks-grid" id="chunks-grid"></div>
-    </div>
-    
-    <div class="modal-overlay" id="modal">
-        <div class="modal modal-large">
-            <div class="modal-header">
-                <div class="modal-title">
-                    Редактирование чанка
-                    <span id="modal-score" class="score-badge" style="display:none"></span>
-                </div>
-                <button class="modal-close" onclick="closeModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="edit-section">
-                    <textarea id="chunk-edit" class="edit-textarea" placeholder="Содержимое чанка..."></textarea>
-                    <div class="edit-buttons">
-                        <button class="btn btn-save" onclick="saveChunk()">💾 Сохранить</button>
-                        <button class="btn btn-cancel" onclick="closeModal()">Отмена</button>
-                        <span id="save-status" class="save-status"></span>
-                    </div>
-                </div>
-                <div class="metadata-section">
-                    <div class="metadata-title">Метаданные</div>
-                    <div class="metadata-grid" id="modal-meta"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-const QDRANT_URL = 'http://localhost:6333';
-const OLLAMA_URL = 'http://192.168.50.41:11434';
-const COLLECTION = 'kag_documents';
+    <div class="chunk-count" id="chunk-count"></div>
+  </div>
 
-let allChunks = [];
-let filteredChunks = [];
-let currentChunk = null;
+  <div id="chunks-container">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
 
-// Load all chunks from Qdrant
-async function loadAllChunks() {
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('chunks-grid').innerHTML = '';
-    allChunks = [];
-    
-    try {
-        let offset = 0;
-        const limit = 100;
-        
-        while (true) {
-            const resp = await fetch(
-                `${QDRANT_URL}/collections/${COLLECTION}/points/scroll`,
-                {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        limit: limit,
-                        offset: offset,
-                        with_payload: true,
-                        with_vectors: false
-                    })
-                }
-            );
-            const data = await resp.json();
-            
-            if (!data.result || !data.result.points || data.result.points.length === 0) break;
-            
-            for (const p of data.result.points) {
-                allChunks.push({id: p.id, payload: p.payload});
-            }
-            
-            offset += limit;
-        }
-        
-        filteredChunks = allChunks;
-        renderStats(allChunks.length);
-        renderChunks();
-    } catch (e) {
-        console.error('Error loading chunks:', e);
-        document.getElementById('loading').textContent = 'Ошибка: ' + e.message;
-    }
+  <div class="pagination" id="pagination" style="display:none"></div>
+</main>
+
+<script>
+const API = '/api/v1';
+const params = new URLSearchParams(window.location.search);
+const DOC_ID = params.get('doc_id');
+const DOC_NAME = params.get('name') || 'Документ';
+
+let currentPage = 0;
+let currentLimit = 10;
+let totalChunks = 0;
+
+if (DOC_ID) {
+  document.getElementById('page-title').textContent = '📄 Чанки: ' + DOC_NAME;
+  document.getElementById('breadcrumb').innerHTML = 
+    '<a href="/documents">← К списку документов</a> &nbsp;›&nbsp; ' + DOC_NAME;
 }
 
-// Handle Enter key
-function handleSearch(event) {
-    if (event.key === 'Enter') runSearch();
+function changeLimit() {
+  currentLimit = parseInt(document.getElementById('limit-select').value);
+  currentPage = 0;
+  loadChunks();
 }
 
-// Handle search type change
-function handleSearchType() {
-    const type = document.getElementById('search-type').value;
-    const input = document.getElementById('search');
-    if (type === 'semantic') {
-        input.placeholder = 'Введите запрос для семантического поиска...';
-    } else {
-        input.placeholder = 'Поиск по тексту или ID...';
-    }
-}
+async function loadChunks() {
+  const container = document.getElementById('chunks-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
-// Run search based on type
-async function runSearch() {
-    const query = document.getElementById('search').value;
-    const type = document.getElementById('search-type').value;
+  try {
+    const apiUrl = DOC_ID 
+      ? `${API}/upload/${DOC_ID}/chunks?offset=${currentPage * currentLimit}&limit=${currentLimit}`
+      : `${API}/chunks?offset=${currentPage * currentLimit}&limit=${currentLimit}`;
+
+    const resp = await fetch(apiUrl);
     
-    if (!query) {
-        filteredChunks = allChunks;
-        renderChunks();
-        return;
+    if (!resp.ok) {
+      // Fallback: try searching via Qdrant
+      const searchData = DOC_ID 
+        ? { doc_id: DOC_ID, limit: currentLimit, offset: currentPage * currentLimit }
+        : { limit: currentLimit, offset: currentPage * currentLimit };
+      
+      const searchResp = await fetch(`${API}/chat/search`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: '', filters: searchData})
+      });
+      
+      if (searchResp.ok) {
+        const data = await searchResp.json();
+        renderChunks(data.chunks || data.results || [], data.total || 0);
+      } else {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Не удалось загрузить чанки</div></div>';
+      }
+      return;
     }
     
-    if (type === 'semantic') {
-        await semanticSearch(query);
-    } else {
-        textSearch(query);
-    }
-}
-
-// Text search in loaded chunks - sort by relevance
-function textSearch(query) {
-    const q = query.toLowerCase();
-    
-    // Calculate relevance score for each chunk
-    const scores = {};
-    
-    filteredChunks = allChunks
-        .map(c => {
-            const p = c.payload || {};
-            const content = (p.content || '').toLowerCase();
-            const docId = (p.document_id || '').toLowerCase();
-            
-            let score = 0;
-            if (content.includes(q)) {
-                const pos = content.indexOf(q);
-                score = 1000 - pos; // Higher score for earlier match
-                if (content === q) score += 500; // Exact match bonus
-            }
-            if (docId.includes(q)) {
-                score += 500;
-            }
-            
-            if (score > 0) {
-                scores[c.id] = score;
-            }
-            
-            return { chunk: c, score: score };
-        })
-        .filter(item => item.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .map(item => item.chunk);
-    
-    renderChunks(false, scores);
-}
-
-// Semantic search via embedding
-async function semanticSearch(query) {
-    document.getElementById('loading').textContent = 'Семантический поиск...';
-    
-    try {
-        // Get embedding
-        const embedResp = await fetch(
-            `${OLLAMA_URL}/api/embeddings`,
-            {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    model: 'nomic-embed-text:latest',
-                    prompt: query
-                })
-            }
-        );
-        const embedData = await embedResp.json();
-        const vector = embedData.embedding;
-        
-        // Search Qdrant
-        const searchResp = await fetch(
-            `${QDRANT_URL}/collections/${COLLECTION}/points/search`,
-            {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    vector: vector,
-                    limit: 20,
-                    with_payload: true
-                })
-            }
-        );
-        const searchData = await searchResp.json();
-        
-        filteredChunks = (searchData.result || []).map(r => ({
-            id: r.id,
-            payload: r.payload,
-            score: r.score
-        }));
-        
-        renderChunks(true);
-    } catch (e) {
-        console.error('Semantic search error:', e);
-        textSearch(query); // Fallback to text search
-    }
-}
-
-// Render stats
-function renderStats(total) {
-    const docs = new Set(allChunks.map(c => c.payload?.document_id)).size;
-    document.getElementById('stats').innerHTML = `
-        <div class="stat-card">
-            <div class="stat-label">Всего чанков</div>
-            <div class="stat-value">${total}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Документов</div>
-            <div class="stat-value">${docs}</div>
-        </div>
-    `;
-}
-
-// Render chunks grid
-function renderChunks(showScores = false, customScores = null) {
-    document.getElementById('loading').style.display = 'none';
-    
-    const grid = document.getElementById('chunks-grid');
-    
-    if (filteredChunks.length === 0) {
-        grid.innerHTML = '<div class="loading">Чанки не найдены</div>';
-        return;
-    }
-    
-    grid.innerHTML = filteredChunks.map((chunk, idx) => {
-        const p = chunk.payload || {};
-        const content = p.content || '';
-        const preview = content.length > 150 ? content.substring(0, 150) + '...' : content;
-        
-        // Show relevance score for text search
-        let scoreBadge = '';
-        if (customScores && customScores[chunk.id]) {
-            const score = Math.min(100, customScores[chunk.id] / 10);
-            scoreBadge = `<span class="score-badge" style="background: ${score > 50 ? '#22c55e' : '#f59e0b'}">${score.toFixed(0)}%</span>`;
-        } else if (showScores && chunk.score) {
-            scoreBadge = `<span class="score-badge">${(chunk.score * 100).toFixed(1)}%</span>`;
-        }
-        
-        return `
-            <div class="chunk-card" onclick="openEditModal(${idx})">
-                <div class="chunk-header">
-                    <span class="doc-id">${truncate(p.document_id || '-', 12)}</span>
-                    <span class="chunk-id">${p.chunk_id || '-'}</span>
-                    ${scoreBadge}
-                </div>
-                <div class="chunk-content-preview">${escapeHtml(preview)}</div>
-                <div class="chunk-meta">
-                    <span class="meta-tag">${p.file_type || '-'}</span>
-                    <span class="meta-tag">${content.length} симв.</span>
-                </div>
-            </div>
-        `;
-    });
-}
-
-// Open edit modal
-function openEditModal(idx) {
-    currentChunk = filteredChunks[idx];
-    const p = currentChunk.payload || {};
-    
-    document.getElementById('chunk-edit').value = p.content || '';
-    
-    // Show score if exists
-    const scoreEl = document.getElementById('modal-score');
-    if (currentChunk.score) {
-        scoreEl.textContent = `Схожесть: ${(currentChunk.score * 100).toFixed(1)}%`;
-        scoreEl.style.display = 'inline';
-    } else {
-        scoreEl.style.display = 'none';
-    }
-    
-    // Render metadata
-    const metaHtml = Object.entries(p).map(([k, v]) => `
-        <div class="metadata-item">
-            <div class="metadata-key">${k}</div>
-            <div class="metadata-value">${truncate(String(v), 50)}</div>
-        </div>
-    `).join('');
-    document.getElementById('modal-meta').innerHTML = metaHtml;
-    
-    document.getElementById('modal').classList.add('active');
-}
-
-// Save edited chunk
-async function saveChunk() {
-    if (!currentChunk) return;
-    
-    const newContent = document.getElementById('chunk-edit').value;
-    const statusEl = document.getElementById('save-status');
-    
-    statusEl.textContent = 'Сохранение...';
-    
-    try {
-        // Update in Qdrant - need to delete and re-insert
-        // First delete old point
-        await fetch(
-            `${QDRANT_URL}/collections/${COLLECTION}/points/delete`,
-            {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    points: [currentChunk.id]
-                })
-            }
-        );
-        
-        // Then insert new point
-        const vector = await getEmbedding(newContent);
-        
-        await fetch(
-            `${QDRANT_URL}/collections/${COLLECTION}/points`,
-            {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    points: [{
-                        id: currentChunk.id,
-                        vector: vector,
-                        payload: {...currentChunk.payload, content: newContent}
-                    }]
-                })
-            }
-        );
-        
-        // Update local data
-        currentChunk.payload.content = newContent;
-        
-        statusEl.textContent = 'Сохранено!';
-        setTimeout(() => {
-            statusEl.textContent = '';
-            closeModal();
-        }, 1000);
-        
-        // Reload if not in search mode
-        if (!document.getElementById('search').value) {
-            loadAllChunks();
-        }
-    } catch (e) {
-        console.error('Save error:', e);
-        statusEl.textContent = 'Ошибка: ' + e.message;
-    }
-}
-
-// Get embedding for text
-async function getEmbedding(text) {
-    const resp = await fetch(
-        `${OLLAMA_URL}/api/embeddings`,
-        {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                model: 'nomic-embed-text:latest',
-                prompt: text
-            })
-        }
-    );
     const data = await resp.json();
-    return data.embedding;
+    renderChunks(data.chunks || data.items || [], data.total || data.count || 0);
+    
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><div class="empty-text">Ошибка: ' + err.message + '</div></div>';
+  }
 }
 
-function closeModal() {
-    document.getElementById('modal').classList.remove('active');
-    currentChunk = null;
+function renderChunks(chunks, total) {
+  totalChunks = total || chunks.length;
+  const container = document.getElementById('chunks-container');
+  
+  document.getElementById('chunk-count').innerHTML = 
+    'Всего: <strong>' + totalChunks + '</strong> чанков' +
+    (DOC_ID ? ' для этого документа' : '');
+  
+  if (!chunks.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">' +
+      (DOC_ID ? 'У этого документа нет чанков' : 'Чанки не найдены') + '</div></div>';
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = chunks.map((c, i) => {
+    const text = c.text || c.content || c.chunk_text || JSON.stringify(c);
+    const seq = c.chunk_seq || c.metadata?.chunk_seq || (c.chunk_id || '').replace('chunk_', '');
+    const id = c.chunk_id || c.id || `#${currentPage * currentLimit + i + 1}`;
+    return `<div class="chunk-card">
+      <div class="chunk-header">
+        <span class="chunk-id">Чанк #${seq} <span style="color:var(--text4);font-weight:400">(${id})</span></span>
+        <span class="chunk-meta">${text.length} символов</span>
+      </div>
+      <div class="chunk-body"><pre>${escapeHtml(text)}</pre></div>
+    </div>`;
+  }).join('');
+
+  // Pagination
+  const totalPages = Math.ceil(totalChunks / currentLimit);
+  const pag = document.getElementById('pagination');
+  if (totalPages <= 1) {
+    pag.style.display = 'none';
+  } else {
+    pag.style.display = 'flex';
+    pag.innerHTML = `
+      <button onclick="goPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>← Назад</button>
+      <span class="page-info">${currentPage + 1} / ${totalPages}</span>
+      <button onclick="goPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Вперёд →</button>
+    `;
+  }
+}
+
+function goPage(n) {
+  currentPage = Math.max(0, n);
+  loadChunks();
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
-function truncate(str, len) {
-    return str.length > len ? str.substring(0, len) + '...' : str;
+loadChunks();
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
 }
 
-// Load on init
-loadAllChunks();
-    </script>
+</script>
 </body>
 </html>

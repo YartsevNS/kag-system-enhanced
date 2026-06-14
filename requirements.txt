@@ -7,6 +7,7 @@ python-multipart==0.0.20
 
 # Аутентификация и авторизация
 python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
 casbin==1.36.0
 # casbin-fastapi-adapter==0.0.4  # Пакет недоступен, используем напрямую
 
@@ -17,6 +18,9 @@ apscheduler==3.10.4
 
 # Векторная БД
 qdrant-client==1.12.1
+
+# Граф знаний
+neo4j==5.27.0
 
 # MCP
 mcp==1.2.0
@@ -36,8 +40,12 @@ cryptography==44.0.0
 # Утилиты
 python-dotenv==1.0.1
 httpx==0.28.1
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+feedparser>=6.0.0
 loguru==0.7.3
 docker==7.1.0
+watchdog>=6.0.0
 
 # Работа с БД (конфиги)
 SQLAlchemy>=2.0.0
@@ -54,3 +62,26 @@ pdf2image>=1.17.0
 
 # Экспорт документов
 reportlab>=4.0.0
+
+# Occular-ocr — быстрый русский OCR (20x быстрее EasyOCR, 93.7% точность)
+# Ставится через Dockerfile с --no-deps (torch тянется отдельно для Docling)
+onnxruntime>=1.16.0
+opencv-python-headless>=4.8.0
+pyclipper>=1.3.0
+shapely>=2.0.0
+pymupdf>=1.23.0
+
+# Docling — layout analysis + таблицы (требует torch)
+torch>=2.0.0
+docling>=2.0.0
+
+# Улучшенный чанкинг для русского языка
+langchain-text-splitters>=0.3.0
+
+# langchain-text-splitters — качественный чанкинг для русского языка
+# (лёгкий, не тянет torch/transformers)
+
+# Reranker для переранжирования поисковых результатов
+# FlashRank — лёгкий ONNX-based (без torch, ~50MB)
+flashrank>=0.2.0
+rank-bm25>=0.2.2

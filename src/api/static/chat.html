@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAG - Интеллектуальный помощник</title>
+    <style>
+        :root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+        *{margin:0;padding:0;box-sizing:border-box}
+        
+        body{
+            font-family:system-ui, -apple-system, sans-serif;
+            background:var(--bg);
+            color:var(--text);
+            height:100vh;
+            overflow:hidden;
+        }
+        
+        .app{
+            display:flex;
+            height:100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar{
+            width:280px;
+            background:var(--panel);
+            border-right:1px solid var(--border);
+            display:flex;
+            flex-direction:column;
+            flex-shrink:0;
+        }
+        
+        .sidebar-header{
+            padding:1.5rem;
+            border-bottom:1px solid var(--border);
+        }
+        
+        .logo{
+            font-size:1.25rem;
+            font-weight:700;
+            background:linear-gradient(135deg,var(--accent),var(--accent-h));
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            margin-bottom:0.5rem;
+        }
+        
+        .subtitle{
+            font-size:0.75rem;
+            color:var(--text4);
+        }
+        
+        .new-chat-btn{
+            margin:1rem;
+            padding:0.65rem 0.75rem;
+            background:var(--accent);
+            color:#fff;
+            border:none;
+            border-radius:var(--radius-sm);
+            cursor:pointer;
+            font-size:0.8125rem;
+            font-weight:500;
+            transition:all 0.15s;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:0.5rem;
+        }
+        
+        .new-chat-btn:hover{
+            background:var(--accent-h);
+        }
+        
+        .sessions-list{
+            flex:1;
+            overflow-y:auto;
+            padding:0.5rem;
+        }
+        
+        .session-item{
+            padding:0.65rem 0.75rem;
+            border-radius:var(--radius-sm);
+            cursor:pointer;
+            transition:all 0.15s;
+            margin-bottom:0.15rem;
+        }
+        
+        .session-item:hover{
+            background:var(--surface);
+        }
+        
+        .session-item.active{
+            background:var(--accent);
+            color:#fff;
+        }
+        
+        .session-item.active .session-time{
+            color:rgba(255,255,255,0.6);
+        }
+        
+        .session-title{
+            font-size:0.8125rem;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+        }
+        
+        .session-time{
+            font-size:0.7rem;
+            color:var(--text4);
+            margin-top:0.2rem;
+        }
+        
+        .sidebar-footer{
+            padding:1rem;
+            border-top:1px solid var(--border);
+            font-size:0.7rem;
+            color:var(--text4);
+            text-align:center;
+        }
+        
+        /* Main Chat Area */
+        .main{
+            flex:1;
+            display:flex;
+            flex-direction:column;
+        }
+        
+        .chat-header{
+            padding:0.75rem 1.5rem;
+            border-bottom:1px solid var(--border);
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            background:var(--panel);
+        }
+        
+        .chat-title-group{
+            display:flex;
+            align-items:center;
+            gap:1rem;
+        }
+        
+        .chat-title{
+            font-size:1rem;
+            font-weight:600;
+            color:var(--text2);
+        }
+        
+        .chat-status{
+            display:flex;
+            align-items:center;
+            gap:0.5rem;
+            font-size:0.75rem;
+            color:var(--text3);
+        }
+        
+        .status-indicator{
+            width:7px;
+            height:7px;
+            border-radius:50%;
+            background:var(--green);
+        }
+        
+        .header-buttons{
+            display:flex;
+            gap:0.5rem;
+            flex-wrap:wrap;
+        }
+        
+        .header-btn{
+            background:var(--surface);
+            border:none;
+            color:var(--text3);
+            padding:0.4rem 0.75rem;
+            border-radius:var(--radius-sm);
+            cursor:pointer;
+            font-size:0.75rem;
+            transition:all 0.15s;
+            text-decoration:none;
+            display:inline-flex;
+            align-items:center;
+            gap:0.35rem;
+            white-space:nowrap;
+        }
+        
+        .header-btn:hover{
+            background:var(--elevated);
+            color:var(--text2);
+        }
+        
+        .header-btn-primary{
+            background:var(--accent);
+            color:#fff;
+        }
+        
+        .header-btn-primary:hover{
+            background:var(--accent-h);
+            color:#fff;
+        }
+        
+        /* Messages */
+        .messages{
+            flex:1;
+            overflow-y:auto;
+            padding:1.5rem;
+        }
+        
+        .message{
+            margin-bottom:1.5rem;
+            display:flex;
+            gap:1rem;
+        }
+        
+        .message-avatar{
+            width:36px;
+            height:36px;
+            border-radius:50%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            flex-shrink:0;
+            font-size:1.1rem;
+        }
+        
+        .user-message .message-avatar{
+            background:var(--accent);
+        }
+        
+        .assistant-message .message-avatar{
+            background:var(--elevated);
+        }
+        
+        .message-content{
+            flex:1;
+            background:var(--panel);
+            padding:1rem;
+            border-radius:var(--radius);
+            border:1px solid var(--border-s);
+        }
+        
+        .message-text{
+            white-space:pre-wrap;
+            line-height:1.6;
+            font-size:0.875rem;
+            color:var(--text2);
+        }
+        
+        .message-meta{
+            margin-top:0.5rem;
+            font-size:0.7rem;
+            color:var(--text4);
+            display:flex;
+            gap:1rem;
+        }
+        
+        .sources{
+            margin-top:0.75rem;
+            padding-top:0.75rem;
+            border-top:1px solid var(--border-s);
+        }
+        
+        .sources-title{
+            font-size:0.7rem;
+            color:var(--text4);
+            margin-bottom:0.5rem;
+        }
+        
+        .source-item{
+            background:var(--surface);
+            padding:0.5rem;
+            border-radius:var(--radius-sm);
+            font-size:0.7rem;
+            color:var(--text3);
+            margin-bottom:0.25rem;
+        }
+        
+        .source-score{
+            color:var(--accent);
+            font-weight:500;
+        }
+        
+        /* Input Area */
+        .input-area{
+            padding:1rem 1.5rem;
+            border-top:1px solid var(--border);
+            background:var(--panel);
+        }
+        
+        .input-container{
+            display:flex;
+            gap:0.75rem;
+            max-width:900px;
+            margin:0 auto;
+        }
+        
+        .message-input{
+            flex:1;
+            background:var(--bg);
+            border:1px solid var(--border);
+            color:var(--text);
+            padding:0.75rem 1rem;
+            border-radius:var(--radius);
+            font-size:0.8125rem;
+            resize:none;
+            min-height:56px;
+            max-height:200px;
+            font-family:inherit;
+            transition:border-color 0.15s;
+        }
+        
+        .message-input:focus{
+            outline:none;
+            border-color:var(--accent);
+        }
+        
+        .message-input::placeholder{
+            color:var(--text4);
+        }
+        
+        .send-btn{
+            background:var(--accent);
+            color:#fff;
+            border:none;
+            border-radius:var(--radius);
+            width:56px;
+            cursor:pointer;
+            font-size:1.15rem;
+            transition:all 0.15s;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            flex-shrink:0;
+        }
+        
+        .send-btn:hover:not(:disabled){
+            background:var(--accent-h);
+        }
+        
+        .send-btn:disabled{
+            opacity:0.4;
+            cursor:not-allowed;
+        }
+        
+        .input-hint{
+            text-align:center;
+            font-size:0.7rem;
+            color:var(--text4);
+            margin-top:0.5rem;
+        }
+        
+        /* Empty State */
+        .empty-state{
+            flex:1;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            color:var(--text3);
+            text-align:center;
+            padding:2rem;
+        }
+        
+        .empty-icon{
+            font-size:4rem;
+            margin-bottom:1rem;
+        }
+        
+        .empty-title{
+            font-size:1.5rem;
+            color:var(--text);
+            margin-bottom:0.5rem;
+        }
+        
+        .suggestions{
+            display:grid;
+            grid-template-columns:repeat(2,1fr);
+            gap:1rem;
+            margin-top:2rem;
+            max-width:600px;
+        }
+        
+        .suggestion{
+            background:var(--panel);
+            border:1px solid var(--border-s);
+            padding:1rem;
+            border-radius:var(--radius);
+            cursor:pointer;
+            transition:all 0.15s;
+            text-align:left;
+        }
+        
+        .suggestion:hover{
+            border-color:var(--accent);
+            background:var(--surface);
+        }
+        
+        .suggestion-title{
+            font-weight:500;
+            margin-bottom:0.25rem;
+            font-size:0.875rem;
+            color:var(--text2);
+        }
+        
+        .suggestion-desc{
+            font-size:0.75rem;
+            color:var(--text4);
+        }
+        
+        /* Loading */
+        .loading{
+            display:flex;
+            align-items:center;
+            gap:0.5rem;
+            color:var(--text3);
+            font-size:0.875rem;
+        }
+        
+        .loading-dots{
+            display:flex;
+            gap:0.25rem;
+        }
+        
+        .loading-dots span{
+            width:5px;
+            height:5px;
+            background:var(--accent);
+            border-radius:50%;
+            animation:bounce 1.4s infinite;
+        }
+        
+        .loading-dots span:nth-child(2){animation-delay:0.2s}
+        .loading-dots span:nth-child(3){animation-delay:0.4s}
+        
+        @keyframes bounce{
+            0%,80%,100%{transform:scale(0)}
+            40%{transform:scale(1)}
+        }
+        
+        /* Responsive */
+        @media(max-width:768px){
+            .sidebar{display:none}
+            .suggestions{grid-template-columns:1fr}
+            .header-buttons{display:none}
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">🎯 KAG</div>
+                <div class="subtitle">Knowledge Augmentation Generation</div>
+            </div>
+            
+            <button class="new-chat-btn" onclick="newChat()">
+                <span>➕</span> Новый чат
+            </button>
+            
+            <div class="sessions-list" id="sessions-list">
+                <!-- Сессии будут добавляться здесь -->
+            </div>
+            
+            <div class="sidebar-footer">
+                KAG v0.2.0 • Ollama • Qdrant
+            </div>
+        </div>
+        
+        <!-- Main Chat -->
+        <div class="main">
+            <div class="chat-header">
+                <div class="chat-title-group">
+                    <div>
+                        <div class="chat-title" id="chat-title">Новый чат</div>
+                        <div class="chat-status">
+                            <span class="status-indicator"></span>
+                            <span id="model-name">Загрузка...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <a href="/documents" class="header-btn header-btn-primary">📄 Документы</a>
+                    <a href="/chunks" class="header-btn">📚 Чанки</a>
+                    <a href="/qdrant" class="header-btn">🗄️ Qdrant</a>
+                    <a href="/docker" class="header-btn">🐳 Docker</a>
+                    <a href="/admin" class="header-btn">⚙️ Настройки</a>
+                    <button class="header-btn" onclick="exportDialog('docx')" title="Скачать DOCX">📥 DOCX</button>
+                    <button class="header-btn" onclick="exportDialog('pdf')" title="Скачать PDF">📥 PDF</button>
+                </div>
+            </div>
+            
+            <div class="messages" id="messages">
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon">🤖</div>
+                    <div class="empty-title">Чем могу помочь?</div>
+                    <div>Интеллектуальный помощник с доступом к базе знаний</div>
+                    
+                    <div class="suggestions">
+                        <div class="suggestion" onclick="useSuggestion('Что такое KAG?')">
+                            <div class="suggestion-title">📚 О проекте</div>
+                            <div class="suggestion-desc">Что такое KAG и как он работает</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Какие возможности у системы?')">
+                            <div class="suggestion-title">🚀 Возможности</div>
+                            <div class="suggestion-desc">Основные функции системы</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Как загрузить документы?')">
+                            <div class="suggestion-title">📄 Документы</div>
+                            <div class="suggestion-desc">Как добавить свои документы</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Расскажи о себе')">
+                            <div class="suggestion-title">💬 О системе</div>
+                            <div class="suggestion-desc">Информация о возможностях</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea 
+                        class="message-input" 
+                        id="message-input"
+                        placeholder="Введите сообщение..."
+                        onkeydown="handleKeyDown(event)"
+                    ></textarea>
+                    <button class="send-btn" id="send-btn" onclick="sendMessage()">
+                        ➤
+                    </button>
+                </div>
+                <div class="input-hint">
+                    Enter - отправить • Shift+Enter - новая строка
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = '/api/v1';
+        let currentSessionId = null;
+        let sessions = [];
+        let isLoading = false;
+        
+        // Обёртка fetch с токеном из localStorage
+        function apiFetch(url, opts) {
+            opts = opts || {};
+            opts.credentials = 'include';
+            var h = new Headers(opts.headers || {});
+            var t = localStorage.getItem('kag_token');
+            if (t) h.set('Authorization', 'Bearer ' + t);
+            opts.headers = h;
+            return fetch(url, opts);
+        }
+        
+        // Уведомление
+        function showNotification(message, isError) {
+            var n = document.getElementById('notification');
+            if (!n) {
+                n = document.createElement('div');
+                n.id = 'notification';
+                n.style.cssText = 'position:fixed;top:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:500;display:none;z-index:2000;box-shadow:0 4px 24px rgba(0,0,0,0.4);animation:slideIn 0.3s ease';
+                document.body.appendChild(n);
+            }
+            n.textContent = message;
+            n.style.background = isError ? '#ef4444' : '#22c55e';
+            n.style.display = 'block';
+            setTimeout(function() { n.style.display = 'none'; }, 3000);
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSessions();
+            loadCurrentModel();
+            document.getElementById('message-input').focus();
+        });
+        
+        // Загрузка текущей модели из Provider Architecture
+        async function loadCurrentModel() {
+            const modelEl = document.getElementById('model-name');
+            const indicator = document.querySelector('.status-indicator');
+            
+            try {
+                // Получаем привязку функции чата
+                const fmResp = await apiFetch(`${API_URL}/admin/models/functions/chat`);
+                if (!fmResp.ok) throw new Error('Не удалось получить привязку чата');
+                const fm = await fmResp.json();
+                const modelName = fm.model || '—';
+                const providerId = fm.provider_id;
+                
+                if (modelEl) modelEl.textContent = modelName;
+                
+                // Проверяем статус провайдера
+                if (providerId) {
+                    const provResp = await apiFetch(`${API_URL}/admin/models/providers/${encodeURIComponent(providerId)}/test`, {method: 'POST'});
+                    const provData = await provResp.json();
+                    if (indicator) {
+                        indicator.style.background = provData.ok ? 'var(--green)' : 'var(--red)';
+                        indicator.title = provData.ok ? 'Модель активна' : 'Модель недоступна';
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки модели:', error);
+                if (modelEl) modelEl.textContent = 'Не настроена';
+                if (indicator) indicator.style.background = 'var(--red)';
+            }
+        }
+        
+        // Загрузка сессий из localStorage
+        function loadSessions() {
+            const saved = localStorage.getItem('kag_sessions');
+            if (saved) {
+                sessions = JSON.parse(saved);
+                renderSessions();
+            }
+        }
+        
+        // Сохранение сессий
+        function saveSessions() {
+            localStorage.setItem('kag_sessions', JSON.stringify(sessions));
+        }
+        
+        // Отрисовка сессий
+        function renderSessions() {
+            const list = document.getElementById('sessions-list');
+            list.innerHTML = '';
+            
+            sessions.slice().reverse().forEach(session => {
+                const div = document.createElement('div');
+                div.className = `session-item ${session.id === currentSessionId ? 'active' : ''}`;
+                div.onclick = () => loadSession(session.id);
+                div.innerHTML = `
+                    <div class="session-title">${session.title}</div>
+                    <div class="session-time">${new Date(session.updatedAt).toLocaleString('ru-RU')}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+        
+        // Новый чат
+        function newChat() {
+            currentSessionId = null;
+            document.getElementById('messages').innerHTML = getEmptyStateHTML();
+            document.getElementById('chat-title').textContent = 'Новый чат';
+            document.getElementById('message-input').focus();
+            renderSessions();
+        }
+        
+        // Загрузка сессии
+        function loadSession(sessionId) {
+            const session = sessions.find(s => s.id === sessionId);
+            if (!session) return;
+            
+            currentSessionId = sessionId;
+            document.getElementById('chat-title').textContent = session.title;
+            
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            
+            if (session.messages) {
+                session.messages.forEach(msg => {
+                    addMessageToUI(msg.role, msg.content, msg.metadata);
+                });
+            }
+            
+            renderSessions();
+            document.getElementById('message-input').focus();
+        }
+        
+        // Отправка сообщения
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            
+            if (!text || isLoading) return;
+            
+            // Убираем empty state
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) emptyState.remove();
+            
+            // Добавляем сообщение пользователя
+            addMessageToUI('user', text);
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // Показываем загрузку
+            showLoading();
+            isLoading = true;
+            updateSendButton();
+            
+            try {
+                // Формируем историю сообщений для API
+                const session = sessions.find(s => s.id === currentSessionId);
+                const apiMessages = [];
+                
+                if (session && session.messages) {
+                    session.messages.forEach(msg => {
+                        apiMessages.push({
+                            role: msg.role,
+                            content: msg.content
+                        });
+                    });
+                }
+                
+                // Добавляем текущее сообщение
+                apiMessages.push({
+                    role: 'user',
+                    content: text
+                });
+                
+                const response = await apiFetch(`${API_URL}/chat/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: apiMessages,
+                        session_id: currentSessionId,
+                        temperature: 0.7,
+                        max_tokens: 2048
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Убираем загрузку
+                hideLoading();
+                
+                // Добавляем ответ ассистента
+                addMessageToUI('assistant', data.response, data.metadata);
+                
+                // Сохраняем сессию
+                saveMessage('user', text);
+                saveMessage('assistant', data.response, data.metadata);
+                
+            } catch (error) {
+                hideLoading();
+                addMessageToUI('assistant', `❌ Ошибка: ${error.message}\n\nПроверьте что сервер запущен и доступен.`);
+            } finally {
+                isLoading = false;
+                updateSendButton();
+                document.getElementById('message-input').focus();
+            }
+        }
+        
+        // Добавление сообщения в UI
+        function addMessageToUI(role, content, metadata = null) {
+            const messagesDiv = document.getElementById('messages');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            const avatar = role === 'user' ? '👤' : '🤖';
+            
+            let sourcesHTML = '';
+            if (metadata && metadata.sources_count > 0 && metadata.rag_used) {
+                const totalDocs = metadata.total_docs || '—';
+                const graphUsed = metadata.graph_used ? ' • 🕸️ Граф знаний' : '';
+                sourcesHTML = `
+                    <div class="sources">
+                        <div class="sources-title">📎 Источники (${metadata.sources_count})</div>
+                        <div class="source-item">
+                            📄 Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">
+                    <div class="message-text">${escapeHTML(content)}</div>
+                    <div class="message-meta">
+                        ${metadata ? `<span>🤖 ${metadata.model || 'N/A'}</span>` : ''}
+                        ${metadata && metadata.backend ? `<span>⚙️ ${metadata.backend}</span>` : ''}
+                        <span>🕐 ${new Date().toLocaleTimeString('ru-RU')}</span>
+                    </div>
+                    ${sourcesHTML}
+                </div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Сохранение сообщения
+        function saveMessage(role, content, metadata = null) {
+            if (!currentSessionId) {
+                currentSessionId = 'session_' + Date.now();
+                sessions.push({
+                    id: currentSessionId,
+                    title: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+                    messages: [],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                
+                document.getElementById('chat-title').textContent = sessions[0].title;
+                renderSessions();
+            }
+            
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (session) {
+                session.messages.push({ role, content, metadata });
+                session.updatedAt = new Date().toISOString();
+                saveSessions();
+                renderSessions();
+            }
+        }
+        
+        // Показ/скрытие загрузки
+        function showLoading() {
+            const messagesDiv = document.getElementById('messages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message assistant-message';
+            loadingDiv.id = 'loading-message';
+            loadingDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="loading">
+                        <span>Думаю</span>
+                        <div class="loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            messagesDiv.appendChild(loadingDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function hideLoading() {
+            const loading = document.getElementById('loading-message');
+            if (loading) loading.remove();
+        }
+        
+        // Обработка клавиш
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        // Использование подсказки
+        function useSuggestion(text) {
+            document.getElementById('message-input').value = text;
+            sendMessage();
+        }
+        
+        // Настройки - теперь это ссылка
+        // Функция удалена, используется прямая ссылка /admin
+        
+        // Экспорт диалога
+        async function exportDialog(format) {
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (!session || !session.messages || session.messages.length === 0) {
+                showNotification('❌ Нет сообщений для экспорта', true);
+                return;
+            }
+
+            showNotification(`⏳ Генерация ${format.toUpperCase()}...`);
+
+            try {
+                const response = await apiFetch(`${API_URL}/chat/export/${currentSessionId}?format=${format}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        messages: session.messages.map(m => ({
+                            role: m.role,
+                            content: m.content,
+                            metadata: m.metadata
+                        }))
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка экспорта');
+                }
+
+                // Скачиваем файл
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `kag_dialog_${currentSessionId.substring(0, 8)}.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showNotification(`✅ ${format.toUpperCase()} документ скачан`);
+            } catch (error) {
+                showNotification(`❌ Ошибка экспорта: ${error.message}`, true);
+            }
+        }
+        
+        // Обновление кнопки отправки
+        function updateSendButton() {
+            const btn = document.getElementById('send-btn');
+            btn.disabled = isLoading;
+        }
+        
+        // Экранирование HTML
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        
+        // HTML пустого состояния
+        function getEmptyStateHTML() {
+            return `
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon">🤖</div>
+                    <div class="empty-title">Чем могу помочь?</div>
+                    <div>Интеллектуальный помощник с доступом к базе знаний</div>
+                    <div class="suggestions">
+                        <div class="suggestion" onclick="useSuggestion('Что такое KAG?')">
+                            <div class="suggestion-title">📚 О проекте</div>
+                            <div class="suggestion-desc">Что такое KAG и как он работает</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Какие возможности у системы?')">
+                            <div class="suggestion-title">🚀 Возможности</div>
+                            <div class="suggestion-desc">Основные функции системы</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Как загрузить документы?')">
+                            <div class="suggestion-title">📄 Документы</div>
+                            <div class="suggestion-desc">Как добавить свои документы</div>
+                        </div>
+                        <div class="suggestion" onclick="useSuggestion('Расскажи о себе')">
+                            <div class="suggestion-title">💬 О системе</div>
+                            <div class="suggestion-desc">Информация о возможностях</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Автоподстройка высоты textarea
+        const textarea = document.getElementById('message-input');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+        });
+    </script>
+</body>
+</html>

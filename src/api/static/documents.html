@@ -1,405 +1,686 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Управление документами</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-        }
-        .header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .back-btn {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .back-btn:hover { background: #64748b; }
-        .container { max-width: 1400px; margin: 2rem auto; padding: 0 2rem; }
-        
-        /* Upload Area */
-        .upload-section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        .upload-area {
-            border: 2px dashed #475569;
-            border-radius: 12px;
-            padding: 3rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .upload-area:hover { border-color: #3b82f6; background: #334155; }
-        .upload-icon { font-size: 3rem; margin-bottom: 1rem; }
-        .upload-text { font-size: 1.125rem; margin-bottom: 0.5rem; }
-        .upload-hint { font-size: 0.875rem; color: #94a3b8; }
-        .upload-form { display: none; }
-        
-        /* Progress Bar */
-        .progress-container {
-            margin-top: 1rem;
-            display: none;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #334155;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #3b82f6;
-            transition: width 0.3s;
-        }
-        
-        /* Documents Table */
-        .section {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        .section-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #334155; }
-        th { color: #94a3b8; font-weight: 500; font-size: 0.875rem; }
-        td { font-size: 0.875rem; }
-        tr:hover { background: #334155; }
-        
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge-success { background: #064e3b; color: #6ee7b7; }
-        .badge-error { background: #7f1d1d; color: #fca5a5; }
-        .badge-warning { background: #78350f; color: #fcd34d; }
-        .badge-info { background: #1e3a8a; color: #93c5fd; }
-        
-        .action-btn {
-            padding: 0.375rem 0.75rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.75rem;
-            margin-right: 0.25rem;
-        }
-        .btn-delete { background: #ef4444; color: white; }
-        .btn-refresh { background: #3b82f6; color: white; }
-        
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            background: #3b82f6;
-            color: white;
-            margin-top: 1rem;
-        }
-        .btn:hover { background: #2563eb; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .loading { text-align: center; padding: 2rem; color: #94a3b8; }
-        .notification {
-            position: fixed;
-            top: 2rem;
-            right: 2rem;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            background: #22c55e;
-            color: white;
-            display: none;
-            z-index: 1000;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Документы</title>
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1600px;width:100%}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
+.stat-card .stat-num{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-0.5px}
+.stat-card .stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
+
+.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filters input,.filters select{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;font-family:system-ui, -apple-system, sans-serif;outline:none}
+.filters input:focus,.filters select:focus{border-color:var(--accent)}
+.filters input{flex:1;min-width:180px}
+.filters select{min-width:130px}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
+.btn:hover{opacity:0.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:500;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--text4)}
+.btn-outline.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:24px;text-align:center;cursor:pointer;margin-bottom:20px;transition:all 0.2s;background:var(--surface)}
+.upload-zone:hover{border-color:var(--accent);background:var(--elevated)}
+.upload-icon{font-size:32px;margin-bottom:6px;opacity:0.6}
+.upload-text{font-size:14px;color:var(--text2);font-weight:500}
+.upload-hint{font-size:12px;color:var(--text4);margin-top:4px}
+
+/* Cards grid */
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(189px,1fr));gap:8px;margin-bottom:24px}
+.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s}
+.doc-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 24px rgba(94,106,210,0.08)}
+.doc-card .thumb{width:100%;aspect-ratio:1/1.414;object-fit:cover;background:var(--panel);display:block}
+.doc-card .thumb-wrap{position:relative;overflow:hidden;aspect-ratio:1/1.414;background:var(--panel)}
+.doc-card .thumb-wrap .type-badge{position:absolute;top:6px;right:6px;font-size:9px;padding:2px 6px;border-radius:9999px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em}
+.doc-card .card-body{padding:4px 2px 2px 3px}
+.doc-card .card-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-card .card-meta{font-size:10px;color:var(--text4);margin-bottom:2px;line-height:1.2}
+.doc-card .card-tags{display:flex;gap:2px;flex-wrap:wrap}
+.tag{font-size:10px;padding:3px 7px;border-radius:9999px;font-weight:500;letter-spacing:0.02em}
+.tag-type{background:rgba(94,106,210,0.15);color:var(--accent-l)}
+.tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
+.tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
+
+/* Table */
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border-s);font-size:13px}
+th{color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;background:var(--panel)}
+td{color:var(--text2)}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.status-badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+.s-ready{background:rgba(16,185,129,0.12);color:var(--emerald)}
+.s-proc{background:rgba(245,158,11,0.12);color:var(--amber)}
+.s-pend{background:rgba(94,106,210,0.12);color:var(--accent-l)}
+.s-fail{background:rgba(220,38,38,0.12);color:var(--red)}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);max-width:750px;width:95%;max-height:85vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 22px 14px;border-bottom:1px solid var(--border-s)}
+.modal-header h2{font-size:17px;font-weight:600;word-break:break-word}
+.modal-close{background:none;border:none;color:var(--text4);font-size:22px;cursor:pointer}
+.modal-close:hover{color:var(--text2)}
+.modal-body{padding:18px 22px 22px}
+.modal-thumb{width:100%;max-height:300px;object-fit:contain;background:var(--surface);border-radius:var(--radius);margin-bottom:16px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.detail-label{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px}
+.detail-value{font-size:13px;color:var(--text2)}
+.modal-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+
+.empty{text-align:center;padding:60px;color:var(--text4);grid-column:1/-1}
+.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:110}
+
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.docs-grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">📄 KAG - Управление документами</div>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="/chunks" class="back-btn">📚 Чанки</a>
-            <a href="/qdrant" class="back-btn">🗄️ Qdrant</a>
-            <a href="/admin" class="back-btn">← Назад к настройкам</a>
-            <a href="/" class="back-btn">💬 К чату</a>
-        </div>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+
+<main>
+  <h1>📄 Документы</h1>
+  <div class="sub">Управление документами — загрузка, классификация, просмотр</div>
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
+    <div class="stat-card" id="stat-pending-card" style="cursor:pointer"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Ожидает</div><div id="reprocess-btn" style="display:none;margin-top:4px"><button onclick="reprocessPending()" style="padding:3px 8px;font-size:10px;background:var(--red);color:#fff;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔄 Переобработать</button></div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
+    <div class="stat-card" id="stat-types-card" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div><div id="type-watch-btn" style="display:none;margin-top:4px"><button class="btn-outline" onclick="startTypeDetection()" style="padding:3px 8px;font-size:10px;background:var(--amber);color:#000;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔍 Типизировать</button></div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="upload-zone">
+    <div class="upload-icon">📤</div>
+    <div class="upload-text">Загрузить документы</div>
+    <div class="upload-hint">Перетащите файлы или нажмите для выбора</div>
+    <div id="allowed-formats-bar" style="display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px;"></div>
+  </div>
+  <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
+
+  <!-- Filters + View toggle -->
+  <div class="filters">
+    <input type="text" id="search-input" placeholder="🔍 Поиск по названию, типу, тэгам..." oninput="applyFilters()">
+    <select id="type-filter" onchange="applyFilters()">
+      <option value="">Все типы</option>
+      <option value="invoice">Счёт</option><option value="contract">Договор</option>
+      <option value="report">Отчёт</option><option value="letter">Письмо</option>
+      <option value="form">Форма</option><option value="identity">Удостоверение</option>
+      <option value="legal">Юридический</option><option value="medical">Медицинский</option>
+      <option value="financial">Финансовый</option><option value="technical">Технический</option>
+      <option value="certificate">Сертификат</option><option value="standard">Стандарт</option>
+      <option value="policy">Политика</option><option value="order">Приказ</option>
+      <option value="news">Новость</option>
+      <option value="unknown">Неизвестно</option>
+    </select>
+    <select id="status-filter" onchange="applyFilters()">
+      <option value="">Все статусы</option>
+      <option value="completed">✅ Готово</option>
+      <option value="processing">⚙️ В обработке</option>
+      <option value="pending">⏳ Ожидает</option>
+      <option value="failed">❌ Ошибка</option>
+    </select>
+    <select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка">
+      <option value="date_desc">📅 Новые сверху</option>
+      <option value="date_asc">📅 Старые сверху</option>
+      <option value="name_asc">🔤 А–Я</option>
+      <option value="name_desc">🔤 Я–А</option>
+      <option value="size_desc">📦 Большие сверху</option>
+      <option value="size_asc">📦 Малые сверху</option>
+    </select>
+    <select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице">
+      <option value="20">20 шт</option>
+      <option value="50" selected>50 шт</option>
+      <option value="100">100 шт</option>
+      <option value="200">200 шт</option>
+      <option value="500">500 шт</option>
+      <option value="0">Все</option>
+    </select>
+    <button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button>
+    <span id="filter-info" style="font-size:11px;color:var(--text4)"></span>
+    <button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button>
+    <button class="btn-outline" id="btn-table" onclick="setView('table')">📋 Таблица</button>
+    <button class="btn-outline active" id="btn-cards" onclick="setView('cards')">🖼️ Карточки</button>
+    <button class="btn" onclick="loadAll()">🔄 Обновить</button>
+  </div>
+
+  <!-- Cards -->
+  <div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div>
+
+  <!-- Table -->
+  <div id="docs-table" style="display:none">
+    <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
+      <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
+      <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
     </div>
+    <table>
+      <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+    <div class="empty" id="table-empty" style="display:none">Нет документов</div>
+  </div>
+</main>
 
-    <div class="container">
-        <!-- Upload Section -->
-        <div class="upload-section">
-            <h2 style="margin-bottom: 1rem;">⬆️ Загрузка документов</h2>
-            
-            <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text">Перетащите файлы сюда или нажмите для выбора</div>
-                <div class="upload-hint">Поддерживаемые форматы: PDF, TXT, MD, DOCX, CSV</div>
-            </div>
-            
-            <input type="file" id="file-input" class="upload-form" multiple accept=".pdf,.txt,.md,.docx,.csv">
-            
-            <div class="progress-container" id="progress-container">
-                <div style="margin-bottom: 0.5rem;">Загрузка... <span id="progress-percent">0%</span></div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-                </div>
-            </div>
-        </div>
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div>
+</div>
+<div class="toast" id="toast"></div>
 
-        <!-- Documents List -->
-        <div class="section">
-            <div class="section-title">
-                <span>📋 Загруженные документы</span>
-                <button class="btn btn-refresh" onclick="loadDocuments()">🔄 Обновить</button>
-            </div>
-            <div id="documents-table">
-                <div class="loading">Загрузка...</div>
-            </div>
-        </div>
-    </div>
+<script>
+const API = '/api/v1';
+let allDocs = [];
+let view = 'cards';
 
-    <div class="notification" id="notification"></div>
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  loadFormatsBar();
+  document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('file-input').onchange = (e) => uploadFiles(Array.from(e.target.files));
+  setupDragDrop();
+  // Восстановить сохранённое количество документов на странице
+  const savedCount = localStorage.getItem('docs-count');
+  if (savedCount) {
+    const sel = document.getElementById('count-filter');
+    if (sel) sel.value = savedCount;
+  }
+  // Восстановить сохранённую сортировку
+  const savedSort = localStorage.getItem('docs-sort');
+  if (savedSort) {
+    const sel = document.getElementById('sort-filter');
+    if (sel) sel.value = savedSort;
+  }
+});
 
-    <script>
-        const API_URL = '/api/v1';
-        let uploadedFiles = [];
+async function loadFormatsBar() {
+  try {
+    const r = await fetch('/api/v1/admin/models/upload-config');
+    if (!r.ok) return;
+    const d = await r.json();
+    const formats = d.all_formats || {};
+    const allowed = d.allowed || {};
+    const bar = document.getElementById('allowed-formats-bar');
+    // Alphabetical order by label
+    const sorted = Object.entries(formats).sort((a, b) => a[1].localeCompare(b[1]));
+    bar.innerHTML = '';
+    const acceptExts = [];
+    sorted.forEach(([ext, label]) => {
+      const enabled = allowed[ext] !== false;
+      if (enabled) acceptExts.push(ext);
+      const badge = document.createElement('span');
+      badge.style.cssText = `font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;${
+        enabled ? 'background:rgba(94,106,210,0.18);color:#7170ff;' : 'background:rgba(255,255,255,0.04);color:#62666d;'
+      }`;
+      badge.textContent = ext + ' ' + label;
+      bar.appendChild(badge);
+    });
+    // Update file input accept
+    const inp = document.getElementById('file-input');
+    if (inp) inp.accept = acceptExts.join(',');
+  } catch(e) {}
+}
 
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDocuments();
-            setupDragAndDrop();
-            setupFileInput();
-        });
+function setupDragDrop() {
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+  zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.style.borderColor = '';
+    uploadFiles(Array.from(e.dataTransfer.files));
+  });
+}
 
-        function setupDragAndDrop() {
-            const area = document.getElementById('upload-area');
-            
-            area.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                area.style.borderColor = '#3b82f6';
-            });
-            
-            area.addEventListener('dragleave', () => {
-                area.style.borderColor = '#475569';
-            });
-            
-            area.addEventListener('drop', (e) => {
-                e.preventDefault();
-                area.style.borderColor = '#475569';
-                const files = Array.from(e.dataTransfer.files);
-                uploadFiles(files);
-            });
-        }
+async function uploadFiles(files) {
+  if (!files.length) return;
+  const pn = document.getElementById('prog-file');
+  if (pn) pn.textContent = '⏳ Загрузка...';
 
-        function setupFileInput() {
-            const input = document.getElementById('file-input');
-            input.addEventListener('change', () => {
-                const files = Array.from(input.files);
-                uploadFiles(files);
-            });
-        }
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (pn) pn.textContent = `📤 ${file.name}`;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
+      if (!r.ok) {
+        const e = await r.json();
+        const msg = typeof e.detail === 'string' ? e.detail : e.detail?.message || e.message || 'Upload failed';
+        throw new Error(msg);
+      }
+      toast(`✅ ${file.name} загружен`);
+    } catch(e) {
+      toast(`❌ ${file.name}: ${e.message}`, true);
+    }
+  }
+  setTimeout(() => { loadAll(); }, 500);
+}
 
-        async function uploadFiles(files) {
-            if (files.length === 0) return;
+async function loadAll() {
+  try {
+    const r = await fetch(`${API}/upload/list`);
+    if (!r.ok) throw new Error('Ошибка загрузки списка');
+    const data = await r.json();
+    allDocs = data.documents || [];
+    await enrichDocs();
+    updateStats();
+    renderAll();
+    checkTypeWatchdog();
+    // Автообновление если есть документы в обработке
+    const hasProcessing = allDocs.some(d => d.status === 'processing' || d.status === 'pending');
+    if (hasProcessing && !window._docsPollTimer) {
+      window._docsPollTimer = setInterval(() => { loadAll(true); }, 5000);
+    } else if (!hasProcessing && window._docsPollTimer) {
+      clearInterval(window._docsPollTimer);
+      window._docsPollTimer = null;
+    }
+  } catch(e) {
+    // При первом вызове (нет таймера) показываем ошибку
+    if (!window._docsPollTimer || !allDocs.length) {
+      document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
+    }
+  }
+}
 
-            const progressContainer = document.getElementById('progress-container');
-            const progressFill = document.getElementById('progress-fill');
-            const progressPercent = document.getElementById('progress-percent');
-            
-            progressContainer.style.display = 'block';
-            progressFill.style.width = '0%';
-            progressPercent.textContent = '0%';
+async function checkTypeWatchdog() {
+  try {
+    const r = await fetch(`${API}/kg/type-watchdog/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const badge = document.getElementById('type-watch-badge');
+    const btn = document.getElementById('type-watch-btn');
+    if (!badge) return;
+    if (d.status === 'running') {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--amber)';
+      badge.textContent = `⏳ ${d.processed}/${d.total_progress || d.total}`;
+      if (btn) btn.style.display = 'none';
+    } else if (d.without_type > 0) {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--text4)';
+      badge.textContent = `⚠️ ${d.without_type}/${d.total} без типа`;
+      if (btn) btn.style.display = 'block';
+    } else if (d.status === 'completed') {
+      badge.style.display = 'block';
+      badge.style.color = 'var(--emerald)';
+      badge.textContent = `✅ ${d.with_type}/${d.total}`;
+      if (btn) btn.style.display = 'none';
+    } else {
+      if (btn) btn.style.display = 'none';
+    }
+  } catch(e) {}
+}
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const formData = new FormData();
-                formData.append('file', file);
+async function startTypeDetection() {
+  const btn = document.querySelector('#type-watch-btn button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  try {
+    const r = await fetch(`${API}/kg/type-watchdog/start`, {method:'POST'});
+    const d = await r.json();
+    if (d.status === 'ok') {
+      setTimeout(checkTypeWatchdog, 2000);
+    }
+  } catch(e) {}
+  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔍 Типизировать'; } }, 5000);
+}
 
-                try {
-                    const response = await fetch(`${API_URL}/upload/`, {
-                        method: 'POST',
-                        body: formData
-                    });
+async function enrichDocs() {
+  // Get tags/types for docs — silently skip failures
+  await Promise.all(allDocs.map(async (d) => {
+    try {
+      const r = await fetch(`${API}/upload/${d.document_id}/details`);
+      if (r.ok) {
+        const det = await r.json();
+        d.document_type = det.document_type || 'unknown';
+        d.tags = det.tags || [];
+        d.uploaded_by_name = det.uploaded_by_name || null;
+        d.recognized_title = det.recognized_title || d.filename;
+      }
+    } catch(e) { /* skip */ }
+  }));
+}
 
-                    if (!response.ok) {
-                        throw new Error(`Ошибка загрузки ${file.name}`);
-                    }
+function updateStats() {
+  const ready = allDocs.filter(d => d.status === 'completed').length;
+  const pending = allDocs.filter(d => d.status === 'pending').length;
+  const totalChunks = allDocs.reduce((s,d) => s + (d.chunks_count || 0), 0);
+  const types = new Set(allDocs.map(d => d.document_type).filter(Boolean));
+  const allTags = new Set();
+  allDocs.forEach(d => (d.tags||[]).forEach(t => allTags.add(t)));
+  document.getElementById('stat-total').textContent = allDocs.length;
+  document.getElementById('stat-ready').textContent = ready;
+  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('reprocess-btn').style.display = pending > 0 ? 'block' : 'none';
+  document.getElementById('stat-chunks').textContent = totalChunks;
+  document.getElementById('stat-types').textContent = types.size;
+  document.getElementById('stat-tags').textContent = allTags.size;
+}
 
-                    const data = await response.json();
-                    showNotification(`✅ ${file.name} загружен`);
-                    
-                    // Обновляем прогресс
-                    const percent = ((i + 1) / files.length) * 100;
-                    progressFill.style.width = percent + '%';
-                    progressPercent.textContent = Math.round(percent) + '%';
-                    
-                } catch (error) {
-                    showNotification(`❌ ${file.name}: ${error.message}`, true);
-                }
-            }
+async function reprocessPending() {
+  const btn = document.querySelector('#reprocess-btn button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  try {
+    const r = await fetch('/api/v1/upload/reprocess-pending', { method: 'POST' });
+    const d = await r.json();
+    alert('Запущено: ' + d.count + ' документов');
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
+  }
+  setTimeout(() => { loadAll(); }, 2000);
+}
 
-            setTimeout(() => {
-                progressContainer.style.display = 'none';
-                loadDocuments();
-            }, 1000);
-        }
+function getFiltered() {
+  const search = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const tf = document.getElementById('type-filter')?.value || '';
+  const sf = document.getElementById('status-filter')?.value || '';
+  return allDocs.filter(d => {
+    if (search && !d.filename.toLowerCase().includes(search) && !(d.document_type||'').includes(search) && !(d.tags||[]).some(t=>t.includes(search))) return false;
+    if (tf && d.document_type !== tf) return false;
+    if (sf && d.status !== sf) return false;
+    return true;
+  });
+}
 
-        async function loadDocuments() {
-            try {
-                const response = await fetch(`${API_URL}/upload/list`);
-                const data = await response.json();
+var currentPage = 0;  // Текущая страница (0-based)
 
-                if (data.documents.length === 0) {
-                    document.getElementById('documents-table').innerHTML = 
-                        '<div style="padding: 2rem; text-align: center; color: #94a3b8;">Нет загруженных документов</div>';
-                    return;
-                }
+function getPageSlice(docs) {
+  const limit = parseInt(document.getElementById('count-filter')?.value || '50');
+  if (limit <= 0) return { shown: docs, page: 0, totalPages: 1 };
+  const totalPages = Math.ceil(docs.length / limit);
+  // Корректируем currentPage если вышли за границы
+  if (currentPage >= totalPages) currentPage = Math.max(0, totalPages - 1);
+  const start = currentPage * limit;
+  const shown = docs.slice(start, start + limit);
+  return { shown, page: currentPage, totalPages };
+}
 
-                document.getElementById('documents-table').innerHTML = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Имя файла</th>
-                                <th>Тип</th>
-                                <th>Размер</th>
-                                <th>Статус</th>
-                                <th>Прогресс</th>
-                                <th>Чанков</th>
-                                <th>Дата</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.documents.map(doc => `
-                                <tr>
-                                    <td><strong>${doc.filename}</strong></td>
-                                    <td>${doc.file_type}</td>
-                                    <td>${formatBytes(doc.file_size)}</td>
-                                    <td>
-                                        <span class="badge ${getStatusBadge(doc.status)}">
-                                            ${getStatusText(doc.status)}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="progress-bar" style="width: 100px;">
-                                            <div class="progress-fill" style="width: ${doc.progress}%"></div>
-                                        </div>
-                                        ${doc.progress}%
-                                    </td>
-                                    <td>${doc.chunks_count || '-'}</td>
-                                    <td>${new Date(doc.created_at).toLocaleString('ru-RU')}</td>
-                                    <td>
-                                        <button class="action-btn btn-delete" onclick="deleteDocument('${doc.document_id}')">🗑️</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-            } catch (error) {
-                console.error('Ошибка загрузки документов:', error);
-            }
-        }
+function updatePager(page, totalPages, total, shown) {
+  var info = document.getElementById('filter-info');
+  var prev = document.getElementById('btn-prev');
+  var next = document.getElementById('btn-next');
+  var limit = parseInt(document.getElementById('count-filter')?.value || '50');
+  
+  if (limit <= 0 || totalPages <= 1) {
+    if (info) info.textContent = 'Всего: ' + total;
+    if (prev) prev.style.opacity = '0.3';
+    if (next) next.style.opacity = '0.3';
+  } else {
+    var from = page * limit + 1;
+    var to = Math.min(from + shown.length - 1, total);
+    if (info) info.textContent = from + '–' + to + ' из ' + total + '  (стр. ' + (page + 1) + '/' + totalPages + ')';
+    if (prev) prev.style.opacity = page > 0 ? '1' : '0.3';
+    if (next) next.style.opacity = page < totalPages - 1 ? '1' : '0.3';
+  }
+}
 
-        async function deleteDocument(docId) {
-            if (!confirm('Удалить этот документ?')) return;
+function nextPage() { currentPage++; applyFilters(); }
+function prevPage() { if (currentPage > 0) { currentPage--; applyFilters(); } }
+function resetPage() { currentPage = 0; }
 
-            try {
-                const response = await fetch(`${API_URL}/upload/${docId}`, {
-                    method: 'DELETE'
-                });
+function renderAll() {
+  const docs = getFiltered();
+  // Сортировка
+  const sortVal = document.getElementById('sort-filter')?.value || 'date_desc';
+  docs.sort((a, b) => {
+    switch (sortVal) {
+      case 'date_desc': return new Date(b.created_at) - new Date(a.created_at);
+      case 'date_asc':  return new Date(a.created_at) - new Date(b.created_at);
+      case 'name_asc':  return (a.filename||'').localeCompare(b.filename||'');
+      case 'name_desc': return (b.filename||'').localeCompare(a.filename||'');
+      case 'size_desc': return (b.file_size||0) - (a.file_size||0);
+      case 'size_asc':  return (a.file_size||0) - (b.file_size||0);
+      default: return 0;
+    }
+  });
+  const total = docs.length;
+  var slice = getPageSlice(docs);
+  updatePager(slice.page, slice.totalPages, total, slice.shown);
+  renderCards(slice.shown);
+  renderTable(slice.shown);
+}
 
-                if (response.ok) {
-                    showNotification('✅ Документ удален');
-                    loadDocuments();
-                } else {
-                    showNotification('❌ Ошибка удаления', true);
-                }
-            } catch (error) {
-                showNotification(`❌ Ошибка: ${error.message}`, true);
-            }
-        }
+function renderCards(docs) {
+  const grid = document.getElementById('docs-grid');
+  if (!docs.length) {
+    grid.innerHTML = '<div class="empty">📭 Нет документов</div>';
+    return;
+  }
+  grid.innerHTML = docs.map(d => {
+    const type = d.document_type || 'unknown';
+    const tags = d.tags || [];
+    const thumbUrl = `${API}/upload/${d.document_id}/thumbnail`;
+    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
+      <div class="thumb-wrap">
+        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" 
+             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
+             style="object-fit:cover">
+        <span class="type-badge tag tag-type">${typeLabel(type)}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
+        <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${d.uploaded_by_name||'—'}</div>
+        <div class="card-meta">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+        <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-        function getStatusBadge(status) {
-            const badges = {
-                'pending': 'badge-info',
-                'processing': 'badge-warning',
-                'completed': 'badge-success',
-                'failed': 'badge-error'
-            };
-            return badges[status] || 'badge-info';
-        }
+function renderTable(docs) {
+  const tbody = document.getElementById('table-body');
+  if (!docs.length) {
+    tbody.innerHTML = '';
+    document.getElementById('table-empty').style.display = 'block';
+    document.getElementById('bulk-actions').style.display = 'none';
+    return;
+  }
+  document.getElementById('table-empty').style.display = 'none';
+  const statusMap = {completed:'<span class="status-badge s-ready">✅ Готово</span>',processing:'<span class="status-badge s-proc">⚙️ Обработка</span>',pending:'<span class="status-badge s-pend">⏳ Ожидает</span>',failed:'<span class="status-badge s-fail">❌ Ошибка</span>'};
+  // Сброс select-all при перерисовке
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = false;
+  document.getElementById('bulk-actions').style.display = 'none';
+  tbody.innerHTML = docs.map(d => `
+    <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="doc-check" value="${d.document_id}" onchange="updateSelectAll()"></td>
+      <td><strong>${d.recognized_title||d.filename}</strong></td>
+      <td><span class="tag tag-type" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
+      <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
+      <td><a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0}</a></td>
+      <td>${d.uploaded_by_name||'—'}</td>
+      <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
+      <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
+      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
+    </tr>`).join('');
+}
 
-        function getStatusText(status) {
-            const texts = {
-                'pending': '⏳ Ожидает',
-                'processing': '⚙️ Обработка',
-                'completed': '✅ Готово',
-                'failed': '❌ Ошибка'
-            };
-            return texts[status] || status;
-        }
+async function showDetail(docId) {
+  const ov = document.getElementById('modal-overlay');
+  document.getElementById('modal-title').textContent = 'Загрузка...';
+  document.getElementById('modal-body').innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
+  ov.classList.add('active');
+  try {
+    const r = await fetch(`${API}/upload/${docId}/details`);
+    if (!r.ok) throw new Error('Ошибка загрузки');
+    const d = await r.json();
+    document.getElementById('modal-title').textContent = d.recognized_title || d.filename;
+    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    document.getElementById('modal-body').innerHTML = `
+      <img class="modal-thumb" src="${API}/upload/${docId}/thumbnail" onerror="this.style.display='none'" alt="Миниатюра">
+      <div class="detail-grid">
+        <div><div class="detail-label">Файл</div><div class="detail-value">${d.filename}</div></div>
+        <div><div class="detail-label">Название</div><div class="detail-value">${d.recognized_title||d.filename}</div></div>
+        <div><div class="detail-label">Тип</div><div class="detail-value"><span class="tag tag-type">${typeLabel(d.document_type||'unknown')}</span></div></div>
+        <div><div class="detail-label">Статус</div><div class="detail-value">${statusMap[d.status]||d.status}</div></div>
+        <div><div class="detail-label">Размер</div><div class="detail-value">${fmtBytes(d.file_size||0)}</div></div>
+        <div><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
+        <div><div class="detail-label">Кто загрузил</div><div class="detail-value">${d.uploaded_by_name||d.uploaded_by||'—'}</div></div>
+        <div><div class="detail-label">SHA-256</div><div class="detail-value" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:10px;word-break:break-all">${d.file_hash||'—'}</div></div>
+        <div><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
+      </div>
+      <div class="modal-tags">${(d.tags||[]).length ? d.tags.map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">Нет тэгов</span>'}</div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+      </div>`;
+  } catch(e) {
+    document.getElementById('modal-body').innerHTML = `<div style="color:var(--red);text-align:center;padding:20px">Ошибка: ${e.message}</div>`;
+  }
+}
 
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
-        function showNotification(message, isError = false) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.style.background = isError ? '#ef4444' : '#22c55e';
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 3000);
-        }
+async function delDoc(id) {
+  if (!confirm('Удалить документ безвозвратно?')) return;
+  try {
+    await fetch(`${API}/upload/${id}`, {method:'DELETE'});
+    toast('✅ Удалён');
+    loadAll();
+  } catch(e) { toast('❌ '+e.message, true); }
+}
 
-        // Автообновление каждые 5 секунд
-        setInterval(loadDocuments, 5000);
-    </script>
+function setView(v) {
+  view = v;
+  document.getElementById('btn-cards').classList.toggle('active', v==='cards');
+  document.getElementById('btn-table').classList.toggle('active', v==='table');
+  document.getElementById('docs-grid').style.display = v==='cards'?'grid':'none';
+  document.getElementById('docs-table').style.display = v==='table'?'block':'none';
+}
+
+function applyFilters() { renderAll(); }
+
+// Helpers
+function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'📕';if(t.includes('doc'))return'📘';if(t.includes('txt')||t.includes('md'))return'📝';if(t.includes('csv')||t.includes('sheet'))return'📊';return'📄'; }
+function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',technical:'Технический',certificate:'Сертификат',standard:'Стандарт',policy:'Политика',order:'Приказ',news:'Новость',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
+function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
+function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
+function toast(msg,err) { const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'var(--red)':'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000); }
+
+async function diffVersions(docId) {
+  const div = document.getElementById('diff-result-' + docId);
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Сравниваю версии...</span>';
+  try {
+    const r = await fetch(API + '/upload/' + docId + '/diff');
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    div.innerHTML = '<div style="padding:8px 12px;background:var(--surface);border-radius:var(--radius);margin-top:6px">' +
+      '<strong>📊 Сравнение версий v' + d.version + '</strong><br>' +
+      '<span style="font-size:11px;color:var(--text4)">SHA-256 текущ: ' + (d.current_hash||'?').substring(0,12) + '...</span><br>' +
+      '<span style="font-size:11px;color:var(--text4)">SHA-256 пред.: ' + (d.previous_hash||'?').substring(0,12) + '...</span><br>' +
+      '<span style="color:' + (d.has_changes ? 'var(--amber)' : 'var(--emerald)') + '">' + d.diff_summary + '</span>' +
+      '</div>';
+  } catch(e) {
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+  }
+}
+
+setInterval(loadAll, 15000);
+
+
+// === Bulk delete ===
+function toggleAll(cb) {
+  document.querySelectorAll('.doc-check').forEach(c => c.checked = cb.checked);
+  updateBulkBar();
+}
+
+function updateSelectAll() {
+  const all = document.querySelectorAll('.doc-check');
+  const checked = document.querySelectorAll('.doc-check:checked');
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = all.length > 0 && checked.length === all.length;
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.doc-check:checked');
+  const bar = document.getElementById('bulk-actions');
+  const cnt = document.getElementById('bulk-count');
+  if (checked.length > 0) {
+    bar.style.display = 'block';
+    cnt.textContent = 'Выбрано: ' + checked.length;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function bulkDelete() {
+  const checked = document.querySelectorAll('.doc-check:checked');
+  if (!checked.length) return;
+  if (!confirm('Удалить ' + checked.length + ' документов? Это действие необратимо.')) return;
+  let deleted = 0, failed = 0;
+  for (const cb of checked) {
+    try {
+      const r = await fetch(API + '/upload/' + cb.value, { method: 'DELETE' });
+      if (r.ok) deleted++; else failed++;
+    } catch(e) { failed++; }
+  }
+  toast('🗑️ Удалено: ' + deleted + (failed ? ', ошибок: ' + failed : ''));
+  loadAll();
+}
+
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+
+function ocrLink(d) {
+  if (d.status !== 'completed') return '<span style="color:var(--text4);font-size:11px">—</span>';
+  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>';
+}
+async function viewOcr(id) {
+  try {
+    var r = await fetch('/api/v1/upload/' + id + '/ocr', { credentials: 'include' });
+    var d = await r.json();
+    if (d.ocr_md_exists) {
+      window.open('/api/v1/upload/' + id + '/ocr/view', '_blank');
+    } else {
+      if (confirm('Markdown не найден. Пересоздать OCR?')) { var r2 = await fetch('/api/v1/upload/' + id + '/reprocess-ocr', { method: 'POST', credentials: 'include' }); var d2 = await r2.json(); toast(d2.message || 'Переобработка запущена'); }
+    }
+  } catch(e) { toast('Ошибка: ' + e.message, true); }
+}
+</script>
 </body>
 </html>

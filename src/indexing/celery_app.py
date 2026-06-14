@@ -33,6 +33,18 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     
+    # Файл расписания beat (в data-директории, доступной kag пользователю)
+    beat_schedule_filename='/app/data/celerybeat-schedule',
+
+    # Расписание периодических задач (celery beat)
+    beat_schedule={
+        'check-stuck-documents': {
+            'task': 'src.indexing.tasks.check_stuck_documents',
+            'schedule': 300.0,  # каждые 5 минут
+            'options': {'queue': 'maintenance'},
+        },
+    },
+
     # Маршрутизация задач
     task_routes={
         "src.indexing.tasks.process_document": {"queue": "documents"},
@@ -60,6 +72,29 @@ celery_app.conf.update(
 
 # Автообнаружение задач
 celery_app.autodiscover_tasks(["src.indexing"])
+
+
+# ================================================================
+# Recovery: восстановление зависших документов при старте worker'а
+# ================================================================
+
+from celery.signals import worker_ready
+
+
+@worker_ready.connect
+def on_worker_ready(sender=None, **kwargs):
+    try:
+        from src.indexing.recovery import recover_stuck_documents
+        logger.info("[Recovery] Worker ready — запуск сканера...")
+        result = recover_stuck_documents(requeue=True)
+        if result["recovered"] > 0:
+            logger.warning(
+                f"[Recovery] Восстановлено {result['recovered']} зависших документов"
+            )
+        else:
+            logger.info("[Recovery] Зависших документов нет")
+    except Exception as e:
+        logger.error(f"[Recovery] Ошибка сканера: {e}")
 
 
 @celery_app.task(bind=True, max_retries=5)

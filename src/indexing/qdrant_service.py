@@ -64,12 +64,27 @@ class QdrantService:
             f"qdrant={self.qdrant_url}, collection={self.collection_name}"
         )
 
+    def _get_api_headers(self) -> dict:
+        """Получить заголовки аутентификации для Qdrant из config_store."""
+        try:
+            from src.api.services.config_store import config_store
+            qdrant_cfg = config_store.get("qdrant", "default")
+            if qdrant_cfg and qdrant_cfg.get("api_key"):
+                from src.security.gost_crypto import GOSTCrypto
+                crypto = GOSTCrypto()
+                api_key = crypto.decrypt_from_base64(qdrant_cfg["api_key"])
+                return {"api-key": api_key}
+        except Exception:
+            pass
+        return {}
+
     def _get_async_client(self) -> httpx.AsyncClient:
         if self._async_client is None or self._async_client.is_closed:
             self._async_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-                follow_redirects=True
+                follow_redirects=True,
+                headers=self._get_api_headers()
             )
         return self._async_client
 
@@ -78,7 +93,8 @@ class QdrantService:
             self._sync_client = httpx.Client(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-                follow_redirects=True
+                follow_redirects=True,
+                headers=self._get_api_headers()
             )
         return self._sync_client
 
@@ -382,6 +398,34 @@ class QdrantService:
         except Exception as e:
             logger.error(f"Ошибка upsert точек: {e}")
             return False
+
+    def scroll_points(
+        self,
+        filter: Optional[Dict] = None,
+        limit: int = 10,
+        offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Прокрутка точек с фильтром (без поиска по вектору)."""
+        try:
+            query = {
+                "limit": limit,
+                "with_payload": True,
+                "with_vectors": False
+            }
+            if filter:
+                query["filter"] = filter
+            if offset is not None:
+                query["offset"] = offset
+
+            result = self._sync_request(
+                "POST",
+                f"collections/{self.collection_name}/points/scroll",
+                json_data=query
+            )
+            return result.get("result", {}).get("points", [])
+        except Exception as e:
+            logger.error(f"Ошибка scroll: {e}")
+            return []
 
     def search(
         self,

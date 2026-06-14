@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Граф знаний</title>
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1400px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px}
+.stat-num{font-size:26px;font-weight:700;color:var(--text)}
+.stat-label{font-size:11px;color:var(--text4);text-transform:uppercase;margin-top:2px}
+.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px}
+.panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
+.search-row{display:flex;gap:10px;margin-bottom:12px}
+.search-row input{flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;font-family:system-ui, -apple-system, sans-serif}
+.search-row input:focus{border-color:var(--accent)}
+.search-row select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
+.btn:hover{opacity:0.85}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--text4)}
+.entities-table{width:100%;border-collapse:collapse;font-size:13px}
+.entities-table th{text-align:left;padding:10px 14px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid var(--border-s);background:var(--panel)}
+.entities-table td{padding:10px 14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+.entities-table tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:500}
+.badge-person{background:rgba(94,106,210,0.15);color:var(--accent-h)}
+.badge-org{background:rgba(16,185,129,0.15);color:var(--emerald)}
+.badge-date{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-money{background:rgba(220,38,38,0.12);color:#f87171}
+.badge-location{background:rgba(139,92,246,0.15);color:#a78bfa}
+.badge-other{background:rgba(255,255,255,0.06);color:var(--text4)}
+.graph-viz{width:100%;height:400px;background:var(--panel);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--text4);font-size:14px}
+.empty{text-align:center;padding:40px;color:var(--text4)}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}.stats-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+  <h1>🕸️ Граф знаний</h1>
+  <div class="sub">Neo4j — сущности, связи, гибридный поиск (граф + вектор)</div>
+
+  <div class="stats-row" id="stats-row" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat-card"><div class="stat-num" id="stat-docs">—</div><div class="stat-label">Документов</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-entities">—</div><div class="stat-label">Сущностей</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-relations">—</div><div class="stat-label">Связей</div></div>
+    <div class="stat-card" style="border:1px solid var(--accent);background:rgba(94,106,210,0.06)"><div class="stat-num" id="stat-cross" style="color:var(--accent-h)">—</div><div class="stat-label">Общих сущностей</div></div>
+  </div>
+
+  <!-- Перестроение графа -->
+  <div class="panel" id="rebuild-panel" style="border:1px solid var(--amber);background:rgba(245,158,11,0.04);display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <h2 style="margin-bottom:0">🔄 Перестроение графа знаний</h2>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="rebuild-status" style="font-size:12px;color:var(--amber)">⏳ Идёт...</span>
+        <span id="rebuild-error" style="font-size:11px;color:var(--red);display:none"></span>
+        <button class="btn-sm" id="rebuild-start-btn" onclick="startRebuild()" style="color:var(--emerald);border-color:rgba(16,185,129,0.3);display:none">▶ Запустить</button>
+        <button class="btn-sm" id="rebuild-stop-btn" onclick="stopRebuild()" style="color:var(--red);border-color:rgba(220,38,38,0.3);display:none">⏹ Стоп</button>
+      </div>
+    </div>
+    <div style="background:var(--elevated);border-radius:4px;height:8px;margin-bottom:8px;overflow:hidden">
+      <div id="rebuild-bar" style="height:100%;background:linear-gradient(90deg,var(--amber),var(--accent-h));width:0%;transition:width 0.5s"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text4);flex-wrap:wrap;gap:8px">
+      <span id="rebuild-progress">Ожидание запуска</span>
+      <span id="rebuild-eta"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>🛠 Инструменты графа (Neo4j Best Practices)</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn-outline" onclick="postProcess()" title="Слияние дубликатов, entity linking, очистка сирот" style="background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">🔄 Пост-обработка</button>
+      <button class="btn-outline" onclick="showDomainSchema()" title="Настраиваемая схема типов сущностей" style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px">📋 Доменная схема</button>
+      <input type="text" id="validate-doc-id" placeholder="ID документа для валидации..." style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px;outline:none;width:300px">
+      <button class="btn-outline" onclick="validateDoc()" title="Проверить качество сущностей" style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px">✅ Валидировать</button>
+    </div>
+    <div id="tools-result" style="font-size:13px"></div>
+    <div id="domain-schema-display" style="display:none;margin-top:12px"></div>
+  </div>
+
+  <div class="panel">
+    <h2>🔍 Поиск сущностей</h2>
+    <div class="search-row">
+      <input type="text" id="entity-search" placeholder="Имя сущности или ключевое слово..." onkeydown="if(event.key==='Enter')searchEntities()">
+      <select id="entity-type">
+        <option value="">Все типы</option>
+        <option value="person">👤 Люди</option>
+        <option value="organization">🏢 Организации</option>
+        <option value="date">📅 Даты</option>
+        <option value="money">💰 Суммы</option>
+        <option value="location">📍 Места</option>
+        <option value="legal_term">⚖️ Термины</option>
+      </select>
+      <button class="btn" onclick="searchEntities()">Найти</button>
+    </div>
+    <div id="entity-results"></div>
+  </div>
+
+  <div class="panel">
+    <h2>🔗 Гибридный поиск (граф + вектор)</h2>
+    <p style="font-size:10px;color:var(--text4);margin-bottom:10px;line-height:1.5">
+      Ищет одновременно в двух пространствах: <strong style="color:var(--text3)">Neo4j</strong> (граф — сущности и их связи) и <strong style="color:var(--text3)">Qdrant</strong> (векторы — смысловая близость чанков).
+      Результат — чанки документов, где встречаются указанные сущности <em>или</em> похожий по смыслу текст.
+      Примеры: <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">Иванов, ООО Ромашка</code> найдёт все документы где есть эти организация и человек;
+      <code style="color:var(--accent-h);background:var(--elevated);padding:0 3px;border-radius:3px">криптография, ГОСТ</code> — документы по теме криптозащиты.
+    </p>
+    <div class="search-row" style="gap:8px;flex-wrap:wrap">
+      <input type="text" id="hybrid-query" placeholder="Сущности через запятую: Иванов, ООО Ромашка, 2024..." onkeydown="if(event.key==='Enter')hybridSearch()" style="flex:1;min-width:200px">
+      <select id="hybrid-scope" style="font-size:12px;padding:8px 10px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
+        <option value="both">🔄 Гибрид</option>
+        <option value="neo4j">🕸️ Только граф</option>
+        <option value="qdrant">🔍 Только векторы</option>
+      </select>
+      <select id="hybrid-relevance" style="font-size:12px;padding:8px 10px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:160px">
+        <option value="0.6">Релевантность ≥ 0.6</option>
+        <option value="0.5">≥ 0.5</option>
+        <option value="0.4" selected>≥ 0.4</option>
+        <option value="0.3">≥ 0.3</option>
+        <option value="0">Без фильтра</option>
+      </select>
+      <button class="btn" onclick="hybridSearch()">Искать</button>
+    </div>
+    <div id="hybrid-results"></div>
+  </div>
+
+  <div class="panel">
+    <h2>💻 Прямой запрос Neo4j (Cypher)</h2>
+    <div class="search-row" style="flex-direction: column; gap: 8px;">
+      <textarea id="cypher-query" placeholder="MATCH (n) RETURN n LIMIT 10..." style="background:var(--elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; color:var(--text); font-size:13px; outline:none; font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace; width:100%; height:80px; resize:vertical;"></textarea>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:var(--text4)">* Только чтение (MATCH, RETURN)</span>
+        <button class="btn" onclick="runCypher()">Выполнить Cypher</button>
+      </div>
+    </div>
+    <div id="cypher-results" style="margin-top: 12px; overflow-x: auto;"></div>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1/kg';
+
+function getToken() {
+  // Read from cookie
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  // Fallback to localStorage
+  return localStorage.getItem('kag_token');
+}
+
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const d = await r.json();
+    document.getElementById('stat-docs').textContent = d.documents || 0;
+    document.getElementById('stat-chunks').textContent = d.chunks || 0;
+    document.getElementById('stat-entities').textContent = d.entities || 0;
+    document.getElementById('stat-relations').textContent = d.relations || 0;
+    document.getElementById('stat-cross').textContent = d.cross_doc_entities || 0;
+  } catch(e) {}
+}
+
+function badgeClass(type) {
+  const m = {person:'badge-person',organization:'badge-org',date:'badge-date',money:'badge-money',location:'badge-location'};
+  return m[type] || 'badge-other';
+}
+
+function labelType(t) {
+  const m = {person:'👤',organization:'🏢',date:'📅',money:'💰',location:'📍',legal_term:'⚖️',document_ref:'📄'};
+  return (m[t]||'•') + ' ' + (t||'other');
+}
+
+async function searchEntities() {
+  const q = document.getElementById('entity-search').value.trim();
+  const type = document.getElementById('entity-type').value;
+  if (!q) return;
+  const div = document.getElementById('entity-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Поиск...</div>';
+  try {
+    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&type=' + type : '') + '&limit=30', { headers: authHeaders() });
+    const d = await r.json();
+    if (!d.results.length) {
+      div.innerHTML = '<div class="empty">🔍 Сущности не найдены</div>';
+      return;
+    }
+    div.innerHTML = '<table class="entities-table"><thead><tr><th>Сущность</th><th>Тип</th><th>Уверенность</th></tr></thead><tbody>' +
+      d.results.map(e => `<tr>
+        <td><strong>${e.name}</strong></td>
+        <td><span class="badge ${badgeClass(e.type)}">${labelType(e.type)}</span></td>
+        <td>${Math.round((e.confidence||1)*100)}%</td>
+      </tr>`).join('') + '</tbody></table>';
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+async function hybridSearch() {
+  const q = document.getElementById('hybrid-query').value.trim();
+  if (!q) return;
+  const scope = document.getElementById('hybrid-scope').value;
+  const relevance = document.getElementById('hybrid-relevance').value;
+  const div = document.getElementById('hybrid-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Гибридный поиск (scope='+scope+', rel≥'+relevance+')...</div>';
+  try {
+    const params = new URLSearchParams({q, scope, relevance_score: relevance});
+    const r = await fetch(API + '/hybrid-search?' + params, { headers: authHeaders() });
+    if (!r.ok) {
+      const text = await r.text();
+      div.innerHTML = '<div class="empty">❌ Ошибка ' + r.status + ': ' + text.substring(0, 200) + '</div>';
+      return;
+    }
+    const d = await r.json();
+    if (typeof d !== 'object' || d === null) {
+      div.innerHTML = '<div class="empty">❌ Неверный ответ сервера</div>';
+      return;
+    }
+    if (!Array.isArray(d.results)) {
+      div.innerHTML = '<div class="empty">❌ Нет поля results в ответе. Ответ: ' + JSON.stringify(d).substring(0, 200) + '</div>';
+      console.error('hybrid-search response:', d);
+      return;
+    }
+    if (!d.results.length) {
+      div.innerHTML = '<div class="empty">🔍 Ничего не найдено</div>';
+      return;
+    }
+    div.innerHTML = '<table class="entities-table"><thead><tr><th>Чанк</th><th>Документ</th><th>Сущностей</th></tr></thead><tbody>' +
+      d.results.map(r => `<tr>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.text||''}">${(r.text||'').substring(0,80)}</td>
+        <td><a href="/viewer?id=${r.doc_id}" style="color:var(--accent-h);text-decoration:none">${r.filename||r.doc_id?.substring(0,8)}</a></td>
+        <td><span class="badge badge-person">${r.entity_count||0}</span></td>
+      </tr>`).join('') + '</tbody></table>';
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+async function runCypher() {
+  const q = document.getElementById('cypher-query').value.trim();
+  if (!q) return;
+  const div = document.getElementById('cypher-results');
+  div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Выполнение...</div>';
+  try {
+    const r = await fetch(API + '/cypher', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ query: q, limit: 100 })
+    });
+    const d = await r.json();
+    if (r.status !== 200 || d.error) throw new Error(d.error || d.detail || 'Ошибка выполнения');
+    
+    if (!d.results || !d.results.length) {
+      div.innerHTML = '<div class="empty">0 записей возвращено</div>';
+      return;
+    }
+    
+    const keys = Object.keys(d.results[0]);
+    let html = '<table class="entities-table"><thead><tr>';
+    keys.forEach(k => html += `<th>${k}</th>`);
+    html += '</tr></thead><tbody>';
+    
+    d.results.forEach(row => {
+      html += '<tr>';
+      keys.forEach(k => {
+        let val = row[k];
+        if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
+        html += `<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    div.innerHTML = html;
+  } catch(e) {
+    div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
+  }
+}
+
+loadStats();
+setInterval(loadStats, 30000);
+
+// === Мониторинг перестроения графа ===
+var rebuildWatchTimer = null;
+var rebuildStartCount = 0;
+var rebuildStartTime = null;
+var rebuildRunning = false;
+var totalDocs = 0;
+
+async function startRebuild() {
+  var panel = document.getElementById('rebuild-panel');
+  document.getElementById('rebuild-start-btn').style.display = 'none';
+  document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
+  document.getElementById('rebuild-error').style.display = 'none';
+  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Запуск...</span>';
+  document.getElementById('rebuild-progress').textContent = 'Запуск перестроения...';
+  panel.style.display = 'block';
+  
+  try {
+    var r = await fetch(API + '/rebuild-graph', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт...</span>';
+      rebuildRunning = true;
+      rebuildStartCount = 0;
+      rebuildStartTime = null;
+      totalDocs = (d.total_stats || {}).documents || 130;
+      watchRebuild();
+    } else {
+      showRebuildError(d.message || 'Ошибка запуска');
+    }
+  } catch(e) {
+    showRebuildError(e.message);
+  }
+}
+
+function showRebuildError(msg) {
+  document.getElementById('rebuild-error').textContent = '❌ ' + msg;
+  document.getElementById('rebuild-error').style.display = 'inline-block';
+  document.getElementById('rebuild-stop-btn').style.display = 'none';
+  document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+  document.getElementById('rebuild-start-btn').textContent = '▶ Перезапустить';
+  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">Ошибка</span>';
+  document.getElementById('rebuild-bar').style.background = 'var(--red)';
+  rebuildRunning = false;
+}
+
+async function watchRebuild() {
+  try {
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const d = await r.json();
+    const docs = d.documents || 0;
+    if (totalDocs === 0) totalDocs = Math.max(docs, 1);
+    
+    if (rebuildStartCount === 0) {
+      rebuildStartCount = docs;
+      rebuildStartTime = Date.now();
+    }
+    
+    var panel = document.getElementById('rebuild-panel');
+    var bar = document.getElementById('rebuild-bar');
+    var prog = document.getElementById('rebuild-progress');
+    var status = document.getElementById('rebuild-status');
+    var eta = document.getElementById('rebuild-eta');
+    
+    panel.style.display = 'block';
+    document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
+    document.getElementById('rebuild-start-btn').style.display = 'none';
+    
+    var pct = Math.min(100, Math.round(docs / totalDocs * 100));
+    bar.style.width = pct + '%';
+    bar.style.background = 'linear-gradient(90deg,var(--amber),var(--accent-h))';
+    prog.textContent = docs + ' / ' + totalDocs + ' документов (' + pct + '%)';
+    
+    var elapsed = (Date.now() - rebuildStartTime) / 1000;
+    var docsSince = docs - rebuildStartCount;
+    if (docsSince > 0 && elapsed > 30) {
+      var rate = docsSince / elapsed;
+      var remaining = (totalDocs - docs) / rate;
+      var minutes = Math.ceil(remaining / 60);
+      if (minutes < 120) {
+        eta.textContent = '≈ ' + minutes + ' мин до завершения';
+        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+      } else {
+        var hours = Math.floor(minutes / 60);
+        eta.textContent = '≈ ' + hours + ' ч ' + (minutes % 60) + ' мин';
+        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+      }
+    } else if (elapsed > 30) {
+      eta.textContent = 'Расчёт времени...';
+    }
+    
+    if (docs >= totalDocs || totalDocs === 0 || !rebuildRunning) {
+      if (docs >= totalDocs) {
+        status.innerHTML = '<span style=\"color:var(--emerald)\">✅ Завершено!</span>';
+        bar.style.background = 'var(--emerald)';
+      }
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      eta.textContent = docs >= totalDocs ? 'Все документы обработаны' : '';
+      rebuildRunning = false;
+      clearTimeout(rebuildWatchTimer);
+      rebuildWatchTimer = setTimeout(function() { panel.style.display = 'none'; }, 10000);
+      loadStats();
+      return;
+    }
+    
+    rebuildWatchTimer = setTimeout(watchRebuild, 5000);
+  } catch(e) {
+    showRebuildError(e.message);
+    clearTimeout(rebuildWatchTimer);
+  }
+}
+
+async function stopRebuild() {
+  var btn = document.getElementById('rebuild-stop-btn');
+  btn.disabled = true;
+  btn.textContent = '⏹ Стоп...';
+  try {
+    var r = await fetch(API + '/stop-rebuild', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">⏹ Остановлено</span>';
+      document.getElementById('rebuild-bar').style.background = 'var(--red)';
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      document.getElementById('rebuild-eta').textContent = 'Остановлено пользователем';
+      rebuildRunning = false;
+      clearTimeout(rebuildWatchTimer);
+    }
+  } catch(e) {
+    showRebuildError(e.message);
+  }
+}
+
+// Авто-определение: если граф пуст — показать кнопку Старт
+async function checkAndWatch() {
+  try {
+    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const d = await r.json();
+    totalDocs = d.documents || 0;
+    if (totalDocs === 0 || totalDocs > 100) totalDocs = 130;
+    
+    if (totalDocs > 0 && totalDocs < 100) {
+      // Идёт перестроение — подключаемся
+      rebuildRunning = true;
+      watchRebuild();
+    } else {
+      // Показать панель с кнопкой Старт
+      var panel = document.getElementById('rebuild-panel');
+      panel.style.display = 'block';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--text4)\">Ожидание</span>';
+      document.getElementById('rebuild-progress').textContent = 'Нажмите «Запустить» для перестроения графа';
+    }
+  } catch(e) {}
+}
+checkAndWatch();
+
+async function postProcess() {
+  const div = document.getElementById('tools-result');
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Пост-обработка графа...</span>';
+  try {
+    const r = await fetch(API + '/post-process', { method: 'POST', headers: authHeaders() });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      div.innerHTML = '<span style="color:var(--emerald)">✅ Слито: ' + (d.dedup_count||0) + ' дубликатов, связано: ' + (d.linked||0) + ' связей</span>';
+      loadStats();
+    } else {
+      div.innerHTML = '<span style="color:var(--red)">❌ ' + (d.message || 'Ошибка') + '</span>';
+    }
+  } catch(e) {
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+  }
+}
+
+async function showDomainSchema() {
+  const div = document.getElementById('domain-schema-display');
+  if (div.style.display === 'block') { div.style.display = 'none'; return; }
+  div.style.display = 'block';
+  div.innerHTML = '<span style="color:var(--text4)">⏳ Загрузка...</span>';
+  try {
+    const r = await fetch(API + '/domain-schema', { headers: authHeaders() });
+    const d = await r.json();
+    const schema = d.schema || {};
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">';
+    for (const [group, types] of Object.entries(schema)) {
+      html += '<div style="background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px">';
+      html += '<div style="font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)">' + (group === 'core' ? '🎯 Core' : group === 'relations' ? '🔗 Relations' : '📎 Extended') + '</div>';
+      for (const [type, desc] of Object.entries(types)) {
+        html += '<div style="font-size:12px;padding:4px 0"><code style="background:var(--elevated);padding:1px 6px;border-radius:3px;color:var(--accent-h)">' + type + '</code> <span style="color:var(--text4)">' + desc + '</span></div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    div.innerHTML = html;
+  } catch(e) {
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+  }
+}
+
+async function validateDoc() {
+  const docId = document.getElementById('validate-doc-id').value.trim();
+  if (!docId) return;
+  const div = document.getElementById('tools-result');
+  div.innerHTML = '<span style="color:var(--amber)">⏳ Валидация...</span>';
+  try {
+    const r = await fetch(API + '/validate/' + encodeURIComponent(docId), { headers: authHeaders() });
+    const d = await r.json();
+    let html = '<div style="background:var(--panel);border-radius:var(--radius);padding:12px;margin-top:8px">';
+    html += '<div style="font-weight:600;margin-bottom:6px">Документ: ' + docId.substring(0, 12) + '...</div>';
+    html += '<div>Всего сущностей: <strong>' + (d.total || 0) + '</strong></div>';
+    html += '<div>Качество: <strong style="color:' + (d.quality_score >= 80 ? 'var(--emerald)' : d.quality_score >= 50 ? 'var(--amber)' : 'var(--red)') + '">' + (d.quality_score || 0) + '%</strong></div>';
+    if (d.warnings && d.warnings.length) {
+      html += '<div style="margin-top:8px;color:var(--amber)">⚠️ Предупреждения:</div>';
+      d.warnings.forEach(function(w) { html += '<div style="font-size:12px;color:var(--text4);padding:2px 0">• ' + w + '</div>'; });
+    } else {
+      html += '<div style="margin-top:8px;color:var(--emerald)">✅ Всё чисто</div>';
+    }
+    html += '</div>';
+    div.innerHTML = html;
+  } catch(e) {
+    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+  }
+}
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+</body>
+</html>

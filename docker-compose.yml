@@ -17,8 +17,8 @@ services:
       - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
+      - JWT_SECRET=${JWT_SECRET:-supersecretkey}
       - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/1
@@ -34,6 +34,8 @@ services:
       - KC_DB_HOST=keycloak-db
       - KC_DB_PORT=5432
       - KC_DB_NAME=keycloak
+      # KAG собственная PostgreSQL (НЕ Keycloak!)
+      - KAG_DB_URL=postgresql://kag:KAGpg2026secure@kag-pg:5432/kag
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
@@ -49,9 +51,9 @@ services:
       - LLM_VLLM_PRIORITY=1
       # Embedding модели
       - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
-      - EMBEDDING_MODEL=nomic-embed-text:latest
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text:latest}
       - EMBEDDING_TIMEOUT=60.0
-      - EMBEDDING_DIMENSIONS=768
+      - EMBEDDING_DIMENSIONS=1024
       # Общие настройки
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
       - LLM_MAX_TOKENS=4096
@@ -59,8 +61,12 @@ services:
     volumes:
       - ./src:/app/src
       - ./data:/app/data
+      - ./prompts:/app/prompts
       - ./user_data:/app/user_data
       - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
+    # Исправление прав на /app/data (Docker создаёт от root)
+    command: >
+      sh -c "chmod -R 777 /app/data 2>/dev/null; mkdir -p /app/data/thumbnails; uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       qdrant:
         condition: service_started
@@ -75,16 +81,16 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 2G
+          memory: 4G
         reservations:
           cpus: "1.0"
-          memory: 1G
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
     profiles:
       - dev
       - prod
@@ -99,8 +105,10 @@ services:
       - QDRANT_PORT=6333
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - EMBEDDING_DIMENSIONS=1024
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@kag-pg:5432/kag}
     volumes:
       - ./src:/app/src
       - ./data:/app/data
@@ -176,7 +184,7 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - ./data/qdrant:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
     networks:
@@ -440,6 +448,42 @@ services:
       - dev
       - prod
 
+  # ===========================================
+  # Neo4j — граф знаний для KAG
+  # ===========================================
+  
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: kag-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
+      - NEO4J_PLUGINS=["apoc","graph-data-science"]
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_memory_pagecache_size=512M
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - kag_internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - dev
+      - prod
+
 # ===========================================
 # Сети
 # ===========================================
@@ -465,4 +509,8 @@ volumes:
   grafana_data:
     driver: local
   loki_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
     driver: local

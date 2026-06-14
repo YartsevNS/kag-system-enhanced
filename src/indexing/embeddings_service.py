@@ -17,12 +17,28 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
+    MatchAny,
     Range,
     PayloadSchemaType
 )
 
 from src.llm.embeddings import EmbeddingClient
 from src.config import get_settings
+
+
+def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
+    """
+    Convert a Qdrant FieldCondition to a dict suitable for REST API.
+    
+    Handles MatchValue and MatchAny.
+    """
+    match = condition.match
+    if isinstance(match, MatchValue):
+        return {"key": condition.key, "match": {"value": match.value}}
+    elif isinstance(match, MatchAny):
+        return {"key": condition.key, "match": {"any": match.any}}
+    else:
+        raise ValueError(f"Unsupported match type: {type(match)}")
 
 
 class EmbeddingsService:
@@ -73,12 +89,29 @@ class EmbeddingsService:
         # Создаем embedding клиент если не передан
         if self._embedding_client is None:
             settings = get_settings()
+            model = settings.EMBEDDING_MODEL
+            base_url = settings.EMBEDDING_BASE_URL
+            
+            # Приоритет: function_map/embedding из админки (Provider Architecture)
+            try:
+                from src.api.services.config_store import config_store
+                fm = config_store.get("function_map", "embedding")
+                if fm and fm.get("provider_id") and fm.get("model"):
+                    from src.api.services.provider_service import provider_service
+                    provider = provider_service.get_provider(fm["provider_id"])
+                    if provider:
+                        base_url = (provider.get("url", "") or "").rstrip("/")
+                        model = fm["model"]
+                        logger.info(f"Embedding из админки: provider={provider.id}, model={model}, url={base_url}")
+            except Exception as e:
+                logger.debug(f"function_map/embedding не найден, использую .env: {e}")
+            
             self._embedding_client = EmbeddingClient(
-                base_url=settings.EMBEDDING_BASE_URL,
-                model=settings.EMBEDDING_MODEL,
+                base_url=base_url,
+                model=model,
                 timeout=settings.EMBEDDING_TIMEOUT
             )
-            logger.info(f"Embedding клиент инициализирован: {settings.EMBEDDING_MODEL}")
+            logger.info(f"Embedding клиент инициализирован: {model}")
 
         # Создаем Qdrant клиент
         self._qdrant_client = QdrantClient(url=self.qdrant_url)
@@ -106,11 +139,20 @@ class EmbeddingsService:
             if not exists:
                 logger.info(f"Создание коллекции: {self.collection_name}")
 
+                from qdrant_client.http.models import HnswConfigDiff, OptimizersConfigDiff
+
                 self._qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
                         size=self._embedding_dimensions,
                         distance=Distance.COSINE
+                    ),
+                    hnsw_config=HnswConfigDiff(
+                        m=32,            # больше связей = точнее поиск
+                        ef_construct=128  # качественнее построение графа
+                    ),
+                    optimizers_config=OptimizersConfigDiff(
+                        indexing_threshold=5000  # индексация после 5000 точек
                     )
                 )
 
@@ -133,6 +175,24 @@ class EmbeddingsService:
                     field_schema=PayloadSchemaType.KEYWORD
                 )
 
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="filename",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="group_ids",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
+                self._qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="filename",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+
                 logger.info(f"Коллекция создана: {self.collection_name}")
             else:
                 logger.info(f"Коллекция существует: {self.collection_name}")
@@ -145,7 +205,8 @@ class EmbeddingsService:
         self,
         document_id: str,
         chunks: List[Dict[str, Any]],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        group_ids: Optional[List[str]] = None
     ) -> int:
         """
         Сгенерировать embeddings для чанков и сохранить в Qdrant.
@@ -173,11 +234,18 @@ class EmbeddingsService:
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{document_id}-{i}"))
 
+            # Извлекаем filename из metadata для прямого сохранения в payload
+            filename = ""
+            if metadata:
+                filename = metadata.get("filename", "")
+            
             payload = {
                 "document_id": document_id,
-                "chunk_id": chunk.get("chunk_id", f"chunk_{i}"),
+                "chunk_id": chunk.get("chunk_id", f"{document_id}_chunk_{i}"),
                 "content": chunk.get("content", ""),
                 "file_type": metadata.get("file_type", "unknown") if metadata else "unknown",
+                "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
+                "group_ids": group_ids or [],
                 "metadata": {
                     **(metadata or {}),
                     **(chunk.get("metadata", {}))
@@ -206,11 +274,56 @@ class EmbeddingsService:
         logger.info(f"Сохранено {total_saved} векторов в Qdrant")
         return total_saved
 
+    async def update_document_type_payload(self, document_id: str, document_type: str):
+        """Обновить document_type в payload всех чанков документа в Qdrant."""
+        try:
+            # Находим все точки документа
+            from qdrant_client.http import models as qmodels
+            scroll_result = self._qdrant_client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="document_id",
+                            match=qmodels.MatchValue(value=document_id)
+                        )
+                    ]
+                ),
+                limit=1000,
+                with_payload=True,
+                with_vectors=False
+            )
+            points, _ = scroll_result
+            if not points:
+                logger.debug(f"Нет чанков для обновления типа {document_id}")
+                return False
+
+            # Обновляем payload каждой точки
+            from qdrant_client.http import models as qmodels2
+            updated_points = []
+            for p in points:
+                p.payload["document_type"] = document_type
+                updated_points.append(
+                    qmodels2.PointStruct(id=p.id, vector=p.vector, payload=p.payload)
+                )
+
+            self._qdrant_client.upsert(
+                collection_name=self.collection_name,
+                points=updated_points
+            )
+            logger.info(f"Обновлён document_type={document_type} для {len(updated_points)} чанков {document_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Не удалось обновить document_type в Qdrant: {e}")
+            return False
+
     async def search(
         self,
         query: str,
         limit: int = 10,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        group_ids: Optional[List[str]] = None,
+        is_admin: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Семантический поиск по embeddings.
@@ -219,6 +332,8 @@ class EmbeddingsService:
             query: Поисковый запрос
             limit: Количество результатов
             filters: Фильтры по метаданным
+            group_ids: Список group_id для фильтрации (None = без фильтрации)
+            is_admin: Если True, group_ids фильтр не применяется
 
         Returns:
             Список результатов с текстом и score
@@ -247,6 +362,15 @@ class EmbeddingsService:
                     )
                 )
 
+        # Group-based access control: filter by group_ids unless admin
+        if not is_admin and group_ids:
+            conditions.append(
+                FieldCondition(
+                    key="group_ids",
+                    match=MatchAny(any=group_ids)
+                )
+            )
+
         # Ищем через REST API (обходим несовместимость клиента)
         formatted_results = []
         try:
@@ -259,8 +383,7 @@ class EmbeddingsService:
             if conditions:
                 search_payload["filter"] = {
                     "must": [
-                        {"key": c.key, "match": {"value": c.match.value}}
-                        for c in conditions
+                        _build_qdrant_filter_condition(c) for c in conditions
                     ]
                 }
 
@@ -281,10 +404,20 @@ class EmbeddingsService:
                     "document_id": payload.get("document_id"),
                     "chunk_id": payload.get("chunk_id"),
                     "file_type": payload.get("file_type"),
+                    "filename": payload.get("filename", ""),  # Возвращаем filename напрямую
                     "metadata": payload.get("metadata", {})
                 })
         except Exception as e:
             logger.warning(f"REST search failed: {e}")
+
+        # Reranking: если результатов много и запрос осмысленный (>3 слов)
+        if len(formatted_results) > 3 and len(query.split()) >= 3:
+            try:
+                from src.indexing.reranker import rerank_search_results
+                formatted_results = await rerank_search_results(query, formatted_results, top_k=limit)
+                logger.debug(f"После reranking: {len(formatted_results)} результатов")
+            except Exception as e:
+                logger.warning(f"Reranking failed (non-critical): {e}")
 
         logger.debug(f"Найдено {len(formatted_results)} результатов")
         return formatted_results
@@ -368,6 +501,8 @@ class EmbeddingsService:
             Список чанков
         """
         try:
+            if self._qdrant_client is None:
+                await self.initialize()
             results, _ = self._qdrant_client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=Filter(
@@ -390,8 +525,8 @@ class EmbeddingsService:
                     "metadata": point.payload.get("metadata", {})
                 })
 
-            # Сортируем по chunk_id
-            chunks.sort(key=lambda x: x.get("chunk_id", ""))
+            # Сортируем по chunk_seq (из metadata), fallback на chunk_id
+            chunks.sort(key=lambda x: x.get("metadata", {}).get("chunk_seq", 0) or 0)
 
             return chunks
 

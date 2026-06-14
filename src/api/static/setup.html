@@ -4,191 +4,190 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KAG - Setup Wizard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        .container {
-            max-width: 700px;
-            width: 100%;
-        }
-        .logo {
-            text-align: center;
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-        }
-        .subtitle {
-            text-align: center;
-            color: #94a3b8;
-            font-size: 1.125rem;
-            margin-bottom: 2rem;
-        }
-        .step {
-            background: #1e293b;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .step-header {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .step-num {
-            background: #3b82f6;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.875rem;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-        .full { grid-column: 1 / -1; }
-        
-        .field { margin-bottom: 1rem; }
-        .field label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
-        }
-        .field input, .field select {
-            width: 100%;
-            background: #0f172a;
-            border: 1px solid #475569;
-            color: #e2e8f0;
-            padding: 0.75rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-        }
-        .field input:focus, .field select:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        .hint {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-top: 0.25rem;
-        }
-        
-        .btn-test {
-            background: #475569;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            transition: background 0.2s;
-        }
-        .btn-test:hover { background: #64748b; }
-        
-        .test-status {
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            border-radius: 4px;
-            display: none;
-        }
-        .test-status.success { background: #064e3b; color: #6ee7b7; display: block; }
-        .test-status.error { background: #7f1d1d; color: #fca5a5; display: block; }
-        
-        .btn-save {
-            width: 100%;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            color: white;
-            border: none;
-            padding: 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            transition: opacity 0.2s;
-        }
-        .btn-save:hover { opacity: 0.9; }
-        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .status-box {
-            margin-top: 1rem;
-            padding: 1rem;
-            border-radius: 6px;
-            display: none;
-        }
-        .status-box.success {
-            background: #064e3b;
-            color: #6ee7b7;
-            border: 1px solid #059669;
-            display: block;
-        }
-        .status-box.error {
-            background: #7f1d1d;
-            color: #fca5a5;
-            border: 1px solid #dc2626;
-            display: block;
-        }
-    </style>
+    
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;color:var(--text);border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:8px}
+.sub{font-size:15px;color:var(--text3);margin-bottom:28px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+input,select,textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+.btn:hover{opacity:0.85}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-ghost:hover{background:rgba(255,255,255,0.06)}
+.btn-danger{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.2);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
+.btn-danger:hover{background:rgba(220,38,38,0.25)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:0.5px;padding:10px 14px;border-bottom:1px solid var(--border-s)}
+td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
+.badge{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500}
+.badge-ok{background:rgba(39,166,68,0.15);color:var(--green)}
+.badge-warn{background:rgba(251,191,36,0.15);color:#fbbf24}
+.badge-err{background:rgba(220,38,38,0.15);color:var(--red)}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}}
+
+/* ===== Setup Wizard Styles ===== */
+.main-content{margin-left:240px;flex:1;padding:40px;max-width:900px}
+.container{max-width:700px;margin:0 auto}
+.main-content .logo{font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--text);margin-bottom:4px}
+.subtitle{font-size:14px;color:var(--text3);margin-bottom:32px}
+.step{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
+.step-header{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-s)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
+.inner-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.inner-card:last-child{margin-bottom:0}
+.btn-create{background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.2s;white-space:nowrap}
+.btn-create:hover{opacity:0.85}
+.btn-create:disabled{opacity:0.4;cursor:not-allowed}
+.create-status{margin-top:8px;font-size:12px;color:var(--text3);padding:6px 10px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.02)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field.full{grid-column:1/-1}
+.field label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.3px}
+.field input,.field select,.field textarea{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:14px;font-family:system-ui, -apple-system, sans-serif;outline:none;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.2)}
+.hint{font-size:11px;color:var(--text4);margin-top:2px}
+.btn-test,.btn-save{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s;margin-top:12px}
+.btn-test:hover,.btn-save:hover{opacity:0.85}
+.btn-test:disabled,.btn-save:disabled{opacity:0.4;cursor:not-allowed}
+.btn-save{display:block;width:100%;padding:14px;font-size:16px;margin-top:24px}
+.test-status{margin-top:8px;font-size:13px;padding:8px 14px;border-radius:var(--radius-sm);line-height:1.5}
+.test-status.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
+.test-status.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+.status-box{margin-top:16px;font-size:14px;padding:12px 18px;border-radius:var(--radius-sm);line-height:1.6}
+.status-box.success{background:rgba(39,166,68,0.1);color:var(--green);border:1px solid rgba(39,166,68,0.2)}
+.status-box.error{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+.db-creds{font-size:12px;color:var(--text2)}
+.db-creds table{width:100%}
+.db-creds td{padding:3px 10px 3px 0;font-size:12px;color:var(--text2);border:none}
+.db-creds td:first-child{color:var(--text4);font-size:11px;width:80px}
+.db-creds td code{background:var(--elevated);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--accent-h)}
+.btn-copy-all{background:var(--surface);color:var(--accent-h);border:1px solid var(--accent);padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-copy-all:hover{background:var(--accent);color:#fff}
+@media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+</nav>
+    </aside>
+
+    <!-- Main content -->
+    <div class="main-content">
     <div class="container">
         <div class="logo">🎯 KAG System</div>
         <div class="subtitle">Первоначальная настройка системы</div>
 
-        <!-- Шаг 1: База данных -->
+        <!-- Шаг 1: Базы данных (авто-создание) -->
         <div class="step">
             <div class="step-header">
                 <span class="step-num">1</span>
-                Настройка базы данных
+                Создание баз данных
             </div>
-            <div class="grid">
-                <div class="field">
-                    <label>Хост базы данных</label>
-                    <input type="text" id="db-host" value="kag-keycloak-db">
+            <p style="color:var(--text3);font-size:0.9rem;margin-bottom:1rem;">
+                Безопасные пароли генерируются автоматически и сохраняются в зашифрованном виде.
+            </p>
+
+            <!-- PostgreSQL -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🐘 PostgreSQL (KAG)</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Основная база конфигурации</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-pg" onclick="createPgDb()">
+                        ⚡ Создать базу данных
+                    </button>
                 </div>
-                <div class="field">
-                    <label>Порт</label>
-                    <input type="number" id="db-port" value="5432">
-                </div>
-                <div class="field">
-                    <label>Имя базы данных</label>
-                    <input type="text" id="db-name" value="keycloak">
-                </div>
-                <div class="field">
-                    <label>Пользователь</label>
-                    <input type="text" id="db-user" value="keycloak">
-                </div>
-                <div class="field full">
-                    <label>Пароль пользователя БД</label>
-                    <input type="password" id="db-pass" value="keycloak_password">
-                </div>
+                <div class="db-creds" id="pg-creds" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+                <div class="create-status" id="pg-status"></div>
             </div>
-            <button class="btn-test" onclick="testDb()">🔍 Тест подключения к БД</button>
-            <div class="test-status" id="db-status"></div>
+
+            <!-- Qdrant -->
+            <div class="inner-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <strong>🔍 Qdrant</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Векторная база для документов</div>
+                    </div>
+                    <button class="btn-create" id="btn-create-qdrant" onclick="createQdrant()">
+                        ⚡ Создать коллекцию
+                    </button>
+                </div>
+                <div class="db-creds" id="qdrant-creds" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+                <div class="create-status" id="qdrant-status"></div>
+            </div>
+
+            <!-- Neo4j -->
+            <div class="inner-card">
+                <div>
+                    <strong>🕸️ Neo4j</strong>
+                    <div style="color:var(--text3);font-size:0.85rem;">Графовая база знаний</div>
+                </div>
+                <div class="db-creds" id="neo4j-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+
+            <!-- Keycloak DB -->
+            <div class="inner-card">
+                <div>
+                    <strong>🔑 Keycloak Database</strong>
+                    <div style="color:var(--text3);font-size:0.85rem;">База для аутентификации</div>
+                </div>
+                <div class="db-creds" id="keycloak-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+
+            <!-- KAG DB -->
+            <div class="inner-card">
+                <div>
+                    <strong>🐘 KAG Database</strong>
+                    <div style="color:var(--text3);font-size:0.85rem;">Отдельный PostgreSQL для API (порт 5433)</div>
+                </div>
+                <div class="db-creds" id="kagdb-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+
+            <button class="btn-copy-all" onclick="copyAllCreds()" style="margin-top:12px;width:100%">📋 Скопировать все креды в буфер</button>
+            <div class="create-status" id="copy-status"></div>
+        </div>
+
+        <!-- Шаг 1.5: Доступы -->
+        <div class="step">
+            <div class="step-header">
+                <span class="step-num">🔑</span>
+                Доступы: админка и вход на сайт
+            </div>
+            <div class="inner-card">
+                <div><strong>🛡️ Keycloak Admin</strong>
+                <div style="color:var(--text3);font-size:0.85rem);">Управление пользователями и realm</div></div>
+                <div class="db-creds" id="keycloak-admin-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
+            <div class="inner-card">
+                <div><strong>🚪 Вход на сайт</strong>
+                <div style="color:var(--text3);font-size:0.85rem);">Логин и пароль пользователя</div></div>
+                <div class="db-creds" id="site-login-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+            </div>
         </div>
 
         <!-- Шаг 2: LLM Бэкенд -->
@@ -228,25 +227,7 @@
             <div class="test-status" id="llm-status"></div>
         </div>
 
-        <!-- Шаг 3: Embedding -->
-        <div class="step">
-            <div class="step-header">
-                <span class="step-num">3</span>
-                Настройка Embedding модели
-            </div>
-            <div class="grid">
-                <div class="field full">
-                    <label>Название embedding модели</label>
-                    <input type="text" id="emb-model" value="qwen3-embedding:4b">
-                </div>
-                <div class="field">
-                    <label>Размерность вектора</label>
-                    <input type="number" id="emb-dim" value="4096">
-                </div>
-            </div>
-        </div>
-
-        <!-- Шаг 4: SSH -->
+        <!-- Шаг 3: SSH -->
         <div class="step">
             <div class="step-header">
                 <span class="step-num">4</span>
@@ -273,8 +254,10 @@
         <button class="btn-save" id="btn-save" onclick="saveAll()">💾 Сохранить и продолжить</button>
         <div class="status-box" id="final-status"></div>
     </div>
+    </div>
 
-    <script>
+
+<script>
         // ==========================================
         // Глобальные переменные
         // ==========================================
@@ -410,110 +393,281 @@
         async function saveAll() {
             const btn = document.getElementById('btn-save');
             
-            // Валидация обязательных полей
-            const requiredFields = [
-                { id: 'db-host', label: 'Хост БД' },
-                { id: 'db-name', label: 'Имя БД' },
-                { id: 'db-user', label: 'Пользователь БД' },
-                { id: 'db-pass', label: 'Пароль БД' },
-                { id: 'llm-host', label: 'Адрес LLM' },
-                { id: 'llm-model', label: 'Модель LLM' },
-                { id: 'ssh-user', label: 'SSH пользователь' },
-                { id: 'ssh-pass', label: 'SSH пароль' }
-            ];
-
-            for (const field of requiredFields) {
-                const val = document.getElementById(field.id).value.trim();
-                if (!val) {
-                    showFinalStatus(false, `⚠️ Заполните поле: ${field.label}`);
-                    document.getElementById(field.id).focus();
+            // 1. Проверяем, созданы ли базы данных
+            try {
+                const statusRes = await fetch(`${API}/status`);
+                const statusData = await statusRes.json();
+                
+                if (!statusData.status.database) {
+                    showFinalStatus(false, '⚠️ Сначала создайте базу данных PostgreSQL (Шаг 1)');
                     return;
                 }
+                if (!statusData.status.qdrant) {
+                    showFinalStatus(false, '⚠️ Сначала создайте коллекцию Qdrant (Шаг 1)');
+                    return;
+                }
+                if (statusData.status.configured) {
+                    showFinalStatus(true, '✅ Система уже настроена! Перенаправление...');
+                    setTimeout(() => { window.location.href = '/'; }, 1500);
+                    return;
+                }
+            } catch (err) {
+                showFinalStatus(false, '❌ Не удалось проверить статус БД: ' + err.message);
+                return;
             }
 
-            // Формирование payload
+            // 2. Валидация полей LLM и SSH
+            const llmHost = document.getElementById('llm-host').value.trim();
+            const llmModel = document.getElementById('llm-model').value.trim();
+            const sshUser = document.getElementById('ssh-user').value.trim();
+            const sshPass = document.getElementById('ssh-pass').value;
+
+            if (!llmHost) { showFinalStatus(false, '⚠️ Введите адрес LLM сервера'); return; }
+            if (!llmModel) { showFinalStatus(false, '⚠️ Введите название модели'); return; }
+            if (!sshUser) { showFinalStatus(false, '⚠️ Введите SSH пользователя'); return; }
+            if (!sshPass) { showFinalStatus(false, '⚠️ Введите SSH пароль'); return; }
+
+            // 3. Формируем payload (БД берём из config_store, не из полей)
             const payload = {
                 database: {
-                    host: document.getElementById('db-host').value.trim(),
-                    port: parseInt(document.getElementById('db-port').value) || 5432,
-                    name: document.getElementById('db-name').value.trim(),
-                    user: document.getElementById('db-user').value.trim(),
-                    password: document.getElementById('db-pass').value
+                    host: "keycloak-db",  // Берётся из авто-создания
+                    port: 5432,
+                    name: "kag_config",
+                    user: "kag_user",
+                    password: "auto-generated"  // Будет перезаписано в save
                 },
                 llm: {
                     type: document.getElementById('llm-type').value,
-                    host: document.getElementById('llm-host').value.trim(),
+                    host: llmHost,
                     port: parseInt(document.getElementById('llm-port').value) || 11434,
-                    model: document.getElementById('llm-model').value.trim(),
+                    model: llmModel,
                     system_prompt: document.getElementById('llm-system-prompt').value.trim()
                 },
-                embedding: {
-                    model: document.getElementById('emb-model').value.trim(),
-                    dimensions: parseInt(document.getElementById('emb-dim').value) || 4096
-                },
                 ssh: {
-                    username: document.getElementById('ssh-user').value.trim(),
-                    password: document.getElementById('ssh-pass').value,
+                    username: sshUser,
+                    password: sshPass,
                     sudo_password: document.getElementById('ssh-sudo').value || undefined
                 }
             };
 
-            // UI: Блокируем кнопку
+            // 4. Отправка
             btn.disabled = true;
             btn.textContent = '⏳ Сохранение...';
             showFinalStatus(false, 'Сохранение настроек...');
 
             try {
-                console.log('Отправка данных:', payload);
-
                 const res = await fetch(`${API}/save`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                console.log('Ответ сервера:', res.status);
-
                 const data = await res.json();
-                console.log('Данные:', data);
 
                 if (res.ok && data.success) {
-                    showFinalStatus(true, '✅ Настройки успешно сохранены! Перенаправление...');
-                    
-                    // Ждем 2 секунды и редиректим на главную
+                    showFinalStatus(true, '✅ Настройки сохранены! Перенаправление...');
                     setTimeout(() => {
                         window.location.href = '/';
-                    }, 2000);
+                    }, 1500);
                 } else {
                     const errorMsg = data.detail || data.message || 'Неизвестная ошибка';
-                    showFinalStatus(false, `❌ Ошибка: ${errorMsg}`);
+                    showFinalStatus(false, '❌ Ошибка: ' + errorMsg);
                     btn.disabled = false;
                     btn.textContent = '💾 Сохранить и продолжить';
                 }
             } catch (err) {
-                console.error('Ошибка сохранения:', err);
-                showFinalStatus(false, `❌ Ошибка сети: ${err.message}`);
+                showFinalStatus(false, '❌ Ошибка сети: ' + err.message);
                 btn.disabled = false;
                 btn.textContent = '💾 Сохранить и продолжить';
             }
         }
 
         // ==========================================
+        // Авто-создание баз данных
+        // ==========================================
+
+        async function createPgDb() {
+            const btn = document.getElementById('btn-create-pg');
+            const status = document.getElementById('pg-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+            status.className = 'create-status';
+            status.style.display = 'block';
+            status.innerHTML = 'Создаю базу данных PostgreSQL...';
+
+            try {
+                const res = await fetch(`${API}/create-pg-db`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.className = 'create-status success';
+                    status.innerHTML = '✅ ' + data.message;
+                    renderDbCreds('pg-creds', data.database);
+                    document.getElementById('pg-creds').style.display = 'block';
+                    btn.textContent = '✅ Создано';
+                } else {
+                    status.className = 'create-status error';
+                    status.innerHTML = '❌ ' + data.message;
+                    btn.disabled = false;
+                    btn.textContent = '⚡ Создать базу данных';
+                }
+            } catch (err) {
+                status.className = 'create-status error';
+                status.innerHTML = '❌ Ошибка: ' + err.message;
+                btn.disabled = false;
+                btn.textContent = '⚡ Создать базу данных';
+            }
+        }
+
+        async function createQdrant() {
+            const btn = document.getElementById('btn-create-qdrant');
+            const status = document.getElementById('qdrant-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+            status.className = 'create-status';
+            status.style.display = 'block';
+            status.innerHTML = 'Создаю коллекцию Qdrant...';
+
+            try {
+                const res = await fetch(`${API}/create-qdrant-collection`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.className = 'create-status success';
+                    status.innerHTML = '✅ ' + data.message;
+                    renderDbCreds('qdrant-creds', data.qdrant);
+                    document.getElementById('qdrant-creds').style.display = 'block';
+                    btn.textContent = '✅ Создано';
+                } else {
+                    status.className = 'create-status error';
+                    status.innerHTML = '❌ ' + data.message;
+                    btn.disabled = false;
+                    btn.textContent = '⚡ Создать коллекцию';
+                }
+            } catch (err) {
+                status.className = 'create-status error';
+                status.innerHTML = '❌ Ошибка: ' + err.message;
+                btn.disabled = false;
+                btn.textContent = '⚡ Создать коллекцию';
+            }
+        }
+
+        function copyAllCreds() {
+            const credsDivs = document.querySelectorAll('.db-creds');
+            const texts = [];
+            const labels = {
+                'pg-creds': '🐘 PostgreSQL (KAG)',
+                'qdrant-creds': '🔍 Qdrant',
+                'neo4j-creds': '🕸️ Neo4j',
+                'keycloak-creds': '🔑 Keycloak DB',
+                'kagdb-creds': '🐘 KAG Database'
+            };
+            
+            credsDivs.forEach(div => {
+                if (div.style.display !== 'none' && div.textContent.trim()) {
+                    const label = labels[div.id] || div.id;
+                    texts.push(`\n=== ${label} ===`);
+                    const rows = div.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length === 2) {
+                            texts.push(`${cells[0].textContent}: ${cells[1].textContent}`);
+                        }
+                    });
+                }
+            });
+            
+            if (texts.length === 0) {
+                document.getElementById('copy-status').innerHTML = '⚠️ Сначала создайте базы данных или дождитесь загрузки';
+                return;
+            }
+            
+            navigator.clipboard.writeText(texts.join('\n').trim()).then(() => {
+                const st = document.getElementById('copy-status');
+                st.className = 'create-status success';
+                st.innerHTML = '✅ Скопировано в буфер!';
+                // Скрываем карточки PG и Qdrant локально
+                ['pg-creds','qdrant-creds'].forEach(id => {
+                    const div = document.getElementById(id);
+                    if (div) { div.style.display = 'none'; div.innerHTML = ''; }
+                });
+                // Отмечаем setup как завершённый и редиректим
+                fetch('/api/v1/setup/complete', {method:'POST'}).catch(()=>{});
+                st.innerHTML = '✅ Скопировано! Переход на документы...';
+                setTimeout(() => { window.location.href = '/documents'; }, 1500);
+            }).catch(() => {
+                const st = document.getElementById('copy-status');
+                st.className = 'create-status error';
+                st.innerHTML = '❌ Не удалось скопировать';
+            });
+        }
+        
+        // ==========================================
+        // Отображение кредов баз данных
+        // ==========================================
+        
+        function renderDbCreds(containerId, data) {
+            const el = document.getElementById(containerId);
+            if (!el || !data) return;
+            el.style.display = 'block';
+            let rows = '';
+            if (data.host) rows += `<tr><td>Хост</td><td><code>${data.host}</code></td></tr>`;
+            if (data.port) rows += `<tr><td>Порт</td><td><code>${data.port}</code></td></tr>`;
+            if (data.name) rows += `<tr><td>БД</td><td><code>${data.name}</code></td></tr>`;
+            if (data.collection) rows += `<tr><td>Коллекция</td><td><code>${data.collection}</code></td></tr>`;
+            if (data.user) rows += `<tr><td>Пользователь</td><td><code>${data.user}</code></td></tr>`;
+            if (data.password) rows += `<tr><td>Пароль</td><td><code style="color:var(--green);font-weight:600">${data.password}</code></td></tr>`;
+            if (data.api_key) rows += `<tr><td>API ключ</td><td><code style="color:var(--green);font-weight:600">${data.api_key}</code></td></tr>`;
+            if (data.http_port && data.host) rows += `<tr><td>HTTP</td><td><a href="http://${data.host}:${data.http_port}" target="_blank" style="color:var(--accent-h);font-size:11px"><code>http://${data.host}:${data.http_port}</code></a></td></tr>`;
+            if (data.bolt_port && data.host) rows += `<tr><td>Bolt</td><td><code>bolt://${data.host}:${data.bolt_port}</code></td></tr>`;
+            el.innerHTML = `<table>${rows}</table>`;
+        }
+        
+        function renderStaticDb(containerId, info) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            el.style.display = 'block';
+            el.innerHTML = '<table>' + info.map(row => 
+                `<tr><td>${row[0]}</td><td><code>${row[1]}</code></td></tr>`
+            ).join('') + '</table>';
+        }
+        
+        // ==========================================
         // Проверка при загрузке страницы
         // ==========================================
         
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Проверяем, не настроена ли уже система
-                const res = await fetch(`${API}/check`);
-                const data = await res.json();
+                const statusRes = await fetch(`${API}/status`);
+                const data = await statusRes.json();
+                const st = data.status || {};
                 
-                if (data.configured) {
-                    // Система уже настроена, идем на главную
-                    window.location.href = '/';
+                // Показываем статус кнопок
+                if (st.database) {
+                    const btn = document.getElementById('btn-create-pg');
+                    btn.textContent = '✅ Создано';
+                    btn.disabled = true;
                 }
+                if (st.qdrant) {
+                    const btn = document.getElementById('btn-create-qdrant');
+                    btn.textContent = '✅ Создано';
+                    btn.disabled = true;
+                }
+                
+                // Показываем креды из API
+                const dbs = data.databases || {};
+                if (dbs.postgresql) renderDbCreds('pg-creds', dbs.postgresql);
+                if (dbs.qdrant) renderDbCreds('qdrant-creds', dbs.qdrant);
+                if (dbs.neo4j) renderDbCreds('neo4j-creds', dbs.neo4j);
+                if (dbs.keycloak_db) renderDbCreds('keycloak-creds', dbs.keycloak_db);
+                if (dbs.kag_db) renderDbCreds('kagdb-creds', dbs.kag_db);
+                
+                // Доступы
+                const acc = data.access || {};
+                if (acc.keycloak_admin) renderDbCreds('keycloak-admin-creds', acc.keycloak_admin);
+                if (acc.site_login) renderDbCreds('site-login-creds', acc.site_login);
             } catch (err) {
-                console.warn('Не удалось проверить статус настройки:', err);
+                console.warn('Не удалось проверить статус:', err);
             }
         });
     </script>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Поиск</title>
+
+<style>
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--green:#10b981;--emerald:#10b981;--red:#ef4444;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;line-height:1.5}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+main{margin-left:240px;flex:1;padding:24px 32px;max-width:1200px}
+h1{font-size:24px;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:var(--text4);margin-bottom:16px}
+
+.search-box{display:flex;gap:10px;margin-bottom:12px}
+.search-box input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;color:var(--text);font-size:16px;font-family:system-ui, -apple-system, sans-serif;outline:none}
+.search-box input:focus{border-color:var(--accent-h)}
+.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius);cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap}
+.btn:hover{opacity:0.85}
+
+.tabs{display:flex;gap:4px;margin-bottom:14px}
+.tab{padding:7px 16px;font-size:12px;font-weight:500;color:var(--text3);background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);cursor:pointer;transition:all 0.15s;font-family:system-ui, -apple-system, sans-serif}
+.tab:hover{color:var(--text);border-color:var(--border)}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.panel h3{font-size:14px;font-weight:600;color:var(--text2);margin-bottom:10px}
+.chunk-card{background:var(--elevated);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;transition:all 0.15s}
+.chunk-card:hover{border-color:var(--border)}
+.chunk-card .c-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px}
+.chunk-card .c-id{color:var(--accent-h);font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-weight:500}
+.chunk-card .c-meta{color:var(--text4)}
+.chunk-card .c-text{font-size:12px;color:var(--text2);line-height:1.6;max-height:120px;overflow-y:auto}
+.chunk-card .c-doc{font-size:11px;color:var(--accent-h);margin-top:6px;text-decoration:none;display:inline-block}
+.chunk-card .c-doc:hover{text-decoration:underline}
+
+.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px;margin-bottom:8px;cursor:pointer;transition:all 0.15s}
+.doc-card:hover{border-color:var(--border)}
+.doc-card .d-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.doc-card .d-meta{font-size:11px;color:var(--text4)}
+.doc-card .d-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.tag{font-size:10px;padding:2px 7px;border-radius:9999px;font-weight:500}
+.tag-blue{background:rgba(94,106,210,0.15);color:var(--accent-h)}
+.tag-green{background:rgba(16,185,129,0.15);color:var(--green)}
+.tag-amber{background:rgba(245,158,11,0.15);color:var(--amber)}
+
+.empty{text-align:center;padding:40px;color:var(--text4)}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent-h);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.count{font-size:13px;color:var(--text3);margin-bottom:8px}
+.hl{background:rgba(94,106,210,0.25);padding:1px 2px;border-radius:2px;color:var(--accent-h)}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:14px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🎯 <span>KAG</span></div>
+    <a href="/">⬡ Дашборд</a>
+  <a href="/chat">💬 Чат с AI</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+<h1>🔎 Поиск</h1>
+<div class="sub">Векторный (Qdrant) + графовый (Neo4j) + по метаданным — выберите режим</div>
+
+<div class="search-box">
+  <input type="text" id="query" placeholder="Введите запрос..." onkeydown="if(event.key==='Enter')doSearch()" autofocus>
+  <button class="btn" onclick="doSearch()">🔍 Искать</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-mode="all" onclick="setMode('all',this)">🔀 Все источники</button>
+  <button class="tab" data-mode="chunks" onclick="setMode('chunks',this)">🧩 Чанки (Qdrant)</button>
+  <button class="tab" data-mode="docs" onclick="setMode('docs',this)">📄 Документы</button>
+  <button class="tab" data-mode="graph" onclick="setMode('graph',this)">🕸️ Граф (Neo4j)</button>
+</div>
+
+<div id="results"><div class="empty">🔍 Введите запрос — поиск по всем источникам</div></div>
+</main>
+
+<script>
+function getToken() {
+  const m = document.cookie.match(/kag_token=([^;]+)/);
+  if (m) return m[1];
+  return localStorage.getItem('kag_token');
+}
+function authHeaders() {
+  const t = getToken();
+  return t ? {'Content-Type':'application/json', 'Authorization':'Bearer '+t} : {'Content-Type':'application/json'};
+}
+
+let mode = 'all';
+function setMode(m, el) {
+  mode = m;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  doSearch();
+}
+
+async function doSearch() {
+  const q = document.getElementById('query').value.trim();
+  if (!q) return;
+  
+  const res = document.getElementById('results');
+  res.innerHTML = '<div class="empty"><div class="spin"></div> Поиск...</div>';
+  
+  const promises = [];
+  
+  // 1. Chunk search (Qdrant vector)
+  if (mode === 'all' || mode === 'chunks') {
+    promises.push((async () => {
+      try {
+        const r = await fetch('/api/v1/chat/search', {
+          method:'POST', headers: authHeaders(),
+          body: JSON.stringify({query: q, limit: 10})
+        });
+        if (r.ok) {
+          const d = await r.json();
+          return {type:'chunks', data: d.chunks || d.results || []};
+        }
+      } catch(e) {}
+      return {type:'chunks', data: []};
+    })());
+  }
+  
+  // 2. Document metadata search
+  if (mode === 'all' || mode === 'docs') {
+    promises.push((async () => {
+      try {
+        const r = await fetch('/api/v1/upload/list', { headers: authHeaders() });
+        if (!r.ok) return {type:'docs', data: []};
+        const d = await r.json();
+        const docs = (d.documents || []).filter(doc => {
+          const txt = [doc.filename, doc.document_type||'', ...(doc.tags||[])].join(' ').toLowerCase();
+          return q.toLowerCase().split(/\s+/).every(w => txt.includes(w));
+        });
+        // Enrich first 5
+        await Promise.all(docs.slice(0,5).map(async doc => {
+          try {
+            const rd = await fetch('/api/v1/upload/'+doc.document_id+'/details', { headers: authHeaders() });
+            if (rd.ok) {
+              const det = await rd.json();
+              doc.recognized_title = det.recognized_title;
+              doc.tags = det.tags;
+              doc.document_type = det.document_type;
+            }
+          } catch(e) {}
+        }));
+        return {type:'docs', data: docs};
+      } catch(e) {}
+      return {type:'docs', data: []};
+    })());
+  }
+  
+  // 3. Graph search (Neo4j entities)
+  if (mode === 'all' || mode === 'graph') {
+    promises.push((async () => {
+      try {
+        const r = await fetch('/api/v1/kg/entities/search?q=' + encodeURIComponent(q) + '&limit=10', { headers: authHeaders() });
+        if (r.ok) {
+          const d = await r.json();
+          return {type:'graph', data: d.results || []};
+        }
+      } catch(e) {}
+      return {type:'graph', data: []};
+    })());
+  }
+  
+  const results = await Promise.all(promises);
+  renderResults(q, results);
+}
+
+function renderResults(q, results) {
+  const res = document.getElementById('results');
+  let html = '';
+  let total = 0;
+  
+  results.forEach(r => {
+    if (r.type === 'chunks' && r.data.length) {
+      total += r.data.length;
+      html += '<div class="panel"><h3>🧩 Чанки — векторный поиск (Qdrant)</h3>';
+      r.data.forEach((c,i) => {
+        const text = c.text || c.content || '';
+        const docId = c.document_id || c.doc_id || '';
+        const cid = c.chunk_id || '#'+(i+1);
+        html += `<div class="chunk-card">
+          <div class="c-header"><span class="c-id">${cid}</span><span class="c-meta">${text.length} симв.</span></div>
+          <div class="c-text">${hl(text, q)}</div>
+          ${docId ? `<a class="c-doc" href="/viewer?id=${docId}">📄 Открыть документ →</a>` : ''}
+        </div>`;
+      });
+      html += '</div>';
+    }
+    
+    if (r.type === 'graph' && r.data.length) {
+      total += r.data.length;
+      html += '<div class="panel"><h3>🕸️ Сущности — граф знаний (Neo4j)</h3>';
+      r.data.forEach(e => {
+        html += `<div class="doc-card" onclick="location.href='/kg'">
+          <div class="d-title">${hl(e.name||'', q)}</div>
+          <div class="d-meta">Тип: ${e.type||'unknown'} · Уверенность: ${Math.round((e.confidence||1)*100)}%</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    
+    if (r.type === 'docs' && r.data.length) {
+      total += r.data.length;
+      html += '<div class="panel"><h3>📄 Документы — по метаданным</h3>';
+      r.data.forEach(d => {
+        html += `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
+          <div class="d-title">${hl(d.recognized_title||d.filename, q)}</div>
+          <div class="d-meta">${d.filename} · ${d.chunks_count||0} чанков · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
+          ${(d.tags||[]).length ? '<div class="d-tags">' + d.tags.slice(0,5).map(t => `<span class="tag tag-blue">${t}</span>`).join('') + '</div>' : ''}
+        </div>`;
+      });
+      html += '</div>';
+    }
+  });
+  
+  res.innerHTML = total 
+    ? `<div class="count">Найдено: ${total} результатов по запросу «${q}»</div>` + html
+    : `<div class="empty">🔍 Ничего не найдено по запросу «${q}». Попробуйте другие слова.</div>`;
+}
+
+function hl(text, query) {
+  if (!query || !text) return text || '';
+  const words = query.split(/\s+/).filter(w => w.length > 1);
+  let result = String(text);
+  words.forEach(w => {
+    try {
+      const re = new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+      result = result.replace(re, '<span class="hl">$1</span>');
+    } catch(e) {}
+  });
+  return result;
+}
+
+function logout() {
+  localStorage.removeItem('kag_token');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+
+</script>
+</body>
+</html>
