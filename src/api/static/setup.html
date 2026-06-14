@@ -76,6 +76,8 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 .db-creds td code{background:var(--elevated);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--accent-h)}
 .btn-copy-all{background:var(--surface);color:var(--accent-h);border:1px solid var(--accent);padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}
 .btn-copy-all:hover{background:var(--accent);color:#fff}
+.btn-init-all{background:var(--accent);color:#fff;border:none;padding:14px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;width:100%;transition:all 0.2s}
+.btn-init-all:hover{background:var(--accent-h)}.btn-init-all[data-loading=true]{opacity:0.6;cursor:wait}
 @media(max-width:768px){.main-content{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -711,6 +713,25 @@ async function createAdminUser() {
     toast(d.message || d.detail);
     if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
   } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
+  btn.dataset.loading = 'false';
+}
+
+
+async function initAll() {
+  const btn = document.getElementById('btn-init-all');
+  if (btn.dataset.loading === 'true') return;
+  btn.dataset.loading = 'true'; btn.textContent = 'Initializing...';
+  const status = document.getElementById('init-status');
+  try {
+    const r = await fetch('/api/v1/setup/init-all', {method:'POST',credentials:'include'});
+    const d = await r.json();
+    if (d.success) {
+      status.innerHTML = 'OK: ' + d.results.success.join(', ');
+      if (d.results.errors.length) status.innerHTML += '<br>Errors: ' + d.results.errors.join(', ');
+      btn.textContent = 'DONE';
+      toast(d.login || 'Ready');
+    }
+  } catch(e) { status.textContent = 'Error: ' + e.message; btn.textContent = 'Retry'; }
   btn.dataset.loading = 'false';
 }
 
