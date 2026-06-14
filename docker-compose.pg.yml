@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: kag
-      POSTGRES_PASSWORD: KAGpg2026!secure
+      POSTGRES_PASSWORD: kagpass123
       POSTGRES_DB: kag
     volumes:
       - kag_pg_data:/var/lib/postgresql/data:rw
