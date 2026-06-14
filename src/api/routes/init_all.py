@@ -58,6 +58,7 @@ async def init_all():
 
     # 3. Neo4j
     try:
+        import os
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")))
         with driver.session() as s:
@@ -73,6 +74,7 @@ async def init_all():
 
     # 4. Admin user in PG
     try:
+        import os
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
         e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-pg:5432/kag"))
