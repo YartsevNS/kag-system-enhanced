@@ -1783,3 +1783,28 @@ async def save_ocr_settings(body: OcrSettingsRequest):
     from src.api.services.config_store import config_store
     config_store.set("ocr", "settings", {"force_ocr": body.force_ocr, "dpi": body.dpi, "enable_summarization": body.enable_summarization})
     return {"status": "ok"}
+# Backup endpoint
+from fastapi.responses import JSONResponse
+from datetime import datetime
+
+BACKUP_NAMESPACES = [
+    "web_monitor", "ocr", "chunking", "embedding", "function_map",
+    "llm_config", "ext_llm", "kg_config", "ui", "documents",
+    "process_logs", "llm", "upload_formats", "hot_folder",
+    "ssh_config", "model_manager",
+]
+
+@router.get("/backup", summary="Backup всех настроек системы")
+async def get_backup():
+    from src.api.services.config_store import config_store
+    backup = {"created_at": datetime.utcnow().isoformat(), "version": "1.0", "data": {}}
+    for ns in BACKUP_NAMESPACES:
+        try:
+            data = config_store.get_all(ns)
+            if data:
+                backup["data"][ns] = data
+        except Exception as e:
+            backup["data"][ns] = {"error": str(e)}
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    headers = {"Content-Disposition": f"attachment; filename=kag-backup-{ts}.json"}
+    return JSONResponse(content=backup, headers=headers)

@@ -578,6 +578,24 @@
             <div id="domain-preset-info" style="font-size:12px;color:var(--text3);margin-top:10px;padding:10px;background:var(--surface);border-radius:var(--radius);display:none"></div>
             <div id="domain-preset-detail" style="font-size:12px;margin-top:8px;display:none"></div>
         </div>
+        <!-- Backup -->
+        <div class="section" style="margin-top:32px;padding-top:32px;border-top:2px solid var(--border)">
+            <h2 class="section-title">Backup</h2>
+            <p style="font-size:12px;color:var(--text4);margin-bottom:12px">
+                Скачать все настройки системы в JSON: провайдеры, модели, OCR, чанкинг,
+                веб-мониторинг, SSH, тема, форматы загрузки, промпты.
+            </p>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" onclick="downloadBackup()">Download backup.json</button>
+                <span id="backup-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <div style="margin-top:12px;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.5">
+                <strong style="color:var(--amber)">What is saved:</strong> all PostgreSQL settings (config_store) -
+                LLM providers, function bindings, OCR/chunking/embedding config, SSH config,
+                web monitor sources, theme, system prompt, upload formats.
+                <strong>Not saved:</strong> documents themselves, Qdrant vectors, Neo4j graph.
+            </div>
+        </div>
     </main>
 
     <div class="notification" id="notification"></div>
@@ -1826,6 +1844,28 @@ async function saveOcrSettings() {
 }
 loadOcrSettings();
 
+
+async function downloadBackup() {
+  var status = document.getElementById('backup-status');
+  status.textContent = 'Generating backup...';
+  try {
+    var r = await fetch('/api/v1/admin/models/backup', { credentials: 'include' });
+    var blob = await r.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'kag-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.textContent = 'Downloaded';
+    setTimeout(function(){ status.textContent = ''; }, 3000);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
 </script>
 
 async function loadOcrSettings() {
@@ -1858,6 +1898,28 @@ async function saveOcrSettings() {
   } catch(e) {}
 }
 loadOcrSettings();
+
+
+async function downloadBackup() {
+  var status = document.getElementById('backup-status');
+  status.textContent = 'Generating backup...';
+  try {
+    var r = await fetch('/api/v1/admin/models/backup', { credentials: 'include' });
+    var blob = await r.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'kag-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.textContent = 'Downloaded';
+    setTimeout(function(){ status.textContent = ''; }, 3000);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
 
 </script>
 </body>
