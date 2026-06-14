@@ -87,22 +87,22 @@ class DocumentService:
         self._ocr_dir = upload_base / "ocr_results"
         self._thumb_dir = upload_base / "thumbnails"
 
-        for d in [self._upload_dir, self._ocr_dir, self._thumb_dir]:
+        # Проверяем и фиксим каждую директорию (volume может перекрыть chown из Dockerfile)
+        tmp_base = Path("/tmp/kag_data")
+
+        for attr, subdir in [("_upload_dir", "uploads"), ("_ocr_dir", "ocr_results"), ("_thumb_dir", "thumbnails")]:
+            target = upload_base / subdir
             try:
-                d.mkdir(parents=True, exist_ok=True)
+                target.mkdir(parents=True, exist_ok=True)
+                test_file = target / ".test"
+                test_file.write_text("test")
+                test_file.unlink()
+                setattr(self, attr, target)
             except Exception:
-                pass
-        
-        try:
-            self._upload_dir.mkdir(parents=True, exist_ok=True)
-            # Проверяем доступность на запись
-            test_file = self._upload_dir / ".test"
-            test_file.write_text("test")
-            test_file.unlink()
-        except Exception:
-            logger.warning("data/uploads недоступен, использую /tmp")
-            self._upload_dir = Path("/tmp/kag_uploads")
-            self._upload_dir.mkdir(parents=True, exist_ok=True)
+                fallback = tmp_base / subdir
+                fallback.mkdir(parents=True, exist_ok=True)
+                setattr(self, attr, fallback)
+                logger.warning(f"/app/data/{subdir} недоступен, использую {fallback}")
 
         # Кэш метаданных (загружается из БД при старте)
         self._documents: Dict[str, DocumentRecord] = {}
@@ -655,7 +655,7 @@ class DocumentService:
         """
         from PIL import Image, ImageDraw, ImageFont
         
-        thumb_dir = Path("/app/data/thumbnails")
+        thumb_dir = self._thumb_dir
         thumb_dir.mkdir(parents=True, exist_ok=True)
         thumb_path = thumb_dir / f"{document_id}.webp"
         
