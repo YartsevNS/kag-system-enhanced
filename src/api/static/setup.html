@@ -150,9 +150,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                         <strong>🕸️ Neo4j</strong>
                         <div style="color:var(--text3);font-size:0.85rem;">Графовая база знаний</div>
                     </div>
-                    <button class="btn-create" onclick="createNeo4j()" id="btn-neo4j" data-loading="false">⚡ Создать</button>
+                    <button class="btn-create" onclick="createNeo4j()" id="btn-neo4j" data-loading="false">Create</button>
                 </div>
-                <div class="db-creds" id="neo4j-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+                <div class="db-creds" id="neo4j-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s);display:none"></div>
             </div>
 
             <!-- Keycloak DB -->
@@ -162,9 +162,9 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                         <strong>🔑 Keycloak Database</strong>
                         <div style="color:var(--text3);font-size:0.85rem;">База для аутентификации</div>
                     </div>
-                    <button class="btn-create" onclick="createKeycloak()" id="btn-keycloak" data-loading="false">⚡ Создать</button>
+                    <button class="btn-create" onclick="createKeycloak()" id="btn-keycloak" data-loading="false">Create</button>
                 </div>
-                <div class="db-creds" id="keycloak-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
+                <div class="db-creds" id="keycloak-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s);display:none"></div>
             </div>
 
             <!-- KAG DB -->
@@ -686,8 +686,7 @@ async function createNeo4j() {
   try {
     const r = await fetch('/api/v1/setup/create-neo4j-db', {method:'POST',credentials:'include'});
     const d = await r.json();
-    toast(d.message || d.detail);
-    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+    if (d.success) { btn.textContent = 'Created'; document.getElementById('neo4j-creds').style.display = ''; } else { toast(d.detail || 'Error', true); btn.textContent = 'Retry'; } else btn.textContent = 'Retry';
   } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
   btn.dataset.loading = 'false';
 }
@@ -698,8 +697,7 @@ async function createKeycloak() {
   try {
     const r = await fetch('/api/v1/setup/create-keycloak-db', {method:'POST',credentials:'include'});
     const d = await r.json();
-    toast(d.message || d.detail);
-    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+    if (d.success) { btn.textContent = 'Created'; document.getElementById('neo4j-creds').style.display = ''; } else { toast(d.detail || 'Error', true); btn.textContent = 'Retry'; } else btn.textContent = 'Retry';
   } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
   btn.dataset.loading = 'false';
 }
@@ -710,8 +708,7 @@ async function createAdminUser() {
   try {
     const r = await fetch('/api/v1/setup/create-admin-user', {method:'POST',credentials:'include'});
     const d = await r.json();
-    toast(d.message || d.detail);
-    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+    if (d.success) { btn.textContent = 'Created'; document.getElementById('neo4j-creds').style.display = ''; } else { toast(d.detail || 'Error', true); btn.textContent = 'Retry'; } else btn.textContent = 'Retry';
   } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
   btn.dataset.loading = 'false';
 }
@@ -727,6 +724,9 @@ async function initAll() {
     const d = await r.json();
     if (d.success) {
       status.innerHTML = 'OK: ' + d.results.success.join(', ');
+    if (d.results.success.includes('neo4j') || ('')) document.getElementById('neo4j-creds').style.display = '';
+    if (d.results.success.some(s => s.startsWith('neo4j'))) document.getElementById('neo4j-creds').style.display = '';
+    if (d.results.success.some(s => s.startsWith('keycloak'))) { document.getElementById('keycloak-creds').style.display = ''; }
       if (d.results.errors.length) status.innerHTML += '<br>Errors: ' + d.results.errors.join(', ');
       btn.textContent = 'DONE';
       toast(d.login || 'Ready');

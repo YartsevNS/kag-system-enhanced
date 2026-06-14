@@ -35,7 +35,7 @@ services:
       - KC_DB_PORT=5432
       - KC_DB_NAME=keycloak
       # KAG собственная PostgreSQL (НЕ Keycloak!)
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@kag-pg:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@keycloak-db:5432/kag}
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
@@ -108,7 +108,7 @@ services:
       - EMBEDDING_DIMENSIONS=1024
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@kag-pg:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:KAGpg2026secure@keycloak-db:5432/kag}
     volumes:
       - ./src:/app/src
       - ./data:/app/data

@@ -299,7 +299,7 @@ async def setup_status():
         "name": "keycloak", "user": "keycloak", "password": "keycloak_password"
     }
     result["databases"]["kag_db"] = {
-        "host": "kag-pg", "port": 5432,
+        "host": "keycloak-db", "port": 5432,
         "name": "kag", "user": "kag", "password": "KAGpg2026!secure"
     }
     
@@ -593,7 +593,7 @@ async def create_admin_user():
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
         settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
-        e = create_engine("postgresql://kag:kagpass123@kag-pg:5432/kag")
+        e = create_engine("postgresql://kag:kagpass123@keycloak-db:5432/kag")
         with e.connect() as conn:
             h = pbkdf2_sha256.hash("admin123456")
             conn.execute(text("INSERT INTO users (id, username, full_name, email, hashed_password, is_active, is_admin, created_at, updated_at) VALUES (:id, :u, :fn, :em, :h, TRUE, TRUE, NOW(), NOW()) ON CONFLICT (username) DO NOTHING"),
@@ -685,7 +685,7 @@ async def init_all():
     try:
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
-        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-pg:5432/kag"))
+        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@keycloak-db:5432/kag"))
         with e.connect() as conn:
             conn.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, full_name VARCHAR(255), email VARCHAR(255), hashed_password VARCHAR(255) NOT NULL, is_active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
             h = pbkdf2_sha256.hash("admin123456")
@@ -783,7 +783,7 @@ async def init_all():
     try:
         from passlib.hash import pbkdf2_sha256
         from sqlalchemy import create_engine, text
-        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@kag-pg:5432/kag"))
+        e = create_engine(os.environ.get("KAG_DB_URL", "postgresql://kag:kagpass123@keycloak-db:5432/kag"))
         with e.connect() as conn:
             conn.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, full_name VARCHAR(255), email VARCHAR(255), hashed_password VARCHAR(255) NOT NULL, is_active BOOLEAN DEFAULT TRUE, is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
             h = pbkdf2_sha256.hash("admin123456")
