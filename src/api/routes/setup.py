@@ -540,6 +540,65 @@ async def complete_setup():
     status = config_store.get("setup", "status", {})
     status["configured"] = True
     status["timestamp"] = datetime.now().isoformat()
-    config_store.set("setup", "status", status)
-    logger.info("Setup Wizard завершён — система настроена")
-    return {"success": True, "message": "Setup завершён"}
+
+@router.post("/create-neo4j-db")
+async def create_neo4j_database():
+    """Создаёт индекс и ограничения в Neo4j для графа знаний."""
+    try:
+        from neo4j import GraphDatabase
+        settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
+        driver = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", settings.NEO4J_PASSWORD))
+        with driver.session() as session:
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (d:Document) ON (d.id)")
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (e:Entity) ON (e.name)")
+        driver.close()
+        config_store.set("neo4j", "default", {"auto_created": True, "host": "neo4j", "bolt_port": 7687})
+        return {"success": True, "message": "Neo4j настроен"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-keycloak-db")
+async def create_keycloak_database():
+    """Создаёт realm и client в Keycloak."""
+    try:
+        import httpx
+        settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
+        async with httpx.AsyncClient() as client:
+            r = await client.post("http://keycloak:8080/realms/master/protocol/openid-connect/token",
+                data={"client_id": "admin-cli", "username": settings.KC_ADMIN_USERNAME or "admin",
+                      "password": settings.KC_ADMIN_PASSWORD or "admin", "grant_type": "password"},
+                timeout=10)
+            token = r.json().get("access_token")
+            if not token:
+                return {"success": False, "message": "Не удалось авторизоваться в Keycloak"}
+            # Create kag realm
+            r2 = await client.post("http://keycloak:8080/admin/realms",
+                json={"realm": "kag", "enabled": True},
+                headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            if r2.status_code == 409:
+                return {"success": True, "message": "Realm kag уже существует"}
+            return {"success": True, "message": "Keycloak realm создан"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-admin-user")
+async def create_admin_user():
+    """Создаёт admin-пользователя в таблице users (PG)."""
+    try:
+        import uuid
+        from passlib.hash import pbkdf2_sha256
+        from sqlalchemy import create_engine, text
+        settings = __import__("src.config", fromlist=["get_settings"]).get_settings()
+        e = create_engine("postgresql://kag:kagpass123@kag-pg:5432/kag")
+        with e.connect() as conn:
+            h = pbkdf2_sha256.hash("admin123456")
+            conn.execute(text("INSERT INTO users (id, username, full_name, email, hashed_password, is_active, is_admin, created_at, updated_at) VALUES (:id, :u, :fn, :em, :h, TRUE, TRUE, NOW(), NOW()) ON CONFLICT (username) DO NOTHING"),
+                {"id": str(uuid.uuid4()), "u": "admin", "fn": "Administrator", "em": "admin@kag.local", "h": h})
+            conn.commit()
+        return {"success": True, "message": "Admin-пользователь создан", "login": "admin / admin123456"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

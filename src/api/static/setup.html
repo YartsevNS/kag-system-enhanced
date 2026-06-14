@@ -143,18 +143,24 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
             <!-- Neo4j -->
             <div class="inner-card">
-                <div>
-                    <strong>🕸️ Neo4j</strong>
-                    <div style="color:var(--text3);font-size:0.85rem;">Графовая база знаний</div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <strong>🕸️ Neo4j</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">Графовая база знаний</div>
+                    </div>
+                    <button class="btn-create" onclick="createNeo4j()" id="btn-neo4j" data-loading="false">⚡ Создать</button>
                 </div>
                 <div class="db-creds" id="neo4j-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
             </div>
 
             <!-- Keycloak DB -->
             <div class="inner-card">
-                <div>
-                    <strong>🔑 Keycloak Database</strong>
-                    <div style="color:var(--text3);font-size:0.85rem;">База для аутентификации</div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <strong>🔑 Keycloak Database</strong>
+                        <div style="color:var(--text3);font-size:0.85rem;">База для аутентификации</div>
+                    </div>
+                    <button class="btn-create" onclick="createKeycloak()" id="btn-keycloak" data-loading="false">⚡ Создать</button>
                 </div>
                 <div class="db-creds" id="keycloak-creds" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)"></div>
             </div>
@@ -670,6 +676,44 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
                 console.warn('Не удалось проверить статус:', err);
             }
         });
-    </script>
+    
+async function createNeo4j() {
+  const btn = document.getElementById('btn-neo4j');
+  if (btn.dataset.loading === 'true') return;
+  btn.dataset.loading = 'true'; btn.textContent = 'Creating...';
+  try {
+    const r = await fetch('/api/v1/setup/create-neo4j-db', {method:'POST',credentials:'include'});
+    const d = await r.json();
+    toast(d.message || d.detail);
+    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+  } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
+  btn.dataset.loading = 'false';
+}
+async function createKeycloak() {
+  const btn = document.getElementById('btn-keycloak');
+  if (btn.dataset.loading === 'true') return;
+  btn.dataset.loading = 'true'; btn.textContent = 'Creating...';
+  try {
+    const r = await fetch('/api/v1/setup/create-keycloak-db', {method:'POST',credentials:'include'});
+    const d = await r.json();
+    toast(d.message || d.detail);
+    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+  } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
+  btn.dataset.loading = 'false';
+}
+async function createAdminUser() {
+  const btn = document.getElementById('btn-admin');
+  if (btn.dataset.loading === 'true') return;
+  btn.dataset.loading = 'true'; btn.textContent = 'Creating...';
+  try {
+    const r = await fetch('/api/v1/setup/create-admin-user', {method:'POST',credentials:'include'});
+    const d = await r.json();
+    toast(d.message || d.detail);
+    if (d.success) btn.textContent = 'Created'; else btn.textContent = 'Retry';
+  } catch(e) { toast(e.message, true); btn.textContent = 'Retry'; }
+  btn.dataset.loading = 'false';
+}
+
+</script>
 </body>
 </html>
