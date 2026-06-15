@@ -274,6 +274,7 @@ async def initialize_all():
             cur.close(); conn.close()
             # Обновляем KAG_DB_URL и сбрасываем engine config_store
             os.environ["KAG_DB_URL"] = "postgresql://kag:" + pg_pass + "@kag-db:5432/kag"
+            config_store._db_url = os.environ["KAG_DB_URL"]
             config_store._engine = None
             config_store._Session = None
             config_store.set("database","default",{"host":"kag-db","port":5432,"name":"kag","user":"kag","password":pg_pass,"auto_created":True,"saved_at":datetime.utcnow().isoformat()})
