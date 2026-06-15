@@ -264,7 +264,9 @@ async def initialize_all():
                 password=os.environ.get("KC_DB_PASSWORD","keycloak_password"),connect_timeout=10)
             conn.autocommit = True
             cur = conn.cursor()
-            cur.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='kag') THEN CREATE USER kag WITH PASSWORD '"+pg_pass+"'; END IF; END $$")
+            cur.execute("SELECT 1 FROM pg_roles WHERE rolname='kag'")
+            if not cur.fetchone():
+                cur.execute("CREATE USER kag WITH PASSWORD '" + pg_pass + "'")
             cur.execute("SELECT 1 FROM pg_database WHERE datname='kag'")
             if not cur.fetchone():
                 cur.execute("CREATE DATABASE kag OWNER kag")
