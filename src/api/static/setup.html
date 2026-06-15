@@ -97,9 +97,7 @@ main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
 
             <div class="step" id="done-step" style="display:none">
                 <div class="step-header"><span class="step-num">✅</span> Система настроена</div>
-                <p style="color:var(--text3);font-size:14px;margin-bottom:16px">
-                    Все базы данных созданы. Сохрани креды выше.
-                </p>
+                <div class="status-box success" id="done-msg" style="margin-bottom:16px">✅ Система готова к работе</div>
                 <button class="btn" onclick="window.location.href='/admin'" style="width:100%">🛡️ Перейти в админку (настройка LLM)</button>
             </div>
         </div>
@@ -115,7 +113,9 @@ let _creds = null;
         const r = await fetch(API + '/check');
         const d = await r.json();
         if (d.configured) {
-            window.location.href = '/documents';
+            document.getElementById('init-step').style.display = 'none';
+            document.getElementById('done-step').style.display = 'block';
+            document.getElementById('done-msg').textContent = '✅ Система уже настроена (' + (d.timestamp ? new Date(d.timestamp).toLocaleString() : '') + ')';
         }
     } catch(e) {}
 })();
