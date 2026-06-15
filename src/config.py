@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Database (for user auth)
-    DATABASE_URL: str = "sqlite:////app/data/kag_users.db"
+    DATABASE_URL: str = "postgresql://kag:kagpass123@kag-db:5432/kag"
 
     class Config:
         env_file = ".env"
