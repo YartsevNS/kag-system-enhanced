@@ -271,10 +271,8 @@ async def initialize_all():
                 cur.execute("GRANT ALL PRIVILEGES ON DATABASE kag TO kag")
             cur.close(); conn.close()
             # Обновляем KAG_DB_URL для текущего процесса
-            os.environ["KAG_DB_URL"] = "postgresql://kag:"+pg_pass+"@kag-db:5432/kag"
+            os.environ["KAG_DB_URL"] = "postgresql://kag:" + pg_pass + "@kag-db:5432/kag"
             config_store.set("database","default",{"host":"kag-db","port":5432,"name":"kag","user":"kag","password":pg_pass,"auto_created":True,"saved_at":datetime.utcnow().isoformat()})
-            config_store._engine = None
-            config_store._Session = None
             credentials["postgresql"] = {"host":"kag-db","name":"kag","user":"kag","password":pg_pass}
         except Exception as e:
             credentials["postgresql"] = {"host":"kag-db","name":"kag","user":"kag","password":"(see .env)"}
