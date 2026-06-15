@@ -253,9 +253,9 @@ async def initialize_all():
             return {"success":True,"message":"Уже настроено","already_configured":True}
 
         credentials = {}
-        pg_pass = "kagpass123"
-        ne_pass = "kagneo4j2026"
-        ad_pass = "admin123456"
+        pg_pass = _generate_password(16)
+        ne_pass = _generate_password(16)
+        ad_pass = _generate_password(12)
 
         # 1. PostgreSQL
         try:
@@ -270,7 +270,11 @@ async def initialize_all():
                 cur.execute("CREATE DATABASE kag OWNER kag")
                 cur.execute("GRANT ALL PRIVILEGES ON DATABASE kag TO kag")
             cur.close(); conn.close()
+            # Обновляем KAG_DB_URL для текущего процесса
+            os.environ["KAG_DB_URL"] = "postgresql://kag:"+pg_pass+"@kag-db:5432/kag"
             config_store.set("database","default",{"host":"kag-db","port":5432,"name":"kag","user":"kag","password":pg_pass,"auto_created":True,"saved_at":datetime.utcnow().isoformat()})
+            config_store._engine = None
+            config_store._Session = None
             credentials["postgresql"] = {"host":"kag-db","name":"kag","user":"kag","password":pg_pass}
         except Exception as e:
             credentials["postgresql"] = {"host":"kag-db","name":"kag","user":"kag","password":"(see .env)"}
