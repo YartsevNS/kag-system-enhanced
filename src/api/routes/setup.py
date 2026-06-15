@@ -290,15 +290,12 @@ async def initialize_all():
         # 3. Neo4j
         try:
             from neo4j import GraphDatabase
-            drv = GraphDatabase.driver("bolt://neo4j:7687",auth=("neo4j","password"))
+            ne_pass = os.environ.get("NEO4J_PASSWORD","kagneo4j2026")
+            drv = GraphDatabase.driver("bolt://neo4j:7687",auth=("neo4j",ne_pass))
             with drv.session() as s:
-                s.run("ALTER CURRENT USER SET PASSWORD FROM 'password' TO '"+ne_pass+"'")
-            drv.close()
-            drv2 = GraphDatabase.driver("bolt://neo4j:7687",auth=("neo4j",ne_pass))
-            with drv2.session() as s:
                 s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)")
                 s.run("CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
-            drv2.close()
+            drv.close()
             credentials["neo4j"] = {"host":"neo4j","http":"http://neo4j:7474","bolt":"bolt://neo4j:7687","user":"neo4j","password":ne_pass}
         except Exception as e:
             credentials["neo4j"] = {"host":"neo4j","note":str(e)[:100]}
@@ -317,7 +314,7 @@ async def initialize_all():
             if engine:
                 with engine.connect() as c:
                     c.execute(text("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())"))
-                    for col,dt in [("full_name","VARCHAR(255)"),("email","VARCHAR(255)"),("updated_at","TIMESTAMP")]:
+                    for col,dt in [("full_name","VARCHAR(255)"),("email","VARCHAR(255)"),("updated_at","TIMESTAMP"),("password_hash","VARCHAR(255)")]:
                         try: c.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS "+col+" "+dt))
                         except: pass
                     c.commit()
