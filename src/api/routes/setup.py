@@ -538,7 +538,7 @@ async def complete_setup():
     status["timestamp"] = datetime.now().isoformat()
 
 @router.post("/create-neo4j-db")
-async def create_neo4j_database():
+import os; async def create_neo4j_database():
     try:
         import os
         from neo4j import GraphDatabase

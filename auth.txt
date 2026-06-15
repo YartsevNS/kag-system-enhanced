@@ -1,0 +1,86 @@
+# Логика аутентификации и первый вход в KAG System
+
+## Первый вход на развёрнутый сайт
+
+1. Пользователь открывает сайт (https://qd.gostsecret.ru или http://192.168.50.18:8000)
+2. SetupCheckMiddleware проверяет config_store("setup", "status") → configured=false
+3. Редирект на /setup — страница первоначальной настройки
+
+## Страница Setup
+
+На странице отображаются:
+- Базы данных: PostgreSQL (KAG), Qdrant, Neo4j, Keycloak DB, KAG Database
+- Креды: хост, порт, имя БД, пользователь, пароль — для каждой базы
+- Доступы: Keycloak Admin (admin/admin), вход на сайт (testuser1/test123456)
+- Настройки LLM, Embedding, SSH
+
+### Кнопка копирования в буфер
+
+При нажатии "📋 Скопировать все креды в буфер":
+1. JS собирает все видимые креды из карточек .db-creds
+2. navigator.clipboard.writeText() — копирует в буфер обмена
+3. Карточки PG и Qdrant скрываются (display:none, innerHTML очищается)
+4. Креды более не отображаются на странице (одноразовый показ)
+
+## Аутентификация
+
+### Middleware порядок (важно!)
+1. AuthMiddleware — ВНЕШНИЙ (проверяет токен первым)
+2. SetupCheckMiddleware — ВНУТРЕННИЙ (проверяет статус настройки)
+
+### AuthMiddleware
+- AUTH_ENABLED=true → требует токен для всех запросов
+- PUBLIC_PREFIXES: /login, /setup, /admin, /api/v1/auth, /api/v1/health, /api/v1/setup, /docs, /openapi.json, /redoc, /static, /favicon.ico
+- Проверяет Keycloak доступность
+- Извлекает Bearer токен из заголовка Authorization
+- Валидирует JWT через src.auth.keycloak.verify_token()
+- Защищённые пути /api/v1/admin требуют роль admin/kag-admin
+- ВАЖНО: "/" НЕ в PUBLIC_PREFIXES — иначе startswith("/") пропускает все пути!
+
+### SetupCheckMiddleware
+- Проверяет config_store("setup", "status", {}).get("configured", False)
+- Если не настроен → редирект на /setup
+- Публичные пути пропускает без проверки
+
+### Keycloak
+- URL: http://keycloak:8080
+- Realm: kag
+- Client: kag-api (secret: kag-secret-change-me)
+- Admin: admin / admin
+- Пользователь: testuser1 / test123456
+- Роль: kag-admin (назначается через REST API)
+
+## Сохранение настроек Setup
+
+После нажатия "💾 Сохранить и продолжить":
+1. POST /api/v1/setup/save — сохраняет LLM, Embedding, SSH настройки
+2. config_store.set("setup", "status", {"configured": True})
+3. Редирект на /documents
+
+## Первый вход пользователя
+
+1. Открывает / → SetupCheckMiddleware видит configured=true → пропускает
+2. AuthMiddleware видит нет токена → 401 "Отсутствует токен аутентификации"
+3. Пользователь переходит на /login
+4. Вводит testuser1 / test123456
+5. POST /api/v1/auth/login → Keycloak → JWT токен
+6. Токен сохраняется в localStorage("kag_token")
+7. Все API-запросы идут с заголовком Authorization: Bearer {token}
+8. Доступ к /documents, /kg, /search и др. открыт
+
+## Команды деплоя
+
+```bash
+git clone -b kag-rusystem-allv1 https://github.com/YartsevNS/kag-system-enhanced.git kag-system
+cd kag-system
+cat > .env << EOF
+AUTH_ENABLED=true
+KAG_DB_URL=postgresql://kag:KAGpg2026!secure@kag-pg:5432/kag
+OLLAMA_BASE_URL=http://192.168.50.41:11434
+EMBEDDING_MODEL=evilfreelancer/enbeddrus:v0.2
+EOF
+docker run -d --name kag-pg --network kag_internal \
+  -e POSTGRES_USER=kag -e POSTGRES_PASSWORD=KAGpg2026!secure -e POSTGRES_DB=kag \
+  -v kag_pg_data:/var/lib/postgresql/data -p 5433:5432 postgres:15-alpine
+docker-compose --profile dev up -d
+```

@@ -1,0 +1,32 @@
+# KAG PostgreSQL — отдельная БД для данных проекта
+# Не использует Keycloak БД чтобы данные не терялись при рестарте
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kag-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kag
+      POSTGRES_PASSWORD: KAGpg2026!secure
+      POSTGRES_DB: kag
+    volumes:
+      - kag_pg_data:/var/lib/postgresql/data:rw
+    ports:
+      - "5433:5432"
+    networks:
+      - kag_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kag -d kag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kag_pg_data:
+    external: true
+    name: kag_pg_data
+
+networks:
+  kag_internal:
+    external: true
+    name: kag-system_kag_internal
