@@ -160,6 +160,9 @@ async function initAll() {
                 const c = data.credentials;
                 if (c.postgresql) {
                     document.getElementById('pg-creds').innerHTML =
+                        '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-val">' + (c.postgresql.host||'kag-db') + '</span></div>' +
+                        '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-val">' + (c.postgresql.name||'kag') + '</span></div>' +
+                        '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-val">' + (c.postgresql.user||'kag') + '</span></div>' +
                         '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-val">' + c.postgresql.password + '</span></div>';
                     document.getElementById('pg-creds').classList.add('show');
                 }
@@ -170,6 +173,10 @@ async function initAll() {
                 }
                 if (c.neo4j) {
                     document.getElementById('neo4j-creds').innerHTML =
+                        '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-val">' + (c.neo4j.host||'neo4j') + '</span></div>' +
+                        '<div class="creds-row"><span class="creds-label">HTTP</span><span class="creds-val">' + (c.neo4j.http||'http://neo4j:7474') + '</span></div>' +
+                        '<div class="creds-row"><span class="creds-label">Bolt</span><span class="creds-val">' + (c.neo4j.bolt||'bolt://neo4j:7687') + '</span></div>' +
+                        '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-val">neo4j</span></div>' +
                         '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-val">' + c.neo4j.password + '</span></div>';
                     document.getElementById('neo4j-creds').classList.add('show');
                 }
