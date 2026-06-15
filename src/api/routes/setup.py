@@ -314,7 +314,7 @@ async def initialize_all():
             if engine:
                 with engine.connect() as c:
                     c.execute(text("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(50) DEFAULT 'user', is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())"))
-                    for col,dt in [("full_name","VARCHAR(255)"),("email","VARCHAR(255)"),("updated_at","TIMESTAMP"),("password_hash","VARCHAR(255)")]:
+                    for col,dt in [("full_name","VARCHAR(255)"),("email","VARCHAR(255)"),("updated_at","TIMESTAMP"),("password_hash","VARCHAR(255)"),("role","VARCHAR(50)")]:
                         try: c.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS "+col+" "+dt))
                         except: pass
                     c.commit()
