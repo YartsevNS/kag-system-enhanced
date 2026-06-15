@@ -576,9 +576,9 @@ async def create_neo4j_database():
     config_store.set("setup", "status", {"configured": True, "timestamp": datetime.utcnow().isoformat()})
 
     return {"success": True, "results": results, "login": "admin / admin123456"}
-from fastapi import APIRouter, HTTPException
-from src.api.services.config_store import config_store
 
+
+@router.post("/init-all")
 @router.post("/init-all", summary="Полная инициализация системы")
 async def init_all():
     """
