@@ -58,6 +58,8 @@ services:
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
       - LLM_MAX_TOKENS=4096
       - LLM_TEMPERATURE=0.7
+      # Базы данных
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     volumes:
       - ./src:/app/src
       - ./data:/app/data

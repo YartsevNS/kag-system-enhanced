@@ -149,31 +149,27 @@ async def initialize_all():
         # Генерируем новый пароль для Neo4j
         ne_new_pass = _gen_password(20)
 
-        # Пробуем подключиться: env пароль → default → ошибка
-        ne_env_pass = os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")
-        ne_connected = False
+        # Текущий пароль — только из переменной окружения (задаётся в docker-compose)
+        ne_current_pass = os.environ.get("NEO4J_PASSWORD")
+        if not ne_current_pass:
+            raise RuntimeError(
+                "NEO4J_PASSWORD не задан. Укажите его в docker-compose.yml "
+                "или .env: NEO4J_PASSWORD=..."
+            )
 
-        for attempt_pass, label in [(ne_env_pass, "env"), ("kagneo4j2026", "default"), ("neo4j", "neo4j/neo4j")]:
-            try:
-                drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", attempt_pass))
-                with drv.session() as s:
-                    s.run("RETURN 1")
-                # Меняем пароль на наш сгенерированный
-                with drv.session() as s:
-                    s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{attempt_pass}' TO '{ne_new_pass}'")
-                drv.close()
-                ne_connected = True
-                logger.info(f"SETUP: Neo4j connected with {label} password — changed to new")
-                break
-            except Exception:
-                continue
+        # Подключаемся с текущим паролем
+        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_current_pass))
+        with drv.session() as s:
+            s.run("RETURN 1")
+        logger.info("SETUP: Neo4j connected with env password")
 
-        if not ne_connected:
-            # Не удалось подключиться — используем env пароль как есть
-            ne_new_pass = ne_env_pass
-            logger.warning("SETUP: Neo4j — unable to change password, using env password")
+        # Меняем пароль на сгенерированный
+        with drv.session() as s:
+            s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{ne_current_pass}' TO '{ne_new_pass}'")
+        drv.close()
+        logger.info("SETUP: Neo4j password changed to generated")
 
-        # Создаём индексы (с новым или старым паролем)
+        # Создаём индексы (уже с новым паролем)
         drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_new_pass))
         with drv.session() as s:
             s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)")
