@@ -72,10 +72,14 @@ async def initialize_all():
         conn.autocommit = True
         cur = conn.cursor()
 
-        # Пользователь kag
+        # Пользователь kag — если есть, меняем пароль; если нет — создаём
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname='kag'")
-        if not cur.fetchone():
+        if cur.fetchone():
+            cur.execute(f"ALTER USER kag WITH PASSWORD '{pg_password}'")
+            logger.info("SETUP: PG user kag exists — password updated")
+        else:
             cur.execute(f"CREATE USER kag WITH PASSWORD '{pg_password}'")
+            logger.info("SETUP: PG user kag created")
 
         # БД kag
         cur.execute("SELECT 1 FROM pg_database WHERE datname='kag'")
@@ -86,7 +90,7 @@ async def initialize_all():
         cur.close()
         conn.close()
 
-        # Обновляем KAG_DB_URL в config_store
+        # Обновляем KAG_DB_URL в config_store с реальным паролем
         db_url = f"postgresql://kag:{pg_password}@kag-db:5432/kag"
         os.environ["KAG_DB_URL"] = db_url
         config_store._db_url = db_url
