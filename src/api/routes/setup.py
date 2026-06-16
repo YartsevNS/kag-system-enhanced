@@ -2,9 +2,9 @@
 Setup Wizard API для KAG
 
 Инициализация системы одной кнопкой:
-- Создаёт БД (PostgreSQL, Qdrant, Neo4j) — пароли из .env, не генерирует
+- Создаёт БД (PostgreSQL, Qdrant, Neo4j) со сгенерированными паролями
 - Создаёт admin-пользователя со сгенерированным паролем
-- Пароли БД НЕ сохраняются — только в ответе и в скачанном файле
+- Все пароли записываются в .env на сервере (persist после перезапуска)
 - Пароль admin сохраняется в config_store (нужен для входа)
 """
 
@@ -15,7 +15,6 @@ import os
 import secrets
 import string
 import passlib.hash as hash_methods
-from urllib.parse import urlparse
 
 from src.api.services.config_store import config_store
 
@@ -30,18 +29,6 @@ def _gen_password(length: int = 12) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _parse_db_url(url: str) -> dict:
-    """Извлечь user, password, host, port, dbname из postgresql:// URL."""
-    parsed = urlparse(url)
-    return {
-        "user": parsed.username or "kag",
-        "password": parsed.password or "",
-        "host": parsed.hostname or "kag-db",
-        "port": parsed.port or 5432,
-        "dbname": parsed.path.lstrip("/") if parsed.path else "kag",
-    }
-
-
 # ── POST /init-all ─────────────────────────────────────────────────────────
 
 @router.post("/init-all")
@@ -49,13 +36,13 @@ async def initialize_all():
     """
     Полная инициализация системы.
 
-    1. PostgreSQL — создаёт БД kag + роль kag (если нет). Пароль из KAG_DB_URL.
+    1. PostgreSQL — создаёт БД kag + роль kag. Пароль генерируется.
     2. Qdrant — создаёт коллекцию kag_documents (если нет).
-    3. Neo4j — создаёт индексы. Пароль из NEO4J_PASSWORD.
-    4. Admin — создаёт пользователя admin со сгенерированным паролем.
+    3. Neo4j — создаёт индексы. Пароль генерируется.
+    4. Admin — создаёт пользователя admin. Пароль генерируется.
 
-    Пароли БД читаются из .env (не генерируются, не меняются).
-    Пароль admin генерируется и сохраняется в config_store.
+    Все пароли записываются в .env на сервере.
+    Пароль admin дополнительно сохраняется в config_store.
     """
     logger.info("=== SETUP: INIT-ALL ===")
 
@@ -72,20 +59,13 @@ async def initialize_all():
     try:
         import psycopg2
 
-        # Пароль PG — из KAG_DB_URL (задан в .env при деплое)
-        db_url_env = os.environ.get("KAG_DB_URL", "")
-        if not db_url_env:
-            raise RuntimeError("KAG_DB_URL не задан. Укажите его в .env")
-
-        pg_info = _parse_db_url(db_url_env)
-        pg_password = pg_info["password"]
-        if not pg_password:
-            raise RuntimeError("Пароль не найден в KAG_DB_URL")
+        # Генерируем пароль для PG
+        pg_password = _gen_password(20)
 
         # Подключаемся как superuser (keycloak) для создания роли/БД
         conn = psycopg2.connect(
-            host=pg_info["host"],
-            port=pg_info["port"],
+            host="kag-db",
+            port=5432,
             dbname="keycloak",
             user=os.environ.get("KC_DB_USERNAME", "keycloak"),
             password=os.environ.get("KC_DB_PASSWORD", "keycloak_password"),
@@ -94,13 +74,14 @@ async def initialize_all():
         conn.autocommit = True
         cur = conn.cursor()
 
-        # Роль kag — только создать если нет, пароль НЕ меняем
+        # Роль kag — создаём или обновляем пароль
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname='kag'")
-        if not cur.fetchone():
+        if cur.fetchone():
+            cur.execute(f"ALTER USER kag WITH PASSWORD '{pg_password}'")
+            logger.info("SETUP: PG user kag exists — password updated")
+        else:
             cur.execute(f"CREATE USER kag WITH PASSWORD '{pg_password}'")
             logger.info("SETUP: PG user kag created")
-        else:
-            logger.info("SETUP: PG user kag already exists — skipped")
 
         # БД kag — создать если нет
         cur.execute("SELECT 1 FROM pg_database WHERE datname='kag'")
@@ -115,15 +96,15 @@ async def initialize_all():
         conn.close()
 
         # Обновляем KAG_DB_URL в config_store
-        full_db_url = f"postgresql://kag:{pg_password}@{pg_info['host']}:{pg_info['port']}/kag"
+        full_db_url = f"postgresql://kag:{pg_password}@kag-db:5432/kag"
         os.environ["KAG_DB_URL"] = full_db_url
         config_store._db_url = full_db_url
         config_store._engine = None
         config_store._Session = None
 
         credentials["postgresql"] = {
-            "host": pg_info["host"],
-            "port": pg_info["port"],
+            "host": "kag-db",
+            "port": 5432,
             "name": "kag",
             "user": "kag",
             "password": pg_password,
@@ -170,20 +151,27 @@ async def initialize_all():
     try:
         from neo4j import GraphDatabase
 
-        ne_password = os.environ.get("NEO4J_PASSWORD")
-        if not ne_password:
-            raise RuntimeError(
-                "NEO4J_PASSWORD не задан. Укажите его в docker-compose.yml "
-                "или .env: NEO4J_PASSWORD=..."
-            )
+        # Генерируем новый пароль для Neo4j
+        ne_new_pass = _gen_password(20)
 
-        # Подключаемся с паролем из env, НЕ меняем его
-        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_password))
+        # Текущий пароль из env (задан при деплое)
+        ne_env_pass = os.environ.get("NEO4J_PASSWORD")
+        if not ne_env_pass:
+            raise RuntimeError("NEO4J_PASSWORD не задан. Укажите его в .env")
+
+        # Подключаемся с текущим паролем, меняем на сгенерированный
+        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_env_pass))
         with drv.session() as s:
             s.run("RETURN 1")
         logger.info("SETUP: Neo4j connected with env password")
 
-        # Создаём индексы
+        with drv.session() as s:
+            s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{ne_env_pass}' TO '{ne_new_pass}'")
+        drv.close()
+        logger.info("SETUP: Neo4j password changed to generated")
+
+        # Создаём индексы (уже с новым паролем)
+        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_new_pass))
         with drv.session() as s:
             s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)")
             s.run(
@@ -197,7 +185,7 @@ async def initialize_all():
             "http": "http://neo4j:7474",
             "bolt": "bolt://neo4j:7687",
             "user": "neo4j",
-            "password": ne_password,
+            "password": ne_new_pass,
         }
         logger.info("SETUP: Neo4j OK")
     except Exception as e:
@@ -214,9 +202,8 @@ async def initialize_all():
         if not db_url_env:
             raise RuntimeError("KAG_DB_URL не задан")
 
-        # Извлекаем пароль для KAG_DB_URL (с паролем из env)
-        pg_info = _parse_db_url(db_url_env)
-        admin_db_url = f"postgresql://kag:{pg_info['password']}@{pg_info['host']}:{pg_info['port']}/kag"
+        # KAG_DB_URL уже содержит актуальный пароль (обновлён в секции PG)
+        admin_db_url = db_url_env
 
         engine = None
         for attempt in range(5):
@@ -271,7 +258,44 @@ async def initialize_all():
         logger.error(f"SETUP: Admin failed: {e}")
         credentials["admin"] = {"login": "admin", "password": ad_password, "error": str(e)[:100]}
 
-    # 5. Помечаем setup как завершённый
+    # ── 5. Обновляем .env на сервере ────────────────────────────────────────
+    try:
+        env_path = "/app/.env"
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                env_lines = f.readlines()
+
+            new_lines = []
+            # Собираем новые значения
+            pg_pwd = credentials.get("postgresql", {}).get("password", "")
+            ne_pwd = credentials.get("neo4j", {}).get("password", "")
+            # Удаляем пароль из env-файла KAG_DB_URL при формировании
+            db_url_clean = f"postgresql://kag:{pg_pwd}@kag-db:5432/kag" if pg_pwd else ""
+
+            for line in env_lines:
+                stripped = line.strip()
+                if stripped.startswith("POSTGRES_PASSWORD=") and pg_pwd:
+                    new_lines.append(f"POSTGRES_PASSWORD={pg_pwd}\n")
+                elif stripped.startswith("DB_PASSWORD=") and pg_pwd:
+                    new_lines.append(f"DB_PASSWORD={pg_pwd}\n")
+                elif stripped.startswith("NEO4J_PASSWORD=") and ne_pwd:
+                    new_lines.append(f"NEO4J_PASSWORD={ne_pwd}\n")
+                elif stripped.startswith("KAG_DB_URL=") and db_url_clean:
+                    new_lines.append(f"KAG_DB_URL={db_url_clean}\n")
+                elif stripped.startswith("KEYCLOAK_ADMIN_PASSWORD="):
+                    new_lines.append(f"KEYCLOAK_ADMIN_PASSWORD={ad_password}\n")
+                else:
+                    new_lines.append(line)
+
+            with open(env_path, "w") as f:
+                f.writelines(new_lines)
+            logger.info("SETUP: .env updated with new passwords")
+        else:
+            logger.warning("SETUP: .env not found at /app/.env")
+    except Exception as e:
+        logger.error(f"SETUP: .env update failed: {e}")
+
+    # 6. Помечаем setup как завершённый
     config_store.set("setup", "status", {
         "configured": True,
         "timestamp": datetime.utcnow().isoformat(),
