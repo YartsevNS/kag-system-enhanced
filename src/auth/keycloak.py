@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from functools import lru_cache
 import httpx
 from loguru import logger
-from jose import jwt, JWTError, ExpiredSignatureError
+import jwt
 try:
     from jwt.exceptions import InvalidTokenError
 except ImportError:

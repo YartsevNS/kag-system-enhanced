@@ -14,7 +14,11 @@ from datetime import datetime
 import os
 import secrets
 import string
-import passlib.hash as hash_methods
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
+
+password_hash = PasswordHash([Argon2Hasher(), BcryptHasher()])
 
 from src.api.services.config_store import config_store
 
@@ -232,7 +236,7 @@ async def initialize_all():
             raise RuntimeError("Не удалось подключиться к PostgreSQL после 5 попыток")
 
         Base.metadata.create_all(bind=engine)
-        hashed = hash_methods.pbkdf2_sha256.hash(ad_password)
+        hashed = password_hash.hash(ad_password)
 
         with engine.begin() as conn:
             row = conn.execute(

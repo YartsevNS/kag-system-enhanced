@@ -6,8 +6,8 @@ pydantic-settings==2.7.0
 python-multipart==0.0.20
 
 # Аутентификация и авторизация
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+PyJWT>=2.9.0
+pwdlib[argon2,bcrypt]>=0.3.0
 casbin==1.36.0
 # casbin-fastapi-adapter==0.0.4  # Пакет недоступен, используем напрямую
 

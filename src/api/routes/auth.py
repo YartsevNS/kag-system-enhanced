@@ -11,13 +11,18 @@ from datetime import datetime, timedelta, timezone
 import time
 from collections import defaultdict
 
-from passlib.hash import pbkdf2_sha256 as hash_method
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
+
+password_hash = PasswordHash([Argon2Hasher(), BcryptHasher()])
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
+import jwt
 
 from src.config import get_settings
 from src.database.session import get_db
@@ -188,7 +193,7 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
     user = User(
         username=body.username,
         email=body.email,
-        hashed_password=hash_method.hash(body.password),
+        hashed_password=password_hash.hash(body.password),
     )
     db.add(user)
     db.commit()
@@ -206,12 +211,23 @@ def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
     """
     _check_rate_limit(request.client.host if request.client else "unknown")
     user = db.query(User).filter(User.username == body.username).first()
-    if not user or not hash_method.verify(body.password, user.hashed_password):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    valid, new_hash = password_hash.verify_and_update(body.password, user.hashed_password)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if new_hash:
+        user.hashed_password = new_hash
+        db.add(user)
+        db.commit()
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -259,7 +275,7 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
             algorithms=[settings.JWT_ALGORITHM],
             options={"verify_exp": True},
         )
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",

@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from loguru import logger
-from jose import jwt, JWTError
+import jwt
 
 from src.config import get_settings
 
@@ -73,7 +73,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             settings = get_settings()
             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
             request.state.username = payload.get("sub")
-        except JWTError:
+        except jwt.PyJWTError:
             return self._auth_required(request)
         
         return await call_next(request)
