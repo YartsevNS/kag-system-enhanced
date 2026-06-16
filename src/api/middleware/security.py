@@ -11,7 +11,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from loguru import logger
-from jose import jwt, jwk, JWTError
+import jwt
+from jwcrypto import jwk
 
 from src.config import get_settings
 
@@ -78,22 +79,22 @@ def _load_jwks(keycloak_url: str, realm: str) -> dict:
 
 def _verify_keycloak(token: str, keycloak_url: str, realm: str) -> dict:
     """Проверить токен через JWKS Keycloak с полной валидацией."""
-    jwks = _load_jwks(keycloak_url, realm)
+    jwks_data = _load_jwks(keycloak_url, realm)
     settings = get_settings()
     issuer = f"{keycloak_url}/realms/{realm}"
 
     header = jwt.get_unverified_header(token)
     kid = header.get("kid")
     if not kid:
-        raise JWTError("Token header missing 'kid'")
-    key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+        raise jwt.InvalidTokenError("Token header missing 'kid'")
+    key_data = next((k for k in jwks_data.get("keys", []) if k.get("kid") == kid), None)
     if not key_data:
-        raise JWTError(f"Key '{kid}' not found in JWKS")
-    public_key = jwk.construct(key_data)
+        raise jwt.InvalidTokenError(f"Key '{kid}' not found in JWKS")
+    public_key = jwk.JWK(**key_data)
 
     return jwt.decode(
         token,
-        public_key,
+        public_key.export_to_pem(),
         algorithms=["RS256"],
         audience=settings.KEYCLOAK_CLIENT_ID,
         issuer=issuer,

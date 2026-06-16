@@ -124,9 +124,9 @@ def verify_token(token: str) -> Dict[str, Any]:
         
         return payload
         
-    except ExpiredSignatureError:
+    except jwt.ExpiredSignatureError:
         raise KeycloakError("Токен истёк")
-    except JWTError as e:
+    except jwt.InvalidTokenError as e:
         raise KeycloakError(f"Ошибка JWT: {e}")
     except KeycloakError:
         raise
