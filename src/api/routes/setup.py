@@ -260,7 +260,7 @@ async def initialize_all():
 
     # ── 5. Обновляем .env на сервере ────────────────────────────────────────
     try:
-        env_path = "/app/.env"
+        env_path = "/app/kag.env"
         if os.path.exists(env_path):
             with open(env_path, "r") as f:
                 env_lines = f.readlines()
