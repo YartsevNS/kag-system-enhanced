@@ -27,10 +27,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
     # Веса для Occular
     mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
     cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
-    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
-    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
-    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
-    curl -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth || echo "WARNING: weight downloads failed, will download at runtime"
 
 # ===========================================
 # Stage 2: Production
