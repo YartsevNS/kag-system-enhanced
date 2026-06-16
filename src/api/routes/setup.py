@@ -111,12 +111,18 @@ async def initialize_all():
 
     # 2. Qdrant
     try:
-        dims = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
         import httpx
 
         async with httpx.AsyncClient(timeout=10.0) as cl:
             r = await cl.get("http://qdrant:6333/collections/kag_documents")
-            if r.status_code != 200:
+            if r.status_code == 200:
+                # Коллекция существует — читаем реальную размерность
+                info = r.json()
+                real_dims = info.get("result", {}).get("config", {}).get("params", {}).get("vectors", {}).get("size", {})
+                logger.info(f"SETUP: Qdrant collection exists (dims={real_dims})")
+            else:
+                # Создаём новую коллекцию
+                dims = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
                 await cl.put(
                     "http://qdrant:6333/collections/kag_documents",
                     json={
@@ -124,13 +130,14 @@ async def initialize_all():
                         "optimizers_config": {"default_segment_number": 2},
                     },
                 )
+                real_dims = dims
+                logger.info(f"SETUP: Qdrant collection created (dims={dims})")
 
         credentials["qdrant"] = {
             "url": "http://qdrant:6333",
             "collection": "kag_documents",
-            "dimensions": dims,
+            "dimensions": real_dims,
         }
-        logger.info(f"SETUP: Qdrant OK (dims={dims})")
     except Exception as e:
         logger.error(f"SETUP: Qdrant failed: {e}")
         credentials["qdrant"] = {"error": str(e)[:100]}
@@ -139,8 +146,35 @@ async def initialize_all():
     try:
         from neo4j import GraphDatabase
 
-        ne_pass_env = os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")
-        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_pass_env))
+        # Генерируем новый пароль для Neo4j
+        ne_new_pass = _gen_password(20)
+
+        # Пробуем подключиться: env пароль → default → ошибка
+        ne_env_pass = os.environ.get("NEO4J_PASSWORD", "kagneo4j2026")
+        ne_connected = False
+
+        for attempt_pass, label in [(ne_env_pass, "env"), ("kagneo4j2026", "default"), ("neo4j", "neo4j/neo4j")]:
+            try:
+                drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", attempt_pass))
+                with drv.session() as s:
+                    s.run("RETURN 1")
+                # Меняем пароль на наш сгенерированный
+                with drv.session() as s:
+                    s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{attempt_pass}' TO '{ne_new_pass}'")
+                drv.close()
+                ne_connected = True
+                logger.info(f"SETUP: Neo4j connected with {label} password — changed to new")
+                break
+            except Exception:
+                continue
+
+        if not ne_connected:
+            # Не удалось подключиться — используем env пароль как есть
+            ne_new_pass = ne_env_pass
+            logger.warning("SETUP: Neo4j — unable to change password, using env password")
+
+        # Создаём индексы (с новым или старым паролем)
+        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_new_pass))
         with drv.session() as s:
             s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)")
             s.run(
@@ -154,7 +188,7 @@ async def initialize_all():
             "http": "http://neo4j:7474",
             "bolt": "bolt://neo4j:7687",
             "user": "neo4j",
-            "password": ne_pass_env,  # пароль от переменной окружения, сгенерирован при деплое
+            "password": ne_new_pass,
         }
         logger.info("SETUP: Neo4j OK")
     except Exception as e:
