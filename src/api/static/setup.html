@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Setup Wizard</title>
+    <title>KAG — Setup Wizard</title>
 <style>
-:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0}
@@ -14,91 +14,91 @@ nav .logo span{color:var(--accent-h)}
 nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
 nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
 nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
-main{margin-left:240px;flex:1;padding:32px 40px;max-width:1200px}
-.main-content{margin-left:240px;flex:1;padding:40px;max-width:900px}
-.container{max-width:700px;margin:0 auto}
-.main-content .logo{font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--text);margin-bottom:4px}
+.main-content{margin-left:240px;flex:1;padding:40px;max-width:1000px}
+.container{max-width:720px;margin:0 auto}
+.page-logo{font-size:28px;font-weight:700;letter-spacing:-0.5px;margin-bottom:4px}
 .subtitle{font-size:14px;color:var(--text3);margin-bottom:32px}
 .step{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
-.step-header{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-s)}
+.step-header{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-s)}
 .step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
-.inner-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px;margin-bottom:12px}
-.inner-card:last-child{margin-bottom:0}
-.btn-init{width:100%;background:linear-gradient(135deg,var(--accent-h),#8b5cf6);color:#fff;border:none;padding:16px;border-radius:var(--radius);font-size:16px;font-weight:600;cursor:pointer;margin-top:8px;transition:opacity 0.2s}
+.step-desc{color:var(--text3);font-size:14px;margin-bottom:20px;line-height:1.5}
+.btn-init{width:100%;background:linear-gradient(135deg,var(--accent-h),#8b5cf6);color:#fff;border:none;padding:18px;border-radius:var(--radius);font-size:17px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
 .btn-init:hover{opacity:0.9}
 .btn-init:disabled{opacity:0.5;cursor:not-allowed}
-.btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
+.btn{background:var(--accent);color:#fff;border:none;padding:12px 24px;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s}
 .btn:hover{opacity:0.85}
 .btn:disabled{opacity:0.5;cursor:not-allowed}
-.btn-ghost{background:rgba(255,255,255,0.03);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer}
-.btn-ghost:hover{background:rgba(255,255,255,0.06)}
-.status-box{margin-top:12px;padding:12px;border-radius:var(--radius-sm);display:none}
+.btn-success{background:var(--green)}
+.btn-success:hover{opacity:0.85}
+.btn-outline{background:transparent;color:var(--text2);border:1px solid var(--border);padding:12px 24px;border-radius:var(--radius-sm);font-size:15px;font-weight:500;cursor:pointer;transition:all 0.2s}
+.btn-outline:hover{background:rgba(255,255,255,0.05)}
+.btn-lg{padding:16px 32px;font-size:17px;width:100%}
+.status-box{margin-top:16px;padding:14px 16px;border-radius:var(--radius-sm);display:none;font-size:14px}
 .status-box.success{background:rgba(39,166,68,0.15);color:var(--green);border:1px solid rgba(39,166,68,0.3);display:block}
 .status-box.error{background:rgba(220,38,38,0.15);color:var(--red);border:1px solid rgba(220,38,38,0.3);display:block}
-.progress{margin-top:12px;display:none}
+.progress{display:none;margin:16px 0}
 .progress.active{display:block}
-.progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:8px}
-.progress-fill{height:100%;background:var(--accent-h);border-radius:2px;width:0%;transition:width 0.3s}
-.db-creds{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)}
-.db-creds.show{display:block}
-.creds-row{display:flex;gap:24px;margin-bottom:4px;font-size:13px}
-.creds-label{color:var(--text4);min-width:100px}
-.creds-val{color:var(--text2);font-family:monospace}
-.btn-copy-all{background:var(--surface);color:var(--accent-h);border:1px solid var(--accent);padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;width:100%;margin-top:12px}
-.btn-copy-all:hover{background:var(--accent);color:#fff}
-@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.main-content{margin-left:0;padding:20px}}
+.progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent-h),var(--emerald));border-radius:2px;width:0%;transition:width 0.4s}
+.progress-label{color:var(--text3);font-size:13px;margin-bottom:8px}
+/* Credentials cards */
+.creds-grid{display:none;margin-top:16px}
+.creds-grid.show{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.creds-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px}
+.creds-card h4{color:var(--accent-l);font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.creds-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid var(--border-s)}
+.creds-row:last-child{border-bottom:none}
+.creds-label{color:var(--text4);min-width:80px}
+.creds-value{color:var(--text2);font-family:monospace;font-size:12px;word-break:break-all;text-align:right;user-select:all}
+.creds-value.admin-pwd{color:var(--amber)}
+.creds-full{grid-column:1/-1}
+.actions-row{display:none;gap:16px;margin-top:20px;flex-wrap:wrap}
+.actions-row.show{display:flex}
+.actions-row .btn{flex:1;min-width:200px}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}.main-content{margin-left:60px;padding:20px 16px}.container{max-width:100%}.creds-grid.show{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
     <nav>
         <div class="logo">KAG <span>System</span></div>
         <a href="/setup" class="active"><span>⚙️</span> Setup</a>
-        <a href="/documents"><span>📄</span> Документы</a>
-        <a href="/chat"><span>💬</span> Чат</a>
-        <a href="/admin"><span>🛡️</span> Админ</a>
     </nav>
     <div class="main-content">
         <div class="container">
-            <div class="logo">🎯 KAG System</div>
+            <div class="page-logo">🎯 KAG System</div>
             <div class="subtitle">Первоначальная настройка системы</div>
 
+            <!-- Шаг 1: Инициализация -->
             <div class="step" id="init-step">
-                <div class="step-header"><span class="step-num">1</span> Инициализация баз данных</div>
-                <p style="color:var(--text3);font-size:14px;margin-bottom:16px">
-                    Создаёт все необходимые базы данных и администратора. Один клик.
-                </p>
-
-                <div class="inner-card">
-                    <div><strong>🐘 PostgreSQL (KAG)</strong></div>
-                    <div class="db-creds" id="pg-creds"></div>
-                </div>
-                <div class="inner-card">
-                    <div><strong>📊 Qdrant</strong></div>
-                    <div class="db-creds" id="qdrant-creds"></div>
-                </div>
-                <div class="inner-card">
-                    <div><strong>🧠 Neo4j</strong></div>
-                    <div class="db-creds" id="neo4j-creds"></div>
-                </div>
-                <div class="inner-card">
-                    <div><strong>🛡️ Администратор</strong></div>
-                    <div class="db-creds" id="admin-creds"></div>
+                <div class="step-header"><span class="step-num">1</span> Инициализация</div>
+                <div class="step-desc">
+                    Система создаст базы данных и администратора. Пароли к БД генерируются автоматически и <strong>не сохраняются</strong> — сохраните их сейчас.
                 </div>
 
                 <div class="progress" id="progress">
-                    <div style="color:var(--text3);font-size:13px" id="progress-text">Создание баз данных...</div>
+                    <div class="progress-label" id="progress-text">Инициализация...</div>
                     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
                 </div>
                 <div class="status-box" id="init-status"></div>
 
+                <!-- Credentials (появляются после успеха) -->
+                <div class="creds-grid" id="creds-grid"></div>
+
+                <!-- Кнопка инициализации -->
                 <button class="btn-init" id="btn-init" onclick="initAll()">🚀 Initialize ALL</button>
-                <button class="btn-copy-all" id="btn-copy" style="display:none" onclick="copyAll()">📋 Скопировать все креды</button>
+
+                <!-- Действия после успеха -->
+                <div class="actions-row" id="actions-row">
+                    <button class="btn btn-outline" onclick="downloadCreds()">📥 Скачать credentials</button>
+                    <button class="btn btn-success" onclick="goToAdmin()">🛡️ Перейти в админку</button>
+                </div>
             </div>
 
+            <!-- Шаг 2: Уже настроено -->
             <div class="step" id="done-step" style="display:none">
                 <div class="step-header"><span class="step-num">✅</span> Система настроена</div>
                 <div class="status-box success" id="done-msg" style="margin-bottom:16px">✅ Система готова к работе</div>
-                <button class="btn" onclick="window.location.href='/admin'" style="width:100%">🛡️ Перейти в админку (настройка LLM)</button>
+                <button class="btn btn-lg" onclick="window.location.href='/admin'">🛡️ Перейти в админку</button>
             </div>
         </div>
     </div>
@@ -115,123 +115,192 @@ let _creds = null;
         if (d.configured) {
             document.getElementById('init-step').style.display = 'none';
             document.getElementById('done-step').style.display = 'block';
-            document.getElementById('done-msg').textContent = '✅ Система уже настроена (' + (d.timestamp ? new Date(d.timestamp).toLocaleString() : '') + ')';
+            document.getElementById('done-msg').textContent = '✅ Система настроена ' + (d.timestamp ? ' (' + new Date(d.timestamp).toLocaleString() + ')' : '');
         }
-    } catch(e) {}
+    } catch(e) { /* ignore */ }
 })();
-
-function copyAll() {
-    if (!_creds) return;
-    let txt = '=== KAG System Credentials ===\n';
-    if (_creds.postgresql) {
-        txt += '\n-- PostgreSQL --\n';
-        txt += 'Host: ' + (_creds.postgresql.host||'kag-db') + '\n';
-        txt += 'DB: ' + (_creds.postgresql.name||'kag') + '\n';
-        txt += 'User: ' + (_creds.postgresql.user||'kag') + '\n';
-        txt += 'Password: ' + _creds.postgresql.password + '\n';
-    }
-    if (_creds.qdrant) {
-        txt += '\n-- Qdrant --\n';
-        txt += 'URL: http://qdrant:6333\n';
-        txt += 'Collection: ' + (_creds.qdrant.collection||'kag_documents') + '\n';
-    }
-    if (_creds.neo4j) {
-        txt += '\n-- Neo4j --\n';
-        txt += 'Host: ' + (_creds.neo4j.host||'neo4j') + '\n';
-        txt += 'HTTP: ' + (_creds.neo4j.http||'http://neo4j:7474') + '\n';
-        txt += 'Bolt: ' + (_creds.neo4j.bolt||'bolt://neo4j:7687') + '\n';
-        txt += 'User: neo4j\n';
-        txt += 'Password: ' + _creds.neo4j.password + '\n';
-    }
-    if (_creds.admin) {
-        txt += '\n-- Admin --\n';
-        txt += 'Login: admin\n';
-        txt += 'Password: ' + _creds.admin.password + '\n';
-    }
-    navigator.clipboard.writeText(txt).then(function() {
-        const st = document.getElementById('init-status');
-        st.className = 'status-box success';
-        st.textContent = '✅ Креды скопированы в буфер!';
-    });
-}
 
 async function initAll() {
     const btn = document.getElementById('btn-init');
     const progress = document.getElementById('progress');
     const fill = document.getElementById('progress-fill');
-    const text = document.getElementById('progress-text');
+    const label = document.getElementById('progress-text');
     const status = document.getElementById('init-status');
 
     btn.disabled = true;
     btn.textContent = '⏳ Инициализация...';
     progress.classList.add('active');
     status.className = 'status-box';
+    status.style.display = 'none';
+
+    // Анимация
+    fill.style.width = '15%';
+    label.textContent = 'Создание PostgreSQL...';
 
     try {
-        fill.style.width = '10%';
-        text.textContent = 'Создание баз данных...';
-
-        const res = await fetch(API + '/init-all', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const res = await fetch(API + '/init-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
         const data = await res.json();
 
         if (res.ok && data.success) {
             fill.style.width = '100%';
-            text.textContent = 'Готово!';
+            label.textContent = 'Готово!';
             _creds = data.credentials;
 
-            if (data.credentials) {
-                const c = data.credentials;
-                if (c.postgresql) {
-                    document.getElementById('pg-creds').innerHTML =
-                        '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-val">'+(c.postgresql.host||'kag-db')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-val">'+(c.postgresql.name||'kag')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-val">'+(c.postgresql.user||'kag')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-val">'+c.postgresql.password+'</span></div>';
-                    document.getElementById('pg-creds').classList.add('show');
-                }
-                if (c.qdrant) {
-                    document.getElementById('qdrant-creds').innerHTML =
-                        '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-val">http://qdrant:6333</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Коллекция</span><span class="creds-val">'+(c.qdrant.collection||'kag_documents')+'</span></div>';
-                    document.getElementById('qdrant-creds').classList.add('show');
-                }
-                if (c.neo4j) {
-                    document.getElementById('neo4j-creds').innerHTML =
-                        '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-val">'+(c.neo4j.host||'neo4j')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">HTTP</span><span class="creds-val">'+(c.neo4j.http||'http://neo4j:7474')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Bolt</span><span class="creds-val">'+(c.neo4j.bolt||'bolt://neo4j:7687')+'</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-val">neo4j</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-val">'+c.neo4j.password+'</span></div>';
-                    document.getElementById('neo4j-creds').classList.add('show');
-                }
-                if (c.admin) {
-                    document.getElementById('admin-creds').innerHTML =
-                        '<div class="creds-row"><span class="creds-label">Логин</span><span class="creds-val">admin</span></div>'+
-                        '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-val">'+c.admin.password+'</span></div>';
-                    document.getElementById('admin-creds').classList.add('show');
-                }
-            }
+            // Показываем credentials
+            renderCreds(data.credentials);
+            document.getElementById('creds-grid').classList.add('show');
+            document.getElementById('actions-row').classList.add('show');
 
             status.className = 'status-box success';
             status.textContent = '✅ ' + (data.message || 'Система готова к работе');
-            document.getElementById('btn-copy').style.display = 'block';
-            document.getElementById('done-step').style.display = 'block';
+            status.style.display = 'block';
         } else {
             fill.style.width = '0%';
-            text.textContent = 'Ошибка';
+            label.textContent = 'Ошибка';
             status.className = 'status-box error';
             status.textContent = '❌ ' + (data.detail || data.message || 'Неизвестная ошибка');
+            status.style.display = 'block';
             btn.disabled = false;
             btn.textContent = '🚀 Initialize ALL';
         }
     } catch (err) {
         fill.style.width = '0%';
-        text.textContent = 'Ошибка сети';
+        label.textContent = 'Ошибка сети';
         status.className = 'status-box error';
         status.textContent = '❌ ' + err.message;
+        status.style.display = 'block';
         btn.disabled = false;
         btn.textContent = '🚀 Initialize ALL';
     }
+}
+
+function renderCreds(c) {
+    const grid = document.getElementById('creds-grid');
+    let html = '';
+
+    // PostgreSQL
+    if (c.postgresql && c.postgresql.password) {
+        html += '<div class="creds-card"><h4>🐘 PostgreSQL</h4>';
+        html += '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-value">' + esc(c.postgresql.host||'kag-db') + ':' + (c.postgresql.port||5432) + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-value">' + esc(c.postgresql.name||'kag') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">' + esc(c.postgresql.user||'kag') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value">' + esc(c.postgresql.password) + '</span></div>';
+        html += '</div>';
+    } else if (c.postgresql && c.postgresql.error) {
+        html += '<div class="creds-card"><h4>🐘 PostgreSQL</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.postgresql.error) + '</div></div>';
+    }
+
+    // Qdrant
+    if (c.qdrant && c.qdrant.collection) {
+        html += '<div class="creds-card"><h4>📊 Qdrant</h4>';
+        html += '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-value">' + esc(c.qdrant.url||'http://qdrant:6333') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Коллекция</span><span class="creds-value">' + esc(c.qdrant.collection) + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Размерность</span><span class="creds-value">' + esc(String(c.qdrant.dimensions||'1024')) + '</span></div>';
+        html += '</div>';
+    } else if (c.qdrant && c.qdrant.error) {
+        html += '<div class="creds-card"><h4>📊 Qdrant</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.qdrant.error) + '</div></div>';
+    }
+
+    // Neo4j
+    if (c.neo4j && c.neo4j.bolt) {
+        html += '<div class="creds-card"><h4>🧠 Neo4j</h4>';
+        html += '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-value">' + esc(c.neo4j.http||'http://neo4j:7474') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Bolt</span><span class="creds-value">' + esc(c.neo4j.bolt) + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">neo4j</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value">' + esc(c.neo4j.password||'***') + '</span></div>';
+        html += '</div>';
+    } else if (c.neo4j && c.neo4j.error) {
+        html += '<div class="creds-card"><h4>🧠 Neo4j</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.neo4j.error) + '</div></div>';
+    }
+
+    // Admin
+    if (c.admin && c.admin.password) {
+        html += '<div class="creds-card creds-full"><h4>🛡️ Администратор</h4>';
+        html += '<div class="creds-row"><span class="creds-label">Логин</span><span class="creds-value">' + esc(c.admin.login||'admin') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value admin-pwd">' + esc(c.admin.password) + '</span></div>';
+        html += '</div>';
+    } else if (c.admin && c.admin.error) {
+        html += '<div class="creds-card creds-full"><h4>🛡️ Администратор</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.admin.error) + '</div></div>';
+    }
+
+    grid.innerHTML = html;
+}
+
+function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function downloadCreds() {
+    if (!_creds) return;
+    let txt = '=== KAG System Credentials ===\n';
+    txt += 'Создано: ' + new Date().toLocaleString() + '\n';
+    txt += 'ВНИМАНИЕ: Эти пароли не хранятся в системе. Сохраните их!\n\n';
+
+    if (_creds.postgresql && _creds.postgresql.password) {
+        txt += '-- PostgreSQL --\n';
+        txt += 'Host:     ' + (_creds.postgresql.host||'kag-db') + ':' + (_creds.postgresql.port||5432) + '\n';
+        txt += 'Database: ' + (_creds.postgresql.name||'kag') + '\n';
+        txt += 'User:     ' + (_creds.postgresql.user||'kag') + '\n';
+        txt += 'Password: ' + _creds.postgresql.password + '\n\n';
+    }
+
+    if (_creds.qdrant && _creds.qdrant.collection) {
+        txt += '-- Qdrant --\n';
+        txt += 'URL:          ' + (_creds.qdrant.url||'http://qdrant:6333') + '\n';
+        txt += 'Collection:   ' + _creds.qdrant.collection + '\n';
+        txt += 'Dimensions:   ' + (_creds.qdrant.dimensions||'1024') + '\n\n';
+    }
+
+    if (_creds.neo4j && _creds.neo4j.bolt) {
+        txt += '-- Neo4j --\n';
+        txt += 'HTTP:  ' + (_creds.neo4j.http||'http://neo4j:7474') + '\n';
+        txt += 'Bolt:  ' + _creds.neo4j.bolt + '\n';
+        txt += 'User:  neo4j\n';
+        txt += 'Password: ' + _creds.neo4j.password + '\n\n';
+    }
+
+    if (_creds.admin && _creds.admin.password) {
+        txt += '-- Администратор --\n';
+        txt += 'Login:    ' + (_creds.admin.login||'admin') + '\n';
+        txt += 'Password: ' + _creds.admin.password + '\n\n';
+    }
+
+    txt += '=== END ===\n';
+
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kag-credentials.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+async function goToAdmin() {
+    // Отправляем complete на сервер
+    try {
+        await fetch(API + '/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch(e) { /* ignore */ }
+
+    // Очищаем credentials
+    _creds = null;
+    document.getElementById('creds-grid').classList.remove('show');
+    document.getElementById('creds-grid').innerHTML = '';
+    document.getElementById('actions-row').classList.remove('show');
+    document.getElementById('init-status').className = 'status-box';
+    document.getElementById('init-status').style.display = 'none';
+
+    // Редирект на /admin
+    window.location.href = '/admin';
 }
 </script>
 </body>

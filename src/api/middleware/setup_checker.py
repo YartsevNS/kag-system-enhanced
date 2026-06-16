@@ -1,8 +1,8 @@
 """
-Middleware Setup Checker для KAG
+Middleware Setup Checker для KAG.
 
-Если система не настроена, все запросы (кроме setup и статики) 
-перенаправляются на /setup.
+Если система не настроена, редиректит на /setup.
+Пропускает только: /setup, /api/v1/setup, /login, /api/v1/auth, /static, /health, /docs.
 """
 
 from fastapi import Request
@@ -14,58 +14,43 @@ from loguru import logger
 class SetupCheckMiddleware(BaseHTTPMiddleware):
     """
     Middleware для проверки первоначальной настройки.
+    Если setup не завершён — редирект на /setup (кроме публичных путей).
     """
-    
-# Пути, которые ВСЕГДА доступны
-    PUBLIC_PATHS = [
+
+    PUBLIC_PATHS = {
         "/setup",
         "/api/v1/setup",
         "/api/v1/health",
-        "/docs",
-        "/openapi.json",
-        "/redoc",
-        "/favicon.ico",
-        "/api/v1/admin_models/",
-        "/api/v1/chat/",
-        "/api/v1/upload/",
+        "/login",
         "/api/v1/auth",
-        "/api/v1/notifications",
-        "/api/v1/documents/",
-        "/qdrant",
-        "/chunks",
-        "/documents",
-        "/admin",
-        "/static/",
-    ]
-    
-    # Также пропускаем если БД недоступна
-    DATABASE_AVAILABLE = True
+        "/api/docs",
+        "/api/redoc",
+        "/api/openapi.json",
+        "/static",
+        "/favicon.ico",
+    }
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        
-        # 1. Проверяем если это публичный путь - пропускаем
+
+        # Публичные пути (включая сам setup) — пропускаем
         if any(path.startswith(p) for p in self.PUBLIC_PATHS):
             return await call_next(request)
-        
-        # 2. Проверяем если это статический файл
+
+        # Статические файлы
         if path.startswith("/static/"):
             return await call_next(request)
-        
-        # 3. Проверяем статус настройки
+
+        # Проверяем статус настройки
         try:
             from src.api.services.config_store import config_store
-            
-            # Если БД недоступна - пропускаем ( система в режиме разработки )
-            if not config_store._engine:
-                return await call_next(request)
-            
+
             setup_status = config_store.get("setup", "status", {})
-            
             if not setup_status.get("configured", False):
+                logger.info(f"SetupCheck: редирект {path} → /setup (не настроено)")
                 return RedirectResponse(url="/setup", status_code=302)
-        except Exception as e:
-            # Если БД недоступна - пропускаем
+        except Exception:
+            # config_store недоступен — пропускаем (случай: первый запуск, нет БД)
             pass
-        
+
         return await call_next(request)
