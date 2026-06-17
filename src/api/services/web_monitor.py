@@ -1032,36 +1032,16 @@ class WebMonitorService:
                             })
                             continue
 
-                        # SHA-256 для дедупликации
+                        # SHA-256 для логирования
                         file_hash = hashlib.sha256(content).hexdigest()
 
-                        # Проверяем — нет ли уже такого документа в KAG?
-                        try:
-                            from src.api.services.document_service import document_service
-                            existing = document_service._find_by_hash(file_hash)
-                            if existing:
-                                logger.info(f"🔁 Дубликат: {filename[:50]} уже существует как {existing.document_id[:12]}...")
-                                skip_count += 1
-                                self._seen_urls.add(url)
-                                self.track_download({
-                                    'url': url, 'filename': filename,
-                                    'source_id': source.id, 'source_name': source.name,
-                                    'status': 'duplicate',
-                                    'file_hash': file_hash, 'file_size': len(content),
-                                    'kag_document_id': existing.document_id,
-                                    'content_type': None,
-                                    'downloaded_at': datetime.utcnow().isoformat()
-                                })
-                                continue
-                        except Exception:
-                            pass
-
-                        # Загружаем в KAG Pipeline
+                        # Загружаем в KAG Pipeline (force_new — каждый файл отдельным документом)
                         try:
                             record = await document_service.upload_document(
                                 filename=filename,
                                 file_content=content,
                                 file_type=None,
+                                force_new=True,
                                 source_metadata=item.get('metadata')
                             )
                             # Запускаем фоновую обработку
