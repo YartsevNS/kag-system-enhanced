@@ -179,14 +179,9 @@ async function register() {
   const st = document.getElementById('reg-status');
   if (!u || !p) { st.textContent = 'Заполните логин и пароль'; st.className='status err'; return; }
   try {
-    const res = await fetch(`${API}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, email:e||null})});
+    const res = await fetch(`${API}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, email:e||null, is_admin: role === 'admin'})});
     const data = await res.json();
     if (res.ok) {
-      // If admin role, update in DB
-      if (role === 'admin') {
-        const t = getToken();
-        if (t) await fetch(`${API}/admin/users/${data.id}/promote`, {method:'POST', headers:authHeaders()});
-      }
       st.className='status ok'; st.textContent = '✅ Пользователь создан: ' + data.username;
       loadUsers();
     } else {

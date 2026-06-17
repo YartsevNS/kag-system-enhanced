@@ -40,6 +40,7 @@ class UserRegister(BaseModel):
     username: str
     password: str
     email: str | None = None
+    is_admin: bool = False
 
     @field_validator("username")
     @classmethod
@@ -193,6 +194,7 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
     user = User(
         username=body.username,
         email=body.email,
+        is_admin=body.is_admin,
         hashed_password=password_hash.hash(body.password),
     )
     db.add(user)
