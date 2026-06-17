@@ -414,6 +414,7 @@ class WebMonitorService:
         sources = self.get_sources()
         if source_id:
             sources = [s for s in sources if s.id == source_id]
+            force = True  # принудительно для конкретного источника
 
         # Фильтруем: только включённые, и время последней проверки вышло
         now = datetime.utcnow()
