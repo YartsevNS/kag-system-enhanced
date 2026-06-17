@@ -711,7 +711,7 @@ class WebMonitorService:
                         text = link.get_text(strip=True)
 
                         # Извлекаем метаданные из окружающей структуры (ГОСТ, ЦБ и т.д.)
-                        meta = _extract_link_metadata(link, soup, source)
+                        meta = self._extract_link_metadata(link, soup, source)
                         new_urls.append({
                             'url': abs_url,
                             'title': text or meta.get('title') or Path(href).name,
