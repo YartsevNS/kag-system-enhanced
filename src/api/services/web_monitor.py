@@ -401,11 +401,12 @@ class WebMonitorService:
     # Основной цикл проверки
     # ============================================================
 
-    async def run_check(self, source_id: Optional[str] = None) -> List[MonitorResult]:
+    async def run_check(self, source_id: Optional[str] = None, force: bool = False) -> List[MonitorResult]:
         """Запустить проверку: всех источников или одного конкретного.
         
         Args:
             source_id: ID источника для проверки (None = все активные)
+            force: если True — игнорировать enabled и check_interval
         
         Returns:
             Список результатов проверки по каждому источнику
@@ -418,9 +419,9 @@ class WebMonitorService:
         now = datetime.utcnow()
         to_check = []
         for s in sources:
-            if not s.enabled:
+            if not force and not s.enabled:
                 continue
-            if s.last_check:
+            if not force and s.last_check:
                 elapsed = (now - s.last_check).total_seconds() / 60
                 if elapsed < s.check_interval_minutes:
                     continue  # Ещё рано проверять
