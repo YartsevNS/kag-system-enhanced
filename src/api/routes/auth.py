@@ -251,12 +251,12 @@ def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "expires_in": _get_token_expiry(),
     })
-    # httpOnly cookie — не доступен JavaScript
+    # httpOnly cookie
     response.set_cookie(
         key="kag_token",
         value=access_token,
         httponly=True,
-        secure=_is_secure(request),
+        secure=True,
         samesite="lax",
         path="/",
         max_age=_get_token_expiry(),
