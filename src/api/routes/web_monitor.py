@@ -159,27 +159,20 @@ async def run_check(
     
     Если source_id не указан — проверяются все активные источники.
     Если force=true — проверка даже для отключённых источников.
+    Проверка выполняется в фоне. Результаты появятся в истории и в списке документов.
     Можно передать source_id в query-параметре (?source_id=...) или в теле JSON.
     """
     # Берём source_id из тела если не передан как query-параметр
     sid = source_id or body.get("source_id")
     try:
         from src.api.services.web_monitor import web_monitor
-        results = await web_monitor.run_check(sid, force=force)
+        import asyncio
+        # Запускаем в фоне — не ждём результата
+        asyncio.create_task(web_monitor.run_check(sid, force=force))
         return {
-            "status": "ok",
-            "checked": len(results),
-            "results": [
-                {
-                    "source_id": r.source_id,
-                    "status": r.status,
-                    "new_items": r.new_items,
-                    "skipped_items": r.skipped_items,
-                    "error": r.error,
-                    "checked_at": r.checked_at.isoformat()
-                }
-                for r in results
-            ]
+            "status": "started",
+            "message": "Проверка запущена в фоне. Результаты появятся в истории.",
+            "source_id": sid,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
