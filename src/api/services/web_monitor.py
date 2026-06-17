@@ -169,7 +169,7 @@ class WebMonitorService:
             "url": "https://www.gost.ru/portal/gost/home/standarts/InformationSecurity",
             "type": "scrape",
             "css_selector": "a[href*='file/load']",
-            "keywords": ["безопасность", "криптографическая", "защита", "информация", "стандарт", "ГОСТ"],
+            "keywords": [],
             "description": "Действующие стандарты ГОСТ Р по информационной безопасности: криптография, защита информации, ЭЦП"
         },
     ]
@@ -709,11 +709,6 @@ class WebMonitorService:
                             continue
 
                         text = link.get_text(strip=True)
-                        # Фильтр по ключевым словам
-                        if source.keywords:
-                            text_lower = text.lower()
-                            if not any(kw.lower() in text_lower for kw in source.keywords):
-                                continue
 
                         # Извлекаем метаданные из окружающей структуры (ГОСТ, ЦБ и т.д.)
                         meta = _extract_link_metadata(link, soup, source)
