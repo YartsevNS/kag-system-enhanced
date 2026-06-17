@@ -203,7 +203,7 @@ async function loadUsers() {
     const users = data.users || [];
     const c = document.getElementById('users-list');
     if (!users.length) { c.innerHTML = '<div class="empty">Нет пользователей</div>'; return; }
-    c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Роль</th><th>Источник</th><th>Активен</th><th>Создан</th></tr>
+    c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Роль</th><th>Источник</th><th>Активен</th><th>Создан</th><th></th></tr>
       ${users.map(u => `<tr>
         <td style="font-weight:500">${u.username}</td>
         <td style="color:var(--text4)">${u.email || '—'}</td>
@@ -211,6 +211,7 @@ async function loadUsers() {
         <td><span class="badge ${u.source === 'keycloak' ? 'domain' : 'user'}">${u.source === 'keycloak' ? 'Keycloak' : 'Локальный'}</span></td>
         <td>${u.is_active ? '✅' : '❌'}</td>
         <td style="color:var(--text4);font-size:12px">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+        <td>${u.source !== 'keycloak' ? `<button class="btn-sm" onclick="changePwd('${u.username}')">🔑 Сменить пароль</button>` : ''}</td>
       </tr>`).join('')}</table>`;
   } catch(e) { document.getElementById('users-list').innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
 }
@@ -236,6 +237,19 @@ async function createGroup() {
     document.getElementById('group-name').value = '';
     document.getElementById('group-desc').value = '';
     loadGroups();
+  } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+async function changePwd(username) {
+  const newPwd = prompt(`Новый пароль для ${username} (мин 6 символов):`);
+  if (!newPwd || newPwd.length < 6) { alert('Пароль должен быть минимум 6 символов'); return; }
+  try {
+    const res = await fetch('/api/v1/auth/change-password', {
+      method:'POST', headers:authHeaders(),
+      body: JSON.stringify({current_password: newPwd, new_password: newPwd})
+    });
+    const data = await res.json();
+    if (res.ok) { alert('✅ Пароль изменён'); } else { alert('❌ ' + (data.detail || 'Ошибка')); }
   } catch(e) { alert('Ошибка: ' + e.message); }
 }
 

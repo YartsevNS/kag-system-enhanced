@@ -348,3 +348,39 @@ def logout(request: Request, response: Response):
         samesite="lax"
     )
     return resp
+
+
+class ChangePasswordRequest(BaseModel):
+    """Запрос на смену пароля."""
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("new password must be at least 6 characters")
+        return v
+
+
+@router.post("/change-password", summary="Смена пароля")
+def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Сменить пароль текущего пользователя.
+    Требуется старый пароль для подтверждения.
+    """
+    valid, new_hash = password_hash.verify_and_update(body.current_password, current_user.hashed_password)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid current password",
+        )
+
+    current_user.hashed_password = password_hash.hash(body.new_password)
+    db.add(current_user)
+    db.commit()
+    return {"status": "ok", "message": "Password changed"}
