@@ -150,6 +150,11 @@ def _get_token_expiry() -> int:
     return settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
 
+def _is_secure(request: Request) -> bool:
+    """Определить HTTPS."""
+    return request.headers.get("X-Forwarded-Proto", "") == "https" or request.url.scheme == "https"
+
+
 def _user_to_response(user: User) -> dict:
     """Convert a User ORM object to a safe dict (no password)."""
     return {
@@ -251,7 +256,7 @@ def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
         key="kag_token",
         value=access_token,
         httponly=True,
-        secure=False,  # True на проде с HTTPS
+        secure=_is_secure(request),
         samesite="lax",
         path="/",
         max_age=_get_token_expiry(),
@@ -345,7 +350,7 @@ def logout(request: Request, response: Response):
     resp.delete_cookie(
         key="kag_token",
         path="/",
-        secure=False,  # True для HTTPS
+        secure=_is_secure(request),
         httponly=True,
         samesite="lax"
     )
