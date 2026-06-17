@@ -9,6 +9,11 @@ from datetime import datetime
 
 from src.models import SystemStatus
 from src.config import get_settings
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
+from pwdlib.hashers.bcrypt import BcryptHasher
+
+password_hash = PasswordHash([Argon2Hasher(), BcryptHasher()])
 
 router = APIRouter()
 
@@ -402,3 +407,44 @@ async def get_disk_usage():
         result["docker_raw"] = "Docker недоступен из контейнера"
     
     return result
+
+
+@router.post("/users/{user_id}/reset-password", summary="Сбросить пароль пользователя")
+async def reset_user_password(user_id: str, data: dict):
+    """Сбросить пароль пользователя (только для admin)."""
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import User
+    new_password = data.get("password", "")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Пароль должен быть минимум 6 символов")
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user.hashed_password = password_hash.hash(new_password)
+        db.add(user)
+        db.commit()
+        return {"status": "ok", "message": "Пароль изменён"}
+    finally:
+        db.close()
+
+
+@router.post("/users/{user_id}/toggle-active", summary="Включить/отключить пользователя")
+async def toggle_user_active(user_id: str):
+    """Включить или отключить пользователя."""
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import User
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user.is_active = not user.is_active
+        db.add(user)
+        db.commit()
+        return {"status": "ok", "is_active": user.is_active, "message": f"Пользователь {'активирован' if user.is_active else 'отключён'}"}
+    finally:
+        db.close()
