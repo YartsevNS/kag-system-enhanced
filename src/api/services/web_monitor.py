@@ -1204,6 +1204,60 @@ class WebMonitorService:
         except Exception:
             pass
 
+    async def reload_source(self, source_id: str) -> dict:
+        """Полное перезагрузка источника: удалить все его файлы и загрузить заново."""
+        from src.api.services.config_store import config_store as cs
+        sources = self.get_sources()
+        source = next((s for s in sources if s.id == source_id), None)
+        if not source:
+            return {"status": "error", "message": "Источник не найден"}
+
+        downloads = cs.get("web_monitor", "downloads") or []
+        source_downloads = [d for d in downloads if d.get("source_id") == source_id]
+        urls = list(set(d.get("url", "") for d in source_downloads if d.get("url")))
+        if not urls:
+            # Fallback: используем BUILTIN_SOURCES
+            src_data = next((s for s in self.BUILTIN_SOURCES if s.get("name") == source.name), None)
+            if src_data:
+                urls = [src_data["url"]]
+        if not urls:
+            return {"status": "error", "message": "Нет URL для перезагрузки"}
+
+        from src.api.services.document_service import document_service
+        from src.api.services.config_store import config_store as cs
+
+        deleted = 0
+        failed_delete = 0
+        for d in source_downloads:
+            doc_id = d.get("kag_document_id")
+            if doc_id:
+                try:
+                    await document_service.delete_document(doc_id)
+                    cs.delete("documents", doc_id)
+                    deleted += 1
+                except Exception as e:
+                    logger.warning(f"Ошибка удаления {doc_id}: {e}")
+                    failed_delete += 1
+
+        new_items, skipped = await self._download_and_upload(
+            None, [{"url": u} for u in urls], source,
+            batch_size=5, batch_delay=15, item_delay=2, batch_jitter=5
+        )
+
+        self.add_history({
+            "source_id": source.id,
+            "source_name": source.name,
+            "time": datetime.utcnow().isoformat(),
+            "status": "reloaded",
+            "new_items": new_items,
+            "skipped": skipped,
+            "total_found": len(urls),
+            "deleted": deleted,
+            "failed_delete": failed_delete,
+        })
+
+        return {"status": "ok", "deleted": deleted, "loaded": new_items, "skipped": skipped}
+
 
 # Глобальный экземпляр
 web_monitor = WebMonitorService()
