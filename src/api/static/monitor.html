@@ -322,7 +322,7 @@ async function loadHistory() {
     var r = await fetch(API + '/history?limit=20', { credentials: 'include' });
     var d = await r.json();
     var history = d.history || [];
-    var html = '<table><thead><tr><th>Время</th><th>Источник</th><th>Результат</th><th>Детали</th></tr></thead><tbody>';
+    var html = '<table><thead><tr><th>Время</th><th>Источник</th><th>Результат</th><th>Детали</th><th></th></tr></thead><tbody>';
     if (!history.length) {
       html += '<tr><td colspan="4" style="text-align:center;color:var(--text4);padding:20px">История проверок пуста</td></tr>';
     } else {
@@ -331,13 +331,25 @@ async function loadHistory() {
           '<td style="font-size:11px;color:var(--text4)">' + new Date(h.time||h.checked_at||'').toLocaleString('ru-RU') + '</td>' +
           '<td>' + (h.source_name||h.source_id||'?') + '</td>' +
           '<td>' + (h.status==='ok'?'<span class="badge" style="background:rgba(39,166,68,0.15);color:var(--green)">✅ OK</span>':h.status==='no_changes'?'<span class="badge" style="background:rgba(108,114,120,0.15);color:var(--text4)">— Нет изменений</span>':'<span class="badge" style="background:rgba(220,38,38,0.15);color:var(--red)">❌ '+ (h.status||'?')+'</span>') + '</td>' +
-          '<td style="font-size:12px"><span style="color:var(--emerald)">📥 '+(h.new_items||0)+' новых</span>' + (h.total_found ? ' · <span style="color:var(--text4)">🔗 '+(h.total_found)+' ссылок</span>' : '') + (h.skipped ? ' · <span style="color:var(--amber)">⏭ '+(h.skipped)+'</span>' : '') + (h.error ? ' · <span style="color:var(--red)">❌ '+h.error.substring(0,60)+'</span>' : '') + '</td>' +
+          '<td style="font-size:12px"><span style="color:var(--emerald)">📥 '+(h.new_items||0)+' новых</span>' + (h.total_found ? ' · <span style="color:var(--text4)">🔗 '+(h.total_found)+' ссылок</span>' : '') + (h.skipped ? ' · <span style="color:var(--amber)">⏭ '+(h.skipped)+'</span>' : '') + (h.deleted ? ' · <span style="color:var(--red)">🗑 '+(h.deleted)+' удалено</span>' : '') + (h.error ? ' · <span style="color:var(--red)">❌ '+h.error.substring(0,60)+'</span>' : '') + '</td>' +
+          '<td><button class="btn-sm" onclick="reloadSource(\''+h.source_id+'\')">♻️</button></td>' +
           '</tr>';
       });
     }
     html += '</tbody></table>';
     document.getElementById('history-table').innerHTML = html;
   } catch(e) {}
+}
+
+async function reloadSource(sid) {
+  if (!sid) return;
+  if (!confirm('♻️ Перезагрузить этот источник? Все существующие файлы будут удалены и скачаны заново.')) return;
+  try {
+    var r = await fetch(API + '/reload/' + sid, { method: 'POST', credentials: 'include' });
+    var d = await r.json();
+    toast('♻️ Перезагрузка: ' + (d.deleted||0) + ' удалено, ' + (d.loaded||0) + ' загружено');
+    loadHistory();
+  } catch(e) { toast('Ошибка: ' + e.message, true); }
 }
 
 function toast(msg, err) {

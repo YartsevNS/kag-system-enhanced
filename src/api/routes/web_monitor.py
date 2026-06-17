@@ -370,6 +370,16 @@ async def get_download_history(
         logger.error(f"Ошибка получения истории: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/reload/{source_id}", summary="Перезагрузить источник")
+async def reload_source(source_id: str):
+    """Удалить все файлы источника и загрузить заново."""
+    try:
+        from src.api.services.web_monitor import web_monitor
+        result = await web_monitor.reload_source(source_id)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @router.delete("/history", summary=chr(34) + "Очистить историю проверок" + chr(34))
 async def clear_history():
     """Удаляет всю историю проверок мониторинга."""
