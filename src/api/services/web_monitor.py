@@ -994,6 +994,7 @@ class WebMonitorService:
                         # Определяем тип файла по Content-Type
                         content_type = resp.headers.get('Content-Type', '')
                         content_disposition = resp.headers.get('Content-Disposition', '')
+                        logger.debug(f"  URL={url[:60]} CT={content_type} CD={content_disposition[:80]}")
 
                         # Извлекаем имя файла из Content-Disposition если есть
                         import re as _re
@@ -1019,6 +1020,7 @@ class WebMonitorService:
                                     break
 
                         if len(content) < 100:  # Слишком маленький — не документ
+                            logger.info(f"⏭ Пропущен {filename[:40]}: слишком маленький ({len(content)} bytes)")
                             skip_count += 1
                             self.track_download({
                                 'url': url, 'filename': filename,
