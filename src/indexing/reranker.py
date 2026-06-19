@@ -21,12 +21,12 @@ _bm25_instance = None
 def get_default_reranker() -> Optional[Any]:
     """
     Получить экземпляр ранкера.
-    
+
     Приоритет:
-    1. FlashRank (ONNX, быстрый, до 1M параметров)
+    1. FlashRank (ONNX, мультиязычный bge-reranker-v2-m3)
     2. BM25 (ранжирование по совпадению слов, без нейросетей)
     3. None (ранжирование не доступно)
-    
+
     Returns:
         Ранкер с методом rerank(query, passages, top_k) или None
     """
@@ -37,13 +37,22 @@ def get_default_reranker() -> Optional[Any]:
         try:
             from flashrank import Ranker as FlashRanker, RerankRequest
 
-            # Небольшая модель: ~50MB, работает на CPU через ONNX
+            # Определяем модель из config_store или по умолчанию bge-reranker-v2-m3
+            model_name = "BAAI/bge-reranker-v2-m3"
+            try:
+                from src.api.services.config_store import config_store
+                reranker_config = config_store.get("reranker", "config", {})
+                if isinstance(reranker_config, dict) and reranker_config.get("model"):
+                    model_name = reranker_config["model"]
+            except Exception:
+                pass
+
             _ranker_instance = FlashRanker(
-                model_name="ms-marco-MiniLM-L-12-v2",
+                model_name=model_name,
                 cache_dir="/app/models/.flashrank",
             )
             _FLASH_AVAILABLE = True
-            logger.info("✅ FlashRank загружен (ONNX, без torch)")
+            logger.info(f"✅ FlashRank загружен: {model_name} (ONNX)")
         except Exception as e:
             logger.warning(f"FlashRank не загружен: {e}")
             _FLASH_AVAILABLE = False
