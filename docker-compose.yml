@@ -51,7 +51,7 @@ services:
       - LLM_VLLM_PRIORITY=1
       # Embedding модели
       - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text:latest}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-m3:latest}
       - EMBEDDING_TIMEOUT=60.0
       - EMBEDDING_DIMENSIONS=1024
       # Общие настройки
