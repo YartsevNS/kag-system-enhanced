@@ -325,3 +325,16 @@ def check_stuck_documents(self):
     except Exception as e:
         logger.error(f"[Beat] Ошибка проверки зависших документов: {e}")
         raise self.retry(exc=e, countdown=120)
+
+
+@celery_app.task(bind=True, queue="maintenance", max_retries=3, default_retry_delay=300)
+def run_monitor_check(self, source_id: str = None):
+    """Запустить проверку источников мониторинга (Celery)."""
+    try:
+        from src.api.services.web_monitor import web_monitor
+        result = asyncio.run(web_monitor.run_check(source_id))
+        logger.info(f"✅ Монитор проверка: source={source_id}, results={len(result)}")
+        return {"status": "ok", "checked": len(result)}
+    except Exception as e:
+        logger.error(f"❌ Монитор проверка упала: {e}")
+        raise self.retry(exc=e)

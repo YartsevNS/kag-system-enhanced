@@ -43,6 +43,11 @@ celery_app.conf.update(
             'schedule': 300.0,  # каждые 5 минут
             'options': {'queue': 'maintenance'},
         },
+        'monitor-auto-check': {
+            'task': 'src.indexing.tasks.run_monitor_check',
+            'schedule': 21600.0,  # каждые 6 часов
+            'options': {'queue': 'maintenance'},
+        },
     },
 
     # Маршрутизация задач
