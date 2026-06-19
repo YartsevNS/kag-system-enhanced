@@ -414,7 +414,6 @@ class WebMonitorService:
         sources = self.get_sources()
         if source_id:
             sources = [s for s in sources if s.id == source_id]
-            force = True  # принудительно для конкретного источника
 
         # При force=true сбрасываем хеши страниц и seen_urls (чтобы перепроверить)
         if force:
