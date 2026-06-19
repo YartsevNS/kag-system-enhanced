@@ -1044,6 +1044,7 @@ class WebMonitorService:
 
                         # Загружаем в KAG Pipeline (force_new — каждый файл отдельным документом)
                         try:
+                            from src.api.services.document_service import document_service
                             record = await document_service.upload_document(
                                 filename=filename,
                                 file_content=content,
