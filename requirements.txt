@@ -72,6 +72,9 @@ pyclipper>=1.3.0
 shapely>=2.0.0
 pymupdf>=1.23.0
 
+# Trafilatura — извлечение контента с веб-страниц (замена BeautifulSoup для scrape)
+trafilatura>=2.0.0
+
 # Docling — layout analysis + таблицы (требует torch)
 torch>=2.0.0
 docling>=2.0.0
