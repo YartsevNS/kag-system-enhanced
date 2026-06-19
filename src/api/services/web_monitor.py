@@ -416,10 +416,12 @@ class WebMonitorService:
             sources = [s for s in sources if s.id == source_id]
             force = True  # принудительно для конкретного источника
 
-        # При force=true сбрасываем хеши страниц (чтобы перепроверить)
+        # При force=true сбрасываем хеши страниц и seen_urls (чтобы перепроверить)
         if force:
             for s in sources:
                 s.last_hash = None
+            self._seen_urls = set()
+            self._hash_cache = {}
 
         # Фильтруем: только включённые, и время последней проверки вышло
         now = datetime.utcnow()
