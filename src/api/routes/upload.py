@@ -3,13 +3,36 @@
 
 Архитектура (как Paperless-ngx):
 1. Клиент шлёт POST /api/v1/upload/ с multipart/form-data
-2. Сервер читает файл в память (await file.read()) — быстро, не bottleneck
-3. Валидация (размер, тип, безопасность)
-4. document_service.upload_document() — хеширует, сохраняет на диск, проверяет дубликаты
-5. Сразу ответ клиенту с document_id
-6. Очередь FIFO (asyncio.Queue + пул воркеров) забирает обработку
+"""
 
-Никакого temp/rename/staging — файл сразу в /app/data/uploads/.
+import time
+from typing import Dict, Any, Callable
+
+# ── In-memory кеш для снижения нагрузки на БД ────────────────────────
+_cache: Dict[str, Dict[str, Any]] = {}  # key - {data, expires_at}
+
+def _cached(ttl: float = 2.0):
+    """Декоратор: кеширует результат функции на ttl секунд (в памяти)."""
+    def decorator(func: Callable) -> Callable:
+        async def wrapper(*args, **kwargs):
+            # Ключ кеша: имя функции + args + kwargs
+            cache_key = f"{func.__name__}:{str(args)}:{str(sorted(kwargs.items()))}"
+            now = time.monotonic()
+            cached = _cache.get(cache_key)
+            if cached and cached["expires_at"] > now:
+                return cached["data"]
+            result = await func(*args, **kwargs)
+            _cache[cache_key] = {"data": result, "expires_at": now + ttl}
+            # Очистка старых записей (каждые 100 вставок)
+            if len(_cache) > 100:
+                for k in list(_cache.keys()):
+                    if _cache[k]["expires_at"] < now:
+                        del _cache[k]
+            return result
+        return wrapper
+    return decorator
+
+Архитектура (как Paperless-ngx):
 Обработка асинхронная, не блокирует upload.
 """
 import os
@@ -63,7 +86,7 @@ TUS_DIR = Path("/tmp/tus_uploads")
 
 
 # ============================================================
-# TUS — resumable upload protocol (RFC-описание)
+# TUS - resumable upload protocol (RFC-описание)
 # Позволяет загружать файлы до 1GB по частям.
 # ============================================================
 
@@ -161,7 +184,7 @@ async def tus_create(
 
     logger.info(f"[TUS] Сессия создана: {upload_id}, файл: {filename}, размер: {total_size}")
 
-    # Location — URL для последующих PATCH/HEAD запросов
+    # Location - URL для последующих PATCH/HEAD запросов
     return Response(
         status_code=201,
         headers={
@@ -241,9 +264,9 @@ async def tus_patch(
         f.write(chunk)
 
     new_offset = file_path.stat().st_size
-    logger.debug(f"[TUS] Чанк получен: {upload_id}, offset: {current_offset}→{new_offset}")
+    logger.debug(f"[TUS] Чанк получен: {upload_id}, offset: {current_offset}-{new_offset}")
 
-    # Если всё загружено — завершаем сессию
+    # Если всё загружено - завершаем сессию
     if new_offset >= meta["total_size"]:
         logger.info(f"[TUS] Загрузка завершена: {upload_id}, файл: {meta['filename']}")
 
@@ -322,8 +345,8 @@ async def upload_document(
     """
     Загрузить документ.
 
-    Простая логика: прочитать файл → проверить → сохранить → ответить.
-    Обработка (OCR, чанкинг, векторизация) — асинхронно через очередь.
+    Простая логика: прочитать файл, проверить, сохранить, ответить.
+    Обработка (OCR, чанкинг, векторизация) - асинхронно через очередь.
     """
     upload_id = str(uuid.uuid4())
     filename = file.filename or f"unnamed_{upload_id[:8]}"
@@ -415,8 +438,8 @@ async def upload_documents_batch(
     """
     Пакетная загрузка нескольких документов.
 
-    Каждый файл: прочитать → проверить → сохранить → в очередь.
-    Если один файл упал — остальные продолжают.
+    Каждый файл: прочитать - проверить - сохранить - в очередь.
+    Если один файл упал - остальные продолжают.
     """
     # Rate limit (batch считается как 1 запрос)
     client_ip = request.client.host if request.client else "unknown"
@@ -668,6 +691,7 @@ async def get_document_status(document_id: str):
     )
 
 
+@_cached(ttl=2.0)
 @router.get("/list", summary="Список документов")
 async def list_documents(
     limit: int = 100,
@@ -830,7 +854,7 @@ async def get_document_details(
     from src.api.services.config_store import config_store
     from src.indexing.auto_tagger import get_auto_tagger
 
-    # Первичный источник — document_service (in-memory, всегда актуальный)
+    # Первичный источник - document_service (in-memory, всегда актуальный)
     record = document_service.get_document_status(document_id)
     
     # Получаем запись из config_store через get_all (надёжнее чем get по ID)
@@ -857,7 +881,7 @@ async def get_document_details(
     # chunks_count: приоритет in-memory, затем config_store, затем 0
     chunks_count = record.chunks_count if record else record_data.get("chunks_count", 0) if record_data else 0
     
-    # Если in-memory показывает 0, но в Qdrant есть чанки — обновим
+    # Если in-memory показывает 0, но в Qdrant есть чанки - обновим
     if chunks_count == 0:
         try:
             from src.indexing.qdrant_service import get_qdrant_service
@@ -973,7 +997,7 @@ async def get_document_thumbnail(document_id: str):
     thumb_dir = Path("/app/data/thumbnails")
     thumb_path = thumb_dir / f"{document_id}.webp"
     
-    # Если миниатюра уже есть в кэше — отдаём сразу
+    # Если миниатюра уже есть в кэше - отдаём сразу
     if thumb_path.exists():
         return FileResponse(thumb_path, media_type="image/webp",
             headers={"Cache-Control": "public, max-age=86400"})
@@ -1156,7 +1180,7 @@ async def check_duplicate(hash: str = ""):
     Проверить, существует ли уже документ с таким SHA-256 хешем.
     
     Используется на фронтенде перед загрузкой: если хеш совпадает,
-    показываем предупреждение «Этот документ уже загружен».
+    показываем предупреждение Этот документ уже загружен.
     
     Args:
         hash: SHA-256 хеш файла (64 символа hex)
@@ -1175,7 +1199,7 @@ async def check_duplicate(hash: str = ""):
                 "status": existing.status,
                 "message": f"Документ уже загружен: {existing.filename} (v{existing.version})"
             }
-        return {"duplicate": False, "message": "Документ не найден — можно загружать"}
+        return {"duplicate": False, "message": "Документ не найден - можно загружать"}
     except Exception as e:
         return {"duplicate": False, "error": str(e)}
 
@@ -1184,7 +1208,7 @@ async def check_duplicate(hash: str = ""):
 async def reprocess_pending_documents():
     """
     Найти все документы со статусом 'pending' и запустить их обработку заново.
-    Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
+    Полезно после падения контейнера (OOM) - pending-документы остались без обработки.
     """
     import asyncio
     from src.api.services.config_store import config_store
