@@ -129,6 +129,28 @@ class EmbeddingsService:
 
         logger.info("EmbeddingsService инициализирован успешно")
 
+    async def ensure_model(self):
+        """Проверить актуальность embedding модели из настроек. Если модель сменилась — пересоздать клиент."""
+        settings = get_settings()
+        new_model = settings.EMBEDDING_MODEL
+        new_base_url = settings.EMBEDDING_BASE_URL
+        try:
+            from src.api.services.config_store import config_store
+            fm = config_store.get("function_map", "embedding")
+            if fm and fm.get("provider_id") and fm.get("model"):
+                from src.api.services.provider_service import provider_service
+                provider = provider_service.get_provider(fm["provider_id"])
+                if provider:
+                    new_base_url = (provider.get("url", "") or "").rstrip("/")
+                    new_model = fm["model"]
+        except Exception:
+            pass
+        if self._embedding_client and (self._embedding_client.model != new_model or self._embedding_client.base_url != new_base_url):
+            logger.info(f"♻️ Embedding модель изменилась: {self._embedding_client.model} → {new_model}")
+            self._embedding_client = EmbeddingClient(base_url=new_base_url, model=new_model, timeout=settings.EMBEDDING_TIMEOUT)
+            self._embedding_dimensions = int(settings.EMBEDDING_DIMENSIONS)
+            logger.info(f"Embedding клиент пересоздан: {new_model}")
+
     async def _ensure_collection(self):
         """Создать коллекцию если не существует"""
         try:
@@ -213,7 +235,10 @@ class EmbeddingsService:
         """
         # Инициализируем если нужно
         await self.initialize()
-        
+
+        # Проверяем актуальность модели (пользователь мог сменить её в админке)
+        await self.ensure_model()
+
         if not self._embedding_client:
             raise RuntimeError("Embedding клиент не инициализирован")
         
