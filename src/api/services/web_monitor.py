@@ -912,10 +912,23 @@ class WebMonitorService:
                 url = item['url']
                 filename = item.get('title', Path(urlparse(url).path).name)
 
-                # Пропускаем уже обработанные URL
-                if url in self._seen_urls:
-                    skip_count += 1
-                    continue
+                # Проверяем URL по кешу: если файл не менялся — не скачиваем
+                cached = self._hash_cache.get(url)
+                if url in self._seen_urls and cached:
+                    # Делаем HEAD — проверяем размер и дату
+                    try:
+                        async with session.head(url, timeout=aiohttp.ClientTimeout(total=15)) as hr:
+                            curr_size = hr.headers.get('Content-Length')
+                            curr_modified = hr.headers.get('Last-Modified', '')
+                            if (curr_size == cached.get('size') and 
+                                curr_modified == cached.get('modified')):
+                                skip_count += 1
+                                continue
+                    except Exception:
+                        pass  # HEAD упал — не страшно, скачаем целиком
+                elif url in self._seen_urls:
+                    # URL есть, но кеша нет — возможно, не менялся, но перестрахуемся — скачаем
+                    pass
 
                 try:
                     # Пауза между файлами внутри партии (кроме первого)
@@ -1048,7 +1061,6 @@ class WebMonitorService:
                                 filename=filename,
                                 file_content=content,
                                 file_type=None,
-                                force_new=True,
                                 source_metadata=item.get('metadata')
                             )
                             # Запускаем фоновую обработку
@@ -1057,6 +1069,13 @@ class WebMonitorService:
 
                             new_count += 1
                             self._seen_urls.add(url)
+                            # Кешируем URL → {size, modified, filename, hash} для HEAD-проверки
+                            self._hash_cache[url] = {
+                                'size': str(len(content)),
+                                'modified': resp.headers.get('Last-Modified', ''),
+                                'filename': filename,
+                                'hash': file_hash,
+                            }
                             self.track_download({
                                 'url': url, 'filename': filename,
                                 'source_id': source.id, 'source_name': source.name,
