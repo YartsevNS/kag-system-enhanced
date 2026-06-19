@@ -845,6 +845,7 @@ async def get_document_chunks(
         return {"chunks": [], "total": 0, "error": str(e)}
 
 
+@_cached(ttl=10.0)
 @router.get("/{document_id}/details", summary="Детальная информация о документе")
 async def get_document_details(
     document_id: str,
