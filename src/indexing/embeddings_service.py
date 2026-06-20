@@ -152,30 +152,29 @@ class EmbeddingsService:
             logger.info(f"Embedding клиент пересоздан: {new_model}")
 
     async def _ensure_collection(self):
-        """Создать коллекцию если не существует"""
+        """Создать коллекцию если не существует (dense + sparse)"""
         try:
-            # Проверяем существует ли коллекция
             collections = self._qdrant_client.get_collections().collections
             exists = any(c.name == self.collection_name for c in collections)
 
             if not exists:
-                logger.info(f"Создание коллекции: {self.collection_name}")
+                logger.info(f"Создание гибридной коллекции: {self.collection_name}")
 
-                from qdrant_client.http.models import HnswConfigDiff, OptimizersConfigDiff
+                from qdrant_client.http.models import SparseVectorParams, SparseIndexParams, VectorParams
 
                 self._qdrant_client.create_collection(
                     collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=self._embedding_dimensions,
-                        distance=Distance.COSINE
-                    ),
-                    hnsw_config=HnswConfigDiff(
-                        m=32,            # больше связей = точнее поиск
-                        ef_construct=128  # качественнее построение графа
-                    ),
-                    optimizers_config=OptimizersConfigDiff(
-                        indexing_threshold=5000  # индексация после 5000 точек
-                    )
+                    vectors_config={
+                        "dense": VectorParams(
+                            size=self._embedding_dimensions,
+                            distance=Distance.COSINE
+                        ),
+                        "sparse": SparseVectorParams(
+                            index=SparseIndexParams(
+                                on_disk=False,
+                            )
+                        ),
+                    },
                 )
 
                 # Создаем индексы для payload полей
@@ -254,10 +253,30 @@ class EmbeddingsService:
         # Генерируем embeddings батчами
         embeddings = await self._embedding_client.generate_batch(texts, batch_size=self._batch_size)
 
+        # Генерируем sparse векторы (BM25) для гибридного поиска
+        sparse_embeddings = []
+        try:
+            from fastembed import SparseTextEmbed
+            sparse_model = SparseTextEmbed(model_name="Qdrant/bm25")
+            sparse_embeddings = list(sparse_model.passages_embed(texts))
+            logger.info(f"Sparse векторы (BM25) сгенерированы: {len(sparse_embeddings)}")
+        except Exception as e:
+            logger.warning(f"Sparse векторы не сгенерированы (продолжаем без BM25): {e}")
+            sparse_embeddings = [None] * len(texts)
+
         # Создаем точки для Qdrant
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{document_id}-{i}"))
+
+            # Формируем вектор: dense (основной) + sparse (BM25)
+            vectors = {"dense": embedding}
+            if sparse_embeddings[i] is not None:
+                se = sparse_embeddings[i]
+                vectors["sparse"] = {
+                    "indices": se.indices.tolist(),
+                    "values": se.values.tolist(),
+                }
 
             # Извлекаем filename из metadata для прямого сохранения в payload
             filename = ""
@@ -281,7 +300,7 @@ class EmbeddingsService:
             points.append(
                 PointStruct(
                     id=point_id,
-                    vector=embedding,
+                    vector=vectors,
                     payload=payload
                 )
             )
@@ -396,14 +415,38 @@ class EmbeddingsService:
                 )
             )
 
-        # Ищем через REST API (обходим несовместимость клиента)
+        # Ищем через REST API (гибридный поиск: dense + sparse + RRF fusion)
         formatted_results = []
         try:
-            import requests
+            import requests as _requests
+
+            # Генерируем sparse вектор запроса для BM25
+            sparse_query = None
+            try:
+                from fastembed import SparseTextEmbed
+                if not hasattr(self, '_sparse_model') or self._sparse_model is None:
+                    self._sparse_model = SparseTextEmbed(model_name="Qdrant/bm25")
+                sq = list(self._sparse_model.query_embed(query))
+                if sq:
+                    sq = sq[0]
+                    sparse_query = {"indices": sq.indices.tolist(), "values": sq.values.tolist()}
+            except Exception:
+                pass
+
+            # Гибридный запрос: Prefetch (dense + sparse) → RRF fusion
+            prefetch = [{"query": query_embedding, "using": "dense", "limit": limit * 2}]
+            if sparse_query:
+                prefetch.append({
+                    "query": sparse_query,
+                    "using": "sparse",
+                    "limit": limit * 2
+                })
+
             search_payload = {
-                "vector": query_embedding,
+                "prefetch": prefetch,
+                "query": {"fusion": "rrf"},
                 "limit": limit,
-                "with_payload": True
+                "with_payload": True,
             }
             if conditions:
                 search_payload["filter"] = {
@@ -412,7 +455,7 @@ class EmbeddingsService:
                     ]
                 }
 
-            resp = requests.post(
+            resp = _requests.post(
                 f"{self.qdrant_url}/collections/{self.collection_name}/points/search",
                 json=search_payload,
                 timeout=30

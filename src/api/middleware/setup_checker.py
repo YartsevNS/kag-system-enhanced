@@ -46,11 +46,11 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
             from src.api.services.config_store import config_store
 
             setup_status = config_store.get("setup", "status", {})
-            if not setup_status.get("configured", False):
+            logger.debug(f"SetupCheck: status={setup_status}")
+            if setup_status and not setup_status.get("configured", False):
                 logger.info(f"SetupCheck: редирект {path} → /setup (не настроено)")
                 return RedirectResponse(url="/setup", status_code=302)
         except Exception:
-            # config_store недоступен — пропускаем (случай: первый запуск, нет БД)
             pass
 
         return await call_next(request)
