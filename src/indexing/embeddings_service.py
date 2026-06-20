@@ -169,6 +169,8 @@ class EmbeddingsService:
                             size=self._embedding_dimensions,
                             distance=Distance.COSINE
                         ),
+                    },
+                    sparse_vectors_config={
                         "sparse": SparseVectorParams(
                             index=SparseIndexParams(
                                 on_disk=False,
