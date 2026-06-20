@@ -7,6 +7,7 @@ Celery задачи для обработки документов.
 
 from typing import Dict, Any, Optional
 import asyncio
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 
 from src.indexing.celery_app import celery_app
@@ -80,8 +81,30 @@ def process_document(
         
     except Exception as exc:
         logger.error(f"[Celery] ❌ Ошибка обработки {document_id}: {exc}")
-        countdown = 60 * (2 ** self.request.retries)
-        raise self.retry(exc=exc, countdown=countdown)
+        now = datetime.now(timezone.utc)
+        
+        # Определяем: это ошибка провайдера (Ollama/DeepSeek) или внутренняя?
+        error_str = str(exc).lower()
+        is_provider_issue = any(kw in error_str for kw in [
+            "connection", "refused", "resolve", "no route", "timeout",
+            "401", "403", "502", "503", "unavailable", "authentication fails"
+        ])
+        
+        if is_provider_issue:
+            # Провайдер недоступен — не retry, а откладываем
+            logger.warning(f"⏸ Провайдер недоступен для {document_id}, откладываю на 5 мин")
+            try:
+                doc_data.setdefault("error", "")
+                doc_data["error"] += f" | {now.isoformat()}: провайдер недоступен"
+                doc_data["delayed_until"] = (now + timedelta(minutes=5)).isoformat()
+                config_store.set("documents", document_id, doc_data)
+            except Exception:
+                pass
+            return {"status": "delayed", "document_id": document_id}
+        else:
+            # Внутренняя ошибка — retry как обычно
+            countdown = 60 * (2 ** self.request.retries)
+            raise self.retry(exc=exc, countdown=countdown)
 
 
 @celery_app.task(

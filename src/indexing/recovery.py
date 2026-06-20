@@ -40,6 +40,32 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
             continue
 
         status = doc_data.get("status", "")
+        if status == "delayed":
+            # Проверяем — пора ли обработать снова?
+            delayed_until_str = doc_data.get("delayed_until")
+            if delayed_until_str:
+                try:
+                    delayed_until = datetime.fromisoformat(delayed_until_str)
+                    if delayed_until.tzinfo is None:
+                        delayed_until = delayed_until.replace(tzinfo=timezone.utc)
+                    if delayed_until > now:
+                        continue  # Ещё не время
+                except (ValueError, TypeError):
+                    pass
+            # Время пришло — сбрасываем в pending
+            doc_data["status"] = "pending"
+            doc_data["progress"] = 0
+            doc_data.pop("delayed_until", None)
+            config_store.set("documents", doc_id, doc_data)
+            result["recovered"] += 1
+            if requeue:
+                try:
+                    from src.indexing.tasks import process_document
+                    process_document.delay(doc_id)
+                except Exception as e:
+                    logger.error(f"[Recovery] Ошибка рекью delayed {doc_id}: {e}")
+            continue
+
         if status != "processing":
             continue
 
