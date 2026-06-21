@@ -7,6 +7,7 @@ Celery задачи для обработки документов.
 
 from typing import Dict, Any, Optional
 import asyncio
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 
 from src.indexing.celery_app import celery_app
@@ -80,8 +81,30 @@ def process_document(
         
     except Exception as exc:
         logger.error(f"[Celery] ❌ Ошибка обработки {document_id}: {exc}")
-        countdown = 60 * (2 ** self.request.retries)
-        raise self.retry(exc=exc, countdown=countdown)
+        now = datetime.now(timezone.utc)
+        
+        # Определяем: это ошибка провайдера (Ollama/DeepSeek) или внутренняя?
+        error_str = str(exc).lower()
+        is_provider_issue = any(kw in error_str for kw in [
+            "connection", "refused", "resolve", "no route", "timeout",
+            "401", "403", "502", "503", "unavailable", "authentication fails"
+        ])
+        
+        if is_provider_issue:
+            # Провайдер недоступен — не retry, а откладываем
+            logger.warning(f"⏸ Провайдер недоступен для {document_id}, откладываю на 5 мин")
+            try:
+                doc_data.setdefault("error", "")
+                doc_data["error"] += f" | {now.isoformat()}: провайдер недоступен"
+                doc_data["delayed_until"] = (now + timedelta(minutes=5)).isoformat()
+                config_store.set("documents", document_id, doc_data)
+            except Exception:
+                pass
+            return {"status": "delayed", "document_id": document_id}
+        else:
+            # Внутренняя ошибка — retry как обычно
+            countdown = 60 * (2 ** self.request.retries)
+            raise self.retry(exc=exc, countdown=countdown)
 
 
 @celery_app.task(
@@ -325,3 +348,16 @@ def check_stuck_documents(self):
     except Exception as e:
         logger.error(f"[Beat] Ошибка проверки зависших документов: {e}")
         raise self.retry(exc=e, countdown=120)
+
+
+@celery_app.task(bind=True, queue="maintenance", max_retries=3, default_retry_delay=300)
+def run_monitor_check(self, source_id: str = None):
+    """Запустить проверку источников мониторинга (Celery)."""
+    try:
+        from src.api.services.web_monitor import web_monitor
+        result = asyncio.run(web_monitor.run_check(source_id))
+        logger.info(f"✅ Монитор проверка: source={source_id}, results={len(result)}")
+        return {"status": "ok", "checked": len(result)}
+    except Exception as e:
+        logger.error(f"❌ Монитор проверка упала: {e}")
+        raise self.retry(exc=e)

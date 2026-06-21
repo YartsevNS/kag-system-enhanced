@@ -165,10 +165,9 @@ async def run_check(
     # Берём source_id из тела если не передан как query-параметр
     sid = source_id or body.get("source_id")
     try:
-        from src.api.services.web_monitor import web_monitor
-        import asyncio
-        # Запускаем в фоне — не ждём результата
-        asyncio.create_task(web_monitor.run_check(sid, force=force))
+        from src.indexing.tasks import run_monitor_check
+        # Запускаем через Celery — не теряется при рестарте API
+        run_monitor_check.delay(source_id=sid)
         return {
             "status": "started",
             "message": "Проверка запущена в фоне. Результаты появятся в истории.",
