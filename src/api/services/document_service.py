@@ -291,6 +291,13 @@ class DocumentService:
         # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
         self._save_document_to_db(doc_id)
 
+        # Дублируем в SQL таблицу (DocumentRepository — пагинация, быстрый поиск)
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            get_doc_repo().upsert(doc_id, record.to_dict())
+        except Exception:
+            pass
+
         return record
 
     def _find_by_hash(self, file_hash: str) -> Optional[DocumentRecord]:
