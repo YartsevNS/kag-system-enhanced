@@ -763,6 +763,13 @@ async def delete_document(document_id: str):
     """
     success = await document_service.delete_document(document_id)
     
+    # Удаляем также из SQL таблицы (DocumentRepository)
+    try:
+        from src.api.services.document_repository import get_doc_repo
+        get_doc_repo().delete(document_id)
+    except Exception:
+        pass
+
     if not success:
         raise HTTPException(status_code=404, detail="Документ не найден")
 

@@ -162,11 +162,20 @@ class EmbeddingsService:
 
                 from qdrant_client.http.models import SparseVectorParams, SparseIndexParams, VectorParams
 
+                # Определяем размерность из фактической модели (generate один embedding)
+                dim = self._embedding_dimensions
+                try:
+                    test_emb = await self._embedding_client.generate("test")
+                    dim = len(test_emb)
+                    logger.info(f"Фактическая размерность модели: {dim}")
+                except Exception:
+                    pass
+
                 self._qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config={
                         "dense": VectorParams(
-                            size=self._embedding_dimensions,
+                            size=dim,
                             distance=Distance.COSINE
                         ),
                     },
@@ -255,16 +264,8 @@ class EmbeddingsService:
         # Генерируем embeddings батчами
         embeddings = await self._embedding_client.generate_batch(texts, batch_size=self._batch_size)
 
-        # Генерируем sparse векторы (BM25) для гибридного поиска
-        sparse_embeddings = []
-        try:
-            from fastembed import SparseTextEmbed
-            sparse_model = SparseTextEmbed(model_name="Qdrant/bm25")
-            sparse_embeddings = list(sparse_model.passages_embed(texts))
-            logger.info(f"Sparse векторы (BM25) сгенерированы: {len(sparse_embeddings)}")
-        except Exception as e:
-            logger.warning(f"Sparse векторы не сгенерированы (продолжаем без BM25): {e}")
-            sparse_embeddings = [None] * len(texts)
+        # Генерируем sparse векторы (BM25) — отключено для скорости, включить после обработки
+        sparse_embeddings = [None] * len(texts)
 
         # Создаем точки для Qdrant
         points = []
