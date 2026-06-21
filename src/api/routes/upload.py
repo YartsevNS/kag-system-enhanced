@@ -12,6 +12,29 @@
 Никакого temp/rename/staging — файл сразу в /app/data/uploads/.
 Обработка асинхронная, не блокирует upload.
 """
+import time
+from typing import Dict, Any, Callable
+
+_cache: Dict[str, Dict[str, Any]] = {}
+
+def _cached(ttl=2.0):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            key = str(args)+str(sorted(kwargs.items()))
+            now = time.monotonic()
+            val = _cache.get(key)
+            if val and val[1] > now:
+                return val[0]
+            res = await func(*args, **kwargs)
+            _cache[key] = (res, now + ttl)
+            if len(_cache) > 100:
+                for k in list(_cache):
+                    if _cache[k][1] < now:
+                        del _cache[k]
+            return res
+        return wrapper
+    return decorator
+
 import os
 import io
 import uuid
