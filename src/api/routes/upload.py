@@ -691,56 +691,45 @@ async def get_document_status(document_id: str):
     )
 
 
-@_cached(ttl=2.0)
-@router.get("/list", summary="Список документов")
+@router.get("/list", summary="Список документов (с пагинацией)")
 async def list_documents(
-    limit: int = 100,
+    limit: int = 50,
+    offset: int = 0,
+    status: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Получить список загруженных документов.
-
-    - **limit**: Максимальное количество записей
-
-    Для не-администраторов возвращаются только документы их групп.
-    """
-    documents = document_service.list_documents(limit)
-
-    # Filter by group access for non-admin users
-    if current_user and not current_user.is_admin:
-        user_group_ids = [g.id for g in current_user.groups] if current_user.groups else []
-        if user_group_ids:
-            documents = [
-                d for d in documents
-                if d.group_ids is None or not d.group_ids or any(g in d.group_ids for g in user_group_ids)
-            ]
-        else:
-            # User has no groups - only show public documents (empty group_ids)
-            documents = [
-                d for d in documents
-                if d.group_ids is None or not d.group_ids
-            ]
+    Получить список документов с пагинацией.
     
-    # Enrich with config_store metadata (document_type, title, etc.)
+    - **limit**: Сколько записей (макс 200)
+    - **offset**: Сдвиг от начала
+    - **status**: Фильтр по статусу (pending/processing/completed/error)
+    """
+    from src.api.services.document_repository import get_doc_repo
+    from src.api.services.config_store import config_store
+
+    repo = get_doc_repo()
+    documents, total = repo.list(limit=min(limit, 200), offset=offset, status=status)
+
     enriched = []
     for d in documents:
         item = {
-            "document_id": d.document_id,
+            "document_id": d.id,
             "filename": d.filename,
-            "file_type": d.file_type,
-            "file_size": d.file_size,
+            "file_type": d.file_type or "",
+            "file_size": d.file_size or 0,
             "status": d.status,
-            "progress": d.progress,
-            "chunks_count": d.chunks_count,
+            "progress": d.progress or 0,
+            "chunks_count": d.chunks_count or 0,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "updated_at": d.updated_at.isoformat() if d.updated_at else None,
-            "uploaded_by": d.uploaded_by
+            "uploaded_by": d.uploaded_by,
+            "is_active": d.is_active,
         }
-        # Merge config_store metadata
+        # Обогащаем метаданными из config_store (document_type, summary, topics)
         try:
-            from src.api.services.config_store import config_store
-            meta = config_store.get("documents", d.document_id)
-            if meta:
+            meta = config_store.get("documents", d.id)
+            if isinstance(meta, dict):
                 item["document_type"] = meta.get("document_type", "")
                 item["recognized_title"] = meta.get("recognized_title", "")
                 item["summary"] = meta.get("summary", "")
@@ -748,10 +737,20 @@ async def list_documents(
         except Exception:
             pass
         enriched.append(item)
-    
+
+    # Фильтрация по группам для не-admin
+    if current_user and not current_user.is_admin:
+        user_group_ids = [g.id for g in current_user.groups] if current_user.groups else []
+        enriched = [
+            d for d in enriched
+            if not d.get("group_ids") or any(g in d.get("group_ids", []) for g in user_group_ids)
+        ]
+
     return {
-        "total": len(enriched),
-        "documents": enriched
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "documents": enriched,
     }
 
 
