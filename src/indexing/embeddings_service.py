@@ -95,7 +95,7 @@ class EmbeddingsService:
             # Приоритет: function_map/embedding из админки (Provider Architecture)
             try:
                 from src.api.services.config_store import config_store
-                fm = config_store.get("function_map", "embedding")
+                fm = config_store.get("providers", "function_map", {}).get("embedding")
                 if fm and fm.get("provider_id") and fm.get("model"):
                     from src.api.services.provider_service import provider_service
                     provider = provider_service.get_provider(fm["provider_id"])
@@ -136,7 +136,7 @@ class EmbeddingsService:
         new_base_url = settings.EMBEDDING_BASE_URL
         try:
             from src.api.services.config_store import config_store
-            fm = config_store.get("function_map", "embedding")
+            fm = config_store.get("providers", "function_map", {}).get("embedding")
             if fm and fm.get("provider_id") and fm.get("model"):
                 from src.api.services.provider_service import provider_service
                 provider = provider_service.get_provider(fm["provider_id"])
