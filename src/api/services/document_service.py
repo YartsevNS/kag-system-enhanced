@@ -138,21 +138,26 @@ class DocumentService:
             logger.warning(f"Автоочистка не выполнена: {e}")
 
     def _load_documents_from_db(self):
-        """Загрузить метаданные документов из PostgreSQL"""
+        """Загрузить метаданные документов из SQL (DocumentRepository)"""
         try:
-            from src.api.services.config_store import config_store
-            all_data = config_store.get_all("documents")
-
-            for doc_id, data in all_data.items():
+            from src.api.services.document_repository import get_doc_repo
+            repo = get_doc_repo()
+            docs, _ = repo.list(limit=10000)
+            for doc in docs:
                 try:
-                    if isinstance(data.get('created_at'), str):
-                        data['created_at'] = datetime.fromisoformat(data['created_at'])
-                    if isinstance(data.get('updated_at'), str):
-                        data['updated_at'] = datetime.fromisoformat(data['updated_at'])
-
-                    self._documents[doc_id] = DocumentRecord(**data)
+                    record = DocumentRecord(
+                        document_id=doc.id,
+                        filename=doc.filename or "unknown",
+                        file_hash=doc.file_hash or "",
+                        status=doc.status or "pending",
+                        progress=doc.progress or 0,
+                        chunks_count=doc.chunks_count or 0,
+                        file_size=doc.file_size or 0,
+                        version=doc.version or 1,
+                    )
+                    self._documents[doc.id] = record
                 except Exception as e:
-                    logger.warning(f"Ошибка загрузки документа {doc_id}: {e}")
+                    logger.warning(f"Ошибка загрузки документа {doc.id}: {e}")
 
             if self._documents:
                 logger.info(f"Загружено {len(self._documents)} документов из БД")
@@ -160,20 +165,14 @@ class DocumentService:
             logger.debug(f"БД недоступна, использую пустой кэш: {e}")
 
     def _save_document_to_db(self, document_id: str):
-        """Сохранить метаданные документа в PostgreSQL (не блокирует обработку)"""
+        """Сохранить метаданные документа в SQL (не блокирует обработку)"""
         try:
-            from src.api.services.config_store import config_store
+            from src.api.services.document_repository import get_doc_repo
             record = self._documents.get(document_id)
             if not record:
                 return
-
             data = record.model_dump()
-            if isinstance(data.get('created_at'), datetime):
-                data['created_at'] = data['created_at'].isoformat()
-            if isinstance(data.get('updated_at'), datetime):
-                data['updated_at'] = data['updated_at'].isoformat()
-
-            config_store.set("documents", document_id, data)
+            get_doc_repo().upsert(document_id, data)
         except Exception as e:
             logger.debug(f"БД недоступна, пропускаю сохранение: {e}")
 

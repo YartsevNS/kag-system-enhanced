@@ -711,13 +711,6 @@ async def list_documents(
     repo = get_doc_repo()
     documents, total = repo.list(limit=min(limit, 200), offset=offset, status=status)
 
-    # Если SQL пустой — fallback на config_store
-    if total == 0:
-        from src.api.services.document_service import document_service
-        docs = document_service.list_documents(limit)
-        total = len(docs)
-        documents = docs
-
     enriched = []
     for d in documents:
         # Поддержка двух типов: SQL Document (.id) и DocumentRecord (.document_id)
