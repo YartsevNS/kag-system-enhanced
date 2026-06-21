@@ -1398,6 +1398,15 @@ async def save_provider(req: ProviderSaveRequest):
     if not success:
         raise HTTPException(status_code=500, detail="Ошибка сохранения провайдера")
 
+    # Автоматически загружаем модели если провайдер Ollama
+    if config.type == "ollama" and config.enabled and not config.api_key:
+        try:
+            from src.api.services.model_manager import model_manager
+            await model_manager.get_ollama_models_detailed(base_url=config.url)
+            logger.info(f"Модели Ollama обновлены для провайдера {config.name}")
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить модели Ollama: {e}")
+
     return {
         "status": "success",
         "message": f"Провайдер {config.name} сохранён",
