@@ -9,6 +9,7 @@
 - Выбора embedding модели
 """
 
+import os
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 
@@ -1571,6 +1572,25 @@ async def save_function_map(req: FunctionMapSaveRequest):
     success = provider_service.save_function_map(fm)
     if not success:
         raise HTTPException(status_code=500, detail="Ошибка сохранения привязки")
+
+    # Обновляем .env если это embedding модель (чтобы не сбрасывалась при пересоздании контейнеров)
+    if req.function == "embedding":
+        try:
+            env_path = "/app/kag.env"
+            if os.path.exists(env_path):
+                with open(env_path, "r") as f:
+                    env_lines = f.readlines()
+                new_lines = []
+                for line in env_lines:
+                    if line.startswith("EMBEDDING_MODEL="):
+                        new_lines.append(f"EMBEDDING_MODEL={req.model}\n")
+                    else:
+                        new_lines.append(line)
+                with open(env_path, "w") as f:
+                    f.writelines(new_lines)
+                logger.info(f".env EMBEDDING_MODEL обновлён: {req.model}")
+        except Exception as e:
+            logger.warning(f"Не удалось обновить .env для embedding: {e}")
 
     return {
         "status": "success",
