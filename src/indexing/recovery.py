@@ -66,7 +66,20 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
                     logger.error(f"[Recovery] Ошибка рекью delayed {doc_id}: {e}")
             continue
 
-        if status != "processing":
+        if status not in ("processing", "delayed", "pending"):
+            continue
+
+        # Pending или delayed: просто ставим в очередь
+        if status == "pending":
+            doc_data["updated_at"] = now.isoformat()
+            config_store.set("documents", doc_id, doc_data)
+            result["recovered"] += 1
+            if requeue:
+                try:
+                    from src.indexing.tasks import process_document
+                    process_document.delay(doc_id)
+                except Exception as e:
+                    logger.error(f"[Recovery] Ошибка рекью pending {doc_id}: {e}")
             continue
 
         # Проверяем время последнего обновления
