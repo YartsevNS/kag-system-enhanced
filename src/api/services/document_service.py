@@ -318,6 +318,20 @@ class DocumentService:
                     )
         except Exception:
             pass
+        # Также поиск через SQL DocumentRepository (надёжнее после рестарта)
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            doc = get_doc_repo().find_by_hash(file_hash)
+            if doc:
+                return DocumentRecord(
+                    document_id=doc.id,
+                    filename=doc.filename,
+                    file_hash=file_hash,
+                    version=doc.version or 1,
+                    status=doc.status or "completed",
+                )
+        except Exception:
+            pass
         return None
 
     def _load_original_text(self, document_id: str) -> Optional[str]:
