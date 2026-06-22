@@ -94,18 +94,8 @@ class EmbeddingsService:
             
             # Приоритет: function_map/embedding из админки (Provider Architecture)
             try:
-                # Читаем function_map из SQL (config_store недоступен в Celery worker)
-                import json, os
-                from sqlalchemy import create_engine, text
-                db_url = getattr(settings, "KAG_DB_URL", os.environ.get("KAG_DB_URL", ""))
-                if db_url:
-                    engine = create_engine(db_url, pool_pre_ping=True)
-                    with engine.connect() as c:
-                        r = c.execute(text("SELECT value FROM system_configs WHERE id='providers:function_map'"))
-                        row = r.fetchone()
-                        if row:
-                            all_fm = json.loads(row[0])
-                            fm = all_fm.get("embedding")
+                from src.api.services.config_store import config_store
+                fm = config_store.get("providers", "function_map", {}).get("embedding")
                 if fm and fm.get("provider_id") and fm.get("model"):
                     from src.api.services.provider_service import provider_service
                     provider = provider_service.get_provider(fm["provider_id"])
@@ -145,18 +135,8 @@ class EmbeddingsService:
         new_model = settings.EMBEDDING_MODEL
         new_base_url = settings.EMBEDDING_BASE_URL
         try:
-                # Читаем function_map из SQL (config_store недоступен в Celery worker)
-                import json, os
-                from sqlalchemy import create_engine, text
-                db_url = getattr(settings, "KAG_DB_URL", os.environ.get("KAG_DB_URL", ""))
-                if db_url:
-                    engine = create_engine(db_url, pool_pre_ping=True)
-                    with engine.connect() as c:
-                        r = c.execute(text("SELECT value FROM system_configs WHERE id='providers:function_map'"))
-                        row = r.fetchone()
-                        if row:
-                            all_fm = json.loads(row[0])
-                            fm = all_fm.get("embedding")
+            from src.api.services.config_store import config_store
+            fm = config_store.get("providers", "function_map", {}).get("embedding")
             if fm and fm.get("provider_id") and fm.get("model"):
                 from src.api.services.provider_service import provider_service
                 provider = provider_service.get_provider(fm["provider_id"])
