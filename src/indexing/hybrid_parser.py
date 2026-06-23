@@ -137,6 +137,24 @@ class HybridDocumentParser:
             self._docling_converter = None
         
         # Try Occular-ocr
+        # Проверяем и докачиваем веса если отсутствуют
+        weights_dir = Path("/opt/venv/lib/python3.11/site-packages/ocr_skel/weights")
+        required = ["dbnet.onnx", "dbnet_weights.pth", "crnn_encoder.onnx", "crnn_mobilenet_large.pth"]
+        if weights_dir.exists():
+            missing = [f for f in required if not (weights_dir / f).is_file()]
+            if missing:
+                logger.warning(f"Occular missing weights: {missing}, downloading...")
+                import subprocess
+                for w in missing:
+                    for i in range(3):
+                        r = subprocess.run(
+                            ["curl", "-sSfL", "--connect-timeout", "30", "--max-time", "300",
+                             f"https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/{w}",
+                             "-o", str(weights_dir / w)], capture_output=True)
+                        if r.returncode == 0:
+                            logger.info(f"  Downloaded: {w}")
+                            break
+                        logger.warning(f"  Attempt {i+1} failed for {w}, retrying...")
         try:
             from ocr_skel import OCRPipeline
             # Примечание: параметр max_workers убран из новых версий OCRPipeline
