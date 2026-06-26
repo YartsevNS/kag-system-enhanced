@@ -608,13 +608,8 @@
         <!-- Worker Resources -->
         <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
             <h2 class="section-title">⚙️ Ресурсы Worker (CPU/память)</h2>
-            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">Изменить количество CPU и памяти для контейнера worker.</p>
-            <div id="worker-res-form" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-                <label>CPU: <input id="worker-cpus" type="text" value="2.0" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--elevated);color:var(--text)"></label>
-                <label>Memory: <input id="worker-memory" type="text" value="4G" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--elevated);color:var(--text)"></label>
-                <button class="btn btn-primary" onclick="updateWorkerResources()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:13px">Применить и перезапустить worker</button>
-                <span id="worker-res-status" style="font-size:12px;color:var(--text4)"></span>
-            </div>
+            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">Текущие лимиты контейнера worker. Для изменения — правка <code>docker-compose.yml</code> → <code>docker-compose up -d --no-deps --force-recreate worker</code></p>
+            <div id="worker-res-info" style="display:flex;gap:16px;font-size:14px;opacity:0.8">Загрузка...</div>
         </div>
 
     </main>
@@ -1922,29 +1917,15 @@ async function clearHistory() {
   } catch(e) { s.textContent = 'Error: ' + e.message; }
 }
 
-function updateWorkerResources(){
-  var s = document.getElementById('worker-res-status');
-  s.textContent = 'Применяю...';
-  fetch('/api/v1/admin/models/worker-resources', {
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    credentials:'include',
-    body:JSON.stringify({
-      cpus: document.getElementById('worker-cpus').value,
-      memory: document.getElementById('worker-memory').value
-    })      
-  }).then(r=>r.json()).then(d=>{
-    if(d.status==='ok') s.textContent = 'Готово! Worker перезапущен с CPU='+d.cpus+', RAM='+d.memory;
-    else s.textContent = 'Ошибка: '+d.message;
-  }).catch(e=>s.textContent='Ошибка сети: '+e.message);
-}
 async function loadWorkerResources(){
-  try{
-    var r = await fetch('/api/v1/admin/models/worker-resources',{credentials:'include'});
+  try {
+    var r = await fetch('/api/v1/admin/models/worker-resources', {credentials:'include'});
     var d = await r.json();
-    document.getElementById('worker-cpus').value = d.cpus;
-    document.getElementById('worker-memory').value = d.memory;
-  }catch(e){}
+    document.getElementById('worker-res-info').innerHTML = 
+      '<span>CPU: <b>' + d.cpus + '</b></span> <span>Memory: <b>' + d.memory + '</b></span>';
+  } catch(e) {
+    document.getElementById('worker-res-info').textContent = 'Недоступно';
+  }
 }
 loadWorkerResources();
 
