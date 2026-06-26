@@ -117,6 +117,8 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@kag-db:5432/kag}
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./src:/app/src
       - ./data:/app/data
     depends_on:
