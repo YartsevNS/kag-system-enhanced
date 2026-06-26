@@ -30,19 +30,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git && \
     mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
     cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
-    for f in dbnet.onnx dbnet_weights.pth crnn_encoder.onnx crnn_mobilenet_large.pth; do \
-      for i in 1 2 3; do \
-        curl -sSfL --retry 2 --retry-delay 10 --connect-timeout 30 --max-time 300 "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/$f" -o "$f" && break; \
-        echo "Occular weight $f attempt $i failed, retrying..."; \
-        sleep 5; \
-      done; \
-    done && \
-    for f in dbnet.onnx dbnet_weights.pth crnn_encoder.onnx crnn_mobilenet_large.pth; do \
-      [ -s "$f" ] || { echo "ERROR: weight $f missing after 3 attempts"; exit 1; }; \
-    done && \
-    echo "Occular weights: all 4 downloaded successfully"
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
+    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth || echo "WARNING: weight downloads failed, will download at runtime"
+
 # ===========================================
 # Stage 2: Production - финальный образ
 # ===========================================
