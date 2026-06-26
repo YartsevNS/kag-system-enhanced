@@ -1876,9 +1876,7 @@ async def restore_backup(file: UploadFile = File(...)):
 async def get_worker_resources():
     """Читает текущие cpus/memory из docker-compose.yml для worker."""
     import yaml, os
-    compose_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docker-compose.yml")
-    if not os.path.exists(compose_path):
-        compose_path = "/app/docker-compose.yml"
+    compose_path = "/app/docker-compose.yml"
     if not os.path.exists(compose_path):
         raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
     with open(compose_path) as f:
@@ -1898,9 +1896,7 @@ async def update_worker_resources(req: dict):
     cpus = req.get("cpus", "4.0")
     memory = req.get("memory", "8G")
 
-    compose_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docker-compose.yml")
-    if not os.path.exists(compose_path):
-        compose_path = "/app/docker-compose.yml"
+    compose_path = "/app/docker-compose.yml"
     if not os.path.exists(compose_path):
         raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
 
