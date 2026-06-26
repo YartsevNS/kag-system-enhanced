@@ -1875,47 +1875,32 @@ async def restore_backup(file: UploadFile = File(...)):
 @router.get("/worker-resources", summary="Текущие ресурсы worker")
 async def get_worker_resources():
     """Читает текущие cpus/memory из docker-compose.yml для worker."""
-    import yaml, os
-    compose_path = "/app/docker-compose.yml"
-    if not os.path.exists(compose_path):
-        raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
-    with open(compose_path) as f:
-        data = yaml.safe_load(f)
-    worker = data["services"]["worker"]
-    limits = worker.get("deploy", {}).get("resources", {}).get("limits", {})
-    return {
-        "cpus": limits.get("cpus", "2.0"),
-        "memory": limits.get("memory", "4G"),
-    }
+    import docker
+    try:
+        client = docker.from_env()
+        w = client.containers.get("kag-worker")
+        host_cfg = w.attrs["HostConfig"]
+        return {
+            "cpus": str(host_cfg.get("NanoCpus", 0) / 1e9) if host_cfg.get("NanoCpus") else "2.0",
+            "memory": str(host_cfg.get("Memory", 0) / (1024**3)) + "G" if host_cfg.get("Memory") else "4G",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/worker-resources", summary="Изменить ресурсы worker")
 async def update_worker_resources(req: dict):
-    """Обновляет cpus/memory в docker-compose.yml и перезапускает worker."""
-    import yaml, os, subprocess
+    """Обновляет cpus/memory через Docker API и перезапускает worker."""
+    import docker, os
     cpus = req.get("cpus", "4.0")
     memory = req.get("memory", "8G")
 
-    compose_path = "/app/docker-compose.yml"
-    if not os.path.exists(compose_path):
-        raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
-
-    with open(compose_path) as f:
-        data = yaml.safe_load(f)
-
-    worker = data["services"]["worker"]
-    worker.setdefault("deploy", {}).setdefault("resources", {}).setdefault("limits", {})
-    worker["deploy"]["resources"]["limits"]["cpus"] = cpus
-    worker["deploy"]["resources"]["limits"]["memory"] = memory
-
-    with open(compose_path, "w") as f:
-        yaml.dump(data, f)
-
     try:
-        subprocess.run(
-            ["docker-compose", "-f", compose_path, "up", "-d", "--no-deps", "--force-recreate", "worker"],
-            check=True, capture_output=True, timeout=120,
-            cwd=os.path.dirname(compose_path))
-        return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker перезапущен"}
+        import docker
+        client = docker.from_env()
+        w = client.containers.get("kag-worker")
+        w.update(cpus=cpus, memory=memory)
+        w.restart()
+        return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker обновлён и перезапущен"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
