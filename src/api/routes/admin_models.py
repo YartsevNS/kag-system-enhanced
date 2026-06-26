@@ -1866,3 +1866,60 @@ async def restore_backup(file: UploadFile = File(...)):
             errors.append(f"{ns}: {e}")
     
     return {"status": "ok", "restored": restored, "errors": errors}
+
+
+# ═══════════════════════════════════════
+# Worker Resources — настройка CPU/памяти
+# ═══════════════════════════════════════
+
+@router.get("/worker-resources", summary="Текущие ресурсы worker")
+async def get_worker_resources():
+    """Читает текущие cpus/memory из docker-compose.yml для worker."""
+    import yaml, os
+    compose_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docker-compose.yml")
+    if not os.path.exists(compose_path):
+        compose_path = "/app/docker-compose.yml"
+    if not os.path.exists(compose_path):
+        raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
+    with open(compose_path) as f:
+        data = yaml.safe_load(f)
+    worker = data["services"]["worker"]
+    limits = worker.get("deploy", {}).get("resources", {}).get("limits", {})
+    return {
+        "cpus": limits.get("cpus", "2.0"),
+        "memory": limits.get("memory", "4G"),
+    }
+
+
+@router.put("/worker-resources", summary="Изменить ресурсы worker")
+async def update_worker_resources(req: dict):
+    """Обновляет cpus/memory в docker-compose.yml и перезапускает worker."""
+    import yaml, os, subprocess
+    cpus = req.get("cpus", "4.0")
+    memory = req.get("memory", "8G")
+
+    compose_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docker-compose.yml")
+    if not os.path.exists(compose_path):
+        compose_path = "/app/docker-compose.yml"
+    if not os.path.exists(compose_path):
+        raise HTTPException(status_code=500, detail="docker-compose.yml не найден")
+
+    with open(compose_path) as f:
+        data = yaml.safe_load(f)
+
+    worker = data["services"]["worker"]
+    worker.setdefault("deploy", {}).setdefault("resources", {}).setdefault("limits", {})
+    worker["deploy"]["resources"]["limits"]["cpus"] = cpus
+    worker["deploy"]["resources"]["limits"]["memory"] = memory
+
+    with open(compose_path, "w") as f:
+        yaml.dump(data, f)
+
+    try:
+        subprocess.run(
+            ["docker-compose", "-f", compose_path, "up", "-d", "--no-deps", "--force-recreate", "worker"],
+            check=True, capture_output=True, timeout=120,
+            cwd=os.path.dirname(compose_path))
+        return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker перезапущен"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
