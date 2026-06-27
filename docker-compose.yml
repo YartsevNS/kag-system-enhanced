@@ -66,12 +66,12 @@ services:
       - ./data:/app/data
       - ./prompts:/app/prompts
       - ./user_data:/app/user_data
-      - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock
       # .env — для записи сгенерированных паролей из setup
       - ./.env:/app/kag.env:rw
     # Исправление прав на /app/data (Docker создаёт от root)
     command: >
-      sh -c "chmod -R 777 /app/data 2>/dev/null; mkdir -p /app/data/thumbnails; uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+      sh -c "chmod -R 777 /app/data 2>/dev/null; chmod 666 /var/run/docker.sock 2>/dev/null; mkdir -p /app/data/thumbnails; uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       qdrant:
         condition: service_started
@@ -117,7 +117,6 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@kag-db:5432/kag}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./src:/app/src
       - ./data:/app/data

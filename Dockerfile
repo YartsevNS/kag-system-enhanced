@@ -108,5 +108,8 @@ USER kag
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
 
-# Команда запуска
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Команда запуска через entrypoint (root → chmod docker.sock → su kag → uvicorn)
+ENTRYPOINT ["/entrypoint.sh"]
