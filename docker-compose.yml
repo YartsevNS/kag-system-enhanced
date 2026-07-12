@@ -35,7 +35,8 @@ services:
       - KC_DB_PORT=5432
       - KC_DB_NAME=keycloak
       # KAG собственная PostgreSQL (НЕ Keycloak!)
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@kag-db:5432/kag}
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - KAG_DB_URL=postgresql://kag:${KAG_DB_PASSWORD:-kagpass123}@kag-db:5432/kag
       # LLM конфигурация - Ollama на удаленном сервере
       - LLM_BACKEND=ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
@@ -65,7 +66,6 @@ services:
       - ./data:/app/data
       - ./prompts:/app/prompts
       - ./user_data:/app/user_data
-      - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
       # .env — для записи сгенерированных паролей из setup
       - ./.env:/app/kag.env:rw
     # Исправление прав на /app/data (Docker создаёт от root)
@@ -109,10 +109,12 @@ services:
       - QDRANT_PORT=6333
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - EMBEDDING_DIMENSIONS=1024
+      - EMBEDDING_DIMENSIONS=768
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text:latest}
+      - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:kagpass123@kag-db:5432/kag}
+      - KAG_DB_URL=postgresql://kag:${KAG_DB_PASSWORD:-kagpass123}@kag-db:5432/kag
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-kagneo4j2026}
     volumes:
       - ./src:/app/src
       - ./data:/app/data
@@ -341,85 +343,8 @@ services:
     profiles:
       - prod
 
-  # ===========================================
-  # Мониторинг (профиль monitoring)
-  # ===========================================
-  
-  prometheus:
-    image: prom/prometheus:v2.49.0
-    container_name: kag-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
-      - prometheus_data:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    profiles:
-      - monitoring
-
-  grafana:
-    image: grafana/grafana:10.2.0
-    container_name: kag-grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      - prometheus
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    profiles:
-      - monitoring
-
-  loki:
-    image: grafana/loki:2.9.0
-    container_name: kag-loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./docker/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
-      - loki_data:/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    profiles:
-      - monitoring
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
-    container_name: kag-otel-collector
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "8888:8888"
-    volumes:
-      - ./docker/otel/otel-config.yaml:/etc/otelcol-contrib/config.yaml:ro
-    depends_on:
-      - prometheus
-      - loki
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    profiles:
-      - monitoring
-
-  # ===========================================
-  # Планировщик задач
+# ===========================================
+# Планировщик задач
   # ===========================================
   
   scheduler:
@@ -507,12 +432,6 @@ volumes:
   redis_data:
     driver: local
   kag_db_data:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
-  loki_data:
     driver: local
   neo4j_data:
     driver: local

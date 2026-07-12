@@ -12,6 +12,29 @@
 Никакого temp/rename/staging — файл сразу в /app/data/uploads/.
 Обработка асинхронная, не блокирует upload.
 """
+import time
+from typing import Dict, Any, Callable
+
+_cache: Dict[str, Dict[str, Any]] = {}
+
+def _cached(ttl=2.0):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            key = str(args)+str(sorted(kwargs.items()))
+            now = time.monotonic()
+            val = _cache.get(key)
+            if val and val[1] > now:
+                return val[0]
+            res = await func(*args, **kwargs)
+            _cache[key] = (res, now + ttl)
+            if len(_cache) > 100:
+                for k in list(_cache):
+                    if _cache[k][1] < now:
+                        del _cache[k]
+            return res
+        return wrapper
+    return decorator
+
 import os
 import io
 import uuid
@@ -668,54 +691,44 @@ async def get_document_status(document_id: str):
     )
 
 
-@router.get("/list", summary="Список документов")
+@router.get("/list", summary="Список документов (с пагинацией)")
+@_cached(ttl=2.0)
 async def list_documents(
-    limit: int = 100,
+    limit: int = 50,
+    offset: int = 0,
+    status: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
-    Получить список загруженных документов.
+    Получить список документов с пагинацией.
 
-    - **limit**: Максимальное количество записей
-
-    Для не-администраторов возвращаются только документы их групп.
+    - **limit**: Сколько записей (макс 200)
+    - **offset**: Сдвиг от начала
+    - **status**: Фильтр по статусу (pending/processing/completed/error)
     """
-    documents = document_service.list_documents(limit)
+    from src.api.services.document_repository import get_doc_repo
+    from src.api.services.config_store import config_store
 
-    # Filter by group access for non-admin users
-    if current_user and not current_user.is_admin:
-        user_group_ids = [g.id for g in current_user.groups] if current_user.groups else []
-        if user_group_ids:
-            documents = [
-                d for d in documents
-                if d.group_ids is None or not d.group_ids or any(g in d.group_ids for g in user_group_ids)
-            ]
-        else:
-            # User has no groups - only show public documents (empty group_ids)
-            documents = [
-                d for d in documents
-                if d.group_ids is None or not d.group_ids
-            ]
-    
+    repo = get_doc_repo()
+    documents, total = repo.list(limit=min(limit, 200), offset=offset, status=status)
+
     # Enrich with config_store metadata (document_type, title, etc.)
     enriched = []
     for d in documents:
         item = {
-            "document_id": d.document_id,
-            "filename": d.filename,
-            "file_type": d.file_type,
-            "file_size": d.file_size,
-            "status": d.status,
-            "progress": d.progress,
-            "chunks_count": d.chunks_count,
+            "document_id": d.id,
+            "filename": d.filename or "unknown",
+            "file_type": d.file_type or "",
+            "file_size": d.file_size or 0,
+            "status": d.status or "pending",
+            "progress": d.progress or 0,
+            "chunks_count": d.chunks_count or 0,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "updated_at": d.updated_at.isoformat() if d.updated_at else None,
-            "uploaded_by": d.uploaded_by
         }
         # Merge config_store metadata
         try:
-            from src.api.services.config_store import config_store
-            meta = config_store.get("documents", d.document_id)
+            meta = config_store.get("documents", d.id)
             if meta:
                 item["document_type"] = meta.get("document_type", "")
                 item["recognized_title"] = meta.get("recognized_title", "")
@@ -724,9 +737,9 @@ async def list_documents(
         except Exception:
             pass
         enriched.append(item)
-    
+
     return {
-        "total": len(enriched),
+        "total": total,
         "documents": enriched
     }
 

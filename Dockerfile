@@ -82,9 +82,6 @@ WORKDIR /app
 # Копирование исходного кода
 COPY --chown=kag:kag src/ /app/src/
 
-# Добавление пользователя kag в группу docker для доступа к сокету
-RUN groupadd -f docker && usermod -aG docker kag
-
 # Создание директорий для данных
 RUN mkdir -p /app/data/audit /app/data/annotations /app/data/quality_tracking /app/data/ab_tests /app/.ssh && \
     chmod -R 750 /app/data && \
