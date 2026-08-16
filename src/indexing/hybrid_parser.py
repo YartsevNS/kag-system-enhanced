@@ -149,11 +149,12 @@ class HybridDocumentParser:
                     logger.info(f"  Copied weight from persist: {f}")
         try:
             from ocr_skel import OCRPipeline
-            # Примечание: параметр max_workers убран из новых версий OCRPipeline
-            # OCRPipeline сам определяет количество потоков по onnxruntime
-            self._ocular = OCRPipeline(onnx=True, gpu=False)
+            # Новые версии Occular-ocr: конструктор принимает (settings, deskew,
+            # reading_order, lm, num_threads, gpu, detector, recognizer). Параметра
+            # onnx больше нет — onnxruntime всегда используется для инференса.
+            self._ocular = OCRPipeline(gpu=False)
             self._ocular_available = True
-            logger.info("Occular-ocr initialized (CPU, onnx)")
+            logger.info("Occular-ocr initialized (CPU)")
         except Exception as e:
             logger.warning(f"Occular-ocr not available: {e}")
             self._ocular = None

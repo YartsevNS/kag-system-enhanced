@@ -58,7 +58,7 @@ services:
       - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-m3:latest}
       - EMBEDDING_TIMEOUT=60.0
-      - EMBEDDING_DIMENSIONS=1024  # авто: dim берётся из модели (игнорируется)
+      - EMBEDDING_DIMENSIONS=768  # snowflake-arctic-embed / nomic-embed-text = 768
 
       # Общие настройки
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
@@ -113,7 +113,7 @@ services:
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - EMBEDDING_DIMENSIONS=1024
+      - EMBEDDING_DIMENSIONS=768
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-m3:latest}
       - EMBEDDING_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
       - CELERY_BROKER_URL=redis://redis:6379/1

@@ -102,7 +102,7 @@ class EmbeddingsService:
                     if provider:
                         base_url = (provider.get("url", "") or "").rstrip("/")
                         model = fm["model"]
-                        logger.info(f"Embedding из админки: provider={provider.id}, model={model}, url={base_url}")
+                        logger.info(f"Embedding из админки: provider={provider.get('id')}, model={model}, url={base_url}")
             except Exception as e:
                 logger.debug(f"function_map/embedding не найден, использую .env: {e}")
             
