@@ -707,6 +707,14 @@ class WebMonitorService:
                     soup = BeautifulSoup(html, 'html.parser')
                     links = soup.select(source.css_selector)
 
+                    # Извлекаем метаданные страницы через Trafilatura
+                    page_meta = {}
+                    try:
+                        from src.api.services.extraction_service import extraction_service
+                        page_meta = extraction_service.extract_metadata(html, source.url)
+                    except Exception:
+                        pass
+
                     for link in links:
                         href = link.get('href', '')
                         if not href:
@@ -720,6 +728,9 @@ class WebMonitorService:
 
                         # Извлекаем метаданные из окружающей структуры (ГОСТ, ЦБ и т.д.)
                         meta = self._extract_link_metadata(link, soup, source)
+                        # Обогащаем метаданными страницы из Trafilatura
+                        if page_meta and not meta.get('title'):
+                            meta['title'] = page_meta.get('title', '')
                         new_urls.append({
                             'url': abs_url,
                             'title': text or meta.get('title') or Path(href).name,

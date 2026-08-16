@@ -142,12 +142,6 @@ services:
         reservations:
           cpus: "1.0"
           memory: 2G
-    healthcheck:
-      test: ["CMD", "celery", "-A", "src.indexing.celery_app", "inspect", "ping"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
     profiles:
       - dev
       - prod
@@ -351,8 +345,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    profiles:
-      - prod
 
   # ===========================================
   # Мониторинг (профиль monitoring)

@@ -33,7 +33,7 @@ opentelemetry-sdk==1.29.0
 opentelemetry-instrumentation-fastapi==0.50b0
 opentelemetry-exporter-prometheus==0.50b0
 psutil>=5.9.0
-uptime>=0.0.5
+
 
 # Безопасность
 cryptography==44.0.0

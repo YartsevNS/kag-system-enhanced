@@ -115,7 +115,13 @@ class SystemMonitor:
     def get_system_info(self) -> Dict[str, Any]:
         """Полная информация о системе"""
         import platform
-        import uptime
+        
+        # Чтение uptime из /proc/uptime (без внешнего пакета)
+        try:
+            with open('/proc/uptime') as f:
+                uptime_seconds = float(f.read().split()[0])
+        except Exception:
+            uptime_seconds = 0.0
         
         return {
             "hostname": platform.node(),
@@ -125,7 +131,7 @@ class SystemMonitor:
                 "version": platform.version(),
                 "machine": platform.machine(),
             },
-            "uptime": uptime.uptime() if hasattr(uptime, 'uptime') else 0,
+            "uptime": uptime_seconds,
             "cpu": self.get_cpu_info(),
             "memory": self.get_memory_info(),
             "disk": self.get_disk_info(),

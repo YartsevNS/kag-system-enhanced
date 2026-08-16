@@ -1,44 +1,109 @@
 #!/bin/bash
 set -e
+
 echo "=== KAG Deployment ==="
 
-if [ ! -f docker-compose.yml ]; then
-    echo "Cloning repository..."
-    git clone https://github.com/YartsevNS/kag-system-enhanced.git kag-system
-    cd kag-system
-fi
+# ============================================
+# 1. Генерация уникальных паролей
+# ============================================
+generate_password() {
+    openssl rand -base64 24 | tr -d '/+=' | cut -c1-24
+}
 
+JWT_SECRET=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)
+NEO4J_PASSWORD=$(generate_password)
+KEYCLOAK_ADMIN_PASSWORD=$(generate_password)
+KC_DB_PASSWORD=$(generate_password)
+KAG_DB_PASSWORD=$(generate_password)
+
+# ============================================
+# 2. Создание .env
+# ============================================
 if [ ! -f .env ]; then
-    cat > .env << 'ENVFILE'
-POSTGRES_PASSWORD=kagpass123
-DB_NAME=kag
-DB_USER=kag
-DB_PASSWORD=kagpass123
+    cat > .env << ENVFILE
+# === Сгенерировано deploy.sh $(date) ===
+
+# JWT
+JWT_SECRET=${JWT_SECRET}
+
+# Базы данных
+KAG_DB_URL=postgresql://kag:${KAG_DB_PASSWORD}@kag-db:5432/kag
+NEO4J_PASSWORD=${NEO4J_PASSWORD}
+KC_DB_USERNAME=keycloak
+KC_DB_PASSWORD=${KC_DB_PASSWORD}
+POSTGRES_PASSWORD=${KC_DB_PASSWORD}
+
+# Keycloak
 KEYCLOAK_ADMIN=admin
-KEYCLOAK_ADMIN_PASSWORD=KAGadmin2026
+KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+KEYCLOAK_CLIENT_ID=kag-api
+KEYCLOAK_CLIENT_SECRET=${JWT_SECRET}
+KEYCLOAK_REALM=kag
+
+# Ollama
 OLLAMA_BASE_URL=http://192.168.50.41:11434
 OLLAMA_MODEL=phi4-mini:latest
 LLM_OLLAMA_ENABLED=true
-NEO4J_PASSWORD=kagneo4j2026
+
+# Embedding
+EMBEDDING_BASE_URL=http://192.168.50.41:11434
+EMBEDDING_MODEL=nomic-embed-text:latest
+
+# Прочее
 QDRANT_PORT=6333
 REDIS_PORT=6379
-KAG_DB_URL=postgresql://kag:kagpass123@kag-db:5432/kag
+FASTAPI_DEBUG=false
 ENVFILE
-    echo "Created .env"
+
+    echo "Created .env with generated passwords"
+    touch .env.before_deploy
+else
+    echo ".env exists — не перегенерация, используем существующий. Удали .env для новых паролей"
 fi
 
+# ============================================
+# 3. Вывод credentials
+# ============================================
+echo ""
+echo "=== CREDENTIALS (сохрани!) ==="
+echo "JWT_SECRET:              ${JWT_SECRET}"
+echo "KAG DB (kag-db):         kag / ${KAG_DB_PASSWORD}"
+echo "Neo4j:                   neo4j / ${NEO4J_PASSWORD}"
+echo "Keycloak admin:          admin / ${KEYCLOAK_ADMIN_PASSWORD}"
+echo "Keycloak DB (keycloak):  keycloak / ${KC_DB_PASSWORD}"
+echo "=============================="
+echo ""
+
+# ============================================
+# 4. SSL сертификаты (если нет)
+# ============================================
 mkdir -p docker/nginx/ssl
 if [ ! -f docker/nginx/ssl/kag.key ]; then
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout docker/nginx/ssl/kag.key \
         -out docker/nginx/ssl/kag.crt \
         -subj '/CN=kag.local' 2>/dev/null
+    echo "SSL certificate created"
 fi
 
+# ============================================
+# 5. Запуск контейнеров
+# ============================================
+echo ""
 echo "=== Starting containers ==="
-docker network create kag-system_kag_internal 2>/dev/null || true
-docker-compose --profile dev up -d
+docker network create kag_internal 2>/dev/null || true
 
+if [ ! -f .env.before_deploy ]; then
+    # Первый деплой — собираем образы
+    echo "First deploy: building images..."
+    docker-compose build --pull 2>&1
+else
+    # Повторный деплой — только запуск, без пересборки
+    echo "Re-deploy: using existing images, no build"
+fi
+docker-compose up -d --no-build 2>&1
+
+echo ""
 echo "=== Waiting for API ==="
 for i in $(seq 1 30); do
     if curl -s -o /dev/null http://localhost:8000/setup; then
@@ -49,5 +114,6 @@ for i in $(seq 1 30); do
 done
 
 echo ""
+echo "=== Deploy complete ==="
 echo "Open http://localhost:8000/setup -> Initialize ALL"
-echo "Login: admin / admin123456"
+echo "Login: admin / ${KEYCLOAK_ADMIN_PASSWORD}"
