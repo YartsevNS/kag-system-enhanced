@@ -63,7 +63,9 @@ class DocumentRepository:
     def __init__(self, db_url: str):
         self._engine = create_engine(db_url, pool_pre_ping=True, pool_size=5)
         self._Session = sessionmaker(bind=self._engine)
-        Base.metadata.create_all(self._engine)
+        # Идемпотентная схема: create_all + ALTER TABLE для новых колонок.
+        from src.database.migrations import ensure_schema
+        ensure_schema(self._engine)
 
     def _session(self) -> Session:
         return self._Session()
@@ -163,14 +165,17 @@ _doc_repo: Optional[DocumentRepository] = None
 def get_doc_repo() -> DocumentRepository:
     global _doc_repo
     if _doc_repo is None:
-        from src.config import get_settings
-        settings = get_settings()
-        db_url = settings.KAG_DB_URL or settings.DATABASE_URL
-        _doc_repo = DocumentRepository(db_url)
+        from src.database.session import resolve_db_url
+        _doc_repo = DocumentRepository(resolve_db_url())
     return _doc_repo
 
 
 def reset_doc_repo() -> None:
     """Сбросить кэш репозитория (после смены KAG_DB_URL)."""
     global _doc_repo
+    if _doc_repo is not None:
+        try:
+            _doc_repo._engine.dispose()
+        except Exception:
+            pass
     _doc_repo = None

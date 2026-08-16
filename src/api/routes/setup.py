@@ -62,9 +62,13 @@ async def initialize_all():
 
     try:
         import psycopg2
+        from urllib.parse import urlparse
 
-        # Генерируем пароль для PG
-        pg_password = _gen_password(20)
+        # Пароль kag берём из KAG_DB_URL (сгенерирован в deploy.sh).
+        # Если URL пуст или пароль замаскирован (***) — генерируем новый.
+        db_url = os.environ.get("KAG_DB_URL", "")
+        parsed = urlparse(db_url) if db_url else None
+        pg_password = parsed.password if parsed and parsed.password and parsed.password != "***" else _gen_password(20)
 
         # Подключаемся как superuser (keycloak) для создания роли/БД
         conn = psycopg2.connect(
@@ -99,12 +103,14 @@ async def initialize_all():
         cur.close()
         conn.close()
 
-        # Обновляем KAG_DB_URL в config_store
+        # Обновляем KAG_DB_URL в окружении и сбрасываем все engine'ы
         full_db_url = f"postgresql://kag:{pg_password}@kag-db:5432/kag"
         os.environ["KAG_DB_URL"] = full_db_url
-        config_store._db_url = full_db_url
-        config_store._engine = None
-        config_store._Session = None
+        from src.database.session import reset_db_engine
+        from src.api.services.document_repository import reset_doc_repo
+        reset_db_engine()
+        reset_doc_repo()
+        config_store.reset()
 
         credentials["postgresql"] = {
             "host": "kag-db",
@@ -212,7 +218,7 @@ async def initialize_all():
 
     try:
         from sqlalchemy import create_engine, text as sa_text
-        from src.database.models import Base
+        from src.database.session import resolve_db_url, get_engine
 
         db_url_env = os.environ.get("KAG_DB_URL", "")
         if not db_url_env:
@@ -221,21 +227,7 @@ async def initialize_all():
         # KAG_DB_URL уже содержит актуальный пароль (обновлён в секции PG)
         admin_db_url = db_url_env
 
-        engine = None
-        for attempt in range(5):
-            try:
-                engine = create_engine(admin_db_url, pool_pre_ping=True)
-                with engine.connect() as c:
-                    c.execute(sa_text("SELECT 1"))
-                break
-            except Exception:
-                import time
-                time.sleep(2)
-
-        if engine is None:
-            raise RuntimeError("Не удалось подключиться к PostgreSQL после 5 попыток")
-
-        Base.metadata.create_all(bind=engine)
+        engine = get_engine()
         hashed = password_hash.hash(ad_password)
 
         with engine.begin() as conn:

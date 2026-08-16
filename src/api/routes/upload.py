@@ -923,10 +923,10 @@ async def get_document_details(
     uploaded_by_name = None
     if uploaded_by:
         try:
-            from src.database.session import _get_engine, _SessionLocal
+            from src.database.session import get_engine, get_session_local
             from src.database.user_models import User as UserModel
-            _get_engine()
-            session = _SessionLocal()
+            get_engine()
+            session = get_session_local()()
             user = session.query(UserModel).filter(UserModel.id == uploaded_by).first()
             if user:
                 uploaded_by_name = user.username
