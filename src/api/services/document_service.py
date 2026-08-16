@@ -209,6 +209,13 @@ class DocumentService:
         Returns:
             DocumentRecord
         """
+        # ========== Этап 0: санитизация имени файла (защита от path traversal) ==========
+        # Берём только basename, отбрасываем любые path-компоненты и null-байты.
+        sanitized = Path(filename).name.replace("\x00", "").strip()
+        if not sanitized or sanitized in (".", ".."):
+            sanitized = f"document_{uuid.uuid4().hex[:8]}{Path(filename).suffix}"
+        filename = sanitized
+
         # ========== Этап 1: вычисляем SHA-256 хеш содержимого ==========
         file_hash = hashlib.sha256(file_content).hexdigest()
         file_size = len(file_content)
@@ -289,13 +296,6 @@ class DocumentService:
 
         # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
         self._save_document_to_db(doc_id)
-
-        # Дублируем в SQL таблицу (DocumentRepository — пагинация, быстрый поиск)
-        try:
-            from src.api.services.document_repository import get_doc_repo
-            get_doc_repo().upsert(doc_id, record.to_dict())
-        except Exception:
-            pass
 
         return record
 

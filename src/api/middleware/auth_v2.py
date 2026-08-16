@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from src.config import get_settings
@@ -56,7 +57,7 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing subject",
             )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
@@ -125,7 +126,7 @@ async def auth_middleware(request: Request, call_next):
                         request.state.current_user = user
                 finally:
                     db.close()
-        except (JWTError, Exception):
+        except (InvalidTokenError, Exception):
             pass
 
     if not hasattr(request.state, "current_user"):

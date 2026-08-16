@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from loguru import logger
 import jwt
+from jwt import InvalidTokenError
 from jwcrypto import jwk
 
 from src.config import get_settings
@@ -175,7 +176,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if payload is None:
             try:
                 payload = _verify_local(token, settings.JWT_SECRET, settings.JWT_ALGORITHM)
-            except JWTError as e:
+            except InvalidTokenError as e:
                 logger.warning(f"[SEC] 401 — невалидный JWT: {e} | {request.method} {path}")
                 return self._auth_required(path, request)
             except Exception as e:

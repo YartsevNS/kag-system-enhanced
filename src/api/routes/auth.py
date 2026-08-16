@@ -19,7 +19,6 @@ password_hash = PasswordHash([Argon2Hasher(), BcryptHasher()])
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 import jwt
