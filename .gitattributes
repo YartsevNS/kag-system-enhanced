@@ -1,0 +1,6 @@
+# Принудительно LF для shell-скриптов (иначе CRLF ломает shebang в Docker)
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
