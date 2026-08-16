@@ -128,10 +128,12 @@ class KnowledgeGraphService:
         "MENTIONS",     # Упоминается в чанке (системная связь)
     ]
 
-    def __init__(self, uri: str = "bolt://neo4j:7687", user: str = "neo4j", password: str = "kagneo4j2026"):
+    def __init__(self, uri: str = "bolt://neo4j:7687", user: str = "neo4j", password: str = None):
+        import os
         self._uri = uri
         self._user = user
-        self._password = password
+        # Пароль из env NEO4J_PASSWORD (генерируется deploy.sh). Fallback — старый дефолт.
+        self._password = password or os.environ.get("NEO4J_PASSWORD", "") or "kagneo4j2026"
         self._driver = None
         self._initialized = False
         self._domain_schema = dict(self.DEFAULT_DOMAIN_SCHEMA)

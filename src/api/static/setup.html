@@ -209,6 +209,9 @@ function renderCreds(c) {
         html += '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-value">' + esc(c.qdrant.url||'http://qdrant:6333') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Коллекция</span><span class="creds-value">' + esc(c.qdrant.collection) + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Размерность</span><span class="creds-value">' + esc(String(c.qdrant.dimensions||'1024')) + '</span></div>';
+        if (c.qdrant.api_key) {
+            html += '<div class="creds-row"><span class="creds-label">API Key</span><span class="creds-value">' + esc(c.qdrant.api_key) + '</span></div>';
+        }
         html += '</div>';
     } else if (c.qdrant && c.qdrant.error) {
         html += '<div class="creds-card"><h4>📊 Qdrant</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.qdrant.error) + '</div></div>';
@@ -272,7 +275,11 @@ function downloadCreds() {
         txt += '-- Qdrant --\n';
         txt += 'URL:          ' + (_creds.qdrant.url||'http://qdrant:6333') + '\n';
         txt += 'Collection:   ' + _creds.qdrant.collection + '\n';
-        txt += 'Dimensions:   ' + (_creds.qdrant.dimensions||'1024') + '\n\n';
+        txt += 'Dimensions:   ' + (_creds.qdrant.dimensions||'1024') + '\n';
+        if (_creds.qdrant.api_key) {
+            txt += 'API Key:      ' + _creds.qdrant.api_key + '\n';
+        }
+        txt += '\n';
     }
 
     if (_creds.neo4j && _creds.neo4j.bolt) {

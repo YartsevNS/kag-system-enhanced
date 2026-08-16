@@ -113,8 +113,10 @@ class EmbeddingsService:
             )
             logger.info(f"Embedding клиент инициализирован: {model}")
 
-        # Создаем Qdrant клиент
-        self._qdrant_client = QdrantClient(url=self.qdrant_url)
+        # Создаем Qdrant клиент (с api-key, если задан)
+        import os
+        api_key = os.environ.get("QDRANT_API_KEY", "")
+        self._qdrant_client = QdrantClient(url=self.qdrant_url, api_key=api_key) if api_key else QdrantClient(url=self.qdrant_url)
 
         # Проверяем подключение
         try:

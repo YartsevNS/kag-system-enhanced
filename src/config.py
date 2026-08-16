@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "kag-qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "kag_documents"
+    QDRANT_API_KEY: str = ""
 
     # Redis
     REDIS_HOST: str = "redis"

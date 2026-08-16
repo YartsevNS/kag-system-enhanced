@@ -33,6 +33,31 @@ def _gen_password(length: int = 12) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _extract_qdrant_dim(info: dict):
+    """Извлечь размерность вектора из ответа Qdrant.
+
+    Коллекция может быть с named vectors (dense + sparse) или с одним вектором.
+    Возвращает int размерности dense-вектора (или числового size).
+    """
+    try:
+        vectors = info.get("result", {}).get("config", {}).get("params", {}).get("vectors", {})
+        # named vectors: {"dense": {"size": N, ...}, "sparse": {...}}
+        if isinstance(vectors, dict):
+            dense = vectors.get("dense") or vectors.get("default") or {}
+            if isinstance(dense, dict) and dense.get("size"):
+                return int(dense["size"])
+            # если вектора заданы без имени — ищем первый dict со size
+            for v in vectors.values():
+                if isinstance(v, dict) and v.get("size"):
+                    return int(v["size"])
+        # одиночный вектор: {"size": N, ...}
+        if isinstance(vectors, dict) and vectors.get("size"):
+            return int(vectors["size"])
+    except Exception:
+        pass
+    return int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
+
+
 # ── POST /init-all ─────────────────────────────────────────────────────────
 
 @router.post("/init-all")
@@ -150,11 +175,14 @@ async def initialize_all():
     try:
         import httpx
 
+        qdrant_api_key = os.environ.get("QDRANT_API_KEY", "")
+        headers = {"api-key": qdrant_api_key} if qdrant_api_key else {}
+
         async with httpx.AsyncClient(timeout=10.0) as cl:
-            r = await cl.get("http://qdrant:6333/collections/kag_documents")
+            r = await cl.get("http://qdrant:6333/collections/kag_documents", headers=headers)
             if r.status_code == 200:
                 info = r.json()
-                real_dims = info.get("result", {}).get("config", {}).get("params", {}).get("vectors", {}).get("size", {})
+                real_dims = _extract_qdrant_dim(info)
                 logger.info(f"SETUP: Qdrant collection exists (dims={real_dims})")
             else:
                 dims = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
@@ -164,6 +192,7 @@ async def initialize_all():
                         "vectors": {"size": dims, "distance": "Cosine"},
                         "optimizers_config": {"default_segment_number": 2},
                     },
+                    headers=headers,
                 )
                 real_dims = dims
                 logger.info(f"SETUP: Qdrant collection created (dims={dims})")
@@ -172,6 +201,7 @@ async def initialize_all():
             "url": "http://qdrant:6333",
             "collection": "kag_documents",
             "dimensions": real_dims,
+            "api_key": qdrant_api_key,
         }
     except Exception as e:
         logger.error(f"SETUP: Qdrant failed: {e}")
@@ -182,39 +212,44 @@ async def initialize_all():
     try:
         from neo4j import GraphDatabase
 
-        # Генерируем новый пароль для Neo4j
-        ne_new_pass = _gen_password(20)
+        # Пароль Neo4j задаётся NEO4J_AUTH=neo4j/<NEO4J_PASSWORD> в docker-compose
+        # при первом старте контейнера. Здесь НЕ генерируем и НЕ меняем —
+        # просто подключаемся с паролем из env и создаём индексы.
+        ne_password = os.environ.get("NEO4J_PASSWORD", "") or "kagneo4j2026"
 
-        # Пароль из env (может быть задан в .env)
-        ne_env_pass = os.environ.get("NEO4J_PASSWORD") or ""
+        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_password))
+        try:
+            drv.verify_connectivity()
+        except Exception as connect_err:
+            # Если пароль не подошёл (перенос volume с другим паролем) —
+            # пробуем сбросить через старый дефолт, чтобы не блокировать установку.
+            drv.close()
+            logger.warning(f"SETUP: Neo4j не подключается с env-паролем: {connect_err}")
+            # Пробуем дефолты (для обратной совместимости со старыми volume)
+            drv = None
+            for fallback in ("kagneo4j2026", "neo4j"):
+                try:
+                    d = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", fallback))
+                    d.verify_connectivity()
+                    drv = d
+                    # Меняем пароль на env-значение (синхронизация)
+                    with d.session() as s:
+                        s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{fallback}' TO '{ne_password}'")
+                    logger.info("SETUP: Neo4j пароль синхронизирован с env")
+                    break
+                except Exception:
+                    try:
+                        d.close()
+                    except Exception:
+                        pass
 
-        # Пробуем: env → дефолтный из docker-compose → neo4j/neo4j
-        ne_found = False
-        for attempt_pass in [ne_env_pass, "kagneo4j2026", "neo4j"]:
-            if not attempt_pass:
-                continue
-            try:
-                drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", attempt_pass))
-                with drv.session() as s:
-                    s.run("RETURN 1")
-                # Меняем пароль на сгенерированный
-                with drv.session() as s:
-                    s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{attempt_pass}' TO '{ne_new_pass}'")
-                drv.close()
-                ne_found = True
-                logger.info(f"SETUP: Neo4j password changed to generated")
-                break
-            except Exception:
-                continue
-
-        if not ne_found:
+        if drv is None:
             raise RuntimeError(
-                "Не удалось подключиться к Neo4j. Укажите NEO4J_PASSWORD в .env "
+                "Не удалось подключиться к Neo4j. Проверьте NEO4J_PASSWORD в .env "
                 "(пароль из docker-compose: NEO4J_AUTH=neo4j/<пароль>)"
             )
 
-        # Создаём индексы (с новым паролем)
-        drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_new_pass))
+        # Создаём индексы
         with drv.session() as s:
             s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)")
             s.run(
@@ -228,7 +263,7 @@ async def initialize_all():
             "http": "http://neo4j:7474",
             "bolt": "bolt://neo4j:7687",
             "user": "neo4j",
-            "password": ne_new_pass,
+            "password": ne_password,
         }
         logger.info("SETUP: Neo4j OK")
     except Exception as e:

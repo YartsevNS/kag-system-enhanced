@@ -65,7 +65,14 @@ class QdrantService:
         )
 
     def _get_api_headers(self) -> dict:
-        """Получить заголовки аутентификации для Qdrant из config_store."""
+        """Получить заголовки аутентификации для Qdrant.
+
+        Приоритет: env QDRANT_API_KEY (генерируется deploy.sh) → config_store.
+        """
+        import os
+        api_key = os.environ.get("QDRANT_API_KEY", "")
+        if api_key:
+            return {"api-key": api_key}
         try:
             from src.api.services.config_store import config_store
             qdrant_cfg = config_store.get("qdrant", "default")

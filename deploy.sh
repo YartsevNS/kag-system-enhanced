@@ -16,6 +16,7 @@ KEYCLOAK_ADMIN_PASSWORD=$(generate_password)
 KC_DB_PASSWORD=$(generate_password)
 KAG_DB_PASSWORD=$(generate_password)
 ADMIN_PASSWORD=$(generate_password)
+QDRANT_API_KEY=$(generate_password)
 
 # ============================================
 # 2. Создание .env
@@ -54,6 +55,9 @@ LLM_OLLAMA_ENABLED=true
 EMBEDDING_BASE_URL=http://192.168.50.41:11434
 EMBEDDING_MODEL=nomic-embed-text:latest
 
+# Qdrant
+QDRANT_API_KEY=${QDRANT_API_KEY}
+
 # Прочее
 QDRANT_PORT=6333
 REDIS_PORT=6379
@@ -80,6 +84,7 @@ CREDS_FILE="kag-credentials.txt"
     echo "Keycloak admin:          admin / ${KEYCLOAK_ADMIN_PASSWORD}"
     echo "Keycloak DB (keycloak):  keycloak / ${KC_DB_PASSWORD}"
     echo "KAG Admin (веб):         admin / ${ADMIN_PASSWORD}"
+    echo "Qdrant API key:          ${QDRANT_API_KEY}"
     echo "=============================="
 } | tee "$CREDS_FILE"
 
