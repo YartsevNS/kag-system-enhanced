@@ -101,13 +101,12 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Порт приложения
 EXPOSE 8000
 
-# Переключение на непривилегированного пользователя
-USER kag
-
 # Health check (Python urllib - не требует curl)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
 
+# entrypoint запускается от root (chmod docker.sock → su kag → uvicorn),
+# поэтому COPY и chmod должны выполняться ДО переключения на kag.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
