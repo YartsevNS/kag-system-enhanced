@@ -96,9 +96,6 @@ services:
       timeout: 30s
       retries: 5
       start_period: 120s
-    profiles:
-      - dev
-      - prod
 
   worker:
     build:
@@ -142,9 +139,6 @@ services:
         reservations:
           cpus: "1.0"
           memory: 2G
-    profiles:
-      - dev
-      - prod
 
   # ===========================================
   # MCP Сервер для тестирования
@@ -178,8 +172,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-    profiles:
-      - dev
 
   # ===========================================
   # Векторная база данных Qdrant
@@ -206,9 +198,6 @@ services:
         reservations:
           cpus: "2.0"
           memory: 4G
-    profiles:
-      - dev
-      - prod
 
   # ===========================================
   # Redis - кэш и брокер сообщений
@@ -240,9 +229,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    profiles:
-      - dev
-      - prod
 
   # ===========================================
   # Keycloak - IdP для аутентификации
@@ -281,9 +267,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    profiles:
-      - dev
-      - prod
 
   kag-db:
     image: postgres:16-alpine
@@ -308,9 +291,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    profiles:
-      - dev
-      - prod
 
   # ===========================================
   # Nginx - обратный прокси
@@ -319,9 +299,6 @@ services:
   nginx:
     image: nginx:1.25-alpine
     container_name: kag-nginx
-    profiles:
-      - dev
-      - prod
     ports:
       - "80:80"
       - "443:443"
@@ -367,8 +344,6 @@ services:
     networks:
       - kag_internal
     restart: unless-stopped
-    profiles:
-      - monitoring
 
   grafana:
     image: grafana/grafana:10.2.0
@@ -387,8 +362,6 @@ services:
     networks:
       - kag_internal
     restart: unless-stopped
-    profiles:
-      - monitoring
 
   loki:
     image: grafana/loki:2.9.0
@@ -402,8 +375,6 @@ services:
     networks:
       - kag_internal
     restart: unless-stopped
-    profiles:
-      - monitoring
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.91.0
@@ -420,8 +391,6 @@ services:
     networks:
       - kag_internal
     restart: unless-stopped
-    profiles:
-      - monitoring
 
   # ===========================================
   # Планировщик задач
@@ -453,9 +422,6 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
-    profiles:
-      - dev
-      - prod
 
   # ===========================================
   # Neo4j — граф знаний для KAG
@@ -489,9 +455,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    profiles:
-      - dev
-      - prod
 
 # ===========================================
 # Сети
