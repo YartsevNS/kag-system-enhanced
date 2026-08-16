@@ -25,10 +25,22 @@ class DocumentAnalyzer:
         self._model = "phi4-mini"  # быстрая модель для классификации
 
     def _get_config(self):
-        """Получить актуальные настройки LLM из админки."""
+        """Получить актуальные настройки LLM: provider_service (function_map/doc_analysis) → ext_llm."""
+        try:
+            from src.api.services.provider_service import provider_service
+            cfg = provider_service.get_function_llm_config("doc_analysis")
+            if cfg and cfg.get("model"):
+                return cfg
+        except Exception:
+            pass
         try:
             from src.api.routes.admin_models import _ext_llm_config
-            return _ext_llm_config
+            return {
+                "provider": _ext_llm_config.provider,
+                "url": _ext_llm_config.url,
+                "model": _ext_llm_config.model,
+                "api_key": _ext_llm_config.api_key,
+            }
         except Exception:
             return None
 
@@ -55,10 +67,10 @@ class DocumentAnalyzer:
 
         prompt = self._build_prompt(first_chunk_text, filename)
         
-        # Используем настройки из админки
+        # Используем настройки из админки (dict: provider, url, model, api_key)
         cfg = self._get_config()
-        llm_url = cfg.url if cfg else self._llm_url
-        model = cfg.model if cfg else self._model
+        llm_url = cfg.get("url") if cfg else self._llm_url
+        model = cfg.get("model") if cfg else self._model
         
         try:
             import aiohttp

@@ -390,6 +390,27 @@ class ProviderService:
 
         return (provider, fm)
 
+    def get_function_llm_config(self, function_name: str) -> Optional[dict]:
+        """
+        Единый источник LLM-конфигурации для любой функции.
+
+        Возвращает dict с ключами {provider, url, api_key, model, system_prompt,
+        parameters} — совместимый с прямыми вызовами LLM (entity_extractor,
+        document_analyzer и т.д.). None, если нет ни провайдера, ни привязки.
+        """
+        result = self.get_function_provider(function_name)
+        if not result:
+            return None
+        provider, fm = result
+        return {
+            "provider": provider.type,
+            "url": (provider.url or "").rstrip("/"),
+            "api_key": provider.api_key or "",
+            "model": fm.model or "",
+            "system_prompt": fm.system_prompt or "",
+            "parameters": fm.parameters or {},
+        }
+
     # ===========================================
     # Вспомогательные методы
     # ===========================================

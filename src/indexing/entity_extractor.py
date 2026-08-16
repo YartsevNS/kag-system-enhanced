@@ -187,7 +187,17 @@ class EntityExtractor:
     # ============================================================
 
     def _get_graph_config(self):
-        """Получить конфигурацию модели графа из админки/config_store."""
+        """Получить конфигурацию модели графа из provider_service (function_map/graph).
+
+        Fallback: config_store graph_model (legacy), затем _graph_model_config.
+        """
+        try:
+            from src.api.services.provider_service import provider_service
+            cfg = provider_service.get_function_llm_config("graph")
+            if cfg and cfg.get("model"):
+                return cfg
+        except Exception:
+            pass
         try:
             from src.api.services.config_store import config_store
             saved = config_store.get("graph_model", "default")

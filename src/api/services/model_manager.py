@@ -123,21 +123,69 @@ class ModelManager:
     async def initialize(self):
         """
         Инициализировать все компоненты из конфигурации.
-        
+
         Приоритет:
-        1. Настройки из Setup Wizard (PostgreSQL)
+        1. provider_service (function_map/chat) — единый источник из админки
         2. Настройки из .env / config.py
         """
         logger.info("Инициализация ModelManager...")
 
-        # Пробуем загрузить настройки из БД (Setup Wizard)
-        db_config = config_store.get("llm", "default")
-        
-        if db_config:
-            logger.info("Загрузка настроек LLM из PostgreSQL (Setup Wizard)")
-            await self._init_from_db_config(db_config)
-        else:
-            logger.info("Загрузка настроек LLM из config.py / .env")
+        # Пробуем получить провайдера чата из Provider Architecture
+        try:
+            from src.api.services.provider_service import provider_service
+            result = provider_service.get_function_provider("chat")
+            if result:
+                provider, fm = result
+                logger.info(f"Загрузка настроек LLM из provider_service: {provider.id}/{fm.model}")
+                await self._init_from_provider(provider, fm)
+                return
+        except Exception as e:
+            logger.warning(f"provider_service недоступен, fallback на .env: {e}")
+
+        logger.info("Загрузка настроек LLM из config.py / .env")
+        await self._init_from_env()
+
+    async def _init_from_provider(self, provider, fm):
+        """Инициализация LLMRouter из ProviderConfig + FunctionMap (единый источник)."""
+        from src.api.services.provider_service import provider_service as ps
+        try:
+            self._llm_router = LLMRouter(
+                health_check_interval=60,
+                auto_recovery=True
+            )
+            backend_type = provider.type
+            if backend_type == "ollama":
+                client = ps.create_ollama_client(provider, fm.model or "phi4-mini:latest")
+                self._llm_router.add_backend(client, priority=0, enabled=True)
+            else:
+                client = ps.create_openai_client(provider, fm.model or "")
+                self._llm_router.add_backend(client, priority=0, enabled=True)
+
+            # Embedding — из function_map/embedding
+            emb_result = ps.get_function_provider("embedding")
+            if emb_result:
+                emb_provider, emb_fm = emb_result
+                self._embedding_client = EmbeddingClient(
+                    base_url=(emb_provider.url or "").rstrip("/"),
+                    model=emb_fm.model or "nomic-embed-text:latest",
+                    timeout=60.0
+                )
+                self._state.active_embedding_model = emb_fm.model
+                logger.info(f"Embedding из provider_service: {emb_fm.model}")
+
+            self._state.active_llm_backend = LLMBackendType.OLLAMA if backend_type == "ollama" else LLMBackendType.OPENAI
+            self._state.active_llm_model = fm.model
+            self._state.backends[self._state.active_llm_backend.value] = BackendConfig(
+                backend_type=self._state.active_llm_backend,
+                base_url=(provider.url or "").rstrip("/"),
+                enabled=True,
+                priority=0
+            )
+
+            await self._llm_router.start_health_monitoring()
+            self._save_state()
+        except Exception as e:
+            logger.error(f"Ошибка инициализации из provider_service: {e}")
             await self._init_from_env()
 
     async def _init_from_db_config(self, db_config):

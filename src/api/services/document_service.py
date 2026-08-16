@@ -977,20 +977,43 @@ class DocumentService:
 # Глобальный экземпляр
 
     async def _summarize_text(self, text: str, filename: str) -> str:
-        """Создать краткую суммаризацию документа через LLM."""
+        """Создать краткую суммаризацию документа через LLM (provider_service → doc_analysis/chat)."""
         try:
-            from src.llm.router import llm_router
+            from src.api.services.provider_service import provider_service
+            cfg = provider_service.get_function_llm_config("doc_analysis") or \
+                  provider_service.get_function_llm_config("chat")
+            if not cfg or not cfg.get("model"):
+                return ""
             prompt = f"""Создай краткую аннотацию документа (3-5 предложений) на русском языке.
 Название: {filename}
 Текст (начало): {text[:3000]}
 
 Аннотация:"""
-            result = await llm_router.generate(
-                prompt=prompt,
-                max_tokens=300,
-                temperature=0.3
-            )
-            return result.strip()
+
+            import httpx
+            url = f"{cfg['url']}/v1/chat/completions" if cfg.get("provider") != "ollama" else f"{cfg['url']}/api/generate"
+            headers = {"Content-Type": "application/json"}
+            if cfg.get("api_key"):
+                headers["Authorization"] = f"Bearer {cfg['api_key']}"
+
+            if cfg.get("provider") == "ollama":
+                payload = {"model": cfg["model"], "prompt": prompt, "stream": False,
+                           "options": {"temperature": 0.3, "max_tokens": 300}}
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code != 200:
+                        return ""
+                    return (resp.json().get("response", "") or "").strip()
+            else:
+                payload = {"model": cfg["model"], "messages": [{"role": "user", "content": prompt}],
+                           "temperature": 0.3, "max_tokens": 300, "stream": False}
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code != 200:
+                        return ""
+                    data = resp.json()
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return (content or "").strip()
         except Exception as e:
             logger.warning(f"LLM summarization failed: {e}")
             return ""
