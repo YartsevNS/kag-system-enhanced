@@ -77,14 +77,31 @@ def get_engine() -> Engine:
         _engine_db_url = db_url
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
         # Идемпотентно: создаёт таблицы и добавляет недостающие колонки.
-        try:
-            from src.database.migrations import ensure_schema
-            ensure_schema(_engine)
-        except Exception as e:
-            # БД может быть недоступна до setup — таблицы создадутся позже.
-            import logging
-            logging.getLogger(__name__).warning(f"ensure_schema не выполнен (БД недоступна?): {e}")
+        ensure_schema_retry(_engine)
     return _engine
+
+
+def ensure_schema_retry(engine: Engine, attempts: int = 5, delay: float = 2.0) -> None:
+    """
+    Применить схему БД с повторными попытками.
+
+    При старте контейнеров БД может ещё не принимать подключения,
+    поэтому ensure_schema повторяется, а не проглатывается раз и навсегда.
+    """
+    import time as _time
+    from src.database.migrations import ensure_schema
+    import logging
+    _log = logging.getLogger(__name__)
+    for attempt in range(1, attempts + 1):
+        try:
+            ensure_schema(engine)
+            return
+        except Exception as e:
+            if attempt == attempts:
+                _log.warning(f"ensure_schema не выполнен после {attempts} попыток: {e}")
+                return
+            _log.warning(f"ensure_schema попытка {attempt}/{attempts} не удалась: {e}; повтор через {delay}с")
+            _time.sleep(delay)
 
 
 def get_session_local() -> sessionmaker:
