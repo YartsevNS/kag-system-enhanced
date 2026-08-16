@@ -56,7 +56,8 @@ async def initialize_all():
         return {"success": True, "message": "Система уже настроена", "already_configured": True}
 
     credentials = {}
-    ad_password = _gen_password(12)
+    # Пароль admin берём из env (сгенерирован deploy.sh). Fallback — генерация.
+    ad_password = os.environ.get("ADMIN_PASSWORD", "") or _gen_password(12)
 
     # ── 1. PostgreSQL ───────────────────────────────────────────────────────
 
@@ -91,6 +92,18 @@ async def initialize_all():
             cur.execute(f"CREATE USER kag WITH PASSWORD '{pg_password}'")
             logger.info("SETUP: PG user kag created")
 
+        # Синхронизируем пароль keycloak (из KC_DB_PASSWORD в .env).
+        # Это гарантирует, что пароль в БД совпадает с .env при любом деплое/переносе.
+        kc_password = os.environ.get("KC_DB_PASSWORD", "")
+        if kc_password:
+            cur.execute("SELECT 1 FROM pg_roles WHERE rolname='keycloak'")
+            if cur.fetchone():
+                cur.execute(f"ALTER USER keycloak WITH PASSWORD '{kc_password}'")
+                logger.info("SETUP: PG user keycloak exists — password synced")
+            else:
+                cur.execute(f"CREATE USER keycloak WITH PASSWORD '{kc_password}' SUPERUSER")
+                logger.info("SETUP: PG user keycloak created")
+
         # БД kag — создать если нет
         cur.execute("SELECT 1 FROM pg_database WHERE datname='kag'")
         if not cur.fetchone():
@@ -118,6 +131,14 @@ async def initialize_all():
             "name": "kag",
             "user": "kag",
             "password": pg_password,
+        }
+        # Отдельно — доступ keycloak к своей БД
+        credentials["keycloak_db"] = {
+            "host": "kag-db",
+            "port": 5432,
+            "name": "keycloak",
+            "user": "keycloak",
+            "password": os.environ.get("KC_DB_PASSWORD", ""),
         }
         logger.info("SETUP: PostgreSQL OK")
     except Exception as e:
@@ -256,11 +277,8 @@ async def initialize_all():
             "password": ad_password,
         }
 
-        config_store.set("admin", "credentials", {
-            "login": "admin",
-            "password": ad_password,
-            "created_at": datetime.utcnow().isoformat(),
-        })
+        # Пароль admin НЕ сохраняем в config_store — он остаётся только в .env
+        # и в хэшированном виде в таблице users. Достать его из БД нельзя.
         logger.info("SETUP: Admin OK")
     except Exception as e:
         logger.error(f"SETUP: Admin failed: {e}")

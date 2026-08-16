@@ -4,7 +4,7 @@ set -e
 echo "=== KAG Deployment ==="
 
 # ============================================
-# 1. Генерация уникальных паролей
+# 1. Генерация уникальных паролей (единая точка)
 # ============================================
 generate_password() {
     openssl rand -base64 24 | tr -d '/+=' | cut -c1-24
@@ -15,6 +15,7 @@ NEO4J_PASSWORD=$(generate_password)
 KEYCLOAK_ADMIN_PASSWORD=$(generate_password)
 KC_DB_PASSWORD=$(generate_password)
 KAG_DB_PASSWORD=$(generate_password)
+ADMIN_PASSWORD=$(generate_password)
 
 # ============================================
 # 2. Создание .env
@@ -28,6 +29,7 @@ JWT_SECRET=${JWT_SECRET}
 
 # Базы данных
 KAG_DB_URL=postgresql://kag:${KAG_DB_PASSWORD}@kag-db:5432/kag
+KAG_DB_PASSWORD=${KAG_DB_PASSWORD}
 NEO4J_PASSWORD=${NEO4J_PASSWORD}
 KC_DB_USERNAME=keycloak
 KC_DB_PASSWORD=${KC_DB_PASSWORD}
@@ -39,6 +41,9 @@ KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
 KEYCLOAK_CLIENT_ID=kag-api
 KEYCLOAK_CLIENT_SECRET=${JWT_SECRET}
 KEYCLOAK_REALM=kag
+
+# Admin (веб-интерфейс KAG)
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
 # Ollama
 OLLAMA_BASE_URL=http://192.168.50.41:11434
@@ -62,16 +67,24 @@ else
 fi
 
 # ============================================
-# 3. Вывод credentials
+# 3. Вывод credentials (скачать в txt)
 # ============================================
+CREDS_FILE="kag-credentials.txt"
+{
+    echo "=== KAG CREDENTIALS ==="
+    echo "Сгенерировано: $(date)"
+    echo ""
+    echo "JWT_SECRET:              ${JWT_SECRET}"
+    echo "KAG DB (kag-db):         kag / ${KAG_DB_PASSWORD}"
+    echo "Neo4j:                   neo4j / ${NEO4J_PASSWORD}"
+    echo "Keycloak admin:          admin / ${KEYCLOAK_ADMIN_PASSWORD}"
+    echo "Keycloak DB (keycloak):  keycloak / ${KC_DB_PASSWORD}"
+    echo "KAG Admin (веб):         admin / ${ADMIN_PASSWORD}"
+    echo "=============================="
+} | tee "$CREDS_FILE"
+
 echo ""
-echo "=== CREDENTIALS (сохрани!) ==="
-echo "JWT_SECRET:              ${JWT_SECRET}"
-echo "KAG DB (kag-db):         kag / ${KAG_DB_PASSWORD}"
-echo "Neo4j:                   neo4j / ${NEO4J_PASSWORD}"
-echo "Keycloak admin:          admin / ${KEYCLOAK_ADMIN_PASSWORD}"
-echo "Keycloak DB (keycloak):  keycloak / ${KC_DB_PASSWORD}"
-echo "=============================="
+echo "Credentials сохранены в $CREDS_FILE (удали после скачивания!)"
 echo ""
 
 # ============================================
@@ -116,4 +129,4 @@ done
 echo ""
 echo "=== Deploy complete ==="
 echo "Open http://localhost:8000/setup -> Initialize ALL"
-echo "Login: admin / ${KEYCLOAK_ADMIN_PASSWORD}"
+echo "Login: admin / ${ADMIN_PASSWORD}"

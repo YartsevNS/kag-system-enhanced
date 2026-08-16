@@ -193,6 +193,16 @@ function renderCreds(c) {
         html += '<div class="creds-card"><h4>🐘 PostgreSQL</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.postgresql.error) + '</div></div>';
     }
 
+    // Keycloak DB
+    if (c.keycloak_db && c.keycloak_db.password) {
+        html += '<div class="creds-card"><h4>🔐 Keycloak DB</h4>';
+        html += '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-value">' + esc(c.keycloak_db.host||'kag-db') + ':' + (c.keycloak_db.port||5432) + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-value">' + esc(c.keycloak_db.name||'keycloak') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">' + esc(c.keycloak_db.user||'keycloak') + '</span></div>';
+        html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value">' + esc(c.keycloak_db.password) + '</span></div>';
+        html += '</div>';
+    }
+
     // Qdrant
     if (c.qdrant && c.qdrant.collection) {
         html += '<div class="creds-card"><h4>📊 Qdrant</h4>';
@@ -248,6 +258,14 @@ function downloadCreds() {
         txt += 'Database: ' + (_creds.postgresql.name||'kag') + '\n';
         txt += 'User:     ' + (_creds.postgresql.user||'kag') + '\n';
         txt += 'Password: ' + _creds.postgresql.password + '\n\n';
+    }
+
+    if (_creds.keycloak_db && _creds.keycloak_db.password) {
+        txt += '-- Keycloak DB (PostgreSQL) --\n';
+        txt += 'Host:     ' + (_creds.keycloak_db.host||'kag-db') + ':' + (_creds.keycloak_db.port||5432) + '\n';
+        txt += 'Database: ' + (_creds.keycloak_db.name||'keycloak') + '\n';
+        txt += 'User:     ' + (_creds.keycloak_db.user||'keycloak') + '\n';
+        txt += 'Password: ' + _creds.keycloak_db.password + '\n\n';
     }
 
     if (_creds.qdrant && _creds.qdrant.collection) {
