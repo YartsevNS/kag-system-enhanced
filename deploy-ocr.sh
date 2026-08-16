@@ -1,4 +1,10 @@
 #!/bin/bash
+# Самоисправление CRLF: убираем Windows-окончания строк, иначе heredoc сломает пароли.
+if grep -q "$(printf '\r')" "$0" 2>/dev/null; then
+    sed -i 's/\r$//' "$0"
+    echo "deploy-ocr.sh: исправлены CRLF-окончания, перезапускаю..."
+    exec bash "$0" "$@"
+fi
 set -e
 echo "=== KAG-OCR Deployment ==="
 

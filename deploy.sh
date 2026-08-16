@@ -1,4 +1,11 @@
 #!/bin/bash
+# Самоисправление CRLF: если скрипт приехал с Windows-окончаниями строк (\r),
+# убираем их и перезапускаемся — иначе heredoc сгенерит .env с \r в паролях.
+if grep -q "$(printf '\r')" "$0" 2>/dev/null; then
+    sed -i 's/\r$//' "$0"
+    echo "deploy.sh: исправлены CRLF-окончания, перезапускаю..."
+    exec bash "$0" "$@"
+fi
 set -e
 
 echo "=== KAG Deployment ==="
