@@ -120,6 +120,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
+      - HF_HOME=/app/data/hf_cache
     volumes:
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./src:/app/src
