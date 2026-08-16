@@ -39,11 +39,10 @@ def process_document(
     try:
         # Принудительно загружаем документ из БД в память worker'а
         from src.api.services.document_service import document_service
-        from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         
-        # Получаем метаданные из config_store
-        all_docs = config_store.get_all("documents") or {}
-        doc_data = all_docs.get(document_id)
+        # Получаем метаданные из SQL (DocumentRepository)
+        doc_data = get_doc_repo().get_dict(document_id)
         
         if isinstance(doc_data, str):
             raise ValueError(f"Документ повреждён в БД (строка вместо dict): {document_id}")
@@ -97,7 +96,8 @@ def process_document(
                 doc_data.setdefault("error", "")
                 doc_data["error"] += f" | {now.isoformat()}: провайдер недоступен"
                 doc_data["delayed_until"] = (now + timedelta(minutes=5)).isoformat()
-                config_store.set("documents", document_id, doc_data)
+                from src.api.services.document_repository import get_doc_repo
+                get_doc_repo().upsert(document_id, doc_data)
             except Exception:
                 pass
             return {"status": "delayed", "document_id": document_id}

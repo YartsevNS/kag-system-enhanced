@@ -66,8 +66,7 @@ class DocumentService:
     4. Векторизация
     5. Сохранение в Qdrant
 
-    Метаданные документов хранятся в PostgreSQL через config_store
-    для сохранения между перезапусками.
+    Метаданные документов хранятся в PostgreSQL через DocumentRepository (SQL).
     """
 
     def __init__(self, upload_dir: Optional[str] = None):
@@ -125,11 +124,11 @@ class DocumentService:
                     if f.is_file():
                         existing.add(f.name[:36])
             
-            from src.api.services.config_store import config_store
+            from src.api.services.document_repository import get_doc_repo
             stale = [did for did in self._documents if did not in existing]
             for did in stale:
                 fname = self._documents[did].filename if did in self._documents else '?'
-                config_store.delete('documents', did)
+                get_doc_repo().delete(did)
                 del self._documents[did]
             
             if stale:
@@ -309,22 +308,7 @@ class DocumentService:
         for record in self._documents.values():
             if record.file_hash == file_hash:
                 return record
-        # Поиск в БД (если документ не в кэше)
-        try:
-            from src.api.services.config_store import config_store
-            all_docs = config_store.get_all("documents") or {}
-            for did, data in all_docs.items():
-                if isinstance(data, dict) and data.get("file_hash") == file_hash:
-                    return DocumentRecord(
-                        document_id=did,
-                        filename=data.get("filename", "unknown"),
-                        file_hash=file_hash,
-                        version=int(data.get("version", 1)),
-                        status=data.get("status", "completed")
-                    )
-        except Exception:
-            pass
-        # Также поиск через SQL DocumentRepository (надёжнее после рестарта)
+        # Поиск через SQL DocumentRepository (надёжнее после рестарта)
         try:
             from src.api.services.document_repository import get_doc_repo
             doc = get_doc_repo().find_by_hash(file_hash)
@@ -724,8 +708,8 @@ class DocumentService:
 
         # Удаляем из БД
         try:
-            from src.api.services.config_store import config_store
-            config_store.delete("documents", document_id)
+            from src.api.services.document_repository import get_doc_repo
+            get_doc_repo().delete(document_id)
         except Exception as e:
             logger.warning(f"Не удалось удалить документ {document_id} из БД: {e}")
         

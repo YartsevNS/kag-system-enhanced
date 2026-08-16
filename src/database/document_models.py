@@ -27,6 +27,15 @@ class Document(Base):
     delayed_until = Column(DateTime(timezone=True), nullable=True)
     group_ids = Column(Text, default="[]")  # JSON list
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=True)
+    # Классификация (заполняется document_analyzer / type_watchdog)
+    document_type = Column(String, default="")
+    recognized_title = Column(String, default="")
+    summary = Column(Text, default="")
+    topics = Column(Text, default="[]")  # JSON list
+    # Версионность и контекст
+    previous_hash = Column(String, default="")
+    original_text = Column(Text, default=None)
+    source_metadata = Column(Text, default=None)  # JSON dict
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

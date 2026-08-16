@@ -54,6 +54,7 @@ class RebuildWatchdog:
     async def _watch_loop(self):
         """Основной цикл наблюдения."""
         from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         from src.indexing.knowledge_graph import kg_service
         
         # Сбрасываем флаги
@@ -110,7 +111,7 @@ class RebuildWatchdog:
                     self._last_entity_count = entities
                     
                     # Если все документы обработаны — завершаем
-                    total_docs = len(config_store.get_all("documents") or {})
+                    total_docs = len(get_doc_repo().get_all() or {})
                     if entities > 0 and stats.get("documents", 0) >= total_docs * 0.9:
                         logger.info(f"Watchdog: перестроение завершено — {entities} сущностей, {relations} связей")
                         config_store.set("kg_config", "rebuild_status", "completed")
@@ -130,6 +131,7 @@ class RebuildWatchdog:
     async def _restart_rebuild(self):
         """Перезапустить перестроение при зависании."""
         from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         from src.indexing.entity_extractor import entity_extractor
         from src.indexing.embeddings_service import embeddings_service
         from src.indexing.knowledge_graph import kg_service
@@ -146,7 +148,7 @@ class RebuildWatchdog:
                 s.run("MATCH (c:Chunk) DETACH DELETE c")
             logger.info("Watchdog: старые сущности и чанки удалены")
             
-            docs = config_store.get_all("documents") or {}
+            docs = get_doc_repo().get_all() or {}
             
             for did, doc in docs.items():
                 # Проверка флага остановки

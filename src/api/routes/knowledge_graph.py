@@ -165,17 +165,18 @@ async def rebuild_graph(
     try:
         from src.indexing.knowledge_graph import kg_service
         from src.indexing.entity_extractor import entity_extractor
-        from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         from src.indexing.embeddings_service import embeddings_service
 
         if document_ids:
             docs = []
             for did in document_ids:
-                doc = config_store.get("documents", did)
+                doc = get_doc_repo().get_dict(did)
                 if doc:
+                    doc["document_id"] = did
                     docs.append(doc)
         else:
-            all_docs = config_store.get_all("documents") or {}
+            all_docs = get_doc_repo().get_all() or {}
             docs = []
             for did, doc in all_docs.items():
                 if isinstance(doc, dict) and doc.get("status") == "completed":
@@ -386,7 +387,8 @@ async def type_watchdog_status():
         status = status_raw.get("state", "idle") if isinstance(status_raw, dict) else "idle"
         progress = config_store.get("kg_config", "type_watch_progress") or {}
         # Count docs without type
-        docs = config_store.get_all("documents") or {}
+        from src.api.services.document_repository import get_doc_repo
+        docs = get_doc_repo().get_all() or {}
         total = sum(1 for d in docs.values() if isinstance(d, dict) and d.get('status') == 'completed')
         with_type = sum(1 for d in docs.values() 
                        if isinstance(d, dict) and d.get('document_type') 

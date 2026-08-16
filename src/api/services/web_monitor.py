@@ -1261,7 +1261,6 @@ class WebMonitorService:
             return {"status": "error", "message": "Нет URL для перезагрузки"}
 
         from src.api.services.document_service import document_service
-        from src.api.services.config_store import config_store as cs
 
         deleted = 0
         failed_delete = 0
@@ -1270,7 +1269,6 @@ class WebMonitorService:
             if doc_id:
                 try:
                     await document_service.delete_document(doc_id)
-                    cs.delete("documents", doc_id)
                     deleted += 1
                 except Exception as e:
                     logger.warning(f"Ошибка удаления {doc_id}: {e}")

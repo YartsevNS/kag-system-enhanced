@@ -56,8 +56,8 @@ async def lifespan(app: FastAPI):
     
     # Запуск сторожа перестроения графа (если есть необработанные документы)
     try:
-        from src.api.services.config_store import config_store
-        docs = config_store.get_all("documents") or {}
+        from src.api.services.document_repository import get_doc_repo
+        docs = get_doc_repo().get_all() or {}
         completed = sum(1 for d in docs.values() if isinstance(d, dict) and d.get("status") == "completed")
         from src.indexing.knowledge_graph import kg_service
         kg_stats = kg_service.get_stats()

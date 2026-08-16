@@ -706,38 +706,35 @@ async def list_documents(
     - **status**: Фильтр по статусу (pending/processing/completed/error)
     """
     from src.api.services.document_repository import get_doc_repo
-    from src.api.services.config_store import config_store
 
     repo = get_doc_repo()
     documents, total = repo.list(limit=min(limit, 200), offset=offset, status=status)
 
     enriched = []
     for d in documents:
-        # Поддержка двух типов: SQL Document (.id) и DocumentRecord (.document_id)
-        did = getattr(d, 'id', None) or getattr(d, 'document_id', None)
+        meta = repo.to_dict(d)
+        did = d.id
         item = {
             "document_id": did,
-            "filename": getattr(d, 'filename', ''),
-            "file_type": getattr(d, 'file_type', '') or '',
-            "file_size": getattr(d, 'file_size', 0) or 0,
-            "status": getattr(d, 'status', 'pending'),
-            "progress": getattr(d, 'progress', 0) or 0,
-            "chunks_count": getattr(d, 'chunks_count', 0) or 0,
-            "created_at": (d.created_at.isoformat() if getattr(d, 'created_at', None) else None),
-            "updated_at": (d.updated_at.isoformat() if getattr(d, 'updated_at', None) else None),
-            "uploaded_by": getattr(d, 'uploaded_by', None),
-            "is_active": getattr(d, 'is_active', True),
+            "filename": meta.get("filename", ""),
+            "file_type": meta.get("file_type", "") or "",
+            "file_size": meta.get("file_size", 0) or 0,
+            "status": meta.get("status", "pending"),
+            "progress": meta.get("progress", 0) or 0,
+            "chunks_count": meta.get("chunks_count", 0) or 0,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+            "uploaded_by": meta.get("uploaded_by"),
+            "is_active": meta.get("is_active", True),
+            "group_ids": meta.get("group_ids", []),
+            "file_hash": meta.get("file_hash", ""),
+            "version": meta.get("version", 1),
+            # Классификация (теперь в SQL)
+            "document_type": meta.get("document_type", ""),
+            "recognized_title": meta.get("recognized_title", ""),
+            "summary": meta.get("summary", ""),
+            "topics": meta.get("topics", []),
         }
-        # Обогащаем метаданными из config_store (document_type, summary, topics)
-        try:
-            meta = config_store.get("documents", did)
-            if isinstance(meta, dict):
-                item["document_type"] = meta.get("document_type", "")
-                item["recognized_title"] = meta.get("recognized_title", "")
-                item["summary"] = meta.get("summary", "")
-                item["topics"] = meta.get("topics", [])
-        except Exception:
-            pass
         enriched.append(item)
 
     # Фильтрация по группам для не-admin
@@ -860,24 +857,23 @@ async def get_document_details(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Получить расширенную информацию о документе с тэгами, типом, пользователем."""
-    from src.api.services.config_store import config_store
+    from src.api.services.document_repository import get_doc_repo
     from src.indexing.auto_tagger import get_auto_tagger
 
     # Первичный источник — document_service (in-memory, всегда актуальный)
     record = document_service.get_document_status(document_id)
     
-    # Получаем запись из config_store через get_all (надёжнее чем get по ID)
+    # Получаем запись из SQL (DocumentRepository)
     record_data = None
     try:
-        all_docs = config_store.get_all("documents")
-        record_data = all_docs.get(document_id)
+        record_data = get_doc_repo().get_dict(document_id)
     except Exception:
-        record_data = config_store.get("documents", document_id)
+        record_data = None
     
     if not record and not record_data:
         raise HTTPException(status_code=404, detail="Документ не найден")
 
-    # Приоритет: in-memory record > config_store
+    # Приоритет: in-memory record > SQL
     filename = record.filename if record else record_data.get("filename", "unknown")
     file_type = record.file_type if record else record_data.get("file_type", "unknown")
     file_size = record.file_size if record else record_data.get("file_size", 0)
@@ -887,7 +883,7 @@ async def get_document_details(
     created_at_raw = record.created_at if record else record_data.get("created_at")
     updated_at_raw = record.updated_at if record else record_data.get("updated_at")
     
-    # chunks_count: приоритет in-memory, затем config_store, затем 0
+    # chunks_count: приоритет in-memory, затем SQL, затем 0
     chunks_count = record.chunks_count if record else record_data.get("chunks_count", 0) if record_data else 0
     
     # Если in-memory показывает 0, но в Qdrant есть чанки — обновим
@@ -917,7 +913,7 @@ async def get_document_details(
     created_at = created_at_raw.isoformat() if hasattr(created_at_raw, 'isoformat') else str(created_at_raw) if created_at_raw else None
     updated_at = updated_at_raw.isoformat() if hasattr(updated_at_raw, 'isoformat') else str(updated_at_raw) if updated_at_raw else None
     
-    # document_type и recognized_title: приоритет in-memory, затем config_store
+    # document_type и recognized_title: приоритет in-memory, затем SQL
     doc_type_inmem = getattr(record, 'document_type', None) if record else None
     doc_title_inmem = getattr(record, 'recognized_title', None) if record else None
     cfg_document_type = doc_type_inmem or (record_data.get('document_type') if record_data else None)
@@ -1077,10 +1073,10 @@ async def reanalyze_all_documents():
     import asyncio
     try:
         from src.api.services.document_analyzer import document_analyzer
-        from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         from src.api.services.document_service import document_service
         
-        all_docs = config_store.get_all("documents") or {}
+        all_docs = get_doc_repo().get_all() or {}
         to_analyze = []
         for did, doc in all_docs.items():
             if not isinstance(doc, dict) or doc.get("status") != "completed":
@@ -1132,12 +1128,12 @@ async def get_document_versions(document_id: str):
     """
     try:
         from src.api.services.document_service import document_service
-        from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
 
         # Получаем из кэша или БД
         record = document_service._documents.get(document_id)
         if not record:
-            meta = config_store.get("documents", document_id)
+            meta = get_doc_repo().get_dict(document_id)
             if not meta:
                 raise HTTPException(status_code=404, detail="Документ не найден")
             return {
@@ -1220,9 +1216,9 @@ async def reprocess_pending_documents():
     Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
     """
     import asyncio
-    from src.api.services.config_store import config_store
+    from src.api.services.document_repository import get_doc_repo
     
-    docs = config_store.get_all("documents") or {}
+    docs = get_doc_repo().get_all() or {}
     pending = [(did, doc) for did, doc in docs.items() 
                if isinstance(doc, dict) and doc.get('status') == 'pending']
     

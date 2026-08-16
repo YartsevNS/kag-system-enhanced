@@ -22,14 +22,14 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
     Returns:
         dict: {recovered: N, skipped: M, errors: [...]}
     """
-    from src.api.services.config_store import config_store
+    from src.api.services.document_repository import get_doc_repo
 
     result = {"recovered": 0, "skipped": 0, "errors": [], "details": []}
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(minutes=STUCK_THRESHOLD_MINUTES)
 
     try:
-        all_docs = config_store.get_all("documents") or {}
+        all_docs = get_doc_repo().get_all() or {}
     except Exception as e:
         logger.error(f"[Recovery] Ошибка чтения документов из БД: {e}")
         result["errors"].append(str(e))
@@ -56,7 +56,7 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
             doc_data["status"] = "pending"
             doc_data["progress"] = 0
             doc_data.pop("delayed_until", None)
-            config_store.set("documents", doc_id, doc_data)
+            get_doc_repo().upsert(doc_id, doc_data)
             result["recovered"] += 1
             if requeue:
                 try:
@@ -72,7 +72,7 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
         # Pending или delayed: просто ставим в очередь
         if status == "pending":
             doc_data["updated_at"] = now.isoformat()
-            config_store.set("documents", doc_id, doc_data)
+            get_doc_repo().upsert(doc_id, doc_data)
             result["recovered"] += 1
             if requeue:
                 try:
@@ -116,7 +116,7 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
                 f"задача потеряна при перезапуске worker'а"
             )
             doc_data["updated_at"] = now.isoformat()
-            config_store.set("documents", doc_id, doc_data)
+            get_doc_repo().upsert(doc_id, doc_data)
             result["recovered"] += 1
             result["details"].append({
                 "document_id": doc_id,

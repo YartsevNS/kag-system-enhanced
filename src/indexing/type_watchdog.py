@@ -29,6 +29,7 @@ class TypeWatchdog:
 
     async def _run(self):
         from src.api.services.config_store import config_store
+        from src.api.services.document_repository import get_doc_repo
         from src.indexing.embeddings_service import embeddings_service
 
         try:
@@ -38,7 +39,7 @@ class TypeWatchdog:
             config_store.set("kg_config", "type_watch_status", {"state": "error", "error": str(e)})
             return
 
-        docs = config_store.get_all("documents") or {}
+        docs = get_doc_repo().get_all() or {}
         candidates = []
         for did, doc in docs.items():
             if not isinstance(doc, dict) or doc.get('status') != 'completed':
@@ -143,10 +144,11 @@ class TypeWatchdog:
                 final_type = new_key
                 logger.info(f"🏷️ Новый тип: {dtype}")
 
-            doc_data = config_store.get("documents", did) or {}
+            from src.api.services.document_repository import get_doc_repo
+            doc_data = get_doc_repo().get_dict(did) or {}
             if isinstance(doc_data, dict):
                 doc_data["document_type"] = final_type
-                config_store.set("documents", did, doc_data)
+                get_doc_repo().upsert(did, doc_data)
 
             # Qdrant
             try:

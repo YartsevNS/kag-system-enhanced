@@ -154,15 +154,16 @@ class DocumentAnalyzer:
         return result
 
     async def analyze_and_save(self, document_id: str, first_chunk_text: str, filename: str):
-        """Анализирует и сохраняет результат в config_store."""
+        """Анализирует и сохраняет результат в SQL (DocumentRepository)."""
         try:
             result = await self.analyze_document(document_id, first_chunk_text, filename)
             
             if not result:
                 return
             
-            # Обновляем запись в config_store
-            doc_data = config_store.get("documents", document_id)
+            # Обновляем запись в SQL
+            from src.api.services.document_repository import get_doc_repo
+            doc_data = get_doc_repo().get_dict(document_id)
             if doc_data:
                 if "recognized_title" in result:
                     doc_data["recognized_title"] = result["recognized_title"]
@@ -173,7 +174,7 @@ class DocumentAnalyzer:
                 if "topics" in result:
                     doc_data["topics"] = result["topics"]
                 
-                config_store.set("documents", document_id, doc_data)
+                get_doc_repo().upsert(document_id, doc_data)
                 logger.info(f"Метаданные обновлены для {document_id}: {result.get('document_type', '?')} — {result.get('recognized_title', '?')}")
             
             # Также обновляем payload в Qdrant (для поиска)
