@@ -1112,6 +1112,34 @@ async def reanalyze_all_documents():
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/reindex-all", summary="Переиндексировать все документы (пересоздать embeddings)")
+async def reindex_all_documents():
+    """
+    Переиндексировать ВСЕ completed-документы — заново прогнать парсинг → чанкинг
+    → векторизацию. Нужно после смены embedding-модели или исправления схемы Qdrant.
+    Работает асинхронно через Celery (не блокирует API).
+    """
+    try:
+        from src.api.services.document_repository import get_doc_repo
+        from src.indexing.tasks import process_document
+
+        all_docs = get_doc_repo().get_all() or {}
+        ids = [
+            did for did, doc in all_docs.items()
+            if isinstance(doc, dict) and doc.get("status") == "completed"
+        ]
+        for did in ids:
+            process_document.delay(did)
+
+        return {
+            "status": "ok",
+            "message": f"Поставлено в очередь на переиндексацию: {len(ids)} документов",
+            "total": len(ids),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 # ============================================================
 # Версионность и контроль дубликатов
 # ============================================================

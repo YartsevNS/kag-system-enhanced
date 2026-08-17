@@ -369,6 +369,13 @@
                 <button class="btn btn-secondary" onclick="loadFunctionMaps()">🔄 Обновить</button>
                 <span id="functions-status" style="font-size:13px;margin-left:12px"></span>
             </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
+                <button class="btn btn-primary" onclick="reindexAll()">♻️ Переиндексировать все документы</button>
+                <span id="reindex-status" style="font-size:13px;margin-left:12px;color:var(--text3)"></span>
+                <div style="font-size:12px;color:var(--text4);margin-top:6px">
+                    Пересоздаёт embeddings всех документов. Нужно после смены embedding-модели.
+                </div>
+            </div>
         </div>
 
         <!-- Настройки SSH подключения -->
@@ -627,6 +634,26 @@
             if (t) h.set('Authorization', 'Bearer ' + t);
             opts.headers = h;
             return fetch(url, opts);
+        }
+
+        async function reindexAll() {
+            const status = document.getElementById('reindex-status');
+            if (!confirm('Переиндексировать ВСЕ документы? Это пересоздаст embeddings (нужно после смены embedding-модели).')) return;
+            status.textContent = 'Постановка в очередь...';
+            try {
+                const r = await apiFetch('/api/v1/upload/reindex-all', { method: 'POST' });
+                const d = await r.json();
+                if (d.status === 'ok') {
+                    status.textContent = d.message || `В очереди: ${d.total}`;
+                    showNotification(d.message || `✅ Переиндексация запущена: ${d.total} документов`);
+                } else {
+                    status.textContent = d.message || 'Ошибка';
+                    showNotification('❌ ' + (d.message || 'Ошибка'), true);
+                }
+            } catch (e) {
+                status.textContent = 'Ошибка запроса';
+                showNotification('❌ Не удалось запустить переиндексацию: ' + e.message, true);
+            }
         }
 
         async function loadStatus() {
