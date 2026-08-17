@@ -210,7 +210,7 @@ class TypeWatchdog:
             prompt, model, llm_url,
             chunk_id="type_batch", pass_name="type",
             api_key=api_key, provider=provider,
-            system_prompt=cfg.get("system_prompt", "")
+            system_prompt=cfg.get("system_prompt", "").replace("{type_labels}", type_labels)
         )
 
         entities = result.get("entities", [])
