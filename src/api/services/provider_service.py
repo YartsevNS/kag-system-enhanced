@@ -402,14 +402,36 @@ class ProviderService:
         if not result:
             return None
         provider, fm = result
+        system_prompt = fm.system_prompt or ""
+        # Если системный промпт не задан в настройках — берём дефолт из репо
+        # prompts/{function}.txt. Так промпты версионируются в git и не теряются
+        # при backup/переустановке, но переопределяются через админку.
+        if not system_prompt:
+            system_prompt = self._load_default_prompt(function_name)
         return {
             "provider": provider.type,
             "url": (provider.url or "").rstrip("/"),
             "api_key": provider.api_key or "",
             "model": fm.model or "",
-            "system_prompt": fm.system_prompt or "",
+            "system_prompt": system_prompt,
             "parameters": fm.parameters or {},
         }
+
+    @staticmethod
+    def _load_default_prompt(function_name: str) -> str:
+        """Загрузить дефолтный системный промпт из prompts/{function}.txt."""
+        for path in (
+            f"/app/prompts/{function_name}.txt",
+            f"prompts/{function_name}.txt",
+        ):
+            try:
+                from pathlib import Path
+                p = Path(path)
+                if p.exists():
+                    return p.read_text(encoding="utf-8")
+            except Exception:
+                pass
+        return ""
 
     # ===========================================
     # Вспомогательные методы

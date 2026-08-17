@@ -125,6 +125,7 @@ services:
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./src:/app/src
       - ./data:/app/data
+      - ./prompts:/app/prompts
     depends_on:
       redis:
         condition: service_started

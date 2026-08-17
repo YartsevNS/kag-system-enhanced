@@ -50,3 +50,4 @@ models/
 # SBOM
 sbom.json
 docker/nginx/ssl/
+bash.exe.stackdump
