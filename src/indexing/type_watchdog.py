@@ -85,7 +85,7 @@ class TypeWatchdog:
             ]
             config_store.set("kg_config", "doc_types", {"types": known_types})
 
-        BATCH_SIZE = 5
+        BATCH_SIZE = 3
 
         # Последовательная обработка батчей — без пауз, один за другим
         for i in range(0, len(candidates), BATCH_SIZE):
@@ -109,7 +109,7 @@ class TypeWatchdog:
                 for ch in (chunks or [])[:2]:
                     ct = ch.get('content', '')
                     if ct:
-                        texts.append(ct[:1000])
+                        texts.append(ct[:600])
                 if texts:
                     items.append({"id": did, "filename": doc.get('filename', '?')[:60], "texts": texts})
             except Exception:
