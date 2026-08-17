@@ -75,6 +75,9 @@ pymupdf>=1.23.0
 # Trafilatura — извлечение контента с веб-страниц
 trafilatura>=2.0.0
 
+# Playwright — рендеринг SPA/JS-сайтов для веб-мониторинга (тип источника browser)
+playwright>=1.49.0
+
 # FastEmbed — sparse векторы BM25 для гибридного поиска
 fastembed>=0.3.0
 

@@ -123,6 +123,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="form-group"><label>Тип</label><select id="add-type">
         <option value="rss">RSS/Atom — лента новостей</option>
         <option value="scrape">Scrape — парсинг ссылок со страницы</option>
+        <option value="browser">Browser — JS/SPA-сайт (Playwright)</option>
         <option value="change">Change — отслеживание изменений страницы</option>
       </select></div>
       <div class="form-group"><label>Интервал (мин)</label><input type="number" id="add-interval" value="360" min="60" max="10080" style="width:100px"></div>
@@ -197,7 +198,7 @@ async function loadSources() {
       html += '<tr><td colspan="9" style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</td></tr>';
     } else {
       sources.forEach(function(s) {
-        var typeLabel = s.type === 'rss' ? '📡 RSS' : s.type === 'scrape' ? '🔍 Scrape' : '🔄 Change';
+        var typeLabel = s.type === 'rss' ? '📡 RSS' : s.type === 'scrape' ? '🔍 Scrape' : s.type === 'browser' ? '🌐 Browser' : '🔄 Change';
         var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
         html += '<tr>' +
           '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') + '</td>' +

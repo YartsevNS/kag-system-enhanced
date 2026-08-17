@@ -167,7 +167,7 @@ class WebMonitorService:
         {
             "name": "ГОСТ Р — Информационная безопасность",
             "url": "https://www.gost.ru/portal/gost/home/standarts/InformationSecurity",
-            "type": "scrape",
+            "type": "browser",
             "css_selector": "a[href*='file/load']",
             "keywords": [],
             "description": "Действующие стандарты ГОСТ Р по информационной безопасности: криптография, защита информации, ЭЦП"
@@ -442,6 +442,8 @@ class WebMonitorService:
                     result = await self._check_rss(source)
                 elif source.type == "scrape":
                     result = await self._check_scrape(source)
+                elif source.type == "browser":
+                    result = await self._check_browser(source)
                 elif source.type == "change":
                     result = await self._check_change(source)
                 else:
@@ -754,6 +756,84 @@ class WebMonitorService:
         except Exception as e:
             result.status = "error"
             result.error = str(e)
+
+        return result
+
+    # ============================================================
+    # Browser (SPA/JS) — Playwright
+    # ============================================================
+
+    async def _check_browser(self, source: MonitorSource) -> MonitorResult:
+        """Проверить SPA/JS-сайт через headless Chromium (Playwright).
+
+        Для сайтов, где контент и ссылки на документы генерируются JavaScript
+        (pravo.gov.ru, gost.ru file/load, ЦБ РФ и т.д.) — обычный httpx возвращает
+        пустую HTML-обёртку. Playwright рендерит JS и отдаёт финальный DOM.
+        """
+        import aiohttp
+        from bs4 import BeautifulSoup
+
+        result = MonitorResult(source_id=source.id)
+        new_urls = []
+
+        try:
+            from playwright.async_api import async_playwright
+
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(
+                        user_agent=(
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0 Safari/537.36"
+                        )
+                    )
+                    # networkidle — ждём, пока JS-фреймворк дорисует контент
+                    await page.goto(source.url, wait_until="networkidle", timeout=60000)
+                    # Прокрутка вниз — активирует lazy-load контента
+                    for _ in range(3):
+                        await page.mouse.wheel(0, 3000)
+                        await page.wait_for_timeout(500)
+                    html = await page.content()
+                finally:
+                    await browser.close()
+
+            soup = BeautifulSoup(html, "html.parser")
+            links = soup.select(source.css_selector)
+            for link in links:
+                href = link.get("href", "")
+                if not href:
+                    continue
+                abs_url = urljoin(source.url, href)
+                if not self._is_document_url(abs_url, source.file_types):
+                    continue
+                text = link.get_text(strip=True)
+                meta = self._extract_link_metadata(link, soup, source)
+                new_urls.append({
+                    "url": abs_url,
+                    "title": text or meta.get("title") or Path(href).name,
+                    "source": source.name,
+                    "metadata": meta,
+                })
+
+            result.items = new_urls
+
+            if new_urls:
+                async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+                    result.new_items, result.skipped_items = await self._download_and_upload(
+                        session, new_urls, source,
+                        batch_size=source.batch_size,
+                        batch_delay=source.batch_delay,
+                        item_delay=source.item_delay,
+                        batch_jitter=source.batch_jitter
+                    )
+
+            result.status = "ok"
+
+        except Exception as e:
+            result.status = "error"
+            result.error = f"Browser: {e}"
 
         return result
 

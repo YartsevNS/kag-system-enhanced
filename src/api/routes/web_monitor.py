@@ -97,7 +97,7 @@ async def add_source(data: dict = Body(...)):
 
         if not source.url:
             raise HTTPException(status_code=400, detail="URL обязателен")
-        if source.type not in ("rss", "scrape", "change"):
+        if source.type not in ("rss", "scrape", "browser", "change"):
             raise HTTPException(status_code=400, detail=f"Неизвестный тип: {source.type}")
 
         web_monitor.save_source(source)
