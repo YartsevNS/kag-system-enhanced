@@ -463,6 +463,15 @@ class EntityExtractor:
         передан, используется дефолтный для извлечения сущностей.
         """
         if not system_prompt:
+            # Брать system_prompt из настроек функции graph (извлечение сущностей),
+            # если он задан. Восстановлен из backup — подробные правила типов/связей.
+            try:
+                _cfg = self._get_graph_config()
+                if _cfg and _cfg.get("system_prompt"):
+                    system_prompt = _cfg["system_prompt"]
+            except Exception:
+                pass
+        if not system_prompt:
             system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
         try:
             import aiohttp
