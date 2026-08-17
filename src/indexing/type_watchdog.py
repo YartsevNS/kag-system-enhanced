@@ -221,7 +221,8 @@ class TypeWatchdog:
         result = await entity_extractor._call_llm(
             prompt, model, llm_url,
             chunk_id="type_batch", pass_name="type",
-            api_key=api_key, provider=provider
+            api_key=api_key, provider=provider,
+            system_prompt=cfg.get("system_prompt", "")
         )
 
         entities = result.get("entities", [])
@@ -261,6 +262,13 @@ class TypeWatchdog:
         return ""
 
     def _get_config(self):
+        from src.api.services.provider_service import provider_service
+        # Типизация — это «Анализ документов» (function_map:doc_analysis),
+        # а не graph (тот — для извлечения сущностей). system_prompt берётся
+        # из поля «промпт» в настройках админки.
+        cfg = provider_service.get_function_llm_config("doc_analysis")
+        if cfg and cfg.get("model"):
+            return cfg
         from src.indexing.entity_extractor import entity_extractor
         return entity_extractor._get_graph_config()
 

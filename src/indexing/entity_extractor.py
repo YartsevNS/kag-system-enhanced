@@ -450,14 +450,20 @@ class EntityExtractor:
     async def _call_llm(
         self, prompt: str, model: str, llm_url: str,
         chunk_id: str = "", pass_name: str = "",
-        api_key: str = "", provider: str = "ollama"
+        api_key: str = "", provider: str = "ollama",
+        system_prompt: str = ""
     ) -> Dict[str, Any]:
         """Вызвать LLM и распарсить JSON-ответ.
         
         Поддерживает провайдеров:
         - ollama (по умолчанию): POST /api/generate
         - openai / deepseek / openrouter: POST /v1/chat/completions
+        
+        system_prompt берётся из настроек функции (function_map) — если не
+        передан, используется дефолтный для извлечения сущностей.
         """
+        if not system_prompt:
+            system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
         try:
             import aiohttp
             
@@ -469,7 +475,7 @@ class EntityExtractor:
                 payload = {
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.05,
