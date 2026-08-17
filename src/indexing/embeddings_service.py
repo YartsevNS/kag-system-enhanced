@@ -116,6 +116,7 @@ class EmbeddingsService:
         # Создаем Qdrant клиент (с api-key, если задан)
         import os
         api_key = os.environ.get("QDRANT_API_KEY", "")
+        self._api_key = api_key
         self._qdrant_client = QdrantClient(url=self.qdrant_url, api_key=api_key) if api_key else QdrantClient(url=self.qdrant_url)
 
         # Проверяем подключение
@@ -414,68 +415,50 @@ class EmbeddingsService:
                 )
             )
 
-        # Ищем через REST API (гибридный поиск: dense + sparse + RRF fusion)
+        # Поиск через qdrant_client (прямой, надёжный). REST-запрос с
+        # prefetch+rrf-fusion падал на этой версии Qdrant — заменён на клиентский.
         formatted_results = []
         try:
-            import requests as _requests
+            from qdrant_client.models import Filter as QFilter
 
-            # Генерируем sparse вектор запроса для BM25
-            sparse_query = None
-            try:
-                from fastembed import SparseTextEmbed
-                if not hasattr(self, '_sparse_model') or self._sparse_model is None:
-                    self._sparse_model = SparseTextEmbed(model_name="Qdrant/bm25")
-                sq = list(self._sparse_model.query_embed(query))
-                if sq:
-                    sq = sq[0]
-                    sparse_query = {"indices": sq.indices.tolist(), "values": sq.values.tolist()}
-            except Exception:
-                pass
-
-            # Гибридный запрос: Prefetch (dense + sparse) → RRF fusion
-            prefetch = [{"query": query_embedding, "using": "dense", "limit": limit * 2}]
-            if sparse_query:
-                prefetch.append({
-                    "query": sparse_query,
-                    "using": "sparse",
-                    "limit": limit * 2
-                })
-
-            search_payload = {
-                "prefetch": prefetch,
-                "query": {"fusion": "rrf"},
-                "limit": limit,
-                "with_payload": True,
-            }
+            query_filter = None
             if conditions:
-                search_payload["filter"] = {
-                    "must": [
-                        _build_qdrant_filter_condition(c) for c in conditions
-                    ]
-                }
+                from qdrant_client.models import FieldCondition as _FC
+                must = []
+                for c in conditions:
+                    # c — это наш FieldCondition (key, match). Пересобираем в qdrant-модель.
+                    if hasattr(c, "key") and hasattr(c, "match"):
+                        m = c.match
+                        from qdrant_client.models import MatchValue, MatchAny
+                        if hasattr(m, "value"):
+                            must.append(_FC(key=c.key, match=MatchValue(value=m.value)))
+                        elif hasattr(m, "any"):
+                            must.append(_FC(key=c.key, match=MatchAny(any=m.any)))
+                if must:
+                    query_filter = QFilter(must=must)
 
-            resp = _requests.post(
-                f"{self.qdrant_url}/collections/{self.collection_name}/points/search",
-                json=search_payload,
-                timeout=30
+            hits = self._qdrant_client.search(
+                collection_name=self.collection_name,
+                query_vector=("dense", query_embedding),
+                limit=limit,
+                query_filter=query_filter,
+                with_payload=True,
             )
-            resp.raise_for_status()
-            hits = resp.json().get("result", [])
 
             for hit in hits:
-                payload = hit.get("payload", {})
+                payload = hit.payload or {}
                 formatted_results.append({
-                    "id": hit["id"],
-                    "score": hit["score"],
+                    "id": hit.id,
+                    "score": hit.score,
                     "content": payload.get("content", ""),
                     "document_id": payload.get("document_id"),
                     "chunk_id": payload.get("chunk_id"),
                     "file_type": payload.get("file_type"),
-                    "filename": payload.get("filename", ""),  # Возвращаем filename напрямую
+                    "filename": payload.get("filename", ""),
                     "metadata": payload.get("metadata", {})
                 })
         except Exception as e:
-            logger.warning(f"REST search failed: {e}")
+            logger.warning(f"Поиск не выполнен: {e}")
 
         # Reranking: если результатов много и запрос осмысленный (>3 слов)
         if len(formatted_results) > 3 and len(query.split()) >= 3:
