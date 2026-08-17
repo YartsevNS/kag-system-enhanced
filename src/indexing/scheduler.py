@@ -74,6 +74,17 @@ class Scheduler:
             replace_existing=True,
             max_instances=1
         )
+
+        # Мониторинг внешних источников каждые 6 часов (серверное расписание,
+        # работает без открытой вкладки браузера — в отличие от UI-расписания)
+        self.scheduler.add_job(
+            self._run_monitor_check,
+            trigger=IntervalTrigger(hours=6),
+            id="monitor_check",
+            name="Мониторинг внешних источников документов",
+            replace_existing=True,
+            max_instances=1
+        )
         
         self.scheduler.start()
         self._initialized = True
@@ -119,12 +130,15 @@ class Scheduler:
     async def _backup_metadata(self):
         """Резервное копирование метаданных"""
         logger.info("Резервное копирование метаданных")
-        
+
+    async def _run_monitor_check(self):
+        """Запустить проверку источников мониторинга через Celery."""
+        logger.info("🕐 Плановая проверка источников мониторинга")
         try:
-            # TODO: Реализовать резервное копирование
-            pass
+            from src.indexing.tasks import run_monitor_check
+            run_monitor_check.delay()
         except Exception as e:
-            logger.error(f"Ошибка резервного копирования: {e}")
+            logger.error(f"Не удалось поставить мониторинг в очередь: {e}")
 
 
 # Глобальный экземпляр
