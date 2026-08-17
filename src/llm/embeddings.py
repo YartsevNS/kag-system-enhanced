@@ -70,8 +70,24 @@ class EmbeddingClient:
         )
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Получить HTTP клиент"""
-        if self._client is None or self._client.is_closed:
+        """Получить HTTP клиент (пересоздаём при смене event loop).
+
+        Celery обрабатывает каждый документ в отдельном asyncio.run() — новый
+        event loop. httpx.AsyncClient привязывается к loop при первом запросе,
+        поэтому кэшированный клиент после закрытия loop даёт "Event loop is closed".
+        """
+        import asyncio
+        current_loop = asyncio.get_running_loop()
+        if (
+            self._client is None
+            or self._client.is_closed
+            or getattr(self, "_client_loop", None) is not current_loop
+        ):
+            if self._client is not None and not self._client.is_closed:
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=httpx.Timeout(
@@ -85,6 +101,7 @@ class EmbeddingClient:
                     max_keepalive_connections=10
                 )
             )
+            self._client_loop = current_loop
 
         return self._client
 
