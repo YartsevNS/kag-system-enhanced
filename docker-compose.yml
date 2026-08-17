@@ -121,6 +121,7 @@ services:
       - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
       - HF_HOME=/app/data/hf_cache
+      - PLAYWRIGHT_BROWSERS_PATH=/app/data/ms-playwright
     volumes:
       - ./docker-compose.yml:/app/docker-compose.yml:ro
       - ./src:/app/src

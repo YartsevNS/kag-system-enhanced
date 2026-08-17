@@ -707,7 +707,10 @@ class WebMonitorService:
 
                     # Парсим HTML
                     soup = BeautifulSoup(html, 'html.parser')
-                    links = soup.select(source.css_selector)
+                    try:
+                        links = soup.select(source.css_selector)
+                    except Exception:
+                        links = soup.select("a[href]")
 
                     # Извлекаем метаданные страницы через Trafilatura
                     page_meta = {}
@@ -777,10 +780,13 @@ class WebMonitorService:
         new_urls = []
 
         try:
+            import os
+            # Браузер лежит в persist-volume (доступен пользователю kag)
+            os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/app/data/ms-playwright")
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
                 try:
                     page = await browser.new_page(
                         user_agent=(
@@ -789,8 +795,10 @@ class WebMonitorService:
                             "Chrome/120.0 Safari/537.36"
                         )
                     )
-                    # networkidle — ждём, пока JS-фреймворк дорисует контент
-                    await page.goto(source.url, wait_until="networkidle", timeout=60000)
+                    # domcontentloaded + ручное ожидание (networkidle виснет на SPA
+                    # с фоновыми запросами/вебсокетами)
+                    await page.goto(source.url, wait_until="domcontentloaded", timeout=30000)
+                    await page.wait_for_timeout(3000)
                     # Прокрутка вниз — активирует lazy-load контента
                     for _ in range(3):
                         await page.mouse.wheel(0, 3000)
@@ -800,7 +808,12 @@ class WebMonitorService:
                     await browser.close()
 
             soup = BeautifulSoup(html, "html.parser")
-            links = soup.select(source.css_selector)
+            try:
+                links = soup.select(source.css_selector)
+            except Exception:
+                # Malformed selector (напр. a[href*=file/load] без кавычек) —
+                # fallback на все ссылки, фильтруем программно ниже
+                links = soup.select("a[href]")
             for link in links:
                 href = link.get("href", "")
                 if not href:
