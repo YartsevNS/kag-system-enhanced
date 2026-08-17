@@ -599,16 +599,18 @@ class DocumentService:
                 f"чанков: {len(chunks)}, векторов: {vectors_count}"
             )
             
-            # Шаг 4: Фоновый анализ первого чанка (не блокирует)
+            # Шаг 4: Анализ первого чанка (типизация, title, summary).
+            # ВАЖНО: await, а не create_task — в Celery process_document выполняется
+            # внутри asyncio.run(), и create_task-задачи отменяются при его завершении,
+            # поэтому типизация молча не выполнялась.
             if chunks and len(chunks) > 0:
                 try:
-                    import asyncio
                     first_text = chunks[0].get("content", "")
-                    asyncio.create_task(self._analyze_document_async(
+                    await self._analyze_document_async(
                         document_id, first_text, record.filename
-                    ))
+                    )
                 except Exception as e:
-                    logger.debug(f"Не удалось запустить анализ: {e}")
+                    logger.debug(f"Не удалось выполнить анализ: {e}")
             
             # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей (фон)
             try:

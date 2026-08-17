@@ -130,7 +130,15 @@ class TypeWatchdog:
         # Сохраняем результаты
         for item in items:
             did = item["id"]
-            dtype = detected.get(did, "unknown")
+            # В prompt id обрезается до 8 символов (item['id'][:8]), поэтому
+            # LLM возвращает короткий id — матчим по префиксу, а не точному ключу.
+            dtype = "unknown"
+            for k, v in detected.items():
+                if k and did.startswith(k):
+                    dtype = v
+                    break
+            if dtype == "unknown":
+                dtype = detected.get(did, "unknown")
             final_type = "other"
             for t in known_types:
                 if dtype.lower() in (t["label"].lower(), t["key"].lower()):

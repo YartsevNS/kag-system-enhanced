@@ -512,6 +512,9 @@ class EntityExtractor:
             result = self._parse_response(response)
             if not result.get("entities") and not result.get("relations") and not result.get("facts"):
                 logger.debug(f"Пустой ответ LLM для {chunk_id} (pass={pass_name}): {response[:120]}")
+            # Сохраняем сырой ответ — нужен type_watchdog (типизация),
+            # который парсит JSON-список [{id,type}] напрямую из raw.
+            result["raw"] = response
             return result
 
         except Exception as e:
