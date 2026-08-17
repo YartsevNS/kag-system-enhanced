@@ -109,7 +109,7 @@ class TypeWatchdog:
                 for ch in (chunks or [])[:2]:
                     ct = ch.get('content', '')
                     if ct:
-                        texts.append(ct[:500])
+                        texts.append(ct[:1000])
                 if texts:
                     items.append({"id": did, "filename": doc.get('filename', '?')[:60], "texts": texts})
             except Exception:
@@ -182,8 +182,29 @@ class TypeWatchdog:
         """Определить типы для пачки документов одним LLM-вызовом (батч: до 5)."""
         type_labels = ", ".join(t["label"] for t in known_types)
 
-        prompt_lines = [f"Определи типы {len(items)} документов из списка: {type_labels}"]
-        prompt_lines.append("Верни JSON список: [{\"id\":\"doc_id\",\"type\":\"тип\"}]")
+        # Подробные правила определения типа (маркеры + примеры) из prompts/type.txt.
+        # Этот промпт был утерян при переходе на батч-детекцию (коммит 03e0061),
+        # из-за чего flash-модель не понимала задачу и отвечала «unknown».
+        rules = self._load_type_rules()
+        if rules:
+            rules = (
+                rules
+                .replace("{type_labels}", type_labels)
+                .replace("{filename}", "(имя файла указано в каждом блоке ниже)")
+                .replace("{sample_texts}", "(текст указан в каждом блоке ниже)")
+                # type.txt использует {{ }} как экранирование для .format() —
+                # приводим к обычным одинарным скобкам JSON-примеров
+                .replace("{{", "{").replace("}}", "}")
+            )
+            prompt_lines = [rules]
+        else:
+            prompt_lines = [f"Ты — классификатор документов. Определи тип из списка: {type_labels}"]
+
+        prompt_lines.append(f"\nСейчас батч из {len(items)} документов.")
+        prompt_lines.append('ВАЖНО: верни СТРОГО JSON список (без markdown, без обёртки entities):')
+        prompt_lines.append('[{"id":"<короткий id>","type":"<ключ типа латиницей>"}, ...]')
+        prompt_lines.append('Ключ типа пиши ЛАТИНИЦЕЙ (invoice, contract, report, letter, form, identity, medical, legal, financial, technical, standard, policy, order, news).')
+        prompt_lines.append('Если тип не ясен — "other".')
         for item in items:
             prompt_lines.append(f"\n---{item['id'][:8]} ({item['filename']})---")
             for i, t in enumerate(item["texts"]):
@@ -211,7 +232,7 @@ class TypeWatchdog:
             if eid and et:
                 detected[eid] = et
 
-        # Fallback: парсим JSON из ответа
+        # Fallback: парсим JSON-список из сырого ответа
         if not detected:
             raw = result.get("raw", "")
             import json, re
@@ -226,6 +247,18 @@ class TypeWatchdog:
                     pass
 
         return detected
+
+    def _load_type_rules(self) -> str:
+        """Загрузить подробный промпт типизации из prompts/type.txt."""
+        for path in ("/app/prompts/type.txt", "prompts/type.txt"):
+            try:
+                from pathlib import Path
+                p = Path(path)
+                if p.exists():
+                    return p.read_text(encoding="utf-8")
+            except Exception as e:
+                logger.debug(f"Не удалось загрузить {path}: {e}")
+        return ""
 
     def _get_config(self):
         from src.indexing.entity_extractor import entity_extractor
