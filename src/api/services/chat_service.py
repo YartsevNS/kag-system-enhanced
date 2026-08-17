@@ -276,21 +276,33 @@ class ChatService:
         # Шаг 3: Формируем сообщения для LLM
         api_messages = []
 
+        # Статистика базы (для системных вопросов «сколько документов» и т.п.)
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            _docs = get_doc_repo().get_all() or {}
+            total_docs = len(_docs)
+            stats_line = f"В базе знаний загружено документов: {total_docs}."
+        except Exception:
+            total_docs = None
+            stats_line = ""
+
         # Системный промпт (из function_map, с контекстом RAG)
         if context:
             api_messages.append({
                 "role": "system",
                 "content": f"""{system_prompt}
 
+{stats_line}
+
 КОНТЕКСТ ИЗ ДОКУМЕНТОВ:
 {context}
 
-Используй вышеуказанный контекст для ответа на вопрос пользователя. Если контекст не содержит нужной информации, ответь на основе своих знаний, но укажи это."""
+Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа на вопрос — скажи честно «в загруженных документах эта информация не найдена». НЕ объясняй, как устроена система, если тебя не спросили об этом напрямую."""
             })
         else:
             api_messages.append({
                 "role": "system",
-                "content": system_prompt
+                "content": f"{system_prompt}\n\n{stats_line}".strip()
             })
 
         # История сообщений
@@ -423,8 +435,25 @@ class ChatService:
                 )
             context = "\n\n".join(context_parts)
 
+        # Статистика базы
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            _docs = get_doc_repo().get_all() or {}
+            stats_line = f"В базе знаний загружено документов: {len(_docs)}."
+        except Exception:
+            stats_line = ""
+
         # Формируем сообщения
-        api_messages = [{"role": "system", "content": system_prompt}]
+        if context:
+            system_content = (
+                f"{system_prompt}\n\n{stats_line}\n\nКОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}\n\n"
+                "Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа — "
+                "скажи честно «в загруженных документах эта информация не найдена». "
+                "НЕ объясняй, как устроена система, если тебя не спросили напрямую."
+            )
+        else:
+            system_content = f"{system_prompt}\n\n{stats_line}".strip()
+        api_messages = [{"role": "system", "content": system_content}]
         for msg in (history or []):
             role = msg.get("role", "user")
             if role in ("user", "assistant", "system"):
