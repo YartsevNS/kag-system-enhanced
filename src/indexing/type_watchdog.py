@@ -182,28 +182,16 @@ class TypeWatchdog:
         """Определить типы для пачки документов одним LLM-вызовом (батч: до 5)."""
         type_labels = ", ".join(t["label"] for t in known_types)
 
-        # Подробные правила определения типа (маркеры + примеры) из prompts/type.txt.
-        # Этот промпт был утерян при переходе на батч-детекцию (коммит 03e0061),
-        # из-за чего flash-модель не понимала задачу и отвечала «unknown».
-        rules = self._load_type_rules()
-        if rules:
-            rules = (
-                rules
-                .replace("{type_labels}", type_labels)
-                .replace("{filename}", "(имя файла указано в каждом блоке ниже)")
-                .replace("{sample_texts}", "(текст указан в каждом блоке ниже)")
-                # type.txt использует {{ }} как экранирование для .format() —
-                # приводим к обычным одинарным скобкам JSON-примеров
-                .replace("{{", "{").replace("}}", "}")
-            )
-            prompt_lines = [rules]
-        else:
-            prompt_lines = [f"Ты — классификатор документов. Определи тип из списка: {type_labels}"]
+        # Компактный промпт. Подробные маркеры типов вынесены в system_prompt
+        # настроек («Анализ документов»), т.к. полный prompts/type.txt (8К)
+        # + тексты батча делали промпт слишком длинным для flash-модели —
+        # она возвращала пустой ответ.
+        prompt_lines = [f"Определи тип каждого документа из списка: {type_labels}."]
 
-        prompt_lines.append(f"\nСейчас батч из {len(items)} документов.")
-        prompt_lines.append('ВАЖНО: верни СТРОГО JSON список (без markdown, без обёртки entities):')
+        prompt_lines.append(f"Документов в батче: {len(items)}.")
+        prompt_lines.append('Верни СТРОГО JSON список (без markdown):')
         prompt_lines.append('[{"id":"<короткий id>","type":"<ключ типа латиницей>"}, ...]')
-        prompt_lines.append('Ключ типа пиши ЛАТИНИЦЕЙ (invoice, contract, report, letter, form, identity, medical, legal, financial, technical, standard, policy, order, news).')
+        prompt_lines.append('Ключ типа — латиницей (invoice, contract, report, letter, form, identity, medical, legal, financial, technical, standard, policy, order, news).')
         prompt_lines.append('Если тип не ясен — "other".')
         for item in items:
             prompt_lines.append(f"\n---{item['id'][:8]} ({item['filename']})---")
