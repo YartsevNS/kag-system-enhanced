@@ -32,7 +32,7 @@ class DocumentRecord(BaseModel):
     """Запись о документе"""
     document_id: str = Field(..., description="ID документа")
     filename: str = Field(..., description="Имя файла")
-    file_type: str = Field(..., description="Тип файла (MIME)")
+    file_type: str = Field(default="application/octet-stream", description="Тип файла (MIME)")
     file_size: int = Field(default=0, description="Размер файла")
     status: str = Field(default="pending", description="Статус: pending, processing, completed, failed")
     progress: float = Field(default=0.0, description="Прогресс обработки (0-100)")
