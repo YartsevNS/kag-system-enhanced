@@ -295,7 +295,9 @@ async function uploadFiles(files) {
 
 async function loadAll() {
   try {
-    const r = await fetch(`${API}/upload/list`);
+    // Запрашиваем с большим лимитом — иначе backend отдаёт только 50 и пагинация
+    // крутит эти же 50. count-filter (50/100/200/500) пагинирует уже на клиенте.
+    const r = await fetch(`${API}/upload/list?limit=1000`);
     if (!r.ok) throw new Error('Ошибка загрузки списка');
     const data = await r.json();
     allDocs = data.documents || [];

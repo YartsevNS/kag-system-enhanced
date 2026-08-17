@@ -701,14 +701,14 @@ async def list_documents(
     """
     Получить список документов с пагинацией.
     
-    - **limit**: Сколько записей (макс 200)
+    - **limit**: Сколько записей (макс 1000)
     - **offset**: Сдвиг от начала
     - **status**: Фильтр по статусу (pending/processing/completed/error)
     """
     from src.api.services.document_repository import get_doc_repo
 
     repo = get_doc_repo()
-    documents, total = repo.list(limit=min(limit, 200), offset=offset, status=status)
+    documents, total = repo.list(limit=min(limit, 1000), offset=offset, status=status)
 
     enriched = []
     for d in documents:
