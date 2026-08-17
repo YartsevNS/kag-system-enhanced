@@ -224,7 +224,35 @@ class EmbeddingsService:
 
                 logger.info(f"Коллекция создана: {self.collection_name}")
             else:
-                logger.info(f"Коллекция существует: {self.collection_name}")
+                # Коллекция есть — проверяем, совпадает ли размерность с текущей моделью.
+                # Если модель сменилась (например 768→1024), пересоздаём коллекцию,
+                # иначе вставка векторов падает с "dimension error".
+                try:
+                    _info = self._qdrant_client.get_collection(self.collection_name)
+                    _existing_dim = None
+                    _vc = _info.config.params.vectors
+                    if isinstance(_vc, dict) and "dense" in _vc:
+                        _vd = _vc["dense"]
+                        _existing_dim = getattr(_vd, "size", None)
+                    elif hasattr(_vc, "size"):
+                        _existing_dim = _vc.size
+
+                    _dim = self._embedding_dimensions
+                    try:
+                        _test = await self._embedding_client.generate("test")
+                        _dim = len(_test)
+                    except Exception:
+                        pass
+
+                    if _existing_dim is not None and _existing_dim != _dim:
+                        logger.warning(
+                            f"Размерность коллекции ({_existing_dim}) != модели ({_dim}) — пересоздаю коллекцию"
+                        )
+                        self._qdrant_client.delete_collection(self.collection_name)
+                        return await self._ensure_collection()
+                    logger.info(f"Коллекция существует: {self.collection_name} (dim={_existing_dim})")
+                except Exception:
+                    logger.info(f"Коллекция существует: {self.collection_name}")
 
         except Exception as e:
             logger.error(f"Ошибка создания коллекции: {e}")
