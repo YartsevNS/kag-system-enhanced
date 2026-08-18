@@ -77,7 +77,10 @@ class EmbeddingsService:
 
         # Настройки
         self._embedding_dimensions = settings.EMBEDDING_DIMENSIONS
-        self._batch_size = 32  # Размер батча для Qdrant
+        # Размер батча для /api/embed. 32 текста на CPU-Ollama (bge-m3) идут
+        # дольше 60с и упирались в timeout (пустые векторы). Уменьшено до 8 —
+        # батч ~12с, надёжно укладывается в EMBEDDING_TIMEOUT.
+        self._batch_size = 8
 
         logger.info(
             f"EmbeddingsService инициализирован: "

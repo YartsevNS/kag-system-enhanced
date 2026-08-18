@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     # Embedding модели (Ollama)
     EMBEDDING_BASE_URL: str = "http://192.168.50.41:11434"
     EMBEDDING_MODEL: str = "nomic-embed-text:latest"
-    EMBEDDING_TIMEOUT: float = 60.0
+    EMBEDDING_TIMEOUT: float = 300.0
     EMBEDDING_DIMENSIONS: int = 768
 
     # Настройки чанкинга для документов
