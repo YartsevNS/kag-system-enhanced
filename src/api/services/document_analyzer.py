@@ -21,11 +21,13 @@ class DocumentAnalyzer:
     """Анализирует документы через LLM и обогащает метаданные."""
 
     def __init__(self, llm_url: Optional[str] = None):
-        self._llm_url = llm_url or "http://192.168.50.41:11434"
-        self._model = "phi4-mini"  # быстрая модель для классификации
+        # Модель и URL НЕ хардкодим — берутся из admin (function_map:doc_analysis
+        # через provider_service). Fallback на phi4-mini убран: если функция не
+        # настроена в админке, анализ документа просто пропускается.
+        pass
 
     def _get_config(self):
-        """Получить актуальные настройки LLM: provider_service (function_map/doc_analysis) → ext_llm."""
+        """Получить настройки LLM ТОЛЬКО из admin (function_map:doc_analysis)."""
         try:
             from src.api.services.provider_service import provider_service
             cfg = provider_service.get_function_llm_config("doc_analysis")
@@ -33,16 +35,7 @@ class DocumentAnalyzer:
                 return cfg
         except Exception:
             pass
-        try:
-            from src.api.routes.admin_models import _ext_llm_config
-            return {
-                "provider": _ext_llm_config.provider,
-                "url": _ext_llm_config.url,
-                "model": _ext_llm_config.model,
-                "api_key": _ext_llm_config.api_key,
-            }
-        except Exception:
-            return None
+        return None
 
     async def analyze_document(
         self,
@@ -67,36 +60,70 @@ class DocumentAnalyzer:
 
         prompt = self._build_prompt(first_chunk_text, filename)
         
-        # Используем настройки из админки (dict: provider, url, model, api_key)
+        # Настройки ТОЛЬКО из admin (function_map:doc_analysis)
         cfg = self._get_config()
-        llm_url = cfg.get("url") if cfg else self._llm_url
-        model = cfg.get("model") if cfg else self._model
+        if not cfg or not cfg.get("model"):
+            logger.warning(f"[analyze] Функция 'doc_analysis' не настроена в админке — анализ пропущен для {document_id}")
+            return {}
+
+        model = cfg.get("model")
+        llm_url = cfg.get("url", "")
+        api_key = cfg.get("api_key", "")
+        provider = cfg.get("provider", "ollama")
         
         try:
             import aiohttp
             
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{llm_url}/api/generate",
-                    json={
+                if provider in ("openai", "deepseek", "openrouter"):
+                    # OpenAI-совместимый API (chat/completions)
+                    headers = {"Content-Type": "application/json"}
+                    if api_key:
+                        headers["Authorization"] = f"Bearer {api_key}"
+                    payload = {
                         "model": model,
-                        "prompt": prompt,
+                        "messages": [
+                            {"role": "system", "content": "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 300,
                         "stream": False,
-                        "options": {"temperature": 0.1, "max_tokens": 300}
-                    },
-                    timeout=aiohttp.ClientTimeout(total=120)
-                ) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"LLM недоступен для анализа: {resp.status}")
-                        return {}
-                    
-                    data = await resp.json()
-                    response = data.get("response", "")
-                    
-                    result = self._parse_response(response, filename)
-                    if not result:
-                        logger.warning(f"Анализ {document_id}: LLM вернул невалидный JSON, ответ: {response[:200]}")
-                    return result
+                    }
+                    async with session.post(
+                        f"{llm_url}/v1/chat/completions",
+                        json=payload,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as resp:
+                        if resp.status != 200:
+                            logger.warning(f"LLM недоступен для анализа: {resp.status}")
+                            return {}
+                        data = await resp.json()
+                        response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                else:
+                    # Ollama API (/api/generate)
+                    async with session.post(
+                        f"{llm_url}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": prompt,
+                            "stream": False,
+                            "options": {"temperature": 0.1, "max_tokens": 300},
+                        },
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as resp:
+                        if resp.status != 200:
+                            logger.warning(f"LLM недоступен для анализа: {resp.status}")
+                            return {}
+                        data = await resp.json()
+                        response = data.get("response", "")
+                
+                # Парсим ответ (общий путь для всех провайдеров)
+                result = self._parse_response(response, filename)
+                if not result:
+                    logger.warning(f"Анализ {document_id}: LLM вернул невалидный JSON, ответ: {response[:200]}")
+                return result
                     
         except Exception as e:
             logger.warning(f"Ошибка анализа документа {document_id}: {type(e).__name__}: {e}")

@@ -184,48 +184,64 @@ class EmbeddingClient:
     async def generate_batch(
         self,
         texts: List[str],
-        batch_size: int = 10
+        batch_size: int = 32
     ) -> List[List[float]]:
         """
-        Сгенерировать embeddings для списка текстов.
+        Сгенерировать embeddings для списка текстов НАСТОЯЩИМ батчем.
+
+        Ollama /api/embed принимает input=[...] и возвращает все векторы за
+        ОДИН HTTP-запрос. Раньше каждый текст шёл отдельным POST /api/embeddings
+        (даже в «батче» через asyncio.gather) — это и было узким местом
+        векторизации (~1.5 сек × N чанков). Теперь батч из batch_size текстов
+        = 1 запрос, что даёт ускорение в десятки раз.
 
         Args:
             texts: Список текстов
-            batch_size: Размер батча для параллельной обработки
+            batch_size: Размер батча (текстов на один запрос /api/embed)
 
         Returns:
             Список векторов (по одному на каждый текст)
         """
         logger.info(f"Batch embedding: {len(texts)} текстов, batch_size={batch_size}")
 
-        embeddings = []
+        embeddings: List[List[float]] = []
         total = len(texts)
 
         for i in range(0, total, batch_size):
             batch = texts[i:i + batch_size]
-            batch_num = (i // batch_size) + 1
-            total_batches = (total + batch_size - 1) // batch_size
-
-            logger.debug(
-                f"Обработка батча {batch_num}/{total_batches}: "
-                f"{len(batch)} текстов"
-            )
-
-            # Параллельная обработка батча
-            tasks = [self.generate(text) for text in batch]
-            batch_embeddings = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Обрабатываем результаты
-            for j, emb in enumerate(batch_embeddings):
-                if isinstance(emb, Exception):
-                    logger.error(f"Ошибка в батче для текста {i+j}: {emb}")
-                    # Возвращаем пустой вектор при ошибке
+            try:
+                batch_emb = await self._embed_batch(batch)
+                embeddings.extend(batch_emb)
+            except Exception as e:
+                logger.error(f"Ошибка /api/embed для батча {i}: {e}")
+                for _ in batch:
                     embeddings.append([0.0] * (self._dimensions or 768))
-                else:
-                    embeddings.append(emb)
 
-        logger.info(f"Batch embedding завершен: {len(embeddings)} векторов")
+        logger.info(f"Batch embedding завершён: {len(embeddings)} векторов")
         return embeddings
+
+    async def _embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Один запрос /api/embed для батча текстов. Возвращает список векторов."""
+        client = await self._get_client()
+        response = await client.post(
+            "/api/embed",
+            json={"model": self.model, "input": texts}
+        )
+        if response.status_code == 404:
+            raise ValueError(
+                f"Модель не найдена: {self.model}. Выполните: ollama pull {self.model}"
+            )
+        if response.status_code != 200:
+            raise ValueError(
+                f"Ошибка /api/embed (код {response.status_code}): {response.text[:200]}"
+            )
+        data = response.json()
+        embs = data.get("embeddings", [])
+        if not embs:
+            raise ValueError("Пустой ответ /api/embed")
+        if self._dimensions is None and embs:
+            self._dimensions = len(embs[0])
+        return embs
 
     async def generate_for_document(
         self,

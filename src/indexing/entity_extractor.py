@@ -178,8 +178,9 @@ class EntityExtractor:
     DOMAIN_SCHEMA = SCHEMA_PRESETS["universal"]["schema"]
 
     def __init__(self):
-        self._llm_url = "http://192.168.50.41:11434"
-        self._model = "phi4-mini"
+        # Модель и URL НЕ хардкодим — берутся из admin (function_map:graph через
+        # provider_service). Fallback на phi4-mini убран: если функция graph не
+        # настроена в админке, извлечение сущностей просто пропускается.
         self._domain_config = dict(self.DOMAIN_SCHEMA)  # Копия, можно менять
 
     # ============================================================
@@ -187,9 +188,11 @@ class EntityExtractor:
     # ============================================================
 
     def _get_graph_config(self):
-        """Получить конфигурацию модели графа из provider_service (function_map/graph).
+        """Получить конфигурацию модели графа ТОЛЬКО из admin (function_map:graph).
 
-        Fallback: config_store graph_model (legacy), затем _graph_model_config.
+        Раньше был fallback на config_store graph_model и _graph_model_config
+        (хардкод phi4-mini:latest). Убран: если функция graph не настроена
+        в админке — возвращаем None, извлечение пропускается (без phi4-mini).
         """
         try:
             from src.api.services.provider_service import provider_service
@@ -198,18 +201,7 @@ class EntityExtractor:
                 return cfg
         except Exception:
             pass
-        try:
-            from src.api.services.config_store import config_store
-            saved = config_store.get("graph_model", "default")
-            if saved and saved.get("model"):
-                return saved
-        except Exception:
-            pass
-        try:
-            from src.api.routes.admin_models import _graph_model_config
-            return _graph_model_config
-        except Exception:
-            return None
+        return None
 
     def set_domain_schema(self, schema: Dict):
         """Установить пользовательскую доменную схему (словарь)."""
@@ -284,10 +276,14 @@ class EntityExtractor:
             return {"entities": [], "relations": [], "facts": [], "warnings": ["Chunk too short"]}
 
         cfg = self._get_graph_config()
-        model = cfg.get("model", self._model) if cfg else self._model
-        llm_url = cfg.get("url", self._llm_url) if cfg else self._llm_url
-        api_key = cfg.get("api_key", "") if cfg else ""
-        provider = cfg.get("provider", "ollama") if cfg else "ollama"
+        if not cfg or not cfg.get("model"):
+            logger.warning(f"[graph] Функция 'graph' не настроена в админке — извлечение пропущено для {chunk_id}")
+            return {"entities": [], "relations": [], "facts": [], "warnings": ["graph model not configured"]}
+
+        model = cfg.get("model")
+        llm_url = cfg.get("url", "")
+        api_key = cfg.get("api_key", "")
+        provider = cfg.get("provider", "ollama")
 
         # Все типы сущностей (core + extended) в одном списке
         core_types = self._domain_config.get("core", {})

@@ -378,7 +378,7 @@ class ProviderService:
                     fm = FunctionMap(
                         function=function_name,
                         provider_id=p.id,
-                        model=p.models[0] if p.models else "phi4-mini:latest",
+                        model=p.models[0] if p.models else "",
                     )
                     break
             if not fm:
