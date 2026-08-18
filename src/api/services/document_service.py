@@ -602,6 +602,19 @@ class DocumentService:
                 except Exception as e:
                     logger.debug(f"Не удалось выполнить анализ: {e}")
 
+            # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей.
+            # ВАЖНО: await, а не create_task — в Celery process_document выполняется
+            # внутри asyncio.run(), и create_task-задачи отменяются при его завершении,
+            # поэтому граф молча не строился (Neo4j был пуст при 102 документах).
+            # Внутри _build_knowledge_graph_async есть свой try/except — ошибка
+            # графа не уронит завершение документа.
+            try:
+                await self._build_knowledge_graph_async(
+                    document_id, record.filename, chunks
+                )
+            except Exception as e:
+                logger.debug(f"Не удалось построить граф знаний: {e}")
+
             # Завершено (100%)
             record.status = "completed"
             record.progress = 100
@@ -619,15 +632,6 @@ class DocumentService:
                 f"Документ обработан: {document_id}, "
                 f"чанков: {len(chunks)}, векторов: {vectors_count}"
             )
-            
-            # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей (фон)
-            try:
-                import asyncio
-                asyncio.create_task(self._build_knowledge_graph_async(
-                    document_id, record.filename, chunks
-                ))
-            except Exception as e:
-                logger.debug(f"Не удалось запустить построение графа: {e}")
             
             return {
                 "document_id": document_id,

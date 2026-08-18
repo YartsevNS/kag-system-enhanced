@@ -269,12 +269,14 @@ class EntityExtractor:
         document_id: str,
         filename: str = ""
     ) -> Dict[str, Any]:
-        """Извлечь сущности из чанка — итеративно, по группам типов.
-        
-        Pass 1 — Core entities: всегда извлекаем ключевые типы.
-        Pass 2 — Relations: связи между найденными сущностями.
-        Pass 3 — Extended: дополнительные типы (если есть в схеме).
-        
+        """Извлечь сущности и связи из чанка ОДНИМ LLM-вызовом.
+
+        Раньше было 3 отдельных прохода (core → relations → extended) — по
+        3 LLM-вызова на каждый чанк. Объединено в один промпт: все типы
+        сущностей (core + extended) и все типы связей в одном JSON-ответе.
+        Это в ~3 раза меньше вызовов к внешнему Ollama и в ~3 раза быстрее
+        построение графа.
+
         Returns:
             {"entities": [...], "relations": [...], "facts": [...], "warnings": [...]}
         """
@@ -287,161 +289,47 @@ class EntityExtractor:
         api_key = cfg.get("api_key", "") if cfg else ""
         provider = cfg.get("provider", "ollama") if cfg else "ollama"
 
-        all_entities = []
-        all_relations = []
-        all_facts = []
-        warnings = []
-
-        # --- Pass 1: Core entities ---
-        core_result = await self._extract_core_entities(
-            chunk_text, chunk_id, document_id, filename, model, llm_url, api_key, provider
-        )
-        all_entities.extend(core_result.get("entities", []))
-        all_facts.extend(core_result.get("facts", []))
-        if core_result.get("warnings"):
-            warnings.extend(core_result["warnings"])
-
-        # --- Pass 2: Relations (только если есть сущности) ---
-        if all_entities:
-            rel_result = await self._extract_relations(
-                chunk_text, all_entities, document_id, model, llm_url, api_key, provider
-            )
-            all_relations.extend(rel_result.get("relations", []))
-            if rel_result.get("warnings"):
-                warnings.extend(rel_result["warnings"])
-
-        # --- Pass 3: Extended entities (опционально) ---
-        extended_types = self._domain_config.get("extended", {})
-        if extended_types:
-            ext_result = await self._extract_extended_entities(
-                chunk_text, extended_types, document_id, model, llm_url, api_key, provider
-            )
-            all_entities.extend(ext_result.get("entities", []))
-            if ext_result.get("warnings"):
-                warnings.extend(ext_result["warnings"])
-
-        # Валидация
-        validation_warnings = self._validate_extraction(all_entities, all_relations)
-        warnings.extend(validation_warnings)
-
-        return {
-            "entities": all_entities,
-            "relations": all_relations,
-            "facts": all_facts,
-            "warnings": warnings
-        }
-
-    # ============================================================
-    # Pass 1: Ключевые сущности
-    # ============================================================
-
-    async def _extract_core_entities(
-        self, text: str, chunk_id: str, doc_id: str, filename: str,
-        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
-    ) -> Dict[str, Any]:
-        """Извлечение ключевых сущностей — лёгкий промпт, быстрый ответ.
-        
-        Neo4j Best Practice: не перегружаем промпт всеми типами сразу.
-        Только person, organization, date, money.
-        """
+        # Все типы сущностей (core + extended) в одном списке
         core_types = self._domain_config.get("core", {})
-        if not core_types:
-            return {"entities": [], "relations": [], "facts": []}
+        extended_types = self._domain_config.get("extended", {})
+        all_types = {**core_types, **extended_types}
+        type_desc = "\n".join([f"  - {t}: {d}" for t, d in all_types.items()])
 
-        type_desc = "\n".join([f"  - {t}: {d}" for t, d in core_types.items()])
-        sample = text[:1500]  # Берём первые 1500 символов для контекста
+        rel_types = self._domain_config.get("relations", {})
+        rel_desc = "\n".join([f"  - {t}: {d}" for t, d in rel_types.items()])
 
-        prompt = f"""Извлеки КЛЮЧЕВЫЕ сущности из текста. Верни ТОЛЬКО JSON.
+        sample = chunk_text[:2000]  # первых 2000 символов достаточно для чанка
+
+        prompt = f"""Извлеки из текста сущности и связи. Верни ТОЛЬКО JSON.
 
 Типы сущностей:
 {type_desc}
 
-Текст (первые 1500 символов):
+Типы связей:
+{rel_desc}
+
+Текст:
 ---
 {sample}
 ---
 
 Верни СТРОГО такой JSON без markdown:
-{{"entities":[{{"name":"точное имя","type":"тип","confidence":0.0-1.0}}],"facts":["краткий факт"]}}
+{{"entities":[{{"name":"точное имя","type":"тип","confidence":0.0-1.0}}],"relations":[{{"source":"сущность1","target":"сущность2","type":"тип связи"}}],"facts":["краткий факт"]}}
 
 Правила:
 - name: точное значение из текста (не придумывай)
-- type: только из списка выше
+- type: только из списка типов сущностей
+- source и target связи: только из найденных сущностей
 - confidence: 0.9 если явно указано, 0.7 если косвенно, 0.5 если предположительно
-- facts: 1-3 ключевых утверждения из текста
-- Если сущностей нет — верни {{"entities":[],"facts":[]}}"""
+- Если ничего не найдено — верни {{"entities":[],"relations":[],"facts":[]}}"""
 
-        return await self._call_llm(prompt, model, llm_url, chunk_id, "core", api_key, provider)
+        result = await self._call_llm(prompt, model, llm_url, chunk_id, "extract", api_key, provider)
 
-    # ============================================================
-    # Pass 2: Связи между сущностями
-    # ============================================================
+        # Валидация
+        warnings = self._validate_extraction(result.get("entities", []), result.get("relations", []))
+        result["warnings"] = warnings
 
-    async def _extract_relations(
-        self, text: str, entities: List[Dict], doc_id: str,
-        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
-    ) -> Dict[str, Any]:
-        """Извлечение связей между уже найденными сущностями.
-        
-        Neo4j Best Practice: связи извлекаются ОТДЕЛЬНО от сущностей.
-        LLM получает список уже найденных сущностей и ищет связи между ними.
-        """
-        if not entities:
-            return {"relations": [], "warnings": []}
-
-        entity_names = list(set(e["name"] for e in entities))[:30]
-        rel_types = self._domain_config.get("relations", {})
-        rel_desc = "\n".join([f"  - {t}: {d}" for t, d in rel_types.items()])
-
-        prompt = f"""Найди СВЯЗИ между сущностями в тексте. Верни ТОЛЬКО JSON.
-
-Типы связей:
-{rel_desc}
-
-Уже найденные сущности:
-{json.dumps(entity_names, ensure_ascii=False)}
-
-Текст:
----
-{text[:1000]}
----
-
-Верни СТРОГО такой JSON без markdown:
-{{"relations":[{{"source":"сущность1","target":"сущность2","type":"тип связи"}}]}}
-
-Правила:
-- source и target ДОЛЖНЫ быть из списка найденных сущностей
-- type только из списка типов связей
-- Если связей нет — верни {{"relations":[]}}"""
-
-        result = await self._call_llm(prompt, model, llm_url, "relations", "relations", api_key, provider)
         return result
-
-    # ============================================================
-    # Pass 3: Расширенные сущности (опционально)
-    # ============================================================
-
-    async def _extract_extended_entities(
-        self, text: str, extended_types: Dict, doc_id: str,
-        model: str, llm_url: str, api_key: str = "", provider: str = "ollama"
-    ) -> Dict[str, Any]:
-        """Извлечение дополнительных типов сущностей."""
-        type_desc = "\n".join([f"  - {t}: {d}" for t, d in extended_types.items()])
-
-        prompt = f"""Найди ДОПОЛНИТЕЛЬНЫЕ сущности в тексте. Верни ТОЛЬКО JSON.
-
-Типы:
-{type_desc}
-
-Текст:
----
-{text[:1200]}
----
-
-Верни СТРОГО: {{"entities":[{{"name":"...","type":"...","confidence":0.0-1.0}}]}}
-Если нет — {{"entities":[]}}"""
-
-        return await self._call_llm(prompt, model, llm_url, "extended", "extended", api_key, provider)
 
     # ============================================================
     # LLM вызов
@@ -472,6 +360,11 @@ class EntityExtractor:
             except Exception:
                 pass
         if not system_prompt:
+            system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
+
+        # Страховка: не отправлять раздутый system_prompt (старые версии graph.txt
+        # ~30 КБ могли остаться в config_store) — обрезаем до компактного дефолта.
+        if len(system_prompt) > 2000:
             system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
         try:
             import aiohttp
