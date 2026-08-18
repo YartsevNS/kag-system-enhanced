@@ -3,6 +3,7 @@ Process Logger — детальное логирование всех этапо
 
 Сохраняет в config_store (process_logs) для каждого document_id:
 - Временные метки каждого этапа
+- Длительность каждого этапа (delta_ms) и время от старта (elapsed_ms)
 - Параметры чанкинга (chunk_size, chunk_overlap)
 - Количество чанков, векторов
 - Результаты анализа (title, type, summary)
@@ -12,6 +13,7 @@ Process Logger — детальное логирование всех этапо
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import time
 from loguru import logger
 
 
@@ -21,16 +23,36 @@ class ProcessLogger:
     def __init__(self, document_id: str):
         self.document_id = document_id
         self._log: List[Dict[str, Any]] = []
+        # Точки отсчёта для расчёта длительности этапов.
+        # time.monotonic() — монотонные часы: не сбиваются при NTP-коррекции
+        # или переводе системного времени, поэтому разности надёжны.
+        self._started = time.monotonic()
+        self._last = time.monotonic()
 
     def log(self, step: str, details: Dict[str, Any] = None):
-        """Записать шаг обработки."""
+        """Записать шаг обработки.
+
+        В каждый entry автоматически добавляются:
+        - elapsed_ms — время от старта обработки (start) до этого шага
+        - delta_ms   — сколько занял ТЕКУЩИЙ шаг (от предыдущего log() до этого)
+
+        Это позволяет увидеть, на каком этапе документ «застревает»
+        (OCR / чанкинг / векторизация / LLM-типизация), не гадая по общему времени.
+        """
+        now = time.monotonic()
         entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "step": step,
+            "elapsed_ms": round((now - self._started) * 1000, 1),
+            "delta_ms": round((now - self._last) * 1000, 1),
             "details": details or {}
         }
+        self._last = now
         self._log.append(entry)
-        logger.info(f"[{self.document_id[:8]}] {step}: {details or ''}")
+        logger.info(
+            f"[{self.document_id[:8]}] {step} "
+            f"(+{entry['delta_ms']}ms, total {entry['elapsed_ms']}ms): {details or ''}"
+        )
 
     def log_error(self, step: str, error: str):
         """Записать ошибку."""

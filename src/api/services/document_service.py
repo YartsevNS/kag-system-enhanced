@@ -581,6 +581,27 @@ class DocumentService:
             except Exception as e:
                 logger.warning(f"Миниатюра не создана: {e}")
 
+            # Шаг 4: Анализ первого чанка (типизация, title, summary).
+            # ВАЖНО: await, а не create_task — в Celery process_document выполняется
+            # внутри asyncio.run(), и create_task-задачи отменяются при его завершении,
+            # поэтому типизация молча не выполнялась.
+            # Метка тайминга: plog.log("analyze", ...) фиксирует длительность LLM-вызова
+            # типизации — это один из кандидатов на «медленное» место (внешний Ollama).
+            # Перенесён ПЕРЕД plog.log("completed")/plog.save(), чтобы метка успела
+            # попасть в сохранённый лог (иначе save() вызвался бы раньше analyze).
+            if chunks and len(chunks) > 0:
+                try:
+                    first_text = chunks[0].get("content", "")
+                    _t_analyze = time.monotonic()
+                    await self._analyze_document_async(
+                        document_id, first_text, record.filename
+                    )
+                    plog.log("analyze", {
+                        "duration_ms": round((time.monotonic() - _t_analyze) * 1000, 1)
+                    })
+                except Exception as e:
+                    logger.debug(f"Не удалось выполнить анализ: {e}")
+
             # Завершено (100%)
             record.status = "completed"
             record.progress = 100
@@ -598,19 +619,6 @@ class DocumentService:
                 f"Документ обработан: {document_id}, "
                 f"чанков: {len(chunks)}, векторов: {vectors_count}"
             )
-            
-            # Шаг 4: Анализ первого чанка (типизация, title, summary).
-            # ВАЖНО: await, а не create_task — в Celery process_document выполняется
-            # внутри asyncio.run(), и create_task-задачи отменяются при его завершении,
-            # поэтому типизация молча не выполнялась.
-            if chunks and len(chunks) > 0:
-                try:
-                    first_text = chunks[0].get("content", "")
-                    await self._analyze_document_async(
-                        document_id, first_text, record.filename
-                    )
-                except Exception as e:
-                    logger.debug(f"Не удалось выполнить анализ: {e}")
             
             # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей (фон)
             try:
@@ -875,6 +883,10 @@ class DocumentService:
 
     async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list):
         """Фоновое построение графа знаний."""
+        # Метка тайминга: граф идёт в фоне (create_task) и НЕ попадает в plog,
+        # поэтому меряем здесь через time.monotonic() и пишем в logger — это
+        # второй кандидат на «медленное» место (LLM-извлечение сущностей + Neo4j).
+        _t_graph = time.monotonic()
         try:
             from src.indexing.knowledge_graph import kg_service
             from src.indexing.entity_extractor import entity_extractor
@@ -896,7 +908,10 @@ class DocumentService:
                     document_id, chunk_id, chunk_text, chunk_seq, filename
                 )
             
-            logger.info(f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано")
+            logger.info(
+                f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано "
+                f"(+{round((time.monotonic() - _t_graph) * 1000, 1)}ms)"
+            )
         except Exception as e:
             logger.warning(f"Ошибка построения графа для {document_id}: {e}")
 
