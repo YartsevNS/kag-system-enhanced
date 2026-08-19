@@ -606,20 +606,59 @@
             }
         }
         
-        // Загрузка сессий из localStorage
-        function loadSessions() {
+        // Авторизован ли пользователь (есть токен). Если да — сессии храним
+        // на СЕРВЕРЕ (chat_storage): нет гонки localStorage между вкладками,
+        // история доступна с любого устройства. Если нет — фолбэк на
+        // localStorage (обратная совместимость для анонимов).
+        const useServerSessions = !!localStorage.getItem('kag_token');
+
+        // Загрузка сессий
+        async function loadSessions() {
+            if (useServerSessions) {
+                try {
+                    const resp = await apiFetch(`${API_URL}/chat/sessions`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        // Нормализуем поля серверных сессий к виду фронтенда
+                        sessions = (data.sessions || []).map(s => ({
+                            id: s.id,
+                            title: s.title || 'Новый диалог',
+                            createdAt: s.created_at,
+                            updatedAt: s.updated_at,
+                            messages: []
+                        }));
+                        renderSessions();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Не удалось загрузить сессии с сервера, фолбэк на localStorage', e);
+                }
+            }
             const saved = localStorage.getItem('kag_sessions');
             if (saved) {
                 sessions = JSON.parse(saved);
                 renderSessions();
             }
         }
-        
-        // Сохранение сессий
+
+        // Сохранение сессий (только для анонимов — авторизованным хранит сервер)
         function saveSessions() {
-            localStorage.setItem('kag_sessions', JSON.stringify(sessions));
+            if (!useServerSessions) {
+                localStorage.setItem('kag_sessions', JSON.stringify(sessions));
+            }
         }
-        
+
+        // Создание сессии на сервере (для авторизованных)
+        async function createServerSession() {
+            const resp = await apiFetch(`${API_URL}/chat/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: 'Новый диалог' })
+            });
+            if (!resp.ok) throw new Error('Не удалось создать сессию');
+            return await resp.json();
+        }
+
         // Отрисовка сессий
         function renderSessions() {
             const list = document.getElementById('sessions-list');
@@ -630,32 +669,54 @@
                 div.className = `session-item ${session.id === currentSessionId ? 'active' : ''}`;
                 div.onclick = () => loadSession(session.id);
                 div.innerHTML = `
-                    <div class="session-title">${session.title}</div>
-                    <div class="session-time">${new Date(session.updatedAt).toLocaleString('ru-RU')}</div>
+                    <div class="session-title">${escapeHTML(session.title || 'Новый диалог')}</div>
+                    <div class="session-time">${session.updatedAt ? new Date(session.updatedAt).toLocaleString('ru-RU') : ''}</div>
                 `;
                 list.appendChild(div);
             });
         }
-        
+
         // Новый чат
-        function newChat() {
+        async function newChat() {
             currentSessionId = null;
             document.getElementById('messages').innerHTML = getEmptyStateHTML();
             document.getElementById('chat-title').textContent = 'Новый чат';
             document.getElementById('message-input').focus();
             renderSessions();
         }
-        
+
         // Загрузка сессии
-        function loadSession(sessionId) {
+        async function loadSession(sessionId) {
             const session = sessions.find(s => s.id === sessionId);
             if (!session) return;
             
             currentSessionId = sessionId;
-            document.getElementById('chat-title').textContent = session.title;
+            document.getElementById('chat-title').textContent = session.title || 'Диалог';
             
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
+            
+            // Авторизованным сообщения грузим с сервера (источник истины)
+            if (useServerSessions) {
+                try {
+                    const resp = await apiFetch(`${API_URL}/chat/sessions/${sessionId}/messages`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        (data.messages || []).forEach(msg => {
+                            addMessageToUI(msg.role, msg.content, msg.metadata, null);
+                        });
+                        // Кэшируем в память (для истории при отправке)
+                        session.messages = (data.messages || []).map(m => ({
+                            role: m.role, content: m.content, metadata: m.metadata
+                        }));
+                        renderSessions();
+                        document.getElementById('message-input').focus();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Не удалось загрузить сообщения сессии, фолбэк на локальные', e);
+                }
+            }
             
             if (session.messages) {
                 session.messages.forEach(msg => {
@@ -689,6 +750,22 @@
             updateSendButton();
             
             try {
+                // Для авторизованных: если это новый диалог (нет сессии) —
+                // создаём сессию на сервере, чтобы сообщения сохранялись
+                // в БД, а не в localStorage (нет гонки вкладок).
+                if (useServerSessions && !currentSessionId) {
+                    const created = await createServerSession();
+                    currentSessionId = created.id;
+                    sessions.push({
+                        id: created.id,
+                        title: 'Новый диалог',
+                        createdAt: created.created_at,
+                        updatedAt: created.updated_at,
+                        messages: []
+                    });
+                    renderSessions();
+                }
+
                 // Формируем историю сообщений для API
                 const session = sessions.find(s => s.id === currentSessionId);
                 const apiMessages = [];

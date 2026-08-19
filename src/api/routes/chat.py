@@ -20,6 +20,76 @@ router = APIRouter()
 router_export = APIRouter()
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Сессии чата — серверное хранение (SQL, привязка к пользователю).
+# Зачем: раньше сессии жили в localStorage браузера. При 2+ вкладках каждая
+# перезаписывала общий localStorage → диалоги терялись. Серверное хранение
+# убирает гонку и даёт изоляцию между пользователями (каждый видит своё).
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/sessions", summary="Список сессий текущего пользователя")
+async def list_sessions(
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    from src.api.services.chat_storage import chat_storage
+    if not current_user:
+        return {"sessions": []}
+    return {"sessions": chat_storage.list_sessions(current_user.id)}
+
+
+@router.post("/sessions", summary="Создать новую сессию")
+async def create_session(
+    body: dict = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    from src.api.services.chat_storage import chat_storage
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    title = (body or {}).get("title", "Новый диалог")
+    return chat_storage.create_session(current_user.id, title=title)
+
+
+@router.get("/sessions/{session_id}/messages", summary="Сообщения сессии")
+async def get_session_messages(
+    session_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    from src.api.services.chat_storage import chat_storage
+    if not current_user:
+        return {"messages": []}
+    return {"messages": chat_storage.list_messages(current_user.id, session_id)}
+
+
+@router.delete("/sessions/{session_id}", summary="Удалить сессию")
+async def delete_session(
+    session_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    from src.api.services.chat_storage import chat_storage
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    ok = chat_storage.delete_session(current_user.id, session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Сессия не найдена")
+    return {"status": "ok"}
+
+
+@router.post("/sessions/{session_id}/rename", summary="Переименовать сессию")
+async def rename_session(
+    session_id: str,
+    body: dict = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    from src.api.services.chat_storage import chat_storage
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    title = (body or {}).get("title", "")
+    ok = chat_storage.rename_session(current_user.id, session_id, title)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Сессия не найдена")
+    return {"status": "ok"}
+
+
 @router.post("/", response_model=ChatResponse, summary="Отправить сообщение в чат")
 async def send_message(
     request: ChatRequest,
@@ -56,11 +126,25 @@ async def send_message(
         # Извлекаем последнее сообщение пользователя
         user_message = formatted_messages[-1].content if formatted_messages else ""
 
-        # История сообщений без последнего
+        # История сообщений без последнего. Для авторизованных — источник
+        # истины СЕРВЕР (БД), а не тело запроса: клиент мог прислать устаревшую
+        # localStorage-историю (или историю из другой вкладки), и она разъехалась
+        # бы с БД. Берём из chat_storage, если сессия уже существует.
         history = [
             {"role": msg.role, "content": msg.content}
             for msg in formatted_messages[:-1]
         ] if formatted_messages else []
+        if current_user and request.session_id:
+            try:
+                from src.api.services.chat_storage import chat_storage
+                stored = chat_storage.list_messages(current_user.id, request.session_id)
+                if stored:
+                    history = [
+                        {"role": m["role"], "content": m["content"]}
+                        for m in stored
+                    ]
+            except Exception as e:
+                logger.warning(f"Не удалось прочитать историю из БД: {e}")
 
         # Extract group_ids and admin status for document access control
         group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
@@ -77,6 +161,31 @@ async def send_message(
             group_ids=group_ids,
             is_admin=is_admin
         )
+
+        # Сохраняем сообщения на сервере (если пользователь авторизован).
+        # Зачем: серверное хранение диалогов вместо localStorage — нет гонки
+        # вкладок, история доступна с любого устройства и не теряется.
+        if current_user:
+            try:
+                from src.api.services.chat_storage import chat_storage
+                sid = response.get("session_id") or request.session_id or "session_" + str(uuid.uuid4())
+                # Если клиент не прислал session_id — создаём сессию
+                if not request.session_id:
+                    created = chat_storage.create_session(current_user.id, title=user_message[:60])
+                    sid = created["id"]
+                # Проверяем, что сессия принадлежит пользователю (или создаём)
+                existing = chat_storage.get_session(current_user.id, sid)
+                if not existing:
+                    created = chat_storage.create_session(current_user.id, title=user_message[:60])
+                    sid = created["id"]
+                # Сохраняем сообщение пользователя (если ещё не сохранялось —
+                # в потоковом режиме клиент шлёт всю историю каждый раз)
+                msgs = chat_storage.list_messages(current_user.id, sid)
+                if not any(m["role"] == "user" and m["content"] == user_message for m in msgs[-5:]):
+                    chat_storage.add_message(sid, "user", user_message)
+                chat_storage.add_message(sid, "assistant", response["response"], metadata=response["metadata"])
+            except Exception as e:
+                logger.warning(f"Не удалось сохранить сообщения чата: {e}")
 
         return ChatResponse(
             id=response["id"],
@@ -191,26 +300,40 @@ async def search_chunks(
 async def export_session(
     session_id: str,
     format: str = Query(default="docx", description="Формат: docx или pdf"),
-    messages: Optional[list] = None
+    messages: Optional[list] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Экспортировать диалог сессии в документ.
 
     - **session_id**: ID сессии
     - **format**: Формат файла (docx или pdf)
-    - **messages**: Список сообщений
+    - **messages**: Список сообщений (фолбэк, если сессия не на сервере)
+
+    Сообщения берутся с сервера (chat_storage), если пользователь
+    авторизован; иначе — из тела запроса (обратная совместимость).
     """
     try:
-        if not messages:
+        export_messages = messages or []
+        if current_user:
+            try:
+                from src.api.services.chat_storage import chat_storage
+                stored = chat_storage.list_messages(current_user.id, session_id)
+                if stored:
+                    export_messages = stored
+            except Exception as e:
+                logger.warning(f"Не удалось прочитать сессию из БД: {e}")
+
+        if not export_messages:
             return Response(
-                content="Сообщения не переданы",
+                content="Сообщения не переданы и сессия не найдена на сервере",
                 status_code=400,
                 media_type="text/plain"
             )
 
         if format.lower() == "pdf":
             doc_bytes = export_service.export_to_pdf(
-                messages=messages,
+                messages=export_messages,
                 title=f"Диалог KAG - {session_id[:8]}",
                 author="KAG System"
             )
@@ -218,7 +341,7 @@ async def export_session(
             filename = f"kag_dialog_{session_id[:8]}.pdf"
         else:
             doc_bytes = export_service.export_to_docx(
-                messages=messages,
+                messages=export_messages,
                 title=f"Диалог KAG - {session_id[:8]}",
                 author="KAG System"
             )

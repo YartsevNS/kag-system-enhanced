@@ -16,6 +16,7 @@ from src.database.models import Base
 from src.database.user_models import User, Group  # noqa: F401 — регистрация моделей
 from src.database.document_models import Document, DocumentVersion  # noqa: F401
 from src.database.monitoring_models import WatchedURL, WatchedFolder, Notification  # noqa: F401
+from src.database.chat_models import ChatSession, ChatMessage  # noqa: F401 — регистрация моделей
 
 logger = logging.getLogger(__name__)
 
