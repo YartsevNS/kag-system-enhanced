@@ -13,6 +13,12 @@ from typing import Dict, Any, List, Optional
 from loguru import logger
 import json
 import re
+import asyncio
+
+# Таймаут на одну синхронную Neo4j-операцию (create_entity/create_relation).
+# Страховка от зависания: если Neo4j недоступен, вызов уходит в отдельный
+# поток и через NEO4J_TIMEOUT отдаёт управление, не замораживая worker.
+NEO4J_TIMEOUT = 20
 
 
 class EntityExtractor:
@@ -540,6 +546,25 @@ class EntityExtractor:
             if not entities:
                 return
 
+            # ── Страховка от зависания Neo4j ─────────────────────────────
+            # create_entity/create_relation — СИНХРОННЫЕ вызовы драйвера neo4j.
+            # Если Neo4j недоступен/завис, они блокируют event loop worker'а.
+            # Выполняем их в отдельном потоке с таймаутом — зависший вызов
+            # не заморозит обработку документа (аналогично _build_knowledge_graph_async).
+            async def _neo4j_write(fn, *args, label: str = ""):
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(fn, *args),
+                        timeout=NEO4J_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"[graph] Neo4j таймаут {label} ({NEO4J_TIMEOUT}с) "
+                        f"для {chunk_id} — пропуск"
+                    )
+                except Exception as e:
+                    logger.warning(f"[graph] Neo4j ошибка {label} для {chunk_id}: {e}")
+
             # Сохраняем сущности в Domain Graph
             for e in entities:
                 entity = Entity(
@@ -550,7 +575,7 @@ class EntityExtractor:
                     confidence=e["confidence"],
                     properties=e.get("properties", {})
                 )
-                kg_service.create_entity(entity)
+                await _neo4j_write(kg_service.create_entity, entity, label="create_entity")
 
             # Сохраняем связи
             for r in relations:
@@ -560,7 +585,7 @@ class EntityExtractor:
                     type=r["type"],
                     document_id=document_id
                 )
-                kg_service.create_relation(rel)
+                await _neo4j_write(kg_service.create_relation, rel, label="create_relation")
 
             # Сохраняем в config_store для быстрого доступа из UI
             from src.api.services.config_store import config_store

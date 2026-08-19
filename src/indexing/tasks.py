@@ -66,11 +66,18 @@ def process_document(
                     f"[QueueGuard] {document_id}: уже processing (другая копия "
                     f"задачи выполняется) — пропуск дубля"
                 )
+                # Пропуск — это финальное завершение задачи-дубля: снимаем
+                # замок, чтобы он не висел до TTL (иначе recovery не сможет
+                # перезапустить документ, если основная задача потеряется).
+                from src.indexing.queue_guard import release_lock
+                release_lock(document_id)
                 return {"status": "skipped", "reason": "already_processing"}
             if cur_status == "completed" and not force:
                 logger.warning(
                     f"[QueueGuard] {document_id}: уже completed — пропуск дубля"
                 )
+                from src.indexing.queue_guard import release_lock
+                release_lock(document_id)
                 return {"status": "skipped", "reason": "already_completed"}
         
         if doc_data:

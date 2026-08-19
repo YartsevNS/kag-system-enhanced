@@ -117,7 +117,10 @@ def enqueue_document(document_id: str, force: bool = False) -> bool:
     # циклического импорта (tasks → queue_guard → tasks).
     try:
         from src.indexing.tasks import process_document
-        task = process_document.delay(document_id)
+        # force пробрасывается в задачу: process_document(force=True) разрешает
+        # обработку completed-документа (reindex/reprocess). Без этого задача
+        # получила бы force=False и пропустила бы документ (уровень 3).
+        task = process_document.delay(document_id, force=force)
         logger.info(
             f"[QueueGuard] {document_id}: поставлен (task {task.id}, force={force})"
         )

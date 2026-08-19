@@ -888,7 +888,19 @@ class DocumentService:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
     async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list):
-        """Фоновое построение графа знаний."""
+        """Фоновое построение графа знаний.
+        
+        Страховка от зависания (документ 10fce2f1 висел на этом этапе >60 мин):
+        - Синхронные Neo4j-операции выполняются через asyncio.to_thread с
+          таймаутом — зависший Neo4j не блокирует event loop worker'а.
+        - Каждое LLM-извлечение сущностей ограничено CHUNK_TIMEOUT.
+        - Весь граф ограничен GRAPH_TOTAL_TIMEOUT — если не уложились, граф
+          пропускается, документ продолжает обрабатываться (граф вторичен).
+        """
+        # Таймауты: на одну Neo4j-операцию, на один чанк, на весь граф.
+        NEO4J_OP_TIMEOUT = 20
+        CHUNK_TIMEOUT = 60
+        GRAPH_TOTAL_TIMEOUT = 300
         # Метка тайминга: граф идёт в фоне (create_task) и НЕ попадает в plog,
         # поэтому меряем здесь через time.monotonic() и пишем в logger — это
         # второй кандидат на «медленное» место (LLM-извлечение сущностей + Neo4j).
@@ -896,27 +908,77 @@ class DocumentService:
         try:
             from src.indexing.knowledge_graph import kg_service
             from src.indexing.entity_extractor import entity_extractor
-            
-            # Создаём узел документа
-            kg_service.create_document_node(document_id, filename)
-            
-            # Обрабатываем чанки (первые 10 для скорости, остальные в фоне)
-            for i, chunk in enumerate(chunks[:10]):
-                chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
-                chunk_text = chunk.get("content", "")
-                chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
+
+            async def _neo4j_op(fn, *args, label: str = ""):
+                """Выполнить синхронную Neo4j-операцию в потоке с таймаутом.
                 
-                # Узел чанка в графе
-                kg_service.create_chunk_node(chunk_id, document_id, chunk_text, chunk_seq)
-                
-                # Извлечение сущностей
-                await entity_extractor.extract_and_store(
-                    document_id, chunk_id, chunk_text, chunk_seq, filename
-                )
-            
+                create_document_node/create_chunk_node — СИНХРОННЫЕ вызовы
+                драйвера neo4j. Если Neo4j недоступен/завис, они блокируют
+                event loop навсегда (worker solo-пул замирает целиком).
+                asyncio.to_thread уводит вызов в отдельный поток, wait_for
+                отдаёт управление через NEO4J_OP_TIMEOUT даже если поток
+                продолжает висеть в фоне.
+                """
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(fn, *args),
+                        timeout=NEO4J_OP_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"[graph] Neo4j таймаут {label or fn.__name__} "
+                        f"({NEO4J_OP_TIMEOUT}с) для {document_id} — пропуск"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[graph] Neo4j ошибка {label or fn.__name__} "
+                        f"для {document_id}: {e}"
+                    )
+
+            async def _build():
+                # Создаём узел документа
+                await _neo4j_op(kg_service.create_document_node, document_id, filename, label="create_document_node")
+
+                # Обрабатываем чанки (первые 10 для скорости, остальные в фоне)
+                for i, chunk in enumerate(chunks[:10]):
+                    chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
+                    chunk_text = chunk.get("content", "")
+                    chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
+
+                    # Узел чанка в графе
+                    await _neo4j_op(
+                        kg_service.create_chunk_node,
+                        chunk_id, document_id, chunk_text, chunk_seq,
+                        label="create_chunk_node",
+                    )
+
+                    # Извлечение сущностей (LLM) — ограничено на чанк
+                    try:
+                        await asyncio.wait_for(
+                            entity_extractor.extract_and_store(
+                                document_id, chunk_id, chunk_text, chunk_seq, filename
+                            ),
+                            timeout=CHUNK_TIMEOUT,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"[graph] Извлечение сущностей таймаут для {chunk_id} "
+                            f"({CHUNK_TIMEOUT}с) — пропуск чанка"
+                        )
+
+            # Весь граф — в общий таймаут: если LLM/Neo4j висят суммарно
+            # дольше GRAPH_TOTAL_TIMEOUT, граф пропускается, но документ
+            # продолжает обрабатываться (завершение не блокируется).
+            await asyncio.wait_for(_build(), timeout=GRAPH_TOTAL_TIMEOUT)
+
             logger.info(
                 f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано "
                 f"(+{round((time.monotonic() - _t_graph) * 1000, 1)}ms)"
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[graph] Общий таймаут {GRAPH_TOTAL_TIMEOUT}с для {document_id} — "
+                f"граф пропущен, документ продолжает обработку"
             )
         except Exception as e:
             logger.warning(f"Ошибка построения графа для {document_id}: {e}")
