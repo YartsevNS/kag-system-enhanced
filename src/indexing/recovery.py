@@ -148,6 +148,17 @@ def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False)
                 "was_stuck_since": updated_at_str,
             })
 
+            # QueueGuard: снимаем замок ПЕРЕД перезапуском. Если задача реально
+            # потеряна (worker убит/перезапущен), release_lock в process_document
+            # не выполнился, и замок висит до TTL (6 часов) — recovery не смог
+            # бы перезапустить документ (enqueue вернул бы False). Раз документ
+            # завис дольше STUCK_THRESHOLD, задача точно мертва — замок можно
+            # снять. Если же задача каким-то образом ещё жива, дубль не создастся:
+            # process_document (QueueGuard уровень 3) пропустит обработку при
+            # status=processing.
+            from src.indexing.queue_guard import release_lock
+            release_lock(doc_id)
+
             if requeue:
                 try:
                     # QueueGuard: постановка через enqueue_document — замок не
