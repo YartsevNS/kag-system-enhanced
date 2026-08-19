@@ -432,6 +432,14 @@ class EmbeddingsService:
         """
         logger.debug(f"Поиск: query='{query[:100]}', limit={limit}")
 
+        # Автоинициализация: клиент создаётся в initialize(), которая обычно
+        # вызывается при обработке документов. После рестарта api/worker клиент
+        # может быть ещё None, и search() падал с
+        # 'NoneType' object has no attribute 'generate' → RAG в чате возвращал
+        # 0 источников. Инициализируемся лениво при первом поиске.
+        if self._embedding_client is None:
+            await self.initialize()
+
         # Генерируем embedding для запроса
         query_embedding = await self._embedding_client.generate(query)
 

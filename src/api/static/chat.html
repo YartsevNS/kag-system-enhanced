@@ -729,8 +729,8 @@
                 // Убираем загрузку
                 hideLoading();
                 
-                // Добавляем ответ ассистента
-                addMessageToUI('assistant', data.response, data.metadata);
+                // Добавляем ответ ассистента (sources — для списка документов-источников)
+                addMessageToUI('assistant', data.response, data.metadata, data.sources);
                 
                 // Сохраняем сессию
                 saveMessage('user', text);
@@ -747,7 +747,7 @@
         }
         
         // Добавление сообщения в UI
-        function addMessageToUI(role, content, metadata = null) {
+        function addMessageToUI(role, content, metadata = null, sources = null) {
             const messagesDiv = document.getElementById('messages');
             
             const messageDiv = document.createElement('div');
@@ -759,9 +759,27 @@
             if (metadata && metadata.sources_count > 0 && metadata.rag_used) {
                 const totalDocs = metadata.total_docs || '—';
                 const graphUsed = metadata.graph_used ? ' • 🕸️ Граф знаний' : '';
+                // Собираем уникальные документы (в sources может быть несколько
+                // чанков одного документа) и выводим их имена ссылками на preview.
+                let docLinksHTML = '';
+                if (sources && sources.length > 0) {
+                    const seen = new Map(); // document_id -> {filename}
+                    for (const s of sources) {
+                        const did = s.document_id;
+                        if (!did || seen.has(did)) continue;
+                        seen.set(did, s.filename || did.slice(0, 12));
+                    }
+                    docLinksHTML = Array.from(seen.entries()).map(([did, fname]) => {
+                        const safeName = escapeHTML(fname || did.slice(0, 12));
+                        // Ссылка на файл документа (inline-просмотр/скачивание)
+                        const url = `${API_URL}/upload/${encodeURIComponent(did)}/preview`;
+                        return `<div class="source-item">📄 <a href="${url}" target="_blank" rel="noopener">${safeName}</a></div>`;
+                    }).join('');
+                }
                 sourcesHTML = `
                     <div class="sources">
-                        <div class="sources-title">📎 Источники (${metadata.sources_count})</div>
+                        <div class="sources-title">📎 Источники (${metadata.sources_count} чанков, ${seen ? seen.size : 0} документов)</div>
+                        ${docLinksHTML}
                         <div class="source-item">
                             📄 Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
                         </div>
