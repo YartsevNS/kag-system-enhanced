@@ -90,7 +90,8 @@ async def send_message(
                 "rag_used": response["metadata"]["rag_used"],
                 "sources_count": response["metadata"]["sources_count"],
                 "total_docs": response["metadata"]["total_docs"],
-                "graph_used": response["metadata"]["graph_used"]
+                "graph_used": response["metadata"]["graph_used"],
+                "intent": response["metadata"].get("intent", "semantic"),
             }
         )
 

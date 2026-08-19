@@ -148,6 +148,81 @@ class ChatService:
                 "error": str(e),
             }
 
+    def _detect_meta_intent(self, query: str) -> Optional[str]:
+        """Определить, является ли запрос «мета-запросом о базе» (не семантикой).
+
+        Зачем: «покажи все документы» / «сколько документов» — это вопросы о
+        КАТАЛОГЕ, а не о содержимом. RAG-поиск по Qdrant вернул бы топ-N
+        релевантных чанков из пары документов, а не список. Это классическая
+        задача маршрутизации интента: мета-запросы обрабатываются SQL-выборкой
+        из БД, семантические — RAG.
+
+        Возвращает тип мета-запроса или None:
+          - "count" — сколько документов
+          - "list"  — показать список документов
+          - None    — семантический запрос (обычный RAG)
+        """
+        q = (query or "").lower().strip()
+
+        # Считаем «сколько/количество» — отдельно от «список»
+        count_words = ["сколько документ", "количество документ", "всего документ",
+                       "сколько файл", "сколько загружен", "сколько в базе"]
+        if any(w in q for w in count_words):
+            return "count"
+
+        # Список/перечень/реестр — просим показать документы целиком
+        list_words = [
+            "покажи все документ", "покажи документ", "все документ",
+            "список документ", "перечисли документ", "перечень документ",
+            "реестр документ", "какие документ", "какие есть документ",
+            "список файл", "покажи файл", "все файл",
+            "дай список", "покажи список", "выведи список",
+        ]
+        if any(w in q for w in list_words):
+            return "list"
+
+        return None
+
+    def _build_documents_list_context(
+        self, query: str, group_ids: Optional[List[str]], is_admin: bool,
+        limit: int = 60
+    ) -> str:
+        """Собрать контекст «список документов» из БД (SQL), не из Qdrant.
+
+        Возвращает строку вида:
+          СПИСОК ДОКУМЕНТОВ (всего N):
+          1. «filename» (id, дата, размер)
+          ...
+
+        Фильтрация по группам: не-админ видит только документы своих групп
+        (как в RAG). Показываем не более `limit` имён — чтобы не переполнить
+        контекст LLM; при большем количестве добавляем «и ещё N...».
+        """
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            docs, total = get_doc_repo().list(limit=10000, status="completed")
+
+            # Фильтр по группам (аналог RAG-фильтра в embeddings_service.search)
+            if not is_admin and group_ids:
+                gset = set(group_ids)
+                docs = [d for d in docs if d.group_ids and gset.intersection(d.group_ids or [])]
+
+            total = len(docs)
+            if total == 0:
+                return "СПИСОК ДОКУМЕНТОВ: в базе нет документов (или нет доступа к ним)."
+
+            lines = []
+            for i, d in enumerate(docs[:limit], 1):
+                size_kb = (d.file_size or 0) / 1024
+                created = d.created_at.strftime("%d.%m.%Y") if d.created_at else "?"
+                lines.append(f"{i}. «{d.filename}» (id: {d.id[:8]}, {created}, {size_kb:.0f} КБ)")
+
+            suffix = f"\n... и ещё {total - limit} документов" if total > limit else ""
+            return f"СПИСОК ДОКУМЕНТОВ (всего {total}):\n" + "\n".join(lines) + suffix
+        except Exception as e:
+            logger.warning(f"Не удалось собрать список документов: {e}")
+            return "СПИСОК ДОКУМЕНТОВ: ошибка получения списка."
+
     async def generate_response(
         self,
         user_message: str,
@@ -204,8 +279,33 @@ class ChatService:
         temp = temperature if temperature is not None else 0.7
         tokens = max_tokens or 4096
 
+        # ── Маршрутизация интента (мета-запросы о базе vs семантика) ──────
+        # Зачем: «покажи все документы» — это вопрос о КАТАЛОГЕ. RAG вернул бы
+        # топ-N похожих чанков, а не список. Определяем тип запроса ДО RAG:
+        #   - "count": сколько документов (SQL count; полный список НЕ шлём —
+        #     flash-модель возвращает пустой ответ на длинный промпт)
+        #   - "list":  список документов (SQL select, первые 25 имён)
+        #   - None:    семантический запрос — обычный RAG ниже.
+        # Мета-запросы обрабатываются без Qdrant; LLM лишь форматирует ответ.
+        # Ограничение 25: эмпирически deepseek-v4-flash на промпте >~2.5-3К
+        # токенов (список 60 документов ≈ 3400) отвечает пустой строкой.
+        intent = self._detect_meta_intent(user_message) if use_rag else None
+        meta_context = ""
+        if intent == "count":
+            # Для «сколько» хватает stats_line («В базе знаний загружено
+            # документов: N») — не раздуваем промпт списком.
+            meta_context = ""
+            logger.info("Мета-запрос (count): RAG пропущен, отвечу по stats_line")
+        elif intent == "list":
+            meta_context = self._build_documents_list_context(
+                user_message, group_ids, is_admin, limit=25
+            )
+            logger.info(
+                "Мета-запрос (list): RAG пропущен, использую список из БД (25)"
+            )
+
         # Шаг 2: RAG поиск если включен
-        if use_rag:
+        if use_rag and intent is None:
             try:
                 logger.debug("Выполняю RAG поиск...")
                 from src.indexing.embeddings_service import embeddings_service
@@ -287,15 +387,19 @@ class ChatService:
             stats_line = ""
 
         # Системный промпт (из function_map, с контекстом RAG)
-        if context:
+        if context or meta_context:
+            # Для мета-запросов (список/сколько) контекст — это СПИСОК из БД,
+            # для семантических — чанки из Qdrant. Никогда не оба сразу.
+            rag_block = f"КОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}" if context else ""
+            list_block = f"{meta_context}" if meta_context else ""
             api_messages.append({
                 "role": "system",
                 "content": f"""{system_prompt}
 
 {stats_line}
 
-КОНТЕКСТ ИЗ ДОКУМЕНТОВ:
-{context}
+{list_block}
+{rag_block}
 
 Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа на вопрос — скажи честно «в загруженных документах эта информация не найдена». НЕ объясняй, как устроена система, если тебя не спросили об этом напрямую."""
             })
@@ -357,6 +461,7 @@ class ChatService:
                 "generated_at": datetime.utcnow().isoformat(),
                 "total_docs": self._get_total_docs(),
                 "graph_used": use_rag,
+                "intent": intent or ("semantic" if use_rag else "none"),
             }
         }
 
