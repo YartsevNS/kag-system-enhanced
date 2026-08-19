@@ -91,7 +91,10 @@ def on_worker_ready(sender=None, **kwargs):
     try:
         from src.indexing.recovery import recover_stuck_documents
         logger.info("[Recovery] Worker ready — запуск сканера...")
-        result = recover_stuck_documents(requeue=True)
+        # При старте подхватываем ВСЕ pending (задачи могли потеряться при
+        # остановке worker'а). requeue_pending=True — только здесь, на тиках
+        # Beat это делать нельзя (иначе лавина дублей в очереди).
+        result = recover_stuck_documents(requeue=True, requeue_pending=True)
         if result["recovered"] > 0:
             logger.warning(
                 f"[Recovery] Восстановлено {result['recovered']} зависших документов"

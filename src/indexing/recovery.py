@@ -12,12 +12,25 @@ Recovery-модуль: автоматическое восстановление
 from datetime import datetime, timedelta, timezone
 from loguru import logger
 
-STUCK_THRESHOLD_MINUTES = 5
+# Порог «зависшего» документа. Был 5 мин — recovery сбрасывал в pending любые
+# большие документы, которые обрабатываются дольше 5 минут (например, 5000+
+# чанков), и они попадали в бесконечный цикл (сброс → рекью → снова сброс),
+# блокируя solo-пул и «замораживая» счётчик completed. 60 минут — запас под
+# самые большие документы (task_time_limit всё равно 2 часа).
+STUCK_THRESHOLD_MINUTES = 60
 
 
-def recover_stuck_documents(requeue: bool = True) -> dict:
+def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False) -> dict:
     """
     Сканирует БД на предмет зависших документов и восстанавливает их.
+
+    Args:
+        requeue: ставить ли задачи в очередь для зависших processing/delayed
+        requeue_pending: ставить ли в очередь документы со статусом pending.
+            True — только при старте worker'а (on_worker_ready), чтобы
+            подхватить задачи, потерянные при остановке. False — при тиках
+            Beat, чтобы не плодить дубли (каждый тик добавлял бы по задаче
+            на каждый pending документ).
 
     Returns:
         dict: {recovered: N, skipped: M, errors: [...]}
@@ -60,8 +73,10 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
             result["recovered"] += 1
             if requeue:
                 try:
-                    from src.indexing.tasks import process_document
-                    process_document.delay(doc_id)
+                    # QueueGuard: постановка через enqueue_document — замок не
+                    # даст создать дубль, если задача для документа уже стоит.
+                    from src.indexing.queue_guard import enqueue_document
+                    enqueue_document(doc_id)
                 except Exception as e:
                     logger.error(f"[Recovery] Ошибка рекью delayed {doc_id}: {e}")
             continue
@@ -69,15 +84,24 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
         if status not in ("processing", "delayed", "pending"):
             continue
 
-        # Pending или delayed: просто ставим в очередь
+        # Pending: ставим в очередь ТОЛЬКО при старте worker'а (requeue_pending).
+        # Задача для pending документа обычно УЖЕ в очереди (её кладёт upload.py
+        # при загрузке), а при потере воркера acks_late/reject_on_worker_lost
+        # вернёт её в очередь автоматически. Повторный process_document.delay()
+        # на каждом тике Beat (5 мин) — причина лавины дублей: очередь
+        # разрослась до тысяч копий на одни и те же документы, и worker молотил
+        # дубли вместо реальных задач (pending вечно не обрабатывались).
         if status == "pending":
-            doc_data["updated_at"] = now.isoformat()
-            get_doc_repo().upsert(doc_id, doc_data)
-            result["recovered"] += 1
-            if requeue:
+            if requeue_pending:
+                doc_data["updated_at"] = now.isoformat()
+                get_doc_repo().upsert(doc_id, doc_data)
+                result["recovered"] += 1
                 try:
-                    from src.indexing.tasks import process_document
-                    process_document.delay(doc_id)
+                    # QueueGuard: при старте worker'а подхватываем pending,
+                    # но только если для документа ещё нет задачи (замок
+                    # свободен). Это исключает лавину дублей при рестартах.
+                    from src.indexing.queue_guard import enqueue_document
+                    enqueue_document(doc_id)
                 except Exception as e:
                     logger.error(f"[Recovery] Ошибка рекью pending {doc_id}: {e}")
             continue
@@ -126,10 +150,12 @@ def recover_stuck_documents(requeue: bool = True) -> dict:
 
             if requeue:
                 try:
-                    from src.indexing.tasks import process_document
-                    task = process_document.delay(doc_id)
+                    # QueueGuard: постановка через enqueue_document — замок не
+                    # даст создать дубль, если задача для документа уже стоит.
+                    from src.indexing.queue_guard import enqueue_document
+                    task = enqueue_document(doc_id)
                     logger.info(
-                        f"[Recovery] Перезапущен {doc_id} -> task {task.id}"
+                        f"[Recovery] Перезапущен {doc_id} -> enqueue={task}"
                     )
                 except Exception as e:
                     logger.error(f"[Recovery] Ошибка рекью {doc_id}: {e}")

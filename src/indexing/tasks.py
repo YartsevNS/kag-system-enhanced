@@ -25,6 +25,7 @@ from src.api.services.document_service import document_service
 def process_document(
     self,
     document_id: str,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """
     Обработать документ: парсинг → чанкинг → векторизация.
@@ -33,6 +34,11 @@ def process_document(
     из config_store при инициализации. Новые документы, добавленные после
     старта worker'а, НЕ попадают в его оперативную память.
     Поэтому мы принудительно перезагружаем документ из config_store.
+
+    force=True — принудительная переобработка (reindex/reprocess), разрешена
+    даже для completed-документов. Защита от дублей (QueueGuard, уровень 3):
+    если документ уже processing (другая копия задачи выполняется) или уже
+    completed без force — задача выходит без обработки.
     """
     logger.info(f"[Celery] Начало обработки: {document_id}")
     
@@ -46,6 +52,26 @@ def process_document(
         
         if isinstance(doc_data, str):
             raise ValueError(f"Документ повреждён в БД (строка вместо dict): {document_id}")
+        
+        # ── QueueGuard, уровень 3: защита от дублей в самой задаче ──────
+        # Если в очередь попала задача-дубль (например, осталась от старого
+        # кода до внедрения QueueGuard), а документ уже обрабатывается другой
+        # копией задачи (status=processing) или уже обработан (status=completed
+        # без force) — выходим без обработки. Это страховка на случай, когда
+        # замок в Redis недоступен/истёк, а дубль в очереди остался.
+        if doc_data:
+            cur_status = doc_data.get("status")
+            if cur_status == "processing" and not force:
+                logger.warning(
+                    f"[QueueGuard] {document_id}: уже processing (другая копия "
+                    f"задачи выполняется) — пропуск дубля"
+                )
+                return {"status": "skipped", "reason": "already_processing"}
+            if cur_status == "completed" and not force:
+                logger.warning(
+                    f"[QueueGuard] {document_id}: уже completed — пропуск дубля"
+                )
+                return {"status": "skipped", "reason": "already_completed"}
         
         if doc_data:
             # Пересоздаём запись в памяти (даже если уже была)
@@ -71,6 +97,10 @@ def process_document(
         
         # Обрабатываем
         result = asyncio.run(document_service.process_document(document_id))
+        # Успех — снимаем замок QueueGuard (задача завершена, документ
+        # обработан; при необходимости его можно будет поставить заново).
+        from src.indexing.queue_guard import release_lock
+        release_lock(document_id)
         logger.info(f"[Celery] ✅ Документ обработан: {document_id}")
         return {
             "document_id": document_id,
@@ -100,9 +130,20 @@ def process_document(
                 get_doc_repo().upsert(document_id, doc_data)
             except Exception:
                 pass
+            # Задача завершилась (delayed) — снимаем замок, чтобы recovery
+            # смог переставить документ после delayed_until.
+            from src.indexing.queue_guard import release_lock
+            release_lock(document_id)
             return {"status": "delayed", "document_id": document_id}
         else:
-            # Внутренняя ошибка — retry как обычно
+            # Внутренняя ошибка — retry как обычно.
+            # Перед retry: если это ПОСЛЕДНЯЯ попытка, снимаем замок — иначе
+            # после исчерпания retry документ останется заблокированным до TTL
+            # (6 часов) и recovery не сможет его перезапустить. При обычном
+            # retry замок держим (задача перепоставится Celery, дубль не нужен).
+            from src.indexing.queue_guard import release_lock
+            if self.request.retries >= self.max_retries:
+                release_lock(document_id)
             countdown = 60 * (2 ** self.request.retries)
             raise self.retry(exc=exc, countdown=countdown)
 
@@ -263,16 +304,18 @@ def batch_process_documents(
     results = []
     for doc in documents:
         try:
-            result = process_document.delay(
+            # QueueGuard: единая точка постановки с дедупликацией — на один
+            # документ никогда не создаётся две задачи (ни здесь, ни из
+            # upload/recovery/reindex).
+            from src.indexing.queue_guard import enqueue_document
+            ok = enqueue_document(
                 document_id=doc["document_id"],
-                file_path=doc["file_path"],
-                file_type=doc["file_type"],
-                metadata=doc.get("metadata")
+                force=doc.get("force", False),
             )
             results.append({
                 "document_id": doc["document_id"],
-                "task_id": result.id,
-                "status": "queued"
+                "task_id": None,
+                "status": "queued" if ok else "duplicate_skipped"
             })
         except Exception as e:
             logger.error(f"Ошибка постановки в очередь {doc['document_id']}: {e}")
@@ -339,6 +382,9 @@ def check_stuck_documents(self):
 
     logger.debug("[Beat] Проверка зависших документов...")
     try:
+        # На тиках Beat НЕ ставим pending в очередь повторно (requeue_pending
+        # по умолчанию False) — иначе каждый тик (5 мин) добавляет по задаче
+        # на каждый pending документ, очередь забивается дублями.
         result = recover_stuck_documents(requeue=True)
         if result["recovered"] > 0:
             logger.warning(

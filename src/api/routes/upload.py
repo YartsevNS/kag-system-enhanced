@@ -55,6 +55,11 @@ from src.database.user_models import User
 
 # Celery задача обработки документов (вместо asyncio.Queue)
 from src.indexing.tasks import process_document as celery_process_document
+# QueueGuard — единая точка постановки задач с защитой от дублей.
+# ВАЖНО: все постановки документов на обработку идут ТОЛЬКО через
+# enqueue_document() (Redis-замок + проверка статуса), а не через
+# process_document.delay() напрямую — иначе возможны дубли задач.
+from src.indexing.queue_guard import enqueue_document
 
 router = APIRouter()
 
@@ -295,8 +300,10 @@ async def tus_patch(
                 upload_id=upload_id,
             )
 
-            # В очередь Celery (retry, изоляция, Redis)
-            celery_process_document.delay(document_id=record.document_id)
+            # В очередь Celery (retry, изоляция, Redis).
+            # QueueGuard: дедупликация — если задача для документа уже
+            # стоит/выполняется, повторная не создаётся.
+            enqueue_document(record.document_id)
             logger.info(f"[TUS] Документ в Celery: {record.document_id}")
 
         except Exception as e:
@@ -407,8 +414,8 @@ async def upload_document(
             upload_id=upload_id
         )
 
-        # В очередь Celery
-        celery_process_document.delay(document_id=record.document_id)
+        # В очередь Celery (QueueGuard — защита от дублей)
+        enqueue_document(record.document_id)
         logger.info(f"[{upload_id}] 📋 В Celery")
 
         return DocumentStatus(
@@ -478,7 +485,8 @@ async def upload_documents_batch(
                 upload_id=upload_id
             )
 
-            celery_process_document.delay(document_id=record.document_id)
+            # QueueGuard: постановка с дедупликацией
+            enqueue_document(record.document_id)
 
             results.append({
                 "document_id": record.document_id,
@@ -648,8 +656,8 @@ def _process_bulk_file(
             group_ids=group_ids, upload_id=upload_id,
         ))
 
-        # В очередь Celery
-        celery_process_document.delay(document_id=record.document_id)
+        # В очередь Celery (QueueGuard — защита от дублей)
+        enqueue_document(record.document_id)
 
         results.append({
             "document_id": record.document_id,
@@ -1129,7 +1137,10 @@ async def reindex_all_documents():
             if isinstance(doc, dict) and doc.get("status") == "completed"
         ]
         for did in ids:
-            process_document.delay(did)
+            # QueueGuard: force=True — это осознанная принудительная
+            # переиндексация completed-документов (смена модели и т.п.).
+            # Без force= completed-документ не был бы переставлен.
+            enqueue_document(did, force=True)
 
         return {
             "status": "ok",
@@ -1314,10 +1325,10 @@ async def queue_status():
 
 
 async def _process_document_async(document_id: str):
-    """Запустить фоновую обработку документа через Celery."""
+    """Запустить фоновую обработку документа через Celery (с дедупликацией)."""
     try:
-        from src.indexing.tasks import process_document
-        process_document.delay(document_id)
+        # QueueGuard: единая точка постановки — защита от дублей.
+        enqueue_document(document_id)
     except Exception as e:
         from loguru import logger
         logger.warning(f"Не удалось запустить Celery задачу для {document_id}: {e}")
@@ -1378,9 +1389,11 @@ async def reprocess_ocr(document_id: str):
     record.progress = 0
     document_service._save_document_to_db(document_id)
     
-    task = process_document.delay(document_id)
+    # QueueGuard: force=True — это осознанный ручной перезапуск (reprocess),
+    # поэтому разрешаем постановку, даже если документ был completed.
+    task = enqueue_document(document_id, force=True)
     return {
         "status": "ok",
         "message": f"Переобработка запущена: {document_id}",
-        "task_id": str(task.id)
+        "task_id": str(task) if task else "duplicate_skipped"
     }

@@ -155,7 +155,19 @@ class EmbeddingClient:
         return [item.get("embedding", []) for item in data.get("data", [])]
 
     async def _embed_request(self, client: httpx.AsyncClient, texts: List[str]) -> List[List[float]]:
-        """Один HTTP-запрос для списка текстов. Возвращает список векторов."""
+        """Один HTTP-запрос для списка текстов. Возвращает список векторов.
+
+        ВАЖНО: GigaChat и другие OpenAI-совместимые провайдеры лимитируют вход
+        (GigaChat max 514 токенов на текст, иначе 413 Tokens limit exceeded —
+        батч отклоняется ЦЕЛИКОМ, и все чанки батча получали пустые векторы).
+        Поэтому текст обрезается до безопасного размера: 1000 символов кириллицы
+        ≈ ~570 токенов (всё ещё > 514), 700 ≈ ~500 токенов (на грани), поэтому
+        берём 500 символов ≈ ~350 токенов — гарантированно укладывается в лимит.
+        Для Ollama обрезка безвредна.
+        """
+        MAX_INPUT_CHARS = 500
+        texts = [t[:MAX_INPUT_CHARS] for t in texts]
+
         endpoint = self._embed_endpoint(batch=(len(texts) > 1))
         payload = self._embed_payload(texts)
 
