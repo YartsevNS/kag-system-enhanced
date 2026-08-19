@@ -761,9 +761,11 @@
                 const graphUsed = metadata.graph_used ? ' • 🕸️ Граф знаний' : '';
                 // Собираем уникальные документы (в sources может быть несколько
                 // чанков одного документа) и выводим их имена ссылками на preview.
+                // seen объявляем ДО блока — иначе при пустых sources будет
+                // ReferenceError: seen is not defined (использовалась ниже в шаблоне).
+                const seen = new Map(); // document_id -> filename
                 let docLinksHTML = '';
                 if (sources && sources.length > 0) {
-                    const seen = new Map(); // document_id -> {filename}
                     for (const s of sources) {
                         const did = s.document_id;
                         if (!did || seen.has(did)) continue;
