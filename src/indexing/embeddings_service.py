@@ -94,6 +94,8 @@ class EmbeddingsService:
             settings = get_settings()
             model = settings.EMBEDDING_MODEL
             base_url = settings.EMBEDDING_BASE_URL
+            provider_type = "ollama"
+            api_key = ""
             
             # Приоритет: function_map/embedding из админки (Provider Architecture)
             try:
@@ -101,18 +103,22 @@ class EmbeddingsService:
                 fm = config_store.get("function_map", "embedding") or {}
                 if fm and fm.get("provider_id") and fm.get("model"):
                     from src.api.services.provider_service import provider_service
-                    provider = provider_service.get_provider(fm["provider_id"])
+                    provider = provider_service.get_provider_with_key(fm["provider_id"])
                     if provider:
-                        base_url = (provider.get("url", "") or "").rstrip("/")
+                        base_url = (provider.url or "").rstrip("/")
                         model = fm["model"]
-                        logger.info(f"Embedding из админки: provider={provider.get('id')}, model={model}, url={base_url}")
+                        provider_type = "ollama" if provider.type == "ollama" else "openai"
+                        api_key = provider.api_key or ""
+                        logger.info(f"Embedding из админки: provider={provider.id}, model={model}, url={base_url}, type={provider_type}")
             except Exception as e:
                 logger.debug(f"function_map/embedding не найден, использую .env: {e}")
             
             self._embedding_client = EmbeddingClient(
                 base_url=base_url,
                 model=model,
-                timeout=settings.EMBEDDING_TIMEOUT
+                timeout=settings.EMBEDDING_TIMEOUT,
+                provider_type=provider_type,
+                api_key=api_key
             )
             logger.info(f"Embedding клиент инициализирован: {model}")
 
@@ -136,24 +142,35 @@ class EmbeddingsService:
         logger.info("EmbeddingsService инициализирован успешно")
 
     async def ensure_model(self):
-        """Проверить актуальность embedding модели из настроек. Если модель сменилась — пересоздать клиент."""
+        """Проверить актуальность embedding модели из настроек. Если модель/провайдер сменились — пересоздать клиент."""
         settings = get_settings()
         new_model = settings.EMBEDDING_MODEL
         new_base_url = settings.EMBEDDING_BASE_URL
+        new_provider_type = "ollama"
+        new_api_key = ""
         try:
             from src.api.services.config_store import config_store
             fm = config_store.get("function_map", "embedding") or {}
             if fm and fm.get("provider_id") and fm.get("model"):
                 from src.api.services.provider_service import provider_service
-                provider = provider_service.get_provider(fm["provider_id"])
+                provider = provider_service.get_provider_with_key(fm["provider_id"])
                 if provider:
-                    new_base_url = (provider.get("url", "") or "").rstrip("/")
+                    new_base_url = (provider.url or "").rstrip("/")
                     new_model = fm["model"]
+                    new_provider_type = "ollama" if provider.type == "ollama" else "openai"
+                    new_api_key = provider.api_key or ""
         except Exception:
             pass
-        if self._embedding_client and (self._embedding_client.model != new_model or self._embedding_client.base_url != new_base_url):
+        if self._embedding_client and (
+            self._embedding_client.model != new_model
+            or self._embedding_client.base_url != new_base_url
+            or self._embedding_client.provider_type != new_provider_type
+        ):
             logger.info(f"♻️ Embedding модель изменилась: {self._embedding_client.model} → {new_model}")
-            self._embedding_client = EmbeddingClient(base_url=new_base_url, model=new_model, timeout=settings.EMBEDDING_TIMEOUT)
+            self._embedding_client = EmbeddingClient(
+                base_url=new_base_url, model=new_model, timeout=settings.EMBEDDING_TIMEOUT,
+                provider_type=new_provider_type, api_key=new_api_key
+            )
             self._embedding_dimensions = int(settings.EMBEDDING_DIMENSIONS)
             logger.info(f"Embedding клиент пересоздан: {new_model}")
 

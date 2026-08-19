@@ -1,7 +1,10 @@
 """
-Embedding клиент для Ollama
+Embedding клиент для KAG.
 
-Генерирует векторные представления текста через Ollama API.
+Поддерживает два типа провайдеров:
+- ollama (локальный): POST /api/embeddings (одиночный) и /api/embed (батч)
+- OpenAI-совместимые (openai/deepseek/openrouter/custom): POST /v1/embeddings (input=[...])
+
 Используется для:
 - Векторизации документов перед сохранением в Qdrant
 - Векторизации поисковых запросов
@@ -24,17 +27,10 @@ class EmbeddingResponse(BaseModel):
 
 class EmbeddingClient:
     """
-    Клиент для генерации эмбеддингов через Ollama.
+    Клиент для генерации эмбеддингов.
 
-    Ollama предоставляет endpoint /api/embeddings для генерации
-    векторных представлений текста.
-
-    Пример использования:
-        client = EmbeddingClient(
-            base_url="http://192.168.50.41:11434",
-            model="nomic-embed-text"
-        )
-        vector = await client.generate("Текст документа")
+    Поддерживает Ollama (/api/embed) и OpenAI-совместимые провайдеры
+    (/v1/embeddings). Тип провайдера задаётся через provider_type.
     """
 
     def __init__(
@@ -43,30 +39,36 @@ class EmbeddingClient:
         model: str = "nomic-embed-text:latest",
         timeout: float = 60.0,
         max_retries: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
+        provider_type: str = "ollama",
+        api_key: str = ""
     ):
         """
         Инициализация embedding клиента.
 
         Args:
-            base_url: URL Ollama сервера
+            base_url: URL провайдера (без endpoint)
             model: Модель для эмбеддингов
             timeout: Таймаут запросов
             max_retries: Максимум повторных попыток
             retry_delay: Задержка между попытками
+            provider_type: "ollama" или OpenAI-совместимый (openai/deepseek/openrouter/custom)
+            api_key: API-ключ для OpenAI-совместимых провайдеров
         """
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.provider_type = provider_type  # "ollama" | "openai"-совместимый
+        self.api_key = api_key
 
         self._client: Optional[httpx.AsyncClient] = None
         self._dimensions: Optional[int] = None
 
         logger.info(
             f"EmbeddingClient инициализирован: "
-            f"base_url={self.base_url}, model={self.model}"
+            f"base_url={self.base_url}, model={self.model}, type={self.provider_type}"
         )
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -111,9 +113,76 @@ class EmbeddingClient:
             await self._client.aclose()
             logger.info("Embedding клиент закрыт")
 
+    def _headers(self) -> dict:
+        """Заголовки для OpenAI-совместимых провайдеров."""
+        h = {"Content-Type": "application/json"}
+        if self.api_key:
+            h["Authorization"] = f"Bearer {self.api_key}"
+        return h
+
+    def _embed_endpoint(self, batch: bool) -> str:
+        """Правильный endpoint в зависимости от типа провайдера.
+
+        Для Ollama: /api/embed (батч) или /api/embeddings (одиночный).
+        Для OpenAI-совместимых: /embeddings (если base_url уже оканчивается на
+        /v1) или /v1/embeddings. Это исключает двойной /v1.
+        """
+        if self.provider_type == "ollama":
+            return "/api/embed" if batch else "/api/embeddings"
+        # OpenAI-совместимый
+        if self.base_url.endswith("/v1"):
+            return "/embeddings"
+        return "/v1/embeddings"
+
+    def _embed_payload(self, texts: List[str]) -> dict:
+        """Тело запроса в зависимости от типа провайдера."""
+        if self.provider_type == "ollama":
+            if len(texts) == 1:
+                return {"model": self.model, "prompt": texts[0]}
+            return {"model": self.model, "input": texts}
+        # OpenAI-совместимый
+        return {"model": self.model, "input": texts}
+
+    def _parse_embeddings(self, data: dict, count: int) -> List[List[float]]:
+        """Распарсить ответ в список векторов (по числу запрошенных текстов)."""
+        if self.provider_type == "ollama":
+            # /api/embeddings (одиночный) → {"embedding": [...]}
+            if "embedding" in data:
+                return [data["embedding"]]
+            # /api/embed (батч) → {"embeddings": [[...], ...]}
+            return data.get("embeddings", [])
+        # OpenAI-совместимый /v1/embeddings → {"data": [{"embedding": [...]}, ...]}
+        return [item.get("embedding", []) for item in data.get("data", [])]
+
+    async def _embed_request(self, client: httpx.AsyncClient, texts: List[str]) -> List[List[float]]:
+        """Один HTTP-запрос для списка текстов. Возвращает список векторов."""
+        endpoint = self._embed_endpoint(batch=(len(texts) > 1))
+        payload = self._embed_payload(texts)
+
+        if self.provider_type == "ollama":
+            response = await client.post(endpoint, json=payload)
+        else:
+            response = await client.post(endpoint, json=payload, headers=self._headers())
+
+        if response.status_code == 404:
+            raise ValueError(f"Модель не найдена: {self.model}. Проверьте имя модели у провайдера.")
+        if response.status_code != 200:
+            raise ValueError(
+                f"Ошибка embedding API (код {response.status_code}): {response.text[:200]}"
+            )
+
+        data = response.json()
+        embeddings = self._parse_embeddings(data, len(texts))
+        if not embeddings:
+            raise ValueError("Пустой ответ embedding API")
+
+        if self._dimensions is None and embeddings and embeddings[0]:
+            self._dimensions = len(embeddings[0])
+        return embeddings
+
     async def generate(self, text: str) -> List[float]:
         """
-        Сгенерировать embedding для текста.
+        Сгенерировать embedding для одного текста.
 
         Args:
             text: Текст для векторизации
@@ -132,33 +201,11 @@ class EmbeddingClient:
 
                 logger.debug(f"Embedding запрос: text_length={len(text)}, attempt={attempt+1}")
 
-                response = await client.post(
-                    "/api/embeddings",
-                    json={
-                        "model": self.model,
-                        "prompt": text
-                    }
-                )
-
-                if response.status_code == 404:
-                    raise ValueError(
-                        f"Модель не найдена: {self.model}. "
-                        f"Выполните: ollama pull {self.model}"
-                    )
-                elif response.status_code != 200:
-                    raise ValueError(
-                        f"Ошибка embedding API (код: {response.status_code}): {response.text}"
-                    )
-
-                data = response.json()
-                embedding = data.get("embedding", [])
+                embeddings = await self._embed_request(client, [text])
+                embedding = embeddings[0]
 
                 if not embedding:
                     raise ValueError("Пустой embedding в ответе")
-
-                # Сохраняем размерность
-                if self._dimensions is None:
-                    self._dimensions = len(embedding)
 
                 logger.debug(f"Embedding сгенерирован: dimensions={len(embedding)}")
                 return embedding
@@ -167,7 +214,7 @@ class EmbeddingClient:
                 last_error = TimeoutError(f"Таймаут embedding запроса ({self.timeout}с)")
                 logger.warning(last_error)
             except httpx.ConnectError as e:
-                last_error = ConnectionError(f"Ошибка подключения к Ollama: {e}")
+                last_error = ConnectionError(f"Ошибка подключения к embedding API: {e}")
                 logger.error(last_error)
                 raise  # Не retry'им ошибки подключения
             except Exception as e:
@@ -184,20 +231,18 @@ class EmbeddingClient:
     async def generate_batch(
         self,
         texts: List[str],
-        batch_size: int = 32
+        batch_size: int = 8
     ) -> List[List[float]]:
         """
         Сгенерировать embeddings для списка текстов НАСТОЯЩИМ батчем.
 
-        Ollama /api/embed принимает input=[...] и возвращает все векторы за
-        ОДИН HTTP-запрос. Раньше каждый текст шёл отдельным POST /api/embeddings
-        (даже в «батче» через asyncio.gather) — это и было узким местом
-        векторизации (~1.5 сек × N чанков). Теперь батч из batch_size текстов
-        = 1 запрос, что даёт ускорение в десятки раз.
+        Один HTTP-запрос на батч из batch_size текстов (для Ollama /api/embed
+        или OpenAI /v1/embeddings). Раньше каждый текст шёл отдельным запросом
+        (~1.5 сек × N чанков) — это было узким местом векторизации.
 
         Args:
             texts: Список текстов
-            batch_size: Размер батча (текстов на один запрос /api/embed)
+            batch_size: Размер батча (текстов на один запрос)
 
         Returns:
             Список векторов (по одному на каждый текст)
@@ -210,38 +255,15 @@ class EmbeddingClient:
         for i in range(0, total, batch_size):
             batch = texts[i:i + batch_size]
             try:
-                batch_emb = await self._embed_batch(batch)
+                batch_emb = await self._embed_request(client=await self._get_client(), texts=batch)
                 embeddings.extend(batch_emb)
             except Exception as e:
-                logger.error(f"Ошибка /api/embed для батча {i}: {e}")
+                logger.error(f"Ошибка embedding батча {i}: {e}")
                 for _ in batch:
                     embeddings.append([0.0] * (self._dimensions or 768))
 
         logger.info(f"Batch embedding завершён: {len(embeddings)} векторов")
         return embeddings
-
-    async def _embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Один запрос /api/embed для батча текстов. Возвращает список векторов."""
-        client = await self._get_client()
-        response = await client.post(
-            "/api/embed",
-            json={"model": self.model, "input": texts}
-        )
-        if response.status_code == 404:
-            raise ValueError(
-                f"Модель не найдена: {self.model}. Выполните: ollama pull {self.model}"
-            )
-        if response.status_code != 200:
-            raise ValueError(
-                f"Ошибка /api/embed (код {response.status_code}): {response.text[:200]}"
-            )
-        data = response.json()
-        embs = data.get("embeddings", [])
-        if not embs:
-            raise ValueError("Пустой ответ /api/embed")
-        if self._dimensions is None and embs:
-            self._dimensions = len(embs[0])
-        return embs
 
     async def generate_for_document(
         self,
@@ -277,7 +299,7 @@ class EmbeddingClient:
 
     async def health_check(self) -> dict:
         """
-        Проверить доступность Ollama embedding API.
+        Проверить доступность embedding API.
 
         Returns:
             Словарь со статусом проверки
@@ -285,35 +307,23 @@ class EmbeddingClient:
         try:
             client = await self._get_client()
 
-            # Пробуем сгенерировать embedding для простого текста
             start_time = asyncio.get_event_loop().time()
 
-            response = await client.post(
-                "/api/embeddings",
-                json={
-                    "model": self.model,
-                    "prompt": "test"
-                },
-                timeout=10.0
-            )
+            embeddings = await self._embed_request(client, ["test"])
 
             response_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
 
-            if response.status_code == 200:
-                data = response.json()
-                dimensions = len(data.get("embedding", []))
-
+            if embeddings and embeddings[0]:
                 return {
                     "healthy": True,
                     "model": self.model,
-                    "dimensions": dimensions,
+                    "dimensions": len(embeddings[0]),
                     "response_time_ms": response_time_ms
                 }
-            else:
-                return {
-                    "healthy": False,
-                    "error": f"HTTP {response.status_code}: {response.text}"
-                }
+            return {
+                "healthy": False,
+                "error": "Пустой ответ embedding API"
+            }
 
         except Exception as e:
             return {

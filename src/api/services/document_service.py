@@ -569,10 +569,12 @@ class DocumentService:
                 },
                 group_ids=record.group_ids
             )
+            # Реальная модель и размерность из активного embedding-клиента (не хардкод)
+            _emb_client = getattr(embeddings_service, "_embedding_client", None)
             plog.log("vectorize", {
                 "vectors_stored": vectors_count,
-                "embedding_model": "nomic-embed-text",
-                "dimensions": 768
+                "embedding_model": getattr(_emb_client, "model", "unknown"),
+                "dimensions": getattr(_emb_client, "_dimensions", None) or 0
             })
 
             # Генерируем миниатюру
