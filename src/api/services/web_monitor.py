@@ -938,6 +938,14 @@ class WebMonitorService:
         parsed = urlparse(url)
         path = parsed.path.lower()
         
+        # Проверка 0: docs.cntd.ru — Электронный фонд правовых документов
+        # (Техэксперт). Ссылки вида /document/{id} отдают полный текст
+        # документа в HTML (блок #textBlock1) после SSO-редиректа с cookies.
+        # Это не файл, а HTML-страница — обрабатывается отдельной веткой
+        # в _download_and_upload (извлекаем текст → сохраняем как .txt).
+        if parsed.netloc in ("docs.cntd.ru", "www.docs.cntd.ru") and "/document/" in path:
+            return True
+        
         # Проверка 1: расширение файла
         if any(path.endswith(ext) for ext in file_types):
             return True
@@ -949,6 +957,10 @@ class WebMonitorService:
             '/files/download/',            # скачивание
             '/download/file/',             # ещё вариант
             '/api/files/',                 # API файлов
+            '/file/',                      # fs.cap.ru/file/{token} — ЦИТ Чувашии:
+                                           # файлы лежат по токену БЕЗ расширения
+                                           # (напр. https://fs.cap.ru/file/sqMJ8ty8ccmf...),
+                                           # тип определяется по Content-Type при скачивании
         ]
         if any(pattern in path for pattern in file_service_patterns):
             return True
@@ -1093,6 +1105,90 @@ class WebMonitorService:
                             skip_count += 1
                         continue  # Переходим к следующему элементу
 
+                    # ── docs.cntd.ru: HTML-страница с текстом документа ────
+                    # Техэксперт отдаёт полный текст в блоке #textBlock1 после
+                    # SSO-редиректа (302 на auth.kodeks.ru и обратно, cookies
+                    # сохраняются aiohttp-сессией автоматически). Извлекаем
+                    # текст и сохраняем как .txt документ (аналог RSS-текста).
+                    if "docs.cntd.ru" in url:
+                        try:
+                            async with session.get(
+                                url, timeout=aiohttp.ClientTimeout(total=60),
+                                allow_redirects=True
+                            ) as resp:
+                                if resp.status != 200:
+                                    logger.warning(f"CNTD {url[:60]}: HTTP {resp.status}")
+                                    skip_count += 1
+                                    continue
+                                html_text = await resp.text(encoding="utf-8", errors="replace")
+
+                            # Извлекаем текст документа
+                            from bs4 import BeautifulSoup
+                            soup = BeautifulSoup(html_text, "html.parser")
+                            text_block = soup.select_one("#textBlock1") or soup.select_one(".textBlock") or soup.body
+                            doc_text = text_block.get_text("\n", strip=True) if text_block else ""
+
+                            # Заголовок из <title> или из ссылки
+                            if not filename or filename == "Скачать" or filename == Path(urlparse(url).path).name:
+                                title_tag = soup.find("title")
+                                filename = (title_tag.get_text(strip=True) if title_tag else "") or filename
+                            # Отрезаем служебный хвост Техэксперта («Электронный фонд...»)
+                            for cut in ["Электронный фонд правовых", "Войти Зарегистрироваться"]:
+                                idx = doc_text.find(cut)
+                                if idx > 0:
+                                    doc_text = doc_text[:idx]
+
+                            if len(doc_text.strip()) < 100:
+                                logger.info(f"⏭ CNTD {url[:60]}: текст пуст/короткий ({len(doc_text)} симв)")
+                                skip_count += 1
+                                continue
+
+                            content = doc_text.encode("utf-8")
+                            filename = (filename[:80] + ".txt").replace("/", "_") if not filename.lower().endswith(".txt") else filename[:80]
+                            file_hash = hashlib.sha256(content).hexdigest()
+
+                            # Дедупликация по SHA-256
+                            try:
+                                from src.api.services.document_service import document_service
+                                existing = document_service._find_by_hash(file_hash)
+                                if existing:
+                                    skip_count += 1
+                                    continue
+                            except Exception:
+                                pass
+
+                            record = await document_service.upload_document(
+                                filename=filename,
+                                file_content=content,
+                                file_type="text/plain",
+                                source_metadata=item.get("metadata")
+                            )
+                            from src.api.routes.upload import _process_document_async
+                            await _process_document_async(record.document_id)
+                            new_count += 1
+                            self._seen_urls.add(url)
+                            self._hash_cache[url] = {
+                                'size': str(len(content)),
+                                'modified': '',
+                                'filename': filename,
+                                'hash': file_hash,
+                            }
+                            self.track_download({
+                                'url': url, 'filename': filename,
+                                'source_id': source.id, 'source_name': source.name,
+                                'status': 'downloaded',
+                                'file_hash': file_hash, 'file_size': len(content),
+                                'kag_document_id': record.document_id,
+                                'content_type': 'text/html',
+                                'downloaded_at': datetime.utcnow().isoformat()
+                            })
+                            logger.info(f"📄 [{new_count}/{total}] CNTD: {filename[:50]} (из {source.name})")
+                            self._save_state()
+                        except Exception as e:
+                            logger.warning(f"Ошибка CNTD {url[:60]}: {e}")
+                            skip_count += 1
+                        continue  # Переходим к следующему элементу
+
                     async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                         # Обработка rate limiting
                         if resp.status == 429:
@@ -1121,9 +1217,29 @@ class WebMonitorService:
 
                         # Извлекаем имя файла из Content-Disposition если есть
                         import re as _re
-                        cd_match = _re.search(r'filename[^;=\n]*=["\']?([^"\';\\n]*)', content_disposition, _re.IGNORECASE)
-                        if cd_match:
-                            filename = cd_match.group(1).strip() or filename
+                        # Приоритет — RFC 5987 filename* (UTF-8, %-encoded):
+                        #   filename*=UTF-8''%D0%9E%D1%81%D0%BD...%2Edoc
+                        # Он корректно передаёт кириллицу; простой filename="..."
+                        # часто содержит кракозябры/подчёркивания вместо русских букв.
+                        cd_star = _re.search(
+                            r"filename\*\s*=\s*UTF-8''([^;]*)",
+                            content_disposition,
+                            _re.IGNORECASE,
+                        )
+                        if cd_star:
+                            try:
+                                from urllib.parse import unquote
+                                filename = unquote(cd_star.group(1).strip().strip('"')) or filename
+                            except Exception:
+                                pass
+                        else:
+                            cd_match = _re.search(
+                                r'filename[^;=\n]*=["\']?([^"\';\\n]*)',
+                                content_disposition,
+                                _re.IGNORECASE,
+                            )
+                            if cd_match:
+                                filename = cd_match.group(1).strip() or filename
 
                         # Если тип файла не определён по расширению — берём из Content-Type
                         if not any(filename.lower().endswith(ext) for ext in source.file_types):
