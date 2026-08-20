@@ -301,7 +301,10 @@ async function loadAll() {
     if (!r.ok) throw new Error('Ошибка загрузки списка');
     const data = await r.json();
     allDocs = data.documents || [];
-    await enrichDocs();
+    // НЕ вызываем enrichDocs(): backend /upload/list теперь отдаёт всё
+    // (document_type, recognized_title, uploaded_by_name, tags) одним
+    // запросом. Раньше на каждый документ уходил отдельный /details —
+    // 145 документов = 145 HTTP + ~290 Qdrant scroll + 145 SQL (N+1).
     updateStats();
     renderAll();
     checkTypeWatchdog();
@@ -363,21 +366,9 @@ async function startTypeDetection() {
   setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔍 Типизировать'; } }, 5000);
 }
 
-async function enrichDocs() {
-  // Get tags/types for docs — silently skip failures
-  await Promise.all(allDocs.map(async (d) => {
-    try {
-      const r = await fetch(`${API}/upload/${d.document_id}/details`);
-      if (r.ok) {
-        const det = await r.json();
-        d.document_type = det.document_type || 'unknown';
-        d.tags = det.tags || [];
-        d.uploaded_by_name = det.uploaded_by_name || null;
-        d.recognized_title = det.recognized_title || d.filename;
-      }
-    } catch(e) { /* skip */ }
-  }));
-}
+// enrichDocs() УДАЛЁН: был источником N+1 запросов (details на каждый документ).
+// Backend /upload/list отдаёт document_type, recognized_title, uploaded_by_name,
+// tags одним запросом — обогащение на клиенте больше не нужно.
 
 function updateStats() {
   const ready = allDocs.filter(d => d.status === 'completed').length;

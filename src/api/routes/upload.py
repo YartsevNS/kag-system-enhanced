@@ -718,6 +718,30 @@ async def list_documents(
     repo = get_doc_repo()
     documents, total = repo.list(limit=min(limit, 1000), offset=offset, status=status)
 
+    # ── Устранение N+1 запросов при загрузке страницы документов ────────
+    # Раньше фронтенд на КАЖДЫЙ документ слал /upload/{id}/details
+    # (enrichDocs): 145 документов = 145 HTTP + ~290 Qdrant scroll + 145 SQL.
+    # Из details реально нужен только uploaded_by_name (имя загрузившего);
+    # document_type/recognized_title/summary/topics уже есть в list из SQL,
+    # а tags в системе не хранятся вовсе (Qdrant payload их не содержит).
+    # Поэтому: имена пользователей берём ОДНИМ SQL-запросом (IN ...),
+    # tags отдаём пустыми (фронтенд к этому готов — d.tags || []).
+    user_names = {}
+    try:
+        user_ids = list({d.uploaded_by for d in documents if d.uploaded_by})
+        if user_ids:
+            from src.database.session import get_engine, get_session_local
+            from src.database.user_models import User as UserModel
+            get_engine()
+            session = get_session_local()()
+            rows = session.query(UserModel.id, UserModel.username).filter(
+                UserModel.id.in_(user_ids)
+            ).all()
+            user_names = {uid: name for uid, name in rows}
+            session.close()
+    except Exception as e:
+        logger.debug(f"Не удалось получить имена пользователей: {e}")
+
     enriched = []
     for d in documents:
         meta = repo.to_dict(d)
@@ -733,6 +757,7 @@ async def list_documents(
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "updated_at": d.updated_at.isoformat() if d.updated_at else None,
             "uploaded_by": meta.get("uploaded_by"),
+            "uploaded_by_name": user_names.get(meta.get("uploaded_by")),
             "is_active": meta.get("is_active", True),
             "group_ids": meta.get("group_ids", []),
             "file_hash": meta.get("file_hash", ""),
@@ -742,6 +767,8 @@ async def list_documents(
             "recognized_title": meta.get("recognized_title", ""),
             "summary": meta.get("summary", ""),
             "topics": meta.get("topics", []),
+            # tags в системе не хранятся — пустой список (фронтенд готов)
+            "tags": [],
         }
         enriched.append(item)
 
