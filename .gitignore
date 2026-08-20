@@ -28,6 +28,13 @@ Thumbs.db
 # Env
 .env
 .env.local
+# Бэкапы env и credentials — НЕ коммитить (секреты)
+.env*
+!*.env.example
+*credentials*
+*.bak.*
+.before_deploy
+.before.*
 
 # Secrets
 api_key.txt
@@ -51,3 +58,13 @@ models/
 sbom.json
 docker/nginx/ssl/
 bash.exe.stackdump
+
+# Мусор в корне (копии/служебные — не часть проекта)
+/chat.html
+/chat.py
+/chat_models.py
+/chat_storage.py
+/config.py
+/migrations.py
+/system_monitor.py
+/weights/
