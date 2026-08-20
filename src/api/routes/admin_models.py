@@ -1960,13 +1960,15 @@ if not m:
 block = m.group(1)
 
 # 2) Внутри блока worker правим memory и cpus (только deploy.resources.limits).
+#    Значение может быть жёстким ("4G", 4G, "2.0") ИЛИ переменной окружения
+#    ("${WORKER_CPUS:-4.0}") — заменяем целиком всё, что после "memory:"/"cpus:".
 new_block = re.sub(
-    r"(memory:\\s*)[\\"']?\\d+(?:\\.\\d+)?[MG][\\"']?",
+    r"(memory:\\s*)\\S+",
     f"\\\\g<1>{MEMORY}",
     block, count=1,
 )
 new_block = re.sub(
-    r"(cpus:\\s*)[\\"']?\\d+(?:\\.\\d+)?[\\"']?",
+    r"(cpus:\\s*)\\S+",
     f"\\\\g<1>\\"{CPUS}\\"",
     new_block, count=1,
 )

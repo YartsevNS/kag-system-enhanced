@@ -148,8 +148,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 4G
+          # Лимиты worker настраиваются через переменные окружения (или админку:
+          # «Ресурсы Worker» → PUT /admin/models/worker-resources). Значения по
+          # умолчанию 4 CPU / 12G — Occular-ocr (трансформерная модель) на PDF
+          # со сканами требует >4G (OOM-killed при 4G/2CPU). Задать: 
+          #   WORKER_CPUS=6.0 WORKER_MEMORY=16G docker compose up -d --no-deps --force-recreate worker
+          cpus: "${WORKER_CPUS:-4.0}"
+          memory: "${WORKER_MEMORY:-12G}"
         reservations:
           cpus: "1.0"
           memory: 2G
