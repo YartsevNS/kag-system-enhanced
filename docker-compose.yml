@@ -12,7 +12,9 @@ services:
       dockerfile: Dockerfile
     container_name: kag-api
     ports:
-      - "${FASTAPI_PORT:-8000}:8000"
+      # НЕ публикуем api наружу — единственная точка входа nginx (80/443).
+      # 127.0.0.1:8000 оставлен для локальной проверки с хоста (deploy.sh healthcheck).
+      - "127.0.0.1:${FASTAPI_PORT:-8000}:8000"
     environment:
       - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}

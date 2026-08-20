@@ -129,10 +129,10 @@ fi
 docker-compose up -d --no-build 2>&1
 
 echo ""
-echo "=== Waiting for API ==="
+echo "=== Waiting for API (через nginx) ==="
 for i in $(seq 1 30); do
-    if curl -s -o /dev/null http://localhost:8000/setup; then
-        echo "API ready!"
+    if curl -s -o /dev/null http://localhost/setup; then
+        echo "API ready (через nginx)!"
         break
     fi
     sleep 5
@@ -140,5 +140,7 @@ done
 
 echo ""
 echo "=== Deploy complete ==="
-echo "Open http://localhost:8000/setup -> Initialize ALL"
-echo "Login: admin / ${ADMIN_PASSWORD}"
+echo "Сайт:     http://<host>/setup  ->  Initialize ALL"
+echo "HTTPS:    https://<host>/  (самоподписанный сертификат, сгенерирован выше)"
+echo "Вход:     admin / ${ADMIN_PASSWORD}"
+echo "Внимание: api:8000 НЕ публикуется наружу, весь трафик идёт через nginx (80/443)."
