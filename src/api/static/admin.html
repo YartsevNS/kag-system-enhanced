@@ -615,8 +615,22 @@
         <!-- Worker Resources -->
         <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
             <h2 class="section-title">⚙️ Ресурсы Worker (CPU/память)</h2>
-            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">Текущие лимиты контейнера worker. Для изменения — правка <code>docker-compose.yml</code> → <code>docker-compose up -d --no-deps --force-recreate worker</code></p>
-            <div id="worker-res-info" style="display:flex;gap:16px;font-size:14px;opacity:0.8">Загрузка...</div>
+            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">Лимиты контейнера worker. Изменение применяется мгновенно (docker update) и персистентно (патч docker-compose.yml) — переживает редеплой. Worker перезапускается автоматически.</p>
+            <div id="worker-res-info" style="display:flex;gap:16px;font-size:14px;opacity:0.8;margin-bottom:12px">Загрузка...</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">CPU (ядра, 0.5–32)</label>
+                    <input id="worker-cpus" type="number" step="0.5" min="0.5" max="32" value="4.0"
+                           style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:110px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Память (G, мин 1)</label>
+                    <input id="worker-memory" type="text" value="12G"
+                           style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:110px">
+                </div>
+                <button onclick="saveWorkerResources()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 16px;cursor:pointer;font-size:13px">🔄 Применить и перезапустить</button>
+                <span id="worker-res-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
         </div>
 
     </main>
@@ -1950,8 +1964,35 @@ async function loadWorkerResources(){
     var d = await r.json();
     document.getElementById('worker-res-info').innerHTML = 
       '<span>CPU: <b>' + d.cpus + '</b></span> <span>Memory: <b>' + d.memory + '</b></span>';
+    // Заполняем поля формы текущими значениями (чтобы видеть, что меняем)
+    if (document.getElementById('worker-cpus')) document.getElementById('worker-cpus').value = d.cpus;
+    if (document.getElementById('worker-memory')) {
+      var m = String(d.memory).replace(/G$/i, '') + 'G';
+      document.getElementById('worker-memory').value = m;
+    }
   } catch(e) {
     document.getElementById('worker-res-info').textContent = 'Недоступно';
+  }
+}
+
+async function saveWorkerResources(){
+  var cpus = document.getElementById('worker-cpus').value;
+  var memory = document.getElementById('worker-memory').value;
+  var status = document.getElementById('worker-res-status');
+  if (!confirm('Применить CPU=' + cpus + ' и Memory=' + memory + ' к worker и перезапустить его?')) return;
+  status.textContent = 'Применяю...';
+  try {
+    var r = await fetch('/api/v1/admin/models/worker-resources', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cpus: cpus, memory: memory})
+    });
+    var d = await r.json();
+    status.textContent = d.message || (d.status === 'error' ? d.message : 'OK');
+    loadWorkerResources();
+  } catch(e) {
+    status.textContent = 'Ошибка: ' + e.message;
   }
 }
 loadWorkerResources();

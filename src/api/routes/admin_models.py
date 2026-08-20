@@ -1890,16 +1890,121 @@ async def get_worker_resources():
 
 @router.put("/worker-resources", summary="Изменить ресурсы worker")
 async def update_worker_resources(req: dict):
-    """Обновляет cpus/memory через Docker API и перезапускает worker."""
+    """
+    Обновляет cpus/memory worker и перезапускает его.
+
+    Два уровня применения:
+    1. docker update — мгновенно меняет лимиты ЖИВОГО контейнера.
+    2. Патч docker-compose.yml (через общий volume /app/data + exec в worker) —
+       чтобы лимиты ПЕРЕЖИЛИ редеплой (docker-compose up --force-recreate).
+       Без этого шага после редеплоя worker вернётся к старым 4G/2CPU.
+
+    Worker перезапускается в конце — новый код + новые лимиты.
+    """
     import docker, os
-    cpus = req.get("cpus", "4.0")
-    memory = req.get("memory", "8G")
+    cpus = str(req.get("cpus", "4.0")).strip()
+    memory = str(req.get("memory", "8G")).strip().upper()
+
+    # ── Валидация: не даём выставить мусор/опасные значения ─────────────
+    try:
+        cpus_f = float(cpus)
+        if not (0.5 <= cpus_f <= 32):
+            return {"status": "error", "message": "CPU должен быть в диапазоне 0.5–32"}
+    except ValueError:
+        return {"status": "error", "message": "CPU — число (напр. 4.0)"}
+    mem_match = __import__("re").fullmatch(r"(\d+(?:\.\d+)?)([MG])", memory)
+    if not mem_match:
+        return {"status": "error", "message": "Память — число с суффиксом M или G (напр. 12G)"}
+    mem_val = float(mem_match.group(1))
+    if mem_val < 1:
+        return {"status": "error", "message": "Память не может быть меньше 1 (G)"}
 
     try:
-        import docker
         client = docker.from_env()
         w = client.containers.get("kag-worker")
-        w.update(cpus=cpus, memory=memory)
+
+        # ── Шаг 1: мгновенное применение к живому контейнеру ─────────────
+        # ВНИМАНИЕ: docker SDK Container.update() НЕ принимает cpus/memory,
+        # а update_container() не умеет NanoCpus. Используем прямой вызов
+        # Docker API /containers/{id}/update. Обязательно указываем MemorySwap
+        # вместе с Memory — иначе Docker отвечает 409 («Memory limit should be
+        # smaller than already set memoryswap limit»).
+        mem_bytes = int(mem_val * (1024**3))
+        url = client.api._url('/containers/{0}/update', w.id)
+        upd_resp = client.api._post_json(url, data={
+            'NanoCpus': int(cpus_f * 1e9),
+            'Memory': mem_bytes,
+            'MemorySwap': mem_bytes,
+        })
+        if upd_resp.status_code != 200:
+            return {"status": "error", "message": f"docker update: {upd_resp.text[:200]}"}
+
+        # ── Шаг 2: персистентность — патч docker-compose.yml ─────────────
+        # api не монтирует compose-файл, а у worker он смонтирован READ-ONLY
+        # (rw=false), поэтому exec в worker не может его записать.
+        # Обходной путь: запускаем одноразовый контейнер с volume
+        # /home/yartsevn/kag-system (хостовый путь), который патчит файл
+        # через PyYAML/regex. docker.sock у api есть — этого достаточно.
+        # ВАЖНО: скрипт — обычная строка с плейсхолдерами {CPUS}/{MEMORY},
+        # а не f-string, чтобы не путаться в экранировании.
+        _PATCH_TEMPLATE = '''import re
+
+path = "/opt/kag-system/docker-compose.yml"
+with open(path, "r", encoding="utf-8") as f:
+    text = f.read()
+
+# 1) Находим блок worker: "  worker:" до следующего сервиса на том же уровне.
+m = re.search(r"^(  worker:.*?)(?=^  [a-zA-Z0-9_-]+:|\\Z)", text, re.M | re.S)
+if not m:
+    raise RuntimeError("Секция worker не найдена в docker-compose.yml")
+block = m.group(1)
+
+# 2) Внутри блока worker правим memory и cpus (только deploy.resources.limits).
+new_block = re.sub(
+    r"(memory:\\s*)[\\"']?\\d+(?:\\.\\d+)?[MG][\\"']?",
+    f"\\\\g<1>{MEMORY}",
+    block, count=1,
+)
+new_block = re.sub(
+    r"(cpus:\\s*)[\\"']?\\d+(?:\\.\\d+)?[\\"']?",
+    f"\\\\g<1>\\"{CPUS}\\"",
+    new_block, count=1,
+)
+text = text[:m.start()] + new_block + text[m.end():]
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(text)
+print("compose patched")
+'''
+        script = _PATCH_TEMPLATE.replace("{MEMORY}", memory).replace("{CPUS}", cpus)
+        script_path = "/app/data/patch_compose.py"
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script)
+        try:
+            # Одноразовый контейнер на базе существующего образа api (python3
+            # гарантирован) с RW-volume на хостовый каталог проекта.
+            # У worker volume read-only — поэтому патчим снаружи.
+            # Скрипт лежит в /app/data = хостовый /home/yartsevn/kag-system/data,
+            # внутри контейнера доступен как /opt/kag-system/data/patch_compose.py.
+            client.containers.run(
+                image="kag-system_api:latest",
+                command=["/opt/kag-system/data/patch_compose.py"],
+                entrypoint="python3",  # образ api имеет entrypoint uvicorn — переопределяем
+                volumes={"/home/yartsevn/kag-system": {"bind": "/opt/kag-system", "mode": "rw"}},
+                detach=False,
+                remove=True,
+                mem_limit="256m",
+            )
+            logger.info(f"docker-compose.yml пропатчен: cpus={cpus}, memory={memory}")
+        except Exception as e:
+            logger.warning(f"Патч compose не удался (не критично, docker update применён): {e}")
+        finally:
+            try:
+                os.remove(script_path)
+            except OSError:
+                pass
+
+        # ── Шаг 3: перезапуск worker (новые лимиты + свежий код) ─────────
         w.restart()
         return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker обновлён и перезапущен"}
     except Exception as e:
