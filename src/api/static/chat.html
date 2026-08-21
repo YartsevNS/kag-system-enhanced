@@ -584,23 +584,19 @@
             const indicator = document.querySelector('.status-indicator');
             
             try {
-                // Получаем привязку функции чата
-                const fmResp = await apiFetch(`${API_URL}/admin/models/functions/chat`);
-                if (!fmResp.ok) throw new Error('Не удалось получить привязку чата');
+                // Публичный эндпоинт /chat/model (доступен всем пользователям,
+                // не только admin). Раньше дёргали /admin/models/functions/chat —
+                // для не-admin это 403 → «Не настроена», хотя модель работает.
+                const fmResp = await apiFetch(`${API_URL}/chat/model`);
+                if (!fmResp.ok) throw new Error('Не удалось получить модель');
                 const fm = await fmResp.json();
                 const modelName = fm.model || '—';
-                const providerId = fm.provider_id;
+                const providerName = fm.provider_name || '';
                 
-                if (modelEl) modelEl.textContent = modelName;
-                
-                // Проверяем статус провайдера
-                if (providerId) {
-                    const provResp = await apiFetch(`${API_URL}/admin/models/providers/${encodeURIComponent(providerId)}/test`, {method: 'POST'});
-                    const provData = await provResp.json();
-                    if (indicator) {
-                        indicator.style.background = provData.ok ? 'var(--green)' : 'var(--red)';
-                        indicator.title = provData.ok ? 'Модель активна' : 'Модель недоступна';
-                    }
+                if (modelEl) modelEl.textContent = providerName ? `${modelName} (${providerName})` : modelName;
+                if (indicator) {
+                    indicator.style.background = fm.configured ? 'var(--green)' : 'var(--red)';
+                    indicator.title = fm.configured ? 'Модель активна' : 'Модель не настроена';
                 }
             } catch (error) {
                 console.error('Ошибка загрузки модели:', error);

@@ -27,6 +27,34 @@ router_export = APIRouter()
 # убирает гонку и даёт изоляцию между пользователями (каждый видит своё).
 # ═══════════════════════════════════════════════════════════════════════
 
+@router.get("/model", summary="Текущая модель чата (доступно всем)")
+async def get_chat_model():
+    """Вернуть текущую модель и провайдера для чата.
+
+    Доступно ЛЮБОМУ пользователю (не только admin): имя модели — не секрет,
+    и фронтенд чата показывает его каждому. Раньше фронтенд дёргал
+    /admin/models/functions/chat — для не-admin это 403, и чат показывал
+    «Не настроена», хотя нейросеть отвечала.
+    """
+    try:
+        from src.api.services.provider_service import provider_service
+        fm = provider_service.get_function_map("chat")
+        if not fm or not fm.get("model"):
+            return {"model": "", "provider_id": "", "provider_name": "", "configured": False}
+        provider = provider_service.get_provider(fm.get("provider_id") or "")
+        return {
+            "model": fm.get("model", ""),
+            "provider_id": fm.get("provider_id", ""),
+            "provider_name": (provider or {}).get("name", fm.get("provider_id", "")),
+            "configured": True,
+        }
+    except Exception as e:
+        logger.warning(f"Не удалось получить модель чата: {e}")
+        return {"model": "", "provider_id": "", "provider_name": "", "configured": False}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+
 @router.get("/sessions", summary="Список сессий текущего пользователя")
 async def list_sessions(
     current_user: Optional[User] = Depends(get_current_user_optional)
