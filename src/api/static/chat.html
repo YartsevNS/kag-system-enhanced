@@ -78,6 +78,7 @@
         }
         
         .session-item{
+            position:relative; /* для absolute-кнопки удаления */
             padding:0.65rem 0.75rem;
             border-radius:var(--radius-sm);
             cursor:pointer;
@@ -103,6 +104,29 @@
             white-space:nowrap;
             overflow:hidden;
             text-overflow:ellipsis;
+            padding-right:1.4rem; /* место под кнопку удаления */
+        }
+        
+        .session-delete{
+            position:absolute;
+            top:0.4rem;
+            right:0.4rem;
+            background:none;
+            border:none;
+            color:var(--text3);
+            font-size:0.8rem;
+            cursor:pointer;
+            opacity:0;
+            transition:opacity 0.15s;
+            padding:2px 4px;
+            border-radius:var(--radius-sm);
+        }
+        .session-item:hover .session-delete{
+            opacity:1;
+        }
+        .session-delete:hover{
+            color:var(--red);
+            background:rgba(255,255,255,0.06);
         }
         
         .session-time{
@@ -675,9 +699,32 @@
                 div.innerHTML = `
                     <div class="session-title">${escapeHTML(session.title || 'Новый диалог')}</div>
                     <div class="session-time">${session.updatedAt ? new Date(session.updatedAt).toLocaleString('ru-RU') : ''}</div>
+                    <button class="session-delete" title="Удалить чат" onclick="event.stopPropagation(); deleteSession('${session.id}')">🗑</button>
                 `;
                 list.appendChild(div);
             });
+        }
+
+        // Удаление чата (своего — сервер проверяет владельца)
+        async function deleteSession(sessionId) {
+            if (!confirm('Удалить этот чат?')) return;
+            try {
+                if (useServerSessions) {
+                    const resp = await apiFetch(`${API_URL}/chat/sessions/${sessionId}`, { method: 'DELETE' });
+                    if (!resp.ok && resp.status !== 404) throw new Error('Не удалось удалить чат');
+                }
+                // Убираем из локального списка (и для серверных, и для localStorage)
+                sessions = sessions.filter(s => s.id !== sessionId);
+                if (currentSessionId === sessionId) {
+                    currentSessionId = null;
+                    document.getElementById('messages').innerHTML = getEmptyStateHTML();
+                    document.getElementById('chat-title').textContent = 'Новый чат';
+                }
+                saveSessions(); // для анонимов — в localStorage; для авторизованных — no-op
+                renderSessions();
+            } catch (e) {
+                alert('Ошибка удаления: ' + e.message);
+            }
         }
 
         // Новый чат
