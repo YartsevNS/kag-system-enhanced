@@ -138,7 +138,10 @@ async def hybrid_search(
                         "chunk_id": point.get("chunk_id", ""),
                         "text": content[:500],
                         "doc_id": point.get("document_id", ""),
-                        "filename": point.get("file_type", ""),
+                        # ВАЖНО: filename из payload-поля filename, НЕ file_type!
+                        # Была ошибка: point.get("file_type") — подставлялся MIME-тип
+                        # (application/pdf, .txt) вместо имени файла → кракозябры.
+                        "filename": point.get("filename") or point.get("file_name") or "",
                         "score": round(score, 4),
                         "entity_count": 0,
                         "source": "qdrant"
