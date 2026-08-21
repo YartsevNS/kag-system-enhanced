@@ -53,7 +53,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 </head>
 <body>
 <nav>
-  <div class="logo">🎯 <span>KAG</span></div>
+  <div class="logo"> <span>KAG</span></div>
     <a href="/">⬡ Дашборд</a>
   <a href="/chat">💬 Чат с AI</a>
   <a href="/documents">📄 Документы</a>
@@ -503,7 +503,7 @@ async function showDomainSchema() {
     let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">';
     for (const [group, types] of Object.entries(schema)) {
       html += '<div style="background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px">';
-      html += '<div style="font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)">' + (group === 'core' ? '🎯 Core' : group === 'relations' ? '🔗 Relations' : '📎 Extended') + '</div>';
+      html += '<div style="font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)">' + (group === 'core' ? ' Core' : group === 'relations' ? '🔗 Relations' : '📎 Extended') + '</div>';
       for (const [type, desc] of Object.entries(types)) {
         html += '<div style="font-size:12px;padding:4px 0"><code style="background:var(--elevated);padding:1px 6px;border-radius:3px;color:var(--accent-h)">' + type + '</code> <span style="color:var(--text4)">' + desc + '</span></div>';
       }
