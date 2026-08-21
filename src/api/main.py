@@ -3,10 +3,10 @@
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from loguru import logger
 import os
 
@@ -19,6 +19,18 @@ from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
 from src.api.services.model_manager import model_manager
 from src.config import get_settings
+
+
+def _is_admin_request(request: Request) -> bool:
+    """Админ ли текущий пользователь (роли ставит SecurityMiddleware).
+
+    Зачем: HTML-страницы /admin, /docker и т.п. не под /api/v1/admin —
+    middleware их не защищает. Проверяем request.state.roles, который
+    SecurityMiddleware заполнил из JWT (локальный admin → roles=["admin"],
+    keycloak → realm_access.roles).
+    """
+    roles = getattr(request.state, "roles", None) or set()
+    return bool(roles & {"admin", "kag-admin"})
 
 settings = get_settings()
 
@@ -182,8 +194,15 @@ async def root_web():
 
 
 @app.get("/admin", summary="Админ-панель управления моделями")
-async def admin_web():
-    """Страница админ-панели"""
+async def admin_web(request: Request):
+    """Страница админ-панели (только для admin).
+
+    Зачем проверка: HTML-страница /admin НЕ под /api/v1/admin — security
+    middleware её не защищал, и не-admin открывал её, но все API-запросы
+    /admin/models/* падали 403 → «ошибки отображения провайдера».
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
     admin_path = os.path.join(static_path, "admin.html")
     if os.path.exists(admin_path):
         return FileResponse(admin_path)
@@ -191,8 +210,10 @@ async def admin_web():
 
 
 @app.get("/docker", summary="Docker Dashboard")
-async def docker_dashboard():
-    """Страница Docker Dashboard"""
+async def docker_dashboard(request: Request):
+    """Страница Docker Dashboard (только для admin)."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
     docker_path = os.path.join(static_path, "docker.html")
     if os.path.exists(docker_path):
         return FileResponse(docker_path)
@@ -221,8 +242,10 @@ async def documents_page():
 
 
 @app.get("/qdrant", summary="Qdrant Database Dashboard")
-async def qdrant_dashboard():
-    """Страница Qdrant Dashboard"""
+async def qdrant_dashboard(request: Request):
+    """Страница Qdrant Dashboard (только для admin)."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
     qdrant_path = os.path.join(static_path, "qdrant.html")
     if os.path.exists(qdrant_path):
         return FileResponse(qdrant_path)
@@ -266,8 +289,10 @@ async def monitoring_page():
 
 
 @app.get("/users", summary="Пользователи и группы")
-async def users_page():
-    """Страница управления пользователями"""
+async def users_page(request: Request):
+    """Страница управления пользователями (только для admin)."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
     users_path = os.path.join(static_path, "users.html")
     if os.path.exists(users_path):
         return FileResponse(users_path)
@@ -280,8 +305,10 @@ async def know_web():
 
 
 @app.get("/logs", summary="Логи системы")
-async def logs_page():
-    """Страница просмотра логов"""
+async def logs_page(request: Request):
+    """Страница просмотра логов (только для admin)."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
     logs_path = os.path.join(static_path, "logs.html")
     if os.path.exists(logs_path):
         return FileResponse(logs_path)

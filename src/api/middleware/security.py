@@ -37,6 +37,13 @@ ADMIN_PREFIXES: Set[str] = {
     "/api/v1/admin",
 }
 
+# GET-эндпоинты под /api/v1/admin, доступные ЛЮБОМУ авторизованному
+# (не только admin). Сюда попадает только то, что нужно рабочим страницам
+# и не является секретом/настройкой.
+PUBLIC_ADMIN_GET_PATHS: Set[str] = {
+    "/api/v1/admin/models/upload-config",  # форматы загрузки — documents.html
+}
+
 ADMIN_ROLES: Set[str] = {"admin", "kag-admin"}
 
 # ── Кеш JWKS ──────────────────────────────────────────────────────────
@@ -190,7 +197,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         # 5. Admin-проверка
         if any(path.startswith(p) for p in ADMIN_PREFIXES):
-            if not (roles & ADMIN_ROLES):
+            # Исключения: конфиг форматов загрузки нужен ВСЕМ авторизованным
+            # (documents.html грузит его для выбора разрешённых расширений),
+            # а не только admin. Изменение (POST) — остаётся admin-only.
+            if path in PUBLIC_ADMIN_GET_PATHS and request.method == "GET":
+                pass
+            elif not (roles & ADMIN_ROLES):
                 logger.warning(f"[SEC] 403: user={_get_username(payload)} roles={roles} path={path}")
                 return JSONResponse(
                     status_code=403,
