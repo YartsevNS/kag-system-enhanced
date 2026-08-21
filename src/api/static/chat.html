@@ -586,7 +586,7 @@
             opts = opts || {};
             opts.credentials = 'include';
             var h = new Headers(opts.headers || {});
-            var t = localStorage.getItem('kag_token');
+            var t = ((document.cookie.match(/kag_token=([^;]+)/)||[])[1]||localStorage.getItem('kag_token'));
             if (t) h.set('Authorization', 'Bearer ' + t);
             opts.headers = h;
             return fetch(url, opts);
@@ -650,7 +650,7 @@
         // Раньше проверяли только localStorage — из-за этого серверные
         // сессии не использовались (useServerSessions=false), хотя cookie
         // есть, и чат падал на createSession → 401.
-        const useServerSessions = !!localStorage.getItem('kag_token') || document.cookie.includes('kag_token=');
+        const useServerSessions = !!((document.cookie.match(/kag_token=([^;]+)/)||[])[1]||localStorage.getItem('kag_token')) || document.cookie.includes('kag_token=');
 
         // Загрузка сессий
         async function loadSessions() {

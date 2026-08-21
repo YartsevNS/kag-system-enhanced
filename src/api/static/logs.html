@@ -250,7 +250,7 @@ function toggleSysPanel() {
 function getToken() {
   const m = document.cookie.match(/kag_token=([^;]+)/);
   if (m) return m[1];
-  return localStorage.getItem('kag_token');
+  return ((document.cookie.match(/kag_token=([^;]+)/)||[])[1]||localStorage.getItem('kag_token'));
 }
 function authHeaders() {
   const t = getToken();
@@ -528,6 +528,8 @@ function toast(msg) {const t=document.getElementById('toast');t.textContent=msg;
 
 function logout() {
   localStorage.removeItem('kag_token');
+  localStorage.removeItem('kag_sessions');
+  localStorage.removeItem('kag_user');
   document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
   fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
     .catch(function(){})

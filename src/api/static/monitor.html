@@ -170,7 +170,7 @@ const API = '/api/v1/monitor';
 function getToken() {
   const m = document.cookie.match(/kag_token=([^;]+)/);
   if (m) return m[1];
-  return localStorage.getItem('kag_token');
+  return ((document.cookie.match(/kag_token=([^;]+)/)||[])[1]||localStorage.getItem('kag_token'));
 }
 function authHeaders() {
   const t = getToken();

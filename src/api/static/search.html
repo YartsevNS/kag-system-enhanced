@@ -100,7 +100,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 function getToken() {
   const m = document.cookie.match(/kag_token=([^;]+)/);
   if (m) return m[1];
-  return localStorage.getItem('kag_token');
+  return ((document.cookie.match(/kag_token=([^;]+)/)||[])[1]||localStorage.getItem('kag_token'));
 }
 function authHeaders() {
   const t = getToken();
@@ -256,6 +256,8 @@ function hl(text, query) {
 
 function logout() {
   localStorage.removeItem('kag_token');
+  localStorage.removeItem('kag_sessions');
+  localStorage.removeItem('kag_user');
   document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
   fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
     .catch(function(){})
