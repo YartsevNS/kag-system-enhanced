@@ -299,6 +299,18 @@
             margin-bottom:0.25rem;
         }
         
+        /* Ссылки на документы: светлый контрастный, НЕ синий и НЕ белый
+           (--text #fafafa — обычный шрифт). --accent-l — светлый зелёный. */
+        .source-item a{
+            color:var(--accent-l);
+            text-decoration:none;
+            font-weight:500;
+        }
+        .source-item a:hover{
+            color:var(--accent-h);
+            text-decoration:underline;
+        }
+        
         .source-score{
             color:var(--accent);
             font-weight:500;
