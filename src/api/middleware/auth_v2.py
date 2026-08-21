@@ -24,18 +24,21 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=F
 
 
 async def _get_token(request: Request) -> Optional[str]:
-    """Извлечь JWT: Authorization header ИЛИ httpOnly cookie kag_token.
+    """Извлечь JWT: httpOnly cookie kag_token ИЛИ Authorization header.
 
-    Зачем: login кладёт токен в httpOnly cookie (secure при HTTPS), а
-    oauth2_scheme читает только Authorization header. Браузер после /login
-    шлёт cookie, но не header — без этого fallback'а get_current_user*
-    возвращал None для ВСЕХ авторизованных по cookie пользователей
-    (сессии чата не сохранялись, create_session → 401).
+    Приоритет у COOKIE (а не header): cookie свежий — сервер ставит его при
+    каждом логине текущего пользователя. Authorization header может прийти
+    из localStorage старой версии страницы (токен ПРОШЛОГО пользователя на
+    общем компьютере) — он НЕ должен перебивать свежий cookie.
+    Совпадает с порядком в SecurityMiddleware._extract_token.
     """
+    token = request.cookies.get("kag_token")
+    if token:
+        return token
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:]
-    return request.cookies.get("kag_token")
+    return None
 
 
 def _get_settings():
