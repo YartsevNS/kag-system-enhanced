@@ -833,7 +833,7 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}-message`;
             
-            const avatar = role === 'user' ? '👤' : '🤖';
+            const avatar = role === 'user' ? '👤' : '✨';
             
             let sourcesHTML = '';
             if (metadata && metadata.sources_count > 0 && metadata.rag_used) {
@@ -918,7 +918,7 @@
             loadingDiv.className = 'message assistant-message';
             loadingDiv.id = 'loading-message';
             loadingDiv.innerHTML = `
-                <div class="message-avatar">🤖</div>
+                <div class="message-avatar">✨</div>
                 <div class="message-content">
                     <div class="loading">
                         <span>Думаю</span>
