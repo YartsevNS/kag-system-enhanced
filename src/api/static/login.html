@@ -6,7 +6,7 @@
 <title>KAG — Вход</title>
 
 <style>
-:root{--bg:#08090a;--surface:#191a1b;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--accent:#5e6ad2;--accent-h:#7170ff;--red:#dc2626;--border:rgba(255,255,255,0.08);--radius:8px;--radius-sm:6px}
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px;width:380px;max-width:90vw}
@@ -20,6 +20,9 @@ input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.
 .btn:hover{opacity:0.85}
 .error{background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:var(--radius-sm);padding:10px 14px;color:var(--red);font-size:13px;margin-bottom:16px;display:none}
 .error.show{display:block}
+
+/* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
+.btn{border-radius:var(--radius-pill)!important;font-weight:500}
 </style>
 </head>
 <body>

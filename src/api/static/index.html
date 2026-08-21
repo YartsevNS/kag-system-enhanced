@@ -6,6 +6,8 @@
 <title>KAG — Knowledge Augmentation Generation</title>
 
 <style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
+
 :root {
   --bg: #08090a; --panel: #0f1011; --surface: #191a1b; --elevated: #23252a;
   --text: #f7f8f8; --text2: #d0d6e0; --text3: #8a8f98; --text4: #62666d;
@@ -59,6 +61,9 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;color:var(--text);margin
 /* Responsive */
 @media(max-width:900px){nav{width:60px}nav .logo{font-size:0;padding:20px 16px}nav .nav-item span{display:none}main{margin-left:60px;padding:24px 20px}.stats{grid-template-columns:repeat(2,1fr)}.features,.api-grid{grid-template-columns:1fr}}
 @media(max-width:600px){main{padding:16px 12px}.stats{grid-template-columns:1fr}}
+
+/* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
+.btn{border-radius:var(--radius-pill)!important;font-weight:500}
 </style>
 </head>
 <body>

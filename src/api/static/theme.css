@@ -1,0 +1,53 @@
+/*
+ * Supabase Dark Theme — эталонные CSS-переменные для KAG.
+ * За основу взят design system Supabase (см. скилл popular-web-designs).
+ * Правила Supabase:
+ *   - фон #171717 (не чисто чёрный), глубина через границы, не тени
+ *   - зелёный акцент #3ecf8e — только для акцентов/ссылок, не для заливки
+ *   - вес текста 400/500 (без 700)
+ *   - скругление: карточки 8-16px, primary-кнопки pill (9999px)
+ * Без CDN: основной шрифт system-ui, моно Cascadia Code (уже в проекте).
+ */
+:root {
+    /* Фоны */
+    --bg:        #171717;  /* страница (Supabase page) */
+    --panel:     #0f0f0f;  /* панели/сайдбар (Supabase button bg) */
+    --surface:   #1c1c1c;  /* карточки (чуть светлее фона) */
+    --elevated:  #242424;  /* ховер/поднятые элементы */
+
+    /* Текст */
+    --text:      #fafafa;  /* основной (Supabase off-white) */
+    --text2:     #b4b4b4;  /* вторичный (Supabase light gray) */
+    --text3:     #898989;  /* приглушённый (Supabase mid gray) */
+    --text4:     #4d4d4d;  /* третичный (Supabase dark gray) */
+
+    /* Акцент — Supabase green */
+    --accent:    #3ecf8e;  /* brand green */
+    --accent-h:  #00c573;  /* hover/links */
+    --accent-l:  #6ee7b7;  /* light green */
+
+    /* Семантические (Radix-подобные) */
+    --green:     #3ecf8e;
+    --emerald:   #10b981;
+    --red:       #e5484d;  /* tomato/error */
+    --red2:      #dc2626;  /* альтернативный красный */
+    --amber:     #f5a623;
+    --purple:    #8b5cf6;
+
+    /* Границы — иерархия через серый, не тени */
+    --border:        #2e2e2e;  /* стандартная (Supabase border-dark) */
+    --border-s:      #242424;  /* тонкая (Supabase dark border) */
+    --border-strong: #363636;  /* заметная (Supabase mid border) */
+    --accent-border: rgba(62, 207, 142, 0.3); /* зелёная подсветка */
+
+    /* Скругление */
+    --radius:    8px;    /* карточки */
+    --radius-sm: 6px;    /* кнопки/инпуты */
+    --radius-lg: 16px;   /* крупные контейнеры */
+    --radius-pill: 9999px; /* primary-кнопки */
+
+    /* Шрифты (без CDN) */
+    --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}

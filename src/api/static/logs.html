@@ -6,7 +6,7 @@
 <title>KAG — Логи системы</title>
 
 <style>
-:root{--bg:#08090a;--panel:#0f1011;--surface:#191a1b;--elevated:#23252a;--text:#f7f8f8;--text2:#d0d6e0;--text3:#8a8f98;--text4:#62666d;--accent:#5e6ad2;--accent-h:#7170ff;--accent-l:#828fff;--green:#27a644;--emerald:#10b981;--red:#dc2626;--amber:#f59e0b;--border:rgba(255,255,255,0.08);--border-s:rgba(255,255,255,0.05);--radius:8px;--radius-sm:6px;--radius-lg:12px}
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
 
@@ -97,6 +97,9 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:var(--radius);background:var(--green);color:#fff;font-size:13px;font-weight:500;display:none;z-index:1000;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
 
 @media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}.sys-panel{grid-template-columns:1fr}.log-container{height:400px}}
+
+/* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
+.btn{border-radius:var(--radius-pill)!important;font-weight:500}
 </style>
 </head>
 <body>
