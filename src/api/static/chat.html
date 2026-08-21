@@ -519,7 +519,7 @@
             
             <div class="messages" id="messages">
                 <div class="empty-state" id="empty-state">
-                    <div class="empty-icon">🤖</div>
+                    <div class="empty-icon">✨</div>
                     <div class="empty-title">Чем могу помочь?</div>
                     <div>Интеллектуальный помощник с доступом к базе знаний</div>
                     
@@ -922,7 +922,7 @@
                 <div class="message-content">
                     <div class="message-text">${escapeHTML(content)}</div>
                     <div class="message-meta">
-                        ${metadata ? `<span>🤖 ${metadata.model || 'N/A'}</span>` : ''}
+                        ${metadata ? `<span>✨ ${metadata.model || 'N/A'}</span>` : ''}
                         ${metadata && metadata.backend ? `<span>⚙️ ${metadata.backend}</span>` : ''}
                         <span>🕐 ${new Date().toLocaleTimeString('ru-RU')}</span>
                     </div>
@@ -1065,7 +1065,7 @@
         function getEmptyStateHTML() {
             return `
                 <div class="empty-state" id="empty-state">
-                    <div class="empty-icon">🤖</div>
+                    <div class="empty-icon">✨</div>
                     <div class="empty-title">Чем могу помочь?</div>
                     <div>Интеллектуальный помощник с доступом к базе знаний</div>
                     <div class="suggestions">
