@@ -23,13 +23,28 @@ from src.database.user_models import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
+async def _get_token(request: Request) -> Optional[str]:
+    """Извлечь JWT: Authorization header ИЛИ httpOnly cookie kag_token.
+
+    Зачем: login кладёт токен в httpOnly cookie (secure при HTTPS), а
+    oauth2_scheme читает только Authorization header. Браузер после /login
+    шлёт cookie, но не header — без этого fallback'а get_current_user*
+    возвращал None для ВСЕХ авторизованных по cookie пользователей
+    (сессии чата не сохранялись, create_session → 401).
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return request.cookies.get("kag_token")
+
+
 def _get_settings():
     """Return cached settings."""
     return get_settings()
 
 
 async def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(_get_token),
     db: Session = Depends(get_db),
 ) -> User:
     """
@@ -78,7 +93,7 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(_get_token),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
     """

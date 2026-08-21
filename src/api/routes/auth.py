@@ -250,12 +250,16 @@ def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "expires_in": _get_token_expiry(),
     })
-    # httpOnly cookie
+    # httpOnly cookie. secure зависит от протокола: по HTTPS — Secure,
+    # по HTTP (локальная сеть/реверс-прокси без TLS до нас) — обычная,
+    # иначе браузер НЕ сохранит cookie и пользователь не сможет работать
+    # (create_session/чата → 401). Внешний HTTPS определяется по
+    # X-Forwarded-Proto (реверс-прокси) или request.url.scheme.
     response.set_cookie(
         key="kag_token",
         value=access_token,
         httponly=True,
-        secure=True,
+        secure=_is_secure(request),
         samesite="lax",
         path="/",
         max_age=_get_token_expiry(),

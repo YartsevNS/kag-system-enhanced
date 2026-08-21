@@ -613,7 +613,12 @@
         // на СЕРВЕРЕ (chat_storage): нет гонки localStorage между вкладками,
         // история доступна с любого устройства. Если нет — фолбэк на
         // localStorage (обратная совместимость для анонимов).
-        const useServerSessions = !!localStorage.getItem('kag_token');
+        // Авторизован ли пользователь: токен может быть в httpOnly cookie
+        // (login кладёт только туда) ИЛИ в localStorage (старый способ).
+        // Раньше проверяли только localStorage — из-за этого серверные
+        // сессии не использовались (useServerSessions=false), хотя cookie
+        // есть, и чат падал на createSession → 401.
+        const useServerSessions = !!localStorage.getItem('kag_token') || document.cookie.includes('kag_token=');
 
         // Загрузка сессий
         async function loadSessions() {
