@@ -74,7 +74,8 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
   <!-- Registration -->
   <div class="section" id="local-section">
     <div class="section-title">📝 Регистрация локального пользователя</div>
-    <div class="card">
+    <div id="sso-status" class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text2)">Проверка SSO...</div>
+    <div class="card" id="local-reg-card">
       <div class="form">
         <input type="text" id="reg-username" placeholder="Логин" autocomplete="off">
         <input type="password" id="reg-password" placeholder="Пароль (мин 6 символов)" autocomplete="off">
@@ -359,6 +360,45 @@ function logout() {
     .catch(function(){})
     .finally(function(){ window.location.replace('/login'); });
 }
+
+// ── Статус SSO: кто проводит авторизацию + ссылки на консоль Keycloak ──
+async function loadSsoStatus() {
+  const el = document.getElementById('sso-status');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/v1/auth/status', {credentials:'include'});
+    const d = await r.json();
+    // Внутренний адрес — тот, по которому открыта страница (сервер в локальной сети)
+    const internalConsole = location.protocol + '//' + location.host + '/admin/realms/kag/console/';
+    const externalBase = d.keycloak_url || '';
+    const externalConsole = externalBase ? externalBase + '/admin/realms/kag/console/' : '';
+
+    let html = '';
+    if (d.sso_enabled) {
+      html += '<div style="color:var(--accent-l);font-weight:600;margin-bottom:6px">✅ SSO включён — авторизацию проводит Keycloak</div>';
+      html += '<div style="color:var(--text3);margin-bottom:8px">Локальная регистрация отключена: пользователи создаются в консоли Keycloak (роли admin/user).</div>';
+      // Блокируем локальную регистрацию
+      const card = document.getElementById('local-reg-card');
+      if (card) {
+        card.style.opacity = '0.45';
+        card.style.pointerEvents = 'none';
+      }
+    } else {
+      html += '<div style="color:var(--amber);font-weight:600;margin-bottom:6px">⚠️ SSO выключен (AUTH_ENABLED=false)</div>';
+      html += '<div style="color:var(--text3);margin-bottom:8px">Сейчас авторизацию проводит <b>локальная система</b> (users). Для SSO — включи AUTH_ENABLED и настрой внешний адрес в админке.</div>';
+    }
+    html += '<div style="font-size:12px;color:var(--text3)">Консоль Keycloak: ';
+    html += '<a href="' + internalConsole + '" target="_blank" style="color:var(--accent-l)">внутренняя</a>';
+    if (externalConsole) {
+      html += ' · <a href="' + externalConsole + '" target="_blank" style="color:var(--accent-l)">внешняя (' + d.keycloak_url + ')</a>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.textContent = 'Не удалось получить статус SSO: ' + e.message;
+  }
+}
+loadSsoStatus();
 
 </script>
 </body>

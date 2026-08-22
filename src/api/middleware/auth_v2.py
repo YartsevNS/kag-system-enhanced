@@ -46,12 +46,46 @@ def _get_settings():
     return get_settings()
 
 
+def _sync_keycloak_user(db: Session, payload: dict) -> User:
+    """Синхронизировать keycloak-пользователя в локальную таблицу users.
+
+    Зачем: сессии чата, group_ids и прочие механизмы работают с локальным
+    User. При входе через Keycloak (SSO) — создаём/обновляем запись:
+    username = preferred_username, is_admin из роли admin в realm.
+    """
+    username = payload.get("preferred_username") or payload.get("sub") or "user"
+    roles = set()
+    realm_access = payload.get("realm_access") or {}
+    roles.update(realm_access.get("roles", []) or [])
+    is_admin = "admin" in roles
+
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        user = User(
+            username=username,
+            is_admin=is_admin,
+            is_active=True,
+        )
+        db.add(user)
+    else:
+        # Обновляем админ-права из keycloak-ролей (синхронизация)
+        user.is_admin = is_admin
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 async def get_current_user(
     token: Optional[str] = Depends(_get_token),
     db: Session = Depends(get_db),
 ) -> User:
     """
     FastAPI dependency: extract and validate JWT, return User from DB.
+
+    Поддерживает:
+    - локальные JWT (sub=username, наш JWT_SECRET)
+    - Keycloak JWT (SSO): preferred_username + роли admin/user;
+      пользователь синхронизируется в users таблицу.
 
     Raises 401 if token is missing or invalid, or user not found.
     """
@@ -63,6 +97,8 @@ async def get_current_user(
         )
 
     settings = _get_settings()
+
+    # 1. Локальный JWT
     try:
         payload = jwt.decode(
             token,
@@ -75,24 +111,40 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing subject",
             )
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Inactive user",
+            )
+        return user
     except InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        # Не локальный — пробуем Keycloak
+        pass
 
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
+    # 2. Keycloak JWT (SSO)
+    try:
+        from src.api.middleware.security import _verify_keycloak
+        payload_kc = _verify_keycloak(token, settings.KEYCLOAK_URL, settings.KEYCLOAK_REALM)
+        user_kc = _sync_keycloak_user(db, payload_kc)
+        if not user_kc.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Inactive user",
+            )
+        return user_kc
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail=f"Invalid token: {e}",
         )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Inactive user",
-        )
-    return user
 
 
 async def get_current_user_optional(

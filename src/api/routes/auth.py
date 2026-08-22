@@ -360,6 +360,64 @@ def logout(request: Request, response: Response):
     return resp
 
 
+@router.get("/status", summary="Статус аутентификации (SSO включён?)")
+def auth_status():
+    """Вернуть, включён ли SSO (Keycloak) и его параметры для фронтенда.
+
+    Фронтенд login.html использует: если sso_enabled — логин через Keycloak
+    (password grant), иначе — локальный /auth/login.
+    """
+    settings = get_settings()
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("system", "config", {}) or {}
+    base_url = (cfg.get("base_url") or "").rstrip("/")
+    sso_enabled = bool(settings.AUTH_ENABLED and base_url)
+    return {
+        "sso_enabled": sso_enabled,
+        "keycloak_url": base_url or "",
+        "realm": settings.KEYCLOAK_REALM,
+        "client_id": settings.KEYCLOAK_CLIENT_ID,
+    }
+
+
+class SSOLoginRequest(BaseModel):
+    access_token: str
+
+
+@router.post("/sso-login", summary="Вход через Keycloak (SSO)")
+def sso_login(body: SSOLoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
+    """Принять access_token от Keycloak, проверить, поставить httpOnly cookie.
+
+    Фронтенд получает токен у Keycloak (password grant) и шлёт сюда;
+    сервер валидирует через JWKS и устанавливает cookie kag_token —
+    дальше всё работает как с локальным токеном.
+    """
+    settings = get_settings()
+    try:
+        from src.api.middleware.security import _verify_keycloak
+        payload = _verify_keycloak(body.access_token, settings.KEYCLOAK_URL, settings.KEYCLOAK_REALM)
+        # Синхронизируем пользователя в локальную users (роли admin/user)
+        from src.api.middleware.auth_v2 import _sync_keycloak_user
+        user = _sync_keycloak_user(db, payload)
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Account is deactivated")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid SSO token: {e}")
+
+    response.set_cookie(
+        key="kag_token",
+        value=body.access_token,
+        httponly=True,
+        secure=_is_secure(request),
+        samesite="lax",
+        path="/",
+        max_age=_get_token_expiry(),
+    )
+    return {"status": "ok", "user": user.username, "is_admin": user.is_admin}
+
+
 class ChangePasswordRequest(BaseModel):
     """Запрос на смену пароля."""
     current_password: str
