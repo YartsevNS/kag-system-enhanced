@@ -73,8 +73,13 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
   <!-- Registration -->
   <div class="section" id="local-section">
-    <div class="section-title">📝 Регистрация локального пользователя</div>
     <div id="sso-status" class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text2)">Проверка SSO...</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button onclick="setSso(true)" id="sso-on-btn" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px">✅ Включить SSO</button>
+      <button onclick="setSso(false)" id="sso-off-btn" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px">⛔ Выключить SSO</button>
+      <span id="sso-status-save" style="font-size:12px;color:var(--text4);align-self:center"></span>
+    </div>
+    <div class="section-title">📝 Регистрация локального пользователя</div>
     <div class="card" id="local-reg-card">
       <div class="form">
         <input type="text" id="reg-username" placeholder="Логин" autocomplete="off">
@@ -394,8 +399,34 @@ async function loadSsoStatus() {
     }
     html += '</div>';
     el.innerHTML = html;
+    // Подсветка активной кнопки SSO
+    var onBtn = document.getElementById('sso-on-btn');
+    var offBtn = document.getElementById('sso-off-btn');
+    if (onBtn && offBtn) {
+      onBtn.style.opacity = d.sso_enabled ? '1' : '0.5';
+      offBtn.style.opacity = d.sso_enabled ? '0.5' : '1';
+    }
   } catch(e) {
     el.textContent = 'Не удалось получить статус SSO: ' + e.message;
+  }
+}
+
+// Включить/выключить SSO — перезапуск Keycloak НЕ нужен
+async function setSso(enabled) {
+  const st = document.getElementById('sso-status-save');
+  st.textContent = enabled ? 'Включаю...' : 'Выключаю...';
+  try {
+    const r = await fetch('/api/v1/admin/models/system-config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sso_enabled: enabled})
+    });
+    const d = await r.json();
+    st.textContent = d.message || 'OK';
+    loadSsoStatus();
+  } catch(e) {
+    st.textContent = 'Ошибка: ' + e.message;
   }
 }
 loadSsoStatus();
