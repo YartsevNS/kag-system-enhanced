@@ -338,16 +338,40 @@ async def get_audit_log(
 ):
     """
     Получить журнал аудита действий.
-    
+
     - **limit**: Лимит записей
     - **user**: Фильтр по пользователю
     - **action**: Фильтр по действию
+
+    Читаем /app/data/audit/audit.log (пишет AuditLogger, JSON по строкам).
+    Раньше был TODO → пустой ответ, страница /logs показывала пусто.
     """
-    logger.debug("Запрос журнала аудита")
-    
-    # TODO: Получить записи из Loki
-    
-    return {"entries": []}
+    import json as _json
+    log_path = "/app/data/audit/audit.log"
+    logs = []
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = _json.loads(line)
+                except Exception:
+                    continue
+                logs.append(entry)
+    except FileNotFoundError:
+        return {"logs": [], "error": "audit.log не найден"}
+
+    # Фильтры
+    if user:
+        logs = [e for e in logs if e.get("user_id") == user]
+    if action:
+        logs = [e for e in logs if e.get("action") == action]
+
+    # Последние N (в обратном порядке — новые сверху)
+    logs = logs[-max(1, min(int(limit or 100), 500)):][::-1]
+    return {"logs": logs}
 
 
 @router.get("/disk-usage", summary="Использование диска по директориям")
