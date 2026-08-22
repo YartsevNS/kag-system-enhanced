@@ -59,8 +59,9 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 /* Тип документа: ТЁМНАЯ плашка + светлый шрифт (контраст, читаемость).
    Было: rgba(94,106,210,0.15) фон + светлый текст — плохо читалось. */
 .tag-type{background:#2a2a2a;color:#e8e8e8;border:1px solid #3a3a3a}
-/* «Неизвестно»: плашка темнее обычной (но не чёрная), текст — оттенок белого */
-.tag-type-unknown{background:#1e1e1e;color:#eaeaea;border:1px solid #2e2e2e}
+/* «Неизвестно»: плашка полупрозрачная тёмная (сквозь неё просвечивает
+   миниатюра/фон), текст — оттенок белого */
+.tag-type-unknown{background:rgba(20,20,20,0.55);color:#eaeaea;border:1px solid rgba(255,255,255,0.14)}
 .tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
 .tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
 .tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
