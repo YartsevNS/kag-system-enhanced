@@ -59,6 +59,8 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 /* Тип документа: ТЁМНАЯ плашка + светлый шрифт (контраст, читаемость).
    Было: rgba(94,106,210,0.15) фон + светлый текст — плохо читалось. */
 .tag-type{background:#2a2a2a;color:#e8e8e8;border:1px solid #3a3a3a}
+/* «Неизвестно»: плашка темнее обычной (но не чёрная), текст — оттенок белого */
+.tag-type-unknown{background:#1e1e1e;color:#eaeaea;border:1px solid #2e2e2e}
 .tag-has-date{background:rgba(16,185,129,0.15);color:var(--emerald)}
 .tag-signed{background:rgba(245,158,11,0.15);color:var(--amber)}
 .tag-has-amounts{background:rgba(220,38,38,0.12);color:#f87171}
@@ -490,7 +492,7 @@ function renderCards(docs) {
         <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" 
              onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
              style="object-fit:cover">
-        <span class="type-badge tag tag-type">${typeLabel(type)}</span>
+        <span class="type-badge tag ${typeBadgeClass(type)}">${typeLabel(type)}</span>
       </div>
       <div class="card-body">
         <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
@@ -520,7 +522,7 @@ function renderTable(docs) {
     <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="doc-check" value="${d.document_id}" onchange="updateSelectAll()"></td>
       <td><strong>${d.recognized_title||d.filename}</strong></td>
-      <td><span class="tag tag-type" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
+      <td><span class="tag ${typeBadgeClass(d.document_type||'unknown')}" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
       <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
       <td><a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0}</a></td>
       <td>${d.uploaded_by_name||'—'}</td>
@@ -546,7 +548,7 @@ async function showDetail(docId) {
       <div class="detail-grid">
         <div><div class="detail-label">Файл</div><div class="detail-value">${d.filename}</div></div>
         <div><div class="detail-label">Название</div><div class="detail-value">${d.recognized_title||d.filename}</div></div>
-        <div><div class="detail-label">Тип</div><div class="detail-value"><span class="tag tag-type">${typeLabel(d.document_type||'unknown')}</span></div></div>
+        <div><div class="detail-label">Тип</div><div class="detail-value"><span class="tag ${typeBadgeClass(d.document_type||'unknown')}">${typeLabel(d.document_type||'unknown')}</span></div></div>
         <div><div class="detail-label">Статус</div><div class="detail-value">${statusMap[d.status]||d.status}</div></div>
         <div><div class="detail-label">Размер</div><div class="detail-value">${fmtBytes(d.file_size||0)}</div></div>
         <div><div class="detail-label">Чанков</div><div class="detail-value">${d.chunks_count||0}</div></div>
@@ -588,6 +590,7 @@ function applyFilters() { renderAll(); }
 // Helpers
 function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'📕';if(t.includes('doc'))return'📘';if(t.includes('txt')||t.includes('md'))return'📝';if(t.includes('csv')||t.includes('sheet'))return'📊';return'📄'; }
 function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',technical:'Технический',certificate:'Сертификат',standard:'Стандарт',policy:'Политика',order:'Приказ',news:'Новость',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
+function typeBadgeClass(t) { return (t||'unknown')==='unknown' ? 'tag-type-unknown' : 'tag-type'; }
 function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
 function fmtBytes(b) { if(!b)return'0B';const k=1024;const s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
 function toast(msg,err) { const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'var(--red)':'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000); }
