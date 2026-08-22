@@ -89,7 +89,22 @@ def _verify_keycloak(token: str, keycloak_url: str, realm: str) -> dict:
     """Проверить токен через JWKS Keycloak с полной валидацией."""
     jwks_data = _load_jwks(keycloak_url, realm)
     settings = get_settings()
-    issuer = f"{keycloak_url}/realms/{realm}"
+    # Допустимые issuer: внутренний (keycloak:8080) и ВНЕШНИЙ (base_url из
+    # админки). Пользователи входят через внешний адрес → токен имеет
+    # issuer https://qd.gostsecret.ru/realms/kag; без этого — Invalid issuer.
+    issuers = {
+        f"{keycloak_url}/realms/{realm}",           # http://keycloak:8080/realms/kag
+        f"https://localhost/realms/{realm}",        # keycloak видит Host=localhost через прокси
+        f"http://localhost/realms/{realm}",
+    }
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "config", {}) or {}
+        base_url = (cfg.get("base_url") or "").rstrip("/")
+        if base_url:
+            issuers.add(f"{base_url}/realms/{realm}")
+    except Exception:
+        pass
 
     header = jwt.get_unverified_header(token)
     kid = header.get("kid")
@@ -100,22 +115,28 @@ def _verify_keycloak(token: str, keycloak_url: str, realm: str) -> dict:
         raise jwt.InvalidTokenError(f"Key '{kid}' not found in JWKS")
     public_key = jwk.JWK(**key_data)
 
-    return jwt.decode(
+    payload = jwt.decode(
         token,
         public_key.export_to_pem(),
         algorithms=["RS256"],
         audience=settings.KEYCLOAK_CLIENT_ID,
-        issuer=issuer,
         options={
             "verify_signature": True,
             "verify_exp": True,
             "verify_nbf": True,
             "verify_iat": True,
             "verify_aud": True,
-            "verify_iss": True,
+            "verify_iss": False,  # issuer проверяем вручную (ниже)
             "require": ["exp", "sub", "iat"],
         },
     )
+
+    # Ручная проверка issuer (допускаем внутренний и внешний адреса)
+    if payload.get("iss") not in issuers:
+        raise jwt.InvalidTokenError(
+            f"Invalid issuer {payload.get('iss')!r}; allowed: {sorted(issuers)}"
+        )
+    return payload
 
 
 def _verify_local(token: str, jwt_secret: str, algorithm: str) -> dict:
