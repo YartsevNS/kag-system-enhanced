@@ -689,7 +689,14 @@
             </p>
             <div id="sysconfig-status" style="font-size:13px;color:var(--text2);margin-bottom:12px">Загрузка...</div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                <div style="flex:1;min-width:260px">
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">SSO (Keycloak)</label>
+                    <div style="display:flex;gap:8px">
+                        <button onclick="setSso(true)" id="sso-on-btn" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 14px;cursor:pointer;font-size:13px">✅ Включить SSO</button>
+                        <button onclick="setSso(false)" id="sso-off-btn" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:9px 14px;cursor:pointer;font-size:13px">⛔ Выключить SSO</button>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:220px">
                     <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Внешний адрес (https://kag.mycompany.ru)</label>
                     <input id="sysconfig-base-url" type="text" placeholder="https://kag.example.ru"
                            style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:100%">
@@ -2122,14 +2129,43 @@ async function loadSystemConfig(){
     var kc = d.keycloak || {};
     var modeLabel = kc.mode === 'production' ? '✅ production' : (kc.mode === 'dev' ? '⚠️ dev' : kc.mode);
     var color = kc.mode === 'production' ? 'var(--green)' : 'var(--amber)';
+    var ssoLabel = d.sso_enabled ? '✅ SSO включён' : '⛔ SSO выключен';
+    var ssoColor = d.sso_enabled ? 'var(--green)' : 'var(--red)';
     document.getElementById('sysconfig-status').innerHTML =
       '<span>Адрес: <b>' + (d.base_url || '—') + '</b></span> · ' +
+      '<span>SSO: <b style="color:' + ssoColor + '">' + ssoLabel + '</b></span> · ' +
       '<span>Keycloak: <b style="color:' + color + '">' + modeLabel + '</b>' +
       (kc.hostname ? ' (hostname: ' + kc.hostname + ')' : '') + '</span>' +
       (kc.container_running ? '' : ' · <span style="color:var(--red)">контейнер не запущен</span>');
     if (document.getElementById('sysconfig-base-url')) document.getElementById('sysconfig-base-url').value = d.base_url || '';
+    // Подсветка активной кнопки SSO
+    var onBtn = document.getElementById('sso-on-btn');
+    var offBtn = document.getElementById('sso-off-btn');
+    if (onBtn && offBtn) {
+      onBtn.style.opacity = d.sso_enabled ? '1' : '0.5';
+      offBtn.style.opacity = d.sso_enabled ? '0.5' : '1';
+    }
   } catch(e) {
     document.getElementById('sysconfig-status').textContent = 'Недоступно: ' + e.message;
+  }
+}
+
+// Включить/выключить SSO (кнопки) — перезапуск Keycloak НЕ нужен
+async function setSso(enabled) {
+  var status = document.getElementById('sysconfig-save-status');
+  status.textContent = enabled ? 'Включаю SSO...' : 'Выключаю SSO...';
+  try {
+    var r = await fetch('/api/v1/admin/models/system-config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sso_enabled: enabled})
+    });
+    var d = await r.json();
+    status.textContent = d.message || 'OK';
+    loadSystemConfig();
+  } catch(e) {
+    status.textContent = 'Ошибка: ' + e.message;
   }
 }
 

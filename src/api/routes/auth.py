@@ -371,9 +371,10 @@ def auth_status():
     from src.api.services.config_store import config_store
     cfg = config_store.get("system", "config", {}) or {}
     base_url = (cfg.get("base_url") or "").rstrip("/")
-    sso_enabled = bool(settings.AUTH_ENABLED and base_url)
+    # SSO: config_store (кнопки в админке) имеет приоритет над env AUTH_ENABLED
+    sso_enabled = bool(cfg.get("sso_enabled", settings.AUTH_ENABLED))
     return {
-        "sso_enabled": sso_enabled,
+        "sso_enabled": sso_enabled and bool(base_url),
         "keycloak_url": base_url or "",
         "realm": settings.KEYCLOAK_REALM,
         "client_id": settings.KEYCLOAK_CLIENT_ID,

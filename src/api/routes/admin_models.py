@@ -1894,13 +1894,16 @@ async def restore_backup(file: UploadFile = File(...)):
 
 @router.get("/system-config", summary="Внешний адрес и статус Keycloak")
 async def get_system_config():
-    """Вернуть внешний адрес (config_store) + статус Keycloak."""
+    """Вернуть внешний адрес (config_store) + статус Keycloak + SSO."""
     from src.api.services.config_store import config_store
+    settings = get_settings()
     cfg = config_store.get("system", "config", {})
     if not isinstance(cfg, dict):
         cfg = {}
 
     base_url = cfg.get("base_url", "")
+    # SSO: config_store (переключается кнопками в админке) или env AUTH_ENABLED
+    sso_enabled = cfg.get("sso_enabled", settings.AUTH_ENABLED)
 
     kc_status = {"mode": "unknown", "hostname": None, "container_running": False}
     try:
@@ -1917,11 +1920,12 @@ async def get_system_config():
     except Exception:
         pass
 
-    return {"base_url": base_url, "keycloak": kc_status}
+    return {"base_url": base_url, "sso_enabled": bool(sso_enabled), "keycloak": kc_status}
 
 
 class SystemConfigRequest(BaseModel):
     base_url: Optional[str] = None
+    sso_enabled: Optional[bool] = None
 
 
 @router.put("/system-config", summary="Сохранить внешний адрес и применить к Keycloak")
@@ -1937,12 +1941,30 @@ async def save_system_config(req: SystemConfigRequest):
     if not isinstance(cfg, dict):
         cfg = {}
 
-    base_url = (req.base_url or "").strip().rstrip("/")
-    cfg["base_url"] = base_url
+    base_url = cfg.get("base_url", "")
+    # Обновляем адрес ТОЛЬКО если передан (иначе не затираем сохранённый)
+    if req.base_url is not None:
+        base_url = (req.base_url or "").strip().rstrip("/")
+        cfg["base_url"] = base_url
+
+    # Переключение SSO (кнопки «Включить/Выключить SSO» в админке).
+    # НЕ требует перезапуска Keycloak: SSO — это логика api (auth/status,
+    # login), Keycloak уже работает. Просто сохраняем флаг.
+    sso_changed = False
+    if req.sso_enabled is not None:
+        cfg["sso_enabled"] = bool(req.sso_enabled)
+        sso_changed = True
+
     config_store.set("system", "config", cfg)
 
+    if sso_changed and req.base_url is None:
+        # Только переключение SSO — Keycloak не трогаем
+        return {"status": "ok", "sso_enabled": bool(cfg["sso_enabled"]),
+                "message": "SSO " + ("включён" if cfg["sso_enabled"] else "выключен")}
+
     if not base_url:
-        return {"status": "ok", "base_url": "", "message": "Внешний адрес сброшен — Keycloak в dev mode"}
+        return {"status": "ok", "base_url": "", "sso_enabled": bool(cfg.get("sso_enabled", False)),
+                "message": "Внешний адрес сброшен — Keycloak в dev mode"}
 
     # ── Применяем к Keycloak: патч docker-compose.yml + пересоздание ──
     try:
