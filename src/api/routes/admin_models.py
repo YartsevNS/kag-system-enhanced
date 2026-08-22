@@ -1947,37 +1947,84 @@ async def save_system_config(req: SystemConfigRequest):
     # ── Применяем к Keycloak: патч docker-compose.yml + пересоздание ──
     try:
         import re
-        compose_path = "/home/yartsevn/kag-system/docker-compose.yml"
-        with open(compose_path, "r", encoding="utf-8") as f:
-            text = f.read()
+        import docker
+        client = docker.from_env()
+        # api НЕ монтирует /home/yartsevn/kag-system (compose-файл там).
+        # Патчим через одноразовый контейнер с volume (как в worker-resources).
+        _PATCH = '''import re
 
-        # KC_HOSTNAME в секции keycloak (заменяем на внешний адрес)
-        text = re.sub(
-            r"(- KC_HOSTNAME=).*",
-            f"\\g<1>{base_url}",
-            text, count=1,
-        )
-        # command: start-dev → start (prod mode), с импортом realm
-        text = re.sub(
-            r"command: start-dev --import-realm",
-            "command: start --import-realm",
-            text, count=1,
-        )
-        with open(compose_path, "w", encoding="utf-8") as f:
-            f.write(text)
+path = "/opt/kag-system/docker-compose.yml"
+text = open(path, "r", encoding="utf-8").read()
 
-        # Пересоздаём keycloak с новым hostname и prod mode
-        import docker as docker_sdk
-        client = docker_sdk.from_env()
+# KC_HOSTNAME в секции keycloak → внешний адрес
+new_text = re.sub(r"(- KC_HOSTNAME=).*", f"\\\\g<1>{BASE_URL}", text, count=1)
+# command: start-dev → start (prod mode), realm импортируется
+new_text = re.sub(r"command: start-dev --import-realm", "command: start --import-realm", new_text, count=1)
+
+open(path, "w", encoding="utf-8").write(new_text)
+print("compose patched")
+'''
+        script = _PATCH.replace("{BASE_URL}", base_url)
+        script_path = "/app/data/patch_keycloak.py"
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script)
+        try:
+            client.containers.run(
+                image="kag-system_api:latest",
+                command=["/opt/kag-system/data/patch_keycloak.py"],
+                entrypoint="python3",
+                volumes={"/home/yartsevn/kag-system": {"bind": "/opt/kag-system", "mode": "rw"}},
+                detach=False,
+                remove=True,
+                mem_limit="256m",
+            )
+        finally:
+            try:
+                os.remove(script_path)
+            except OSError:
+                pass
+
+        # ── Пересоздаём keycloak с новым hostname и prod mode ──────────
+        # docker-compose CLI в api нет; воспроизводим контейнер через docker SDK.
+        # Сначала УДАЛЯЕМ старый (иначе имя занято → 409), потом создаём новый.
         kc = client.containers.get("kag-keycloak")
-        # Обновляем env и command через docker update невозможно для command —
-        # пересоздаём через compose
-        import subprocess
-        subprocess.run(
-            ["docker-compose", "up", "-d", "--no-deps", "--force-recreate", "keycloak"],
-            cwd="/home/yartsevn/kag-system", timeout=180,
-            check=True, capture_output=True,
+        attrs = kc.attrs
+        host_cfg = attrs.get("HostConfig", {})
+        config = attrs.get("Config", {})
+
+        # Env: обновляем KC_HOSTNAME
+        env = list(config.get("Env", []))
+        env = [e for e in env if not e.startswith("KC_HOSTNAME=")]
+        env.append(f"KC_HOSTNAME={base_url}")
+
+        # Command: start (prod) вместо start-dev
+        cmd = ["start", "--import-realm"]
+
+        # Сетевые связи: kag_internal
+        networks = {}
+        for net_name in (attrs.get("NetworkSettings", {}).get("Networks", {}) or {}).keys():
+            networks[net_name] = {}
+
+        volumes = {}
+        for b in (host_cfg.get("Binds") or []):
+            parts = b.split(":")
+            if len(parts) >= 2 and not parts[1].startswith("/opt"):
+                volumes[parts[0]] = {"bind": parts[1], "mode": parts[2] if len(parts) > 2 else "rw"}
+
+        # Удаляем старый контейнер, затем создаём новый с тем же именем
+        kc.remove(force=True)
+        client.containers.run(
+            image=config.get("Image"),
+            name="kag-keycloak",
+            environment=env,
+            command=cmd,
+            detach=True,
+            remove=False,
+            network=next(iter(networks), None) or "kag_internal",
+            volumes=volumes,
+            restart_policy=host_cfg.get("RestartPolicy") or {"Name": "unless-stopped"},
         )
+
         return {"status": "ok", "base_url": base_url,
                 "message": "Внешний адрес сохранён, Keycloak переключён в production mode"}
     except Exception as e:
