@@ -176,15 +176,12 @@ class KnowledgeGraphService:
                 # --- Domain Graph индексы ---
                 _safe_create_index(session, "Entity", "name", "idx_entity_name")
                 _safe_create_index(session, "Entity", "type", "idx_entity_type")
-                # Composite constraint: (name, type) уникальность = автоматический dedup
-                try:
-                    session.run(
-                        "CREATE CONSTRAINT cst_entity_unique IF NOT EXISTS "
-                        "FOR (e:Entity) REQUIRE (e.name, e.type) IS NODE KEY"
-                    )
-                except Exception:
-                    pass  # Neo4j Community может не поддерживать NODE KEY
-                
+                # Composite (name, type) уникальность НЕ создаём: NODE KEY —
+                # Enterprise-функция Neo4j, в Community (neo4j:5.26-community)
+                # она не поддерживается и при попытке создать падает
+                # ConstraintCreationFailed, засоряя логи. Дедупликация и так
+                # работает через MERGE (e:Entity {name, type}) + индекс на name.
+
                 # Полнотекстовый индекс для поиска сущностей
                 _safe_create_text_index(session, "txt_entity_name", "Entity", "name")
 
