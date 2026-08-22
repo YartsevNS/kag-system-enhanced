@@ -37,10 +37,15 @@
       "username": "admin",
       "enabled": true,
       "emailVerified": true,
+      "email": "admin@kag.local",
       "firstName": "Admin",
       "lastName": "KAG",
       "credentials": [
-        { "type": "password", "value": "admin", "temporary": true }
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
       ],
       "realmRoles": ["admin", "user"]
     }
