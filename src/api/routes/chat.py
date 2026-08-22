@@ -187,7 +187,10 @@ async def send_message(
             max_tokens=request.max_tokens,
             use_rag=True,
             group_ids=group_ids,
-            is_admin=is_admin
+            is_admin=is_admin,
+            # Реальный пользователь для audit-лога (username); раньше писался
+            # session_id — в логах появлялись «user: test» вместо имён.
+            user_id=current_user.username if current_user else None,
         )
 
         # Сохраняем сообщения на сервере (если пользователь авторизован).

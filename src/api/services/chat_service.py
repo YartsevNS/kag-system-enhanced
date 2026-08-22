@@ -232,7 +232,8 @@ class ChatService:
         max_tokens: Optional[int] = None,
         use_rag: bool = True,
         group_ids: Optional[List[str]] = None,
-        is_admin: bool = False
+        is_admin: bool = False,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Сгенерировать ответ с RAG.
@@ -246,6 +247,8 @@ class ChatService:
             use_rag: Использовать ли RAG поиск
             group_ids: Группы пользователя для фильтрации документов
             is_admin: Если True, поиск возвращает все документы (без фильтрации)
+            user_id: Реальный пользователь (для audit-лога). Раньше в лог
+                писался session_id — «user: test» был session_id, а не юзером.
 
         Returns:
             Словарь с ответом и метаданными
@@ -435,10 +438,10 @@ class ChatService:
             provider=provider,
         )
 
-        # Шаг 5: Логируем запрос
+        # Шаг 5: Логируем запрос (в audit — реальный пользователь, не session_id)
         from src.security.audit import audit_logger, AuditEventType
         audit_logger.log_llm_request(
-            user_id=session_id or "anonymous",
+            user_id=user_id or session_id or "anonymous",
             model=llm_result.get("model", model_name),
             prompt_length=sum(len(m.get("content", "")) for m in api_messages),
             response_length=len(llm_result.get("content", "")),
