@@ -1,0 +1,48 @@
+{
+  "realm": "kag",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Администратор системы" },
+      { "name": "user",  "description": "Обычный пользователь" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "kag-api",
+      "name": "KAG API",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "KAG",
+      "credentials": [
+        { "type": "password", "value": "admin", "temporary": true }
+      ],
+      "realmRoles": ["admin", "user"]
+    }
+  ]
+}
