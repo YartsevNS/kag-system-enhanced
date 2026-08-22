@@ -404,22 +404,34 @@ class OpenAIClient(LLMBackend):
         start_time = time.time()
 
         try:
-            client = await self._get_client()
+            # ВАЖНО: НЕ используем self._get_client() — общий клиент привязан
+            # к основному event loop. health_check теперь выполняется в отдельном
+            # потоке (asyncio.to_thread в router) — клиент из другого loop
+            # сломается. Создаём временный клиент и закрываем его.
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            if "azure.com" in self.base_url.lower():
+                headers["api-key"] = self.api_key
 
-            # OpenAI не предоставляет отдельного health endpoint,
-            # поэтому делаем минимальный запрос к models
-            response = await client.get("/v1/models", timeout=10.0)
-            response_time_ms = (time.time() - start_time) * 1000
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                headers=headers,
+                timeout=httpx.Timeout(6.0, connect=6.0),
+            ) as client:
+                response = await client.get("/v1/models")
+                response_time_ms = (time.time() - start_time) * 1000
 
-            healthy = response.status_code == 200
-            self._healthy = healthy
+                healthy = response.status_code == 200
+                self._healthy = healthy
 
-            return LLMHealthStatus(
-                backend=LLMBackendType.OPENAI,
-                healthy=healthy,
-                model=self.model,
-                response_time_ms=response_time_ms
-            )
+                return LLMHealthStatus(
+                    backend=LLMBackendType.OPENAI,
+                    healthy=healthy,
+                    model=self.model,
+                    response_time_ms=response_time_ms
+                )
 
         except Exception as e:
             response_time_ms = (time.time() - start_time) * 1000

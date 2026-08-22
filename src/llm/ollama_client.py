@@ -346,21 +346,24 @@ class OllamaClient(LLMBackend):
         start_time = time.time()
 
         try:
-            client = await self._get_client()
+            # Временный клиент (см. комментарий в OpenAIClient.health_check:
+            # health_check выполняется в отдельном потоке через to_thread)
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(6.0, connect=6.0),
+            ) as client:
+                response = await client.get("/api/tags")
+                response_time_ms = (time.time() - start_time) * 1000
 
-            # Ollama /api/tags — надёжнее чем корень
-            response = await client.get("/api/tags")
-            response_time_ms = (time.time() - start_time) * 1000
+                healthy = response.status_code == 200
+                self._healthy = healthy
 
-            healthy = response.status_code == 200
-            self._healthy = healthy
-
-            return LLMHealthStatus(
-                backend=LLMBackendType.OLLAMA,
-                healthy=healthy,
-                model=self.model,
-                response_time_ms=response_time_ms
-            )
+                return LLMHealthStatus(
+                    backend=LLMBackendType.OLLAMA,
+                    healthy=healthy,
+                    model=self.model,
+                    response_time_ms=response_time_ms
+                )
 
         except Exception as e:
             response_time_ms = (time.time() - start_time) * 1000

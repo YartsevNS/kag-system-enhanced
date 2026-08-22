@@ -340,24 +340,26 @@ class VLLMClient(LLMBackend):
         start_time = time.time()
 
         try:
-            client = await self._get_client()
+            # Временный клиент (см. комментарий в OpenAIClient.health_check)
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(6.0, connect=6.0),
+            ) as client:
+                response = await client.get("/health")
+                response_time_ms = (time.time() - start_time) * 1000
 
-            # vLLM предоставляет endpoint /health
-            response = await client.get("/health")
-            response_time_ms = (time.time() - start_time) * 1000
+                healthy = response.status_code == 200
+                self._healthy = healthy
 
-            healthy = response.status_code == 200
-            self._healthy = healthy
-
-            # Получаем информацию о модели
-            models = []
-            try:
-                models_response = await client.get("/v1/models")
-                if models_response.status_code == 200:
-                    models_data = models_response.json()
-                    models = [m["id"] for m in models_data.get("data", [])]
-            except Exception:
-                pass
+                # Получаем информацию о модели
+                models = []
+                try:
+                    models_response = await client.get("/v1/models")
+                    if models_response.status_code == 200:
+                        models_data = models_response.json()
+                        models = [m["id"] for m in models_data.get("data", [])]
+                except Exception:
+                    pass
 
             return LLMHealthStatus(
                 backend=LLMBackendType.VLLM,

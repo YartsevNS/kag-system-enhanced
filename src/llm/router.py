@@ -338,7 +338,15 @@ class LLMRouter:
 
         for backend_type, entry in self._backends.items():
             try:
-                status = await entry.backend.health_check()
+                # ВАЖНО: backend.health_check() может блокировать event loop
+                # (httpx DNS-резолв getaddrinfo выполняется синхронно в потоке
+                # loop и НЕ входит в httpx timeout — проверка недоступного
+                # бэкенда висела 30+ сек и «замораживала» весь api, даже health).
+                # Уводим проверку в отдельный поток + жёсткий таймаут.
+                status = await asyncio.wait_for(
+                    asyncio.to_thread(lambda: asyncio.run(entry.backend.health_check())),
+                    timeout=8.0,
+                )
                 results[backend_type] = status
 
                 # Если здоров, сбрасываем circuit
@@ -350,6 +358,16 @@ class LLMRouter:
                     f"healthy={status.healthy}, "
                     f"response_time={status.response_time_ms}ms"
                 )
+
+            except asyncio.TimeoutError:
+                results[backend_type] = LLMHealthStatus(
+                    backend=backend_type,
+                    healthy=False,
+                    model=entry.backend.model,
+                    error="health check timeout (8s)"
+                )
+                entry.record_failure()
+                logger.warning(f"Health check {backend_type.value}: таймаут 8с (бэкенд недоступен)")
 
             except Exception as e:
                 results[backend_type] = LLMHealthStatus(
