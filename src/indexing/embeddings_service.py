@@ -390,20 +390,16 @@ class EmbeddingsService:
                 logger.debug(f"Нет чанков для обновления типа {document_id}")
                 return False
 
-            # Обновляем payload каждой точки
-            from qdrant_client.http import models as qmodels2
-            updated_points = []
-            for p in points:
-                p.payload["document_type"] = document_type
-                updated_points.append(
-                    qmodels2.PointStruct(id=p.id, vector=p.vector, payload=p.payload)
-                )
-
-            self._qdrant_client.upsert(
+            # Обновляем payload: set_payload не требует векторов (точки
+            # получены с with_vectors=False — vector=None, PointStruct
+            # падал бы с «validation errors»).
+            point_ids = [p.id for p in points]
+            self._qdrant_client.set_payload(
                 collection_name=self.collection_name,
-                points=updated_points
+                payload={"document_type": document_type},
+                points=point_ids,
             )
-            logger.info(f"Обновлён document_type={document_type} для {len(updated_points)} чанков {document_id}")
+            logger.info(f"Обновлён document_type={document_type} для {len(point_ids)} чанков {document_id}")
             return True
         except Exception as e:
             logger.warning(f"Не удалось обновить document_type в Qdrant: {e}")
