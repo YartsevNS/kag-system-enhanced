@@ -10,6 +10,7 @@
 """
 
 import os
+import asyncio
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 
@@ -209,9 +210,16 @@ async def start_container(container_name: str):
 
 @router.get("/docker/{container_name}/logs", summary="Получить логи контейнера")
 async def get_container_logs(container_name: str, lines: int = 100):
-    """Получить логи Docker контейнера"""
+    """Получить логи Docker контейнера.
+
+    ВАЖНО: docker_monitor.get_container_logs() — СИНХРОННЫЙ вызов docker SDK
+    (.logs() читает stdout контейнера через сокет). Прямой вызов в async-
+    функции блокировал event loop api на всё время чтения — страница /logs
+    («все источники») дёргала 8 таких запросов и api «зависал» (даже health
+    переставал отвечать). Поэтому — через asyncio.to_thread.
+    """
     try:
-        logs = docker_monitor.get_container_logs(container_name, lines)
+        logs = await asyncio.to_thread(docker_monitor.get_container_logs, container_name, lines)
         return {"logs": logs}
     except Exception as e:
         logger.error(f"Ошибка получения логов: {e}")
@@ -224,11 +232,15 @@ async def get_container_logs(container_name: str, lines: int = 100):
 
 @router.get("/system/info", summary="Получить информацию о системе хоста")
 async def get_system_info():
-    """Получить полную информацию о системе"""
+    """Получить полную информацию о системе хоста.
+
+    system_monitor.get_system_info() — синхронный (subprocess/psutil);
+    через to_thread, чтобы не блокировать event loop.
+    """
     try:
-        return system_monitor.get_system_info()
+        return await asyncio.to_thread(system_monitor.get_system_info)
     except Exception as e:
-        logger.error(f"Ошибка получения system info: {e}")
+        logger.error(f"Ошибка получения информации о системе: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
