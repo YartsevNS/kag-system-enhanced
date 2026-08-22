@@ -678,6 +678,27 @@
             </p>
         </div>
 
+        <!-- Внешний адрес системы (настройка Keycloak после развёртывания) -->
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
+            <h2 class="section-title">🔗 Внешний адрес системы</h2>
+            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">
+                Проект разворачивают в разных сетях за reverse proxy — внешний адрес неизвестен при деплое.
+                Введи его после развёртывания: система переключит Keycloak в <b>production mode</b>
+                (KC_HOSTNAME + start) и SSO будет работать через внешний адрес. Пока адрес не задан —
+                Keycloak работает в dev mode.
+            </p>
+            <div id="sysconfig-status" style="font-size:13px;color:var(--text2);margin-bottom:12px">Загрузка...</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                <div style="flex:1;min-width:260px">
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Внешний адрес (https://kag.mycompany.ru)</label>
+                    <input id="sysconfig-base-url" type="text" placeholder="https://kag.example.ru"
+                           style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:100%">
+                </div>
+                <button onclick="saveSystemConfig()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 16px;cursor:pointer;font-size:13px">💾 Применить к Keycloak</button>
+                <span id="sysconfig-save-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+        </div>
+
     </main>
     <div class="notification" id="notification"></div>
 
@@ -2092,6 +2113,49 @@ async function saveScaling(){
   }
 }
 loadScaling();
+
+// ── Внешний адрес системы (Keycloak) ──────────────────────────────────
+async function loadSystemConfig(){
+  try {
+    var r = await fetch('/api/v1/admin/models/system-config', {credentials:'include'});
+    var d = await r.json();
+    var kc = d.keycloak || {};
+    var modeLabel = kc.mode === 'production' ? '✅ production' : (kc.mode === 'dev' ? '⚠️ dev' : kc.mode);
+    var color = kc.mode === 'production' ? 'var(--green)' : 'var(--amber)';
+    document.getElementById('sysconfig-status').innerHTML =
+      '<span>Адрес: <b>' + (d.base_url || '—') + '</b></span> · ' +
+      '<span>Keycloak: <b style="color:' + color + '">' + modeLabel + '</b>' +
+      (kc.hostname ? ' (hostname: ' + kc.hostname + ')' : '') + '</span>' +
+      (kc.container_running ? '' : ' · <span style="color:var(--red)">контейнер не запущен</span>');
+    if (document.getElementById('sysconfig-base-url')) document.getElementById('sysconfig-base-url').value = d.base_url || '';
+  } catch(e) {
+    document.getElementById('sysconfig-status').textContent = 'Недоступно: ' + e.message;
+  }
+}
+
+async function saveSystemConfig(){
+  var status = document.getElementById('sysconfig-save-status');
+  var baseUrl = document.getElementById('sysconfig-base-url').value.trim();
+  if (baseUrl && !/^https?:\/\//.test(baseUrl)) {
+    status.textContent = 'Адрес должен начинаться с http:// или https://';
+    return;
+  }
+  status.textContent = 'Применяю (перезапуск Keycloak)...';
+  try {
+    var r = await fetch('/api/v1/admin/models/system-config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({base_url: baseUrl})
+    });
+    var d = await r.json();
+    status.textContent = d.message || 'OK';
+    loadSystemConfig();
+  } catch(e) {
+    status.textContent = 'Ошибка: ' + e.message;
+  }
+}
+loadSystemConfig();
 
 </script>
 </body>

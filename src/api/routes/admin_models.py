@@ -1886,6 +1886,107 @@ async def restore_backup(file: UploadFile = File(...)):
 
 
 # ═══════════════════════════════════════
+# Внешний адрес системы — настройка Keycloak после развёртывания
+# ═══════════════════════════════════════
+# Проект разворачивают в разных сетях за reverse proxy — внешний адрес
+# неизвестен при деплое. Админ вводит его после развёртывания, система
+# переключает Keycloak в production mode (KC_HOSTNAME + start).
+
+@router.get("/system-config", summary="Внешний адрес и статус Keycloak")
+async def get_system_config():
+    """Вернуть внешний адрес (config_store) + статус Keycloak."""
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("system", "config", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    base_url = cfg.get("base_url", "")
+
+    kc_status = {"mode": "unknown", "hostname": None, "container_running": False}
+    try:
+        import docker
+        client = docker.from_env()
+        kc = client.containers.get("kag-keycloak")
+        kc_status["container_running"] = kc.status == "running"
+        env = kc.attrs.get("Config", {}).get("Env", [])
+        for e in env:
+            if e.startswith("KC_HOSTNAME="):
+                kc_status["hostname"] = e.split("=", 1)[1]
+        cmd = kc.attrs.get("Config", {}).get("Cmd", [])
+        kc_status["mode"] = "dev" if any("start-dev" in str(c) for c in cmd) else "production"
+    except Exception:
+        pass
+
+    return {"base_url": base_url, "keycloak": kc_status}
+
+
+class SystemConfigRequest(BaseModel):
+    base_url: Optional[str] = None
+
+
+@router.put("/system-config", summary="Сохранить внешний адрес и применить к Keycloak")
+async def save_system_config(req: SystemConfigRequest):
+    """Сохранить внешний адрес; переключить Keycloak в prod mode.
+
+    Если base_url задан (https://host): патчим docker-compose.yml
+    (KC_HOSTNAME=<base_url>, command start --import-realm) и пересоздаём
+    keycloak. Если пустой — остаётся dev mode (start-dev, localhost).
+    """
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("system", "config", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    base_url = (req.base_url or "").strip().rstrip("/")
+    cfg["base_url"] = base_url
+    config_store.set("system", "config", cfg)
+
+    if not base_url:
+        return {"status": "ok", "base_url": "", "message": "Внешний адрес сброшен — Keycloak в dev mode"}
+
+    # ── Применяем к Keycloak: патч docker-compose.yml + пересоздание ──
+    try:
+        import re
+        compose_path = "/home/yartsevn/kag-system/docker-compose.yml"
+        with open(compose_path, "r", encoding="utf-8") as f:
+            text = f.read()
+
+        # KC_HOSTNAME в секции keycloak (заменяем на внешний адрес)
+        text = re.sub(
+            r"(- KC_HOSTNAME=).*",
+            f"\\g<1>{base_url}",
+            text, count=1,
+        )
+        # command: start-dev → start (prod mode), с импортом realm
+        text = re.sub(
+            r"command: start-dev --import-realm",
+            "command: start --import-realm",
+            text, count=1,
+        )
+        with open(compose_path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+        # Пересоздаём keycloak с новым hostname и prod mode
+        import docker as docker_sdk
+        client = docker_sdk.from_env()
+        kc = client.containers.get("kag-keycloak")
+        # Обновляем env и command через docker update невозможно для command —
+        # пересоздаём через compose
+        import subprocess
+        subprocess.run(
+            ["docker-compose", "up", "-d", "--no-deps", "--force-recreate", "keycloak"],
+            cwd="/home/yartsevn/kag-system", timeout=180,
+            check=True, capture_output=True,
+        )
+        return {"status": "ok", "base_url": base_url,
+                "message": "Внешний адрес сохранён, Keycloak переключён в production mode"}
+    except Exception as e:
+        logger.error(f"Не удалось применить внешний адрес к Keycloak: {e}")
+        return {"status": "error", "base_url": base_url,
+                "message": f"Адрес сохранён, но Keycloak не переключён: {e}"}
+
+
+# ═══════════════════════════════════════
 # Масштабирование — настройки для роста (500+ пользователей)
 # ═══════════════════════════════════════
 # Зачем: храним целевые параметры масштабирования в config_store.
