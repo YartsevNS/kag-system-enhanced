@@ -528,9 +528,11 @@ function applyFilters() {
     empty.textContent = 'Нет логов';
     stream.appendChild(empty);
   } else {
-    // НОВЫЕ СТРОКИ СВЕРХУ: массив хранит старые→новые, переворачиваем,
-    // чтобы последние (новые) оказались вверху списка.
-    const display = lines.slice(-500).reverse();
+    // НОВЫЕ СТРОКИ СВЕРХУ: mergeLogLines() кладёт новые в НАЧАЛО массива
+    // (unshift), поэтому берём ПЕРВЫЕ 500 — они и есть самые новые, и уже
+    // в правильном порядке (новейшая первой). Раньше было slice(-500).reverse()
+    // (рассчитано на новые в конце) — отображались СТАРЫЕ логи.
+    const display = lines.slice(0, 500);
     display.forEach(l => {
       const div = document.createElement('div');
       div.className = 'log-line' + (l.level ? ' llevel-'+l.level : '');
