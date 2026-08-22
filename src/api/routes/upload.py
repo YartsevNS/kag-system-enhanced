@@ -42,6 +42,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Optional, List
+from pydantic import BaseModel
 from datetime import datetime
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response
@@ -1026,6 +1027,51 @@ async def get_document_details(
         "created_at": created_at,
         "updated_at": updated_at
     }
+
+
+class DocumentMetaUpdate(BaseModel):
+    """Обновление метаданных документа: название и/или тип."""
+    filename: Optional[str] = None
+    document_type: Optional[str] = None
+
+
+@router.patch("/{document_id}/meta", summary="Обновить название/тип документа")
+async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
+    """Обновить filename и/или document_type документа.
+
+    - БД: upsert (filename, document_type)
+    - Qdrant: при смене типа — update_document_type_payload (все чанки)
+
+    Зачем: на странице просмотра документа (viewer) админ может поправить
+    название (распознанное неверно) и тип (LLM-типизация ошиблась).
+    """
+    from src.api.services.document_repository import get_doc_repo
+    repo = get_doc_repo()
+    if not repo.get(document_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+
+    data = {}
+    if body.filename is not None and body.filename.strip():
+        data["filename"] = body.filename.strip()
+    if body.document_type is not None and body.document_type.strip():
+        data["document_type"] = body.document_type.strip()
+
+    if not data:
+        return {"status": "ok", "message": "Ничего не изменено"}
+
+    repo.upsert(document_id, data)
+
+    # При смене типа — обновляем payload всех чанков в Qdrant
+    if "document_type" in data:
+        try:
+            from src.indexing.embeddings_service import embeddings_service
+            await embeddings_service.initialize()
+            await embeddings_service.update_document_type_payload(
+                document_id, data["document_type"])
+        except Exception as e:
+            logger.warning(f"Qdrant document_type не обновлён: {e}")
+
+    return {"status": "ok", "document_id": document_id, **data}
 
 
 @router.get("/{document_id}/thumbnail", summary="Миниатюра документа")
