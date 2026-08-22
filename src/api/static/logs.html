@@ -52,9 +52,10 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
 .log-stream::-webkit-scrollbar{width:6px}
 .log-stream::-webkit-scrollbar-track{background:transparent}
 .log-stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-
-.log-line{display:flex;padding:4px 14px;border-bottom:1px solid rgba(255,255,255,0.015);transition:background 0.15s}
-.log-line:hover{background:rgba(255,255,255,0.02)}
+/* Выделенная строка лога (клик): клик — выделить, повторный — снять */
+.log-line{display:flex;padding:4px 14px;border-bottom:1px solid rgba(255,255,255,0.015);user-select:text;cursor:pointer;transition:background 0.1s}
+.log-line:hover{background:rgba(255,255,255,0.03)}
+.log-line.log-selected{background:rgba(62,207,142,0.14);outline:1px solid rgba(62,207,142,0.4)}
 .log-line .ltime{color:var(--text4);min-width:75px;flex-shrink:0;font-size:11px}
 .log-line .lsource{min-width:100px;flex-shrink:0;font-weight:600;font-size:11px}
 .log-line .ltext{color:var(--text2);word-break:break-all;white-space:pre-wrap}
@@ -183,6 +184,7 @@ h1{font-size:22px;font-weight:600;letter-spacing:-0.6px;margin-bottom:2px;flex-s
     <button class="btn" onclick="refreshAll()">🔄</button>
     <button class="btn-ghost" onclick="exportLogs()">📥</button>
     <button class="btn-ghost" onclick="clearLogs()">🗑️</button>
+    <button class="btn-ghost" id="copy-btn" onclick="copySelectedLog()" title="Копировать выделенную строку" style="display:none">📋 Копировать</button>
   </div>
 
   <!-- Log stream -->
@@ -435,6 +437,61 @@ function updateBar(id, pct, warn, crit) {
   el.className = 'progress-fill ' + (pct >= crit ? 'progress-crit' : pct >= warn ? 'progress-warn' : 'progress-ok');
 }
 
+// ── Выделение и копирование строк лога ────────────────────────────────
+// Клик по строке — выделяет (подсветка), повторный клик — снимает.
+// Двойной клик или кнопка «📋 Копировать» — копирует текст строки.
+function selectLogLine(el, e) {
+  // Не выделять при выделении текста мышью (пользователь копирует часть)
+  const sel = window.getSelection();
+  if (sel && sel.toString().length > 0) return;
+  const was = el.classList.contains('log-selected');
+  // Снимаем выделение со всех строк
+  document.querySelectorAll('.log-line.log-selected').forEach(x => x.classList.remove('log-selected'));
+  if (!was) {
+    el.classList.add('log-selected');
+    document.getElementById('copy-btn').style.display = '';
+  } else {
+    document.getElementById('copy-btn').style.display = 'none';
+  }
+}
+
+function logLineText(el) {
+  const t = el.querySelector('.ltime');
+  const s = el.querySelector('.lsource');
+  const x = el.querySelector('.ltext');
+  return (t ? t.textContent + ' ' : '') + (s ? s.textContent + ' ' : '') + (x ? x.textContent : '');
+}
+
+function copyLogLine(el) {
+  const text = logLineText(el);
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Строка скопирована');
+  }).catch(() => {
+    // Fallback для http (clipboard может быть недоступен)
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('Строка скопирована');
+  });
+}
+
+async function copySelectedLog() {
+  const sel = document.querySelector('.log-line.log-selected');
+  if (!sel) return;
+  await copyLogLine(sel);
+}
+
+// Убрать выделение по Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.log-line.log-selected').forEach(x => x.classList.remove('log-selected'));
+    document.getElementById('copy-btn').style.display = 'none';
+  }
+});
+
 function applyFilters() {
   const search = (document.getElementById('log-search')?.value || '').toLowerCase();
   const level = document.getElementById('log-level')?.value || '';
@@ -493,6 +550,9 @@ function applyFilters() {
       div.appendChild(timeSpan);
       div.appendChild(sourceSpan);
       div.appendChild(textSpan);
+      // Клик — выделить строку (повторный — снять); двойной — скопировать
+      div.onclick = function(e) { selectLogLine(this, e); };
+      div.ondblclick = function() { copyLogLine(this); };
       stream.appendChild(div);
     });
     
