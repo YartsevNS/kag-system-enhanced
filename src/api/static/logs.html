@@ -459,6 +459,10 @@ function applyFilters() {
   
   // Safe render — DOM construction, no innerHTML
   const stream = document.getElementById('log-stream');
+  // Сохраняем позицию прокрутки ДО перерисовки (чтобы не прыгала,
+  // если пользователь смотрит старые строки)
+  const prevScroll = stream.scrollTop;
+  const wasAtTop = prevScroll < 40;
   stream.innerHTML = '';
   
   if (lines.length === 0) {
@@ -467,7 +471,9 @@ function applyFilters() {
     empty.textContent = 'Нет логов';
     stream.appendChild(empty);
   } else {
-    const display = lines.slice(-500);
+    // НОВЫЕ СТРОКИ СВЕРХУ: массив хранит старые→новые, переворачиваем,
+    // чтобы последние (новые) оказались вверху списка.
+    const display = lines.slice(-500).reverse();
     display.forEach(l => {
       const div = document.createElement('div');
       div.className = 'log-line' + (l.level ? ' llevel-'+l.level : '');
@@ -490,8 +496,13 @@ function applyFilters() {
       stream.appendChild(div);
     });
     
-    if (document.getElementById('auto-scroll').checked) {
-      stream.scrollTop = stream.scrollHeight;
+    // Прокрутка: по умолчанию держим ВВЕРХУ (новые логи всегда видны).
+    // Если пользователь вручную прокрутил вниз (смотрит старые) —
+    // восстанавливаем его позицию, не прыгаем.
+    if (document.getElementById('auto-scroll').checked || wasAtTop) {
+      stream.scrollTop = 0;
+    } else {
+      stream.scrollTop = prevScroll;
     }
   }
   
