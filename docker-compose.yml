@@ -108,6 +108,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    # МАСШТАБИРОВАНИЕ (500+ пользователей): для запуска нескольких worker'ов
+    # убрать строку container_name ниже и выполнить:
+    #   docker-compose up -d --scale worker=N
+    # (N — количество, см. админку → «Масштабирование»). QueueGuard
+    # защищает от дублей задач — несколько worker'ов безопасны.
     container_name: kag-worker
     environment:
       - QDRANT_HOST=qdrant
@@ -458,8 +463,11 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
       - NEO4J_PLUGINS=["apoc","graph-data-science"]
-      - NEO4J_dbms_memory_heap_max__size=1G
-      - NEO4J_dbms_memory_pagecache_size=512M
+      # Память Neo4j — при росте графа (500+ пользователей) увеличить:
+      # heap → 2G-4G, pagecache → 1G-2G (зависит от RAM сервера).
+      # Менять можно и через админку (раздел «Масштабирование» — заготовка).
+      - NEO4J_dbms_memory_heap_max__size=${NEO4J_HEAP:-1G}
+      - NEO4J_dbms_memory_pagecache_size=${NEO4J_PAGECACHE:-512M}
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs

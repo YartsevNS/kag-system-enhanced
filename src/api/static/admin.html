@@ -635,6 +635,49 @@
             </div>
         </div>
 
+        <!-- Масштабирование (заготовка для роста) -->
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
+            <h2 class="section-title">📈 Масштабирование (для роста: 500+ пользователей)</h2>
+            <p style="color:var(--text4);font-size:12px;margin-bottom:12px">
+                Целевые настройки масштабирования. <b>НЕ применяются на лету</b> — сохраняются в БД
+                и используются при следующем деплое. Сейчас система работает на 1 worker (solo) —
+                при росте пользователей увеличьте worker_replicas.
+            </p>
+            <div id="scaling-current" style="font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">Загрузка...</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Worker'ов (реплики)</label>
+                    <input id="scaling-workers" type="number" min="1" max="16" value="1" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:90px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">CPU / worker</label>
+                    <input id="scaling-cpus" type="text" value="4.0" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:80px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">RAM / worker</label>
+                    <input id="scaling-memory" type="text" value="12G" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:80px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Neo4j heap</label>
+                    <input id="scaling-neo4j-heap" type="text" value="512M" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:80px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Neo4j pagecache</label>
+                    <input id="scaling-neo4j-pc" type="text" value="512M" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:90px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">API workers</label>
+                    <input id="scaling-api-workers" type="number" min="1" max="16" value="1" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:70px">
+                </div>
+                <button onclick="saveScaling()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 16px;cursor:pointer;font-size:13px">💾 Сохранить настройки</button>
+                <span id="scaling-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <p style="color:var(--text4);font-size:11px;margin-top:10px">
+                Как применить при деплое: <code style="background:var(--surface);padding:1px 5px;border-radius:4px">docker-compose up -d --scale worker=N</code> (убрать container_name у worker),
+                память Neo4j — через env <code style="background:var(--surface);padding:1px 5px;border-radius:4px">NEO4J_server_memory_heap_max_size</code> и <code style="background:var(--surface);padding:1px 5px;border-radius:4px">NEO4J_server_memory_pagecache_size</code>.
+            </p>
+        </div>
+
     </main>
     <div class="notification" id="notification"></div>
 
@@ -2000,6 +2043,55 @@ async function saveWorkerResources(){
   }
 }
 loadWorkerResources();
+
+// ── Масштабирование (заготовка для роста) ─────────────────────────────
+async function loadScaling(){
+  try {
+    var r = await fetch('/api/v1/admin/models/scaling', {credentials:'include'});
+    var d = await r.json();
+    var cur = d.current || {};
+    var cfg = d.config || {};
+    document.getElementById('scaling-current').innerHTML =
+      '<span>🔄 Worker\'ов сейчас: <b>' + (cur.worker_count||0) + '</b> (цель: ' + (cfg.worker_replicas||1) + ')</span>' +
+      '<span>Neo4j heap: <b>' + (cur.neo4j_heap || cfg.neo4j_heap || '?') + '</b></span>' +
+      '<span>Neo4j pagecache: <b>' + (cur.neo4j_pagecache || cfg.neo4j_pagecache || '?') + '</b></span>';
+    if (document.getElementById('scaling-workers')) document.getElementById('scaling-workers').value = cfg.worker_replicas||1;
+    if (document.getElementById('scaling-cpus')) document.getElementById('scaling-cpus').value = cfg.worker_cpus||'4.0';
+    if (document.getElementById('scaling-memory')) document.getElementById('scaling-memory').value = cfg.worker_memory||'12G';
+    if (document.getElementById('scaling-neo4j-heap')) document.getElementById('scaling-neo4j-heap').value = cfg.neo4j_heap||'512M';
+    if (document.getElementById('scaling-neo4j-pc')) document.getElementById('scaling-neo4j-pc').value = cfg.neo4j_pagecache||'512M';
+    if (document.getElementById('scaling-api-workers')) document.getElementById('scaling-api-workers').value = cfg.api_workers||1;
+  } catch(e) {
+    document.getElementById('scaling-current').textContent = 'Недоступно: ' + e.message;
+  }
+}
+
+async function saveScaling(){
+  var status = document.getElementById('scaling-status');
+  var body = {
+    worker_replicas: parseInt(document.getElementById('scaling-workers').value),
+    worker_cpus: document.getElementById('scaling-cpus').value,
+    worker_memory: document.getElementById('scaling-memory').value,
+    neo4j_heap: document.getElementById('scaling-neo4j-heap').value,
+    neo4j_pagecache: document.getElementById('scaling-neo4j-pc').value,
+    api_workers: parseInt(document.getElementById('scaling-api-workers').value)
+  };
+  status.textContent = 'Сохраняю...';
+  try {
+    var r = await fetch('/api/v1/admin/models/scaling', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    var d = await r.json();
+    status.textContent = d.message || 'OK';
+    loadScaling();
+  } catch(e) {
+    status.textContent = 'Ошибка: ' + e.message;
+  }
+}
+loadScaling();
 
 </script>
 </body>

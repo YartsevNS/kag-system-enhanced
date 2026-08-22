@@ -1886,6 +1886,95 @@ async def restore_backup(file: UploadFile = File(...)):
 
 
 # ═══════════════════════════════════════
+# Масштабирование — настройки для роста (500+ пользователей)
+# ═══════════════════════════════════════
+# Зачем: храним целевые параметры масштабирования в config_store.
+# Они НЕ применяются на лету — это ЗАГОТОВКА для деплоя: админ задаёт
+# значения, devops применяет при следующем развёртывании
+# (docker-compose scale worker=N, память Neo4j и т.д.).
+
+SCALING_DEFAULTS = {
+    "worker_replicas": 1,      # сколько экземпляров worker
+    "worker_cpus": "4.0",      # CPU на worker
+    "worker_memory": "12G",    # память на worker
+    "neo4j_heap": "512M",      # Neo4j JVM heap
+    "neo4j_pagecache": "512M", # Neo4j pagecache
+    "api_workers": 1,          # uvicorn workers для api
+    "notes": "",
+}
+
+
+@router.get("/scaling", summary="Текущее состояние и настройки масштабирования")
+async def get_scaling():
+    """Вернуть: текущее состояние (запущенные worker'ы, память Neo4j)
+    + сохранённые целевые настройки масштабирования из config_store."""
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("scaling", "config", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    cfg = {**SCALING_DEFAULTS, **cfg}
+
+    current = {"worker_count": 0, "neo4j_heap": None, "neo4j_pagecache": None}
+    try:
+        import docker
+        client = docker.from_env()
+        workers = [c for c in client.containers.list() if "worker" in c.name]
+        current["worker_count"] = len(workers)
+        # Память Neo4j из env контейнера
+        try:
+            neo = client.containers.get("kag-neo4j")
+            env = neo.attrs.get("Config", {}).get("Env", [])
+            for e in env:
+                if e.startswith("NEO4J_dbms_memory_heap_max"):
+                    current["neo4j_heap"] = e.split("=", 1)[1]
+                if e.startswith("NEO4J_dbms_memory_pagecache"):
+                    current["neo4j_pagecache"] = e.split("=", 1)[1]
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    return {"current": current, "config": cfg}
+
+
+class ScalingConfigRequest(BaseModel):
+    worker_replicas: Optional[int] = None
+    worker_cpus: Optional[str] = None
+    worker_memory: Optional[str] = None
+    neo4j_heap: Optional[str] = None
+    neo4j_pagecache: Optional[str] = None
+    api_workers: Optional[int] = None
+    notes: Optional[str] = None
+
+
+@router.put("/scaling", summary="Сохранить целевые настройки масштабирования")
+async def save_scaling(req: ScalingConfigRequest):
+    """Сохранить настройки масштабирования в config_store.
+
+    ВАЖНО: только сохраняет ЦЕЛЕВЫЕ значения — НЕ применяет. Применяются
+    при следующем деплое (см. комментарии в docker-compose.yml).
+    """
+    from src.api.services.config_store import config_store
+    cfg = config_store.get("scaling", "config", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    cfg = {**SCALING_DEFAULTS, **cfg}
+
+    data = req.model_dump(exclude_none=True)
+    cfg.update(data)
+
+    # Валидация
+    if cfg.get("worker_replicas") is not None:
+        cfg["worker_replicas"] = max(1, min(int(cfg["worker_replicas"]), 16))
+    if cfg.get("api_workers") is not None:
+        cfg["api_workers"] = max(1, min(int(cfg["api_workers"]), 16))
+
+    config_store.set("scaling", "config", cfg)
+    return {"status": "ok", "config": cfg,
+            "message": "Настройки сохранены (применятся при следующем деплое)"}
+
+
+# ═══════════════════════════════════════
 # Worker Resources — настройка CPU/памяти
 # ═══════════════════════════════════════
 
