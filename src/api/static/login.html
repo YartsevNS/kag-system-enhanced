@@ -39,9 +39,13 @@ input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.
     <input type="password" id="password" placeholder="••••••" autocomplete="current-password">
   </div>
   <button class="btn" onclick="login()">Войти</button>
+  <div style="text-align:center;margin-top:12px">
+    <a href="#" id="local-link" onclick="useLocalLogin();return false" style="font-size:12px;color:var(--accent-l);display:none">🔑 Локальный вход (admin)</a>
+  </div>
 </div>
 <script>
 let ssoConfig = null;
+let useLocal = false; // переключение на локальный вход (admin fallback)
 
 // Проверяем статус аутентификации: включён ли SSO (Keycloak)
 async function initAuth() {
@@ -49,15 +53,33 @@ async function initAuth() {
     const r = await fetch('/api/v1/auth/status');
     const d = await r.json();
     ssoConfig = d;
-    const badge = document.getElementById('auth-mode');
-    if (d.sso_enabled) {
-      badge.textContent = 'Вход через SSO (Keycloak)';
-      badge.style.color = 'var(--accent-l)';
-    } else {
-      badge.textContent = 'Локальный вход';
-      badge.style.color = 'var(--text3)';
-    }
+    updateModeBadge();
   } catch(e) { /* статус не критичен */ }
+}
+
+function updateModeBadge() {
+  const badge = document.getElementById('auth-mode');
+  const localLink = document.getElementById('local-link');
+  if (useLocal) {
+    badge.textContent = 'Локальный вход (admin)';
+    badge.style.color = 'var(--text3)';
+    if (localLink) localLink.style.display = 'none';
+  } else if (ssoConfig && ssoConfig.sso_enabled) {
+    badge.textContent = 'Вход через SSO (Keycloak)';
+    badge.style.color = 'var(--accent-l)';
+    if (localLink) localLink.style.display = '';
+  } else {
+    badge.textContent = 'Локальный вход';
+    badge.style.color = 'var(--text3)';
+    if (localLink) localLink.style.display = 'none';
+  }
+}
+
+function useLocalLogin() {
+  useLocal = true;
+  updateModeBadge();
+  const err = document.getElementById('error');
+  err.classList.remove('show');
 }
 
 async function login() {
@@ -68,54 +90,67 @@ async function login() {
   try {
     let ok = false;
 
-    // Если SSO включён — логин через Keycloak (password grant)
-    if (ssoConfig && ssoConfig.sso_enabled && ssoConfig.keycloak_url) {
-      const tokenResp = await fetch(
-        `${ssoConfig.keycloak_url}/realms/${ssoConfig.realm}/protocol/openid-connect/token`,
-        {
-          method: 'POST',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-          body: new URLSearchParams({
-            grant_type: 'password',
-            client_id: ssoConfig.client_id,
-            username: u,
-            password: p
-          })
-        }
-      );
-      const tokenData = await tokenResp.json();
-      if (tokenResp.ok && tokenData.access_token) {
-        // Токен получен от Keycloak — отдаём серверу, он поставит cookie
-        const ssoResp = await fetch('/api/v1/auth/sso-login', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({access_token: tokenData.access_token})
-        });
-        ok = ssoResp.ok;
-        if (!ok) {
-          const e = await ssoResp.json().catch(() => ({}));
-          err.textContent = e.detail || 'SSO: ошибка входа';
-          err.classList.add('show');
-          return;
-        }
-      } else {
-        err.textContent = tokenData.error_description || tokenData.error || 'SSO: неверный логин или пароль';
-        err.classList.add('show');
-        return;
-      }
-    } else {
-      // Локальный вход (fallback — админ, или SSO не настроен)
+    // Локальный вход (админ-фолбэк) — если включили вручную ИЛИ SSO недоступен
+    const tryLocal = async () => {
       const res = await fetch('/api/v1/auth/login', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({username:u, password:p})
       });
       const data = await res.json();
-      if (res.ok && data.access_token) ok = true;
-      else {
-        err.textContent = data.detail || 'Неверный логин или пароль';
+      if (res.ok && data.access_token) return true;
+      err.textContent = data.detail || 'Неверный логин или пароль';
+      err.classList.add('show');
+      return false;
+    };
+
+    if (useLocal) {
+      ok = await tryLocal();
+    } else if (ssoConfig && ssoConfig.sso_enabled && ssoConfig.keycloak_url) {
+      // SSO: password grant у Keycloak
+      try {
+        const tokenResp = await fetch(
+          `${ssoConfig.keycloak_url}/realms/${ssoConfig.realm}/protocol/openid-connect/token`,
+          {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({
+              grant_type: 'password',
+              client_id: ssoConfig.client_id,
+              username: u,
+              password: p
+            })
+          }
+        );
+        const tokenData = await tokenResp.json();
+        if (tokenResp.ok && tokenData.access_token) {
+          const ssoResp = await fetch('/api/v1/auth/sso-login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({access_token: tokenData.access_token})
+          });
+          ok = ssoResp.ok;
+          if (!ok) {
+            const e = await ssoResp.json().catch(() => ({}));
+            err.textContent = e.detail || 'SSO: ошибка входа';
+            err.classList.add('show');
+            document.getElementById('local-link').style.display = '';
+            return;
+          }
+        } else {
+          // Неверные креды в Keycloak — предлагаем локальный вход (admin)
+          err.textContent = (tokenData.error_description || tokenData.error || 'SSO: неверный логин или пароль') + '. Попробуйте локальный вход для admin.';
+          err.classList.add('show');
+          document.getElementById('local-link').style.display = '';
+          return;
+        }
+      } catch (netErr) {
+        // Keycloak недоступен — автоматически локальный вход (admin fallback)
+        err.textContent = 'SSO недоступен — пробую локальный вход (admin)...';
         err.classList.add('show');
-        return;
+        ok = await tryLocal();
       }
+    } else {
+      ok = await tryLocal();
     }
 
     if (ok) {
