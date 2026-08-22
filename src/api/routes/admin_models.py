@@ -136,9 +136,14 @@ async def test_ssh_connection(connection_id: str = "default"):
 async def get_docker_stats():
     """
     Получить детальную статистику всех Docker контейнеров.
+
+    ВАЖНО: docker_monitor.get_detailed_stats() — СИНХРОННЫЙ docker SDK
+    (собирает stats по всем контейнерам). Прямой вызов блокировал event
+    loop — api переставал отвечать (healthcheck «exceeded timeout»).
+    Через asyncio.to_thread.
     """
     try:
-        stats = docker_monitor.get_detailed_stats()
+        stats = await asyncio.to_thread(docker_monitor.get_detailed_stats)
         return stats
     except Exception as e:
         logger.error(f"Ошибка получения Docker статистики: {e}")
@@ -151,7 +156,7 @@ async def get_docker_system_info():
     Получить общую информацию о Docker системе.
     """
     try:
-        info = docker_monitor.get_system_info()
+        info = await asyncio.to_thread(docker_monitor.get_system_info)
         return info
     except Exception as e:
         logger.error(f"Ошибка получения информации о Docker: {e}")
