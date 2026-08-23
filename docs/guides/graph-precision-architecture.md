@@ -11,8 +11,8 @@
 - [x] адаптивный граф: ВСЕ чанки + параллельные LLM-вызовы (Semaphore 3)
 - [x] двуэтапное извлечение (entities → relations, KGGen) + description
 - [x] entity resolution: lexical + embedding (0.95) + подстрока + aliases
-- [x] версионирование стандартов (ISO: -N = часть, :YYYY = версия; ГОСТ: год после тире)
-- [x] схема Neo4j: description, aliases
+- [x] версионирование стандартов: версии = отдельные узлы + SUPERSEDED_BY + is_current
+- [x] схема Neo4j: description, aliases, is_current
 - [ ] LLM-верификация сомнительных пар (кореференция «ЦБ»=«Банк России»)
 - [ ] переиндексация всех 158 документов
 
