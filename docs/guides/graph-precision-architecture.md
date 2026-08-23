@@ -176,3 +176,12 @@ N документов × M чанков → пул воркеров (vLLM/Ollam
 - modernData101 «Entity Resolution at Scale»
 - Firecrawl «Best Chunking Strategies 2026», NVIDIA chunking benchmarks
 - openspg/kag сравнение: docs/COMPARISON_openspg_kag.md
+
+## Table RAG (коммиты 11fee78, a9defb1)
+
+- Таблицы: PyMuPDF find_tables → markdown в чанки Qdrant + document_tables (rows/headers/html) в PostgreSQL
+- API: GET /{id}/tables, POST /{id}/tables/search (точный поиск по ячейкам)
+- Чат: sources обогащаются таблицами → рендер HTML (buildTablesHTML)
+- Настройка: «Модель распознавания таблиц» в OCR (pymupdf/docling/granite)
+- ⚠️ Docling layout в контейнере сломан (0 детекций) — PyMuPDF сейчас
+- Скилл: kag-tables-rag
