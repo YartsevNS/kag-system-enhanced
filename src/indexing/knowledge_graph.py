@@ -140,6 +140,9 @@ class KnowledgeGraphService:
         self._domain_schema = dict(self.DEFAULT_DOMAIN_SCHEMA)
         # План entity resolution (заполняется в resolve_duplicate_entities)
         self._resolution_plan = {}
+        # Кандидаты на LLM-верификацию: пары в «серой зоне» embedding-сходства
+        # (0.85-0.95) — не сливаем автоматически, спрашиваем LLM
+        self._resolution_candidates = []
 
     # ============================================================
     # Инициализация
@@ -565,6 +568,33 @@ class KnowledgeGraphService:
             except Exception as e:
                 logger.warning(f"[resolution] Embedding similarity пропущен: {e}")
 
+            # ── 3b. LLM-верификация пар из «серой зоны» ─────────────────────
+            # Кандидаты собрал embed-шаг (0.85-0.95). Спрашиваем LLM «это один
+            # объект?» — решает случаи «ЦБ»=«Банк России» (алиас) vs
+            # «Сбербанк»=«Банк России» (разные), которые embedding не различает.
+            if self._resolution_candidates:
+                # Лимит: не больше N кандидатов за прогон (защита от перерасхода)
+                MAX_LLM_CANDIDATES = 40
+                candidates = self._resolution_candidates[:MAX_LLM_CANDIDATES]
+                logger.info(
+                    f"[resolution] LLM-верификация: {len(candidates)} пар "
+                    f"(серая зона 0.85-0.95)"
+                )
+                try:
+                    import asyncio, threading
+                    def _run_verify():
+                        loop = asyncio.new_event_loop()
+                        try:
+                            loop.run_until_complete(self._verify_pairs_llm(candidates))
+                        finally:
+                            loop.close()
+                    _vt = threading.Thread(target=_run_verify, daemon=True)
+                    _vt.start()
+                    _vt.join(timeout=180)
+                except Exception as e:
+                    logger.warning(f"[resolution] LLM-верификация пропущена: {e}")
+                self._resolution_candidates = []
+
             # ── 4. Применяем слияния в Neo4j ──────────────────────────────────
             if merge_plan:
                 # Transitive closure: если keeper сам в merge_plan как dup
@@ -746,6 +776,17 @@ class KnowledgeGraphService:
             for etype, group in by_type.items():
                 if len(group) < 2:
                     continue
+                # ⚠️ ПОЛИТИКА ПО ТИПАМ (глобально):
+                # - legal_term: НЕ сливаем по embedding вообще — термины почти
+                #   никогда не бывают алиасами («зашифрование» ≠ «расшифрование»,
+                #   «5.4» ≠ «5.4.1», «А.1» ≠ «А.2»). Известные синонимы — через
+                #   таблицу entity_aliases (apply_alias_pairs).
+                # - document_ref: НЕ сливаем по embedding (серия/часть/версия —
+                #   разные; версии связываются SUPERSEDED_BY).
+                # - organization/person: сливаем с осторожностью (порог 0.95),
+                #   серые пары → LLM-верификация.
+                if etype in ("legal_term", "document_ref"):
+                    continue
                 # Батчим эмбеддинги имён
                 names = [e["norm"] for e in group]
                 try:
@@ -839,6 +880,13 @@ class KnowledgeGraphService:
                                 if _ratio > 0.6:
                                     continue
                         sim = _cos(vecs[i], vecs[j])
+                        # Два порога:
+                        #  >= 0.95 — уверенное сходство, сливаем сразу (после guard'ов)
+                        #  0.85-0.95 — «серая зона»: НЕ сливаем автоматически,
+                        #  добавляем в кандидаты для LLM-верификации (см.
+                        #  _verify_pairs_llm). Например «ЦБ» и «Банк России» —
+                        #  эмбеддинги близки (оба про банк), но это алиас, а
+                        #  «Сбербанк» и «Банк России» — РАЗНЫЕ организации.
                         if sim >= max(threshold, 0.95):
                             # Канонический — больший confidence
                             keeper = ei if (ei["confidence"], ei["doc_count"]) >= (ej["confidence"], ej["doc_count"]) else ej
@@ -846,8 +894,313 @@ class KnowledgeGraphService:
                             # Проверяем, что dup ещё не запланирован
                             if dup["node_id"] not in self._resolution_plan and keeper["node_id"] != dup["node_id"]:
                                 self._resolution_plan[dup["node_id"]] = keeper["node_id"]
+                        elif sim >= 0.85 and len(ei["name"]) >= 4 and len(ej["name"]) >= 4:
+                            # Серая зона → кандидат на LLM-верификацию
+                            if ei["node_id"] not in self._resolution_plan and ej["node_id"] not in self._resolution_plan:
+                                self._resolution_candidates.append({
+                                    "a_id": ei["node_id"], "a_name": ei["name"], "a_type": ei["type"],
+                                    "b_id": ej["node_id"], "b_name": ej["name"], "b_type": ej["type"],
+                                    "sim": round(sim, 3),
+                                })
+                        elif sim < 0.85:
+                            # Ниже порога — но может быть АББРЕВИАТУРА («ЦБ» = «Банк России»?
+                            # нет — «ЦБ» = «Центральный банк»). Проверяем: одно имя —
+                            # инициалы другого (все заглавные буквы короткого входят
+                            # в первые буквы слов длинного), или подстрока.
+                            _short_e, _long_e = (ei, ej) if len(ei["name"]) <= len(ej["name"]) else (ej, ei)
+                            _sname, _lname = _short_e["name"], _long_e["name"]
+                            if 2 <= len(_sname) <= 6 and _sname.isupper():
+                                # Инициалы: «РСХБ» → Р,С,Х,Б
+                                _initials = "".join(w[0] for w in re.split(r"\s+", _lname) if w)
+                                if all(ch in _initials for ch in _sname):
+                                    if _short_e["node_id"] not in self._resolution_plan and _long_e["node_id"] not in self._resolution_plan:
+                                        self._resolution_candidates.append({
+                                            "a_id": _long_e["node_id"], "a_name": _long_e["name"], "a_type": _long_e["type"],
+                                            "b_id": _short_e["node_id"], "b_name": _short_e["name"], "b_type": _short_e["type"],
+                                            "sim": round(sim, 3), "hint": "initials",
+                                        })
         except Exception as e:
             logger.warning(f"[resolution] embed-шаг: {e}")
+
+    async def _verify_pairs_llm(self, candidates: List[Dict], max_batch: int = 10):
+        """LLM-верификация пар из «серой зоны» (0.85-0.95).
+
+        Для каждой пары спрашиваем LLM: «это один и тот же объект?».
+        Подтверждённые (same=true) добавляем в self._resolution_plan.
+
+        Зачем: «ЦБ» и «Банк России» — эмбеддинги близки (оба про банк),
+        но это алиас ОДНОЙ организации. «Сбербанк» и «Банк России» —
+        тоже близкие эмбеддинги, но РАЗНЫЕ организации. Embedding не
+        различает эти случаи — LLM различает (понимает контекст).
+
+        Args:
+            candidates: список пар из _resolution_candidates
+            max_batch: сколько пар за один LLM-вызов (лимит токенов)
+        """
+        if not candidates:
+            return
+        try:
+            cfg = self._get_graph_llm_config()
+            if not cfg or not cfg.get("model"):
+                logger.warning("[resolution] graph LLM не настроен — верификация пар пропущена")
+                return
+
+            model = cfg.get("model")
+            llm_url = cfg.get("url", "")
+            api_key = cfg.get("api_key", "")
+            provider = cfg.get("provider", "ollama")
+
+            import aiohttp
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            system_prompt = (
+                "Ты — эксперт по разрешению сущностей (entity resolution). "
+                "Определяешь, относятся ли два имени к одному и тому же реальному объекту "
+                "(организация, документ, термин). Учитывай сокращения, аббревиатуры, "
+                "полные и краткие названия. НЕ считай разные организации одним объектом "
+                "только потому, что они из одной сферы. Отвечай строго JSON."
+            )
+
+            # Батчим пары
+            for start in range(0, len(candidates), max_batch):
+                batch = candidates[start:start + max_batch]
+                pairs_desc = "\n".join([
+                    f'{i + 1}. "{c["a_name"]}" ({c["a_type"]}) vs "{c["b_name"]}" ({c["b_type"]})'
+                    for i, c in enumerate(batch)
+                ])
+                prompt = (
+                    "Определи, являются ли следующие пары имён одним и тем же объектом.\n"
+                    "Верни ТОЛЬКО JSON без markdown:\n"
+                    '{"pairs": [{"a": "<имя1>", "b": "<имя2>", "same": true/false, "confidence": 0.0-1.0}]}\n\n'
+                    "Пары:\n" + pairs_desc
+                )
+
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.0,
+                    # max_tokens достаточно: 10 пар × ~50 символов ≈ 500 символов
+                    # ≈ 200-300 токенов. 800 хватало с запасом; больше не нужно.
+                    "max_tokens": 1000,
+                }
+                # deepseek reasoning-модель: отключаем размышления (см. скилл kag-graph-precision)
+                if provider in ("deepseek", "openai", "openrouter"):
+                    payload["thinking"] = {"type": "disabled"}
+
+                if provider in ("openai", "deepseek", "openrouter"):
+                    endpoint = f"{llm_url}/v1/chat/completions"
+                else:
+                    endpoint = f"{llm_url}/api/generate"
+                    payload = {"model": model, "prompt": prompt, "stream": False,
+                               "options": {"temperature": 0.0, "max_tokens": 400}}
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(endpoint, json=payload, headers=headers,
+                                            timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                        if resp.status != 200:
+                            logger.warning(f"[resolution] LLM верификация HTTP {resp.status}")
+                            continue
+                        data = await resp.json()
+                        if provider in ("openai", "deepseek", "openrouter"):
+                            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        else:
+                            content = data.get("response", "")
+
+                # Парсим ответ
+                try:
+                    import json as _json
+                    text_clean = content.strip()
+                    if text_clean.startswith("```"):
+                        text_clean = text_clean.lstrip("`").lstrip("json").strip()
+                        text_clean = text_clean.rstrip("`").strip()
+                    parsed = _json.loads(text_clean)
+                    verdicts = parsed.get("pairs", [])
+                except Exception as e:
+                    logger.warning(f"[resolution] Не удалось распарсить LLM-ответ: {e}; raw={content[:200]}")
+                    verdicts = []
+
+                # Сопоставляем вердикты с кандидатами по именам
+                verdict_map = {}
+                for v in verdicts:
+                    if isinstance(v, dict) and "a" in v and "b" in v:
+                        verdict_map[(str(v.get("a", "")).strip().lower(), str(v.get("b", "")).strip().lower())] = v.get("same", False)
+                        verdict_map[(str(v.get("b", "")).strip().lower(), str(v.get("a", "")).strip().lower())] = v.get("same", False)
+
+                matched = 0
+                confirmed = 0
+                for c in batch:
+                    key = (c["a_name"].strip().lower(), c["b_name"].strip().lower())
+                    same = verdict_map.get(key)
+                    if same is None:
+                        continue
+                    matched += 1
+                    if same:
+                        # Подтверждено LLM — сливаем (канонический по confidence)
+                        a_id, b_id = c["a_id"], c["b_id"]
+                        if a_id in self._resolution_plan or b_id in self._resolution_plan:
+                            continue
+                        # Выбираем keeper: больше source_docs/confidence — но здесь
+                        # нет этих данных, используем порядок: a как keeper (первый)
+                        self._resolution_plan[b_id] = a_id
+                        confirmed += 1
+                        logger.debug(f"[resolution] LLM подтвердил: {c['a_name']} = {c['b_name']}")
+                logger.info(
+                    f"[resolution] LLM-верификация батча: пар={len(batch)}, "
+                    f"сопоставлено={matched}, подтверждено={confirmed}"
+                )
+                # Диагностика: первые пары батча (для отладки)
+                if start == 0:
+                    for _c in batch[:6]:
+                        logger.info(
+                            f"[resolution]   кандидат: {_c['a_name']} ({_c['a_type']}) "
+                            f"~ {_c['b_name']} ({_c['b_type']}) sim={_c.get('sim')}"
+                        )
+
+        except Exception as e:
+            import traceback
+            logger.warning(f"[resolution] LLM-верификация: {e}\n{traceback.format_exc()}")
+
+    def _get_graph_llm_config(self):
+        """Получить конфигурацию LLM для графа (function_map:graph) из админки."""
+        try:
+            from src.api.services.provider_service import provider_service
+            cfg = provider_service.get_function_llm_config("graph")
+            if cfg and cfg.get("model"):
+                return cfg
+        except Exception:
+            pass
+        return None
+
+    def load_alias_pairs(self) -> List[Dict]:
+        """Загрузить известные пары алиасов из таблицы entity_aliases (PostgreSQL).
+
+        Возвращает список {canonical_name, alias, entity_type, source}.
+        """
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                rows = session.query(EntityAlias).all()
+                return [r.to_dict() for r in rows]
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] Не удалось загрузить entity_aliases: {e}")
+            return []
+
+    def apply_alias_pairs(self) -> Dict[str, int]:
+        """Применить известные пары алиасов к графу (детерминированно, без LLM).
+
+        Для каждой пары (alias → canonical) из таблицы entity_aliases:
+        - находим узел Entity с именем alias и типом
+        - если canonical-узел не существует — создаём
+        - переносим связи, source_docs, MENTIONS с alias на canonical
+        - alias помечаем как aliases у canonical
+
+        Returns:
+            {"applied": N, "created": M}
+        """
+        if not self.driver:
+            return {"applied": 0, "created": 0}
+        pairs = self.load_alias_pairs()
+        if not pairs:
+            return {"applied": 0, "created": 0}
+        result = {"applied": 0, "created": 0}
+        try:
+            with self.driver.session() as session:
+                for p in pairs:
+                    canonical = (p.get("canonical_name") or "").strip()
+                    alias = (p.get("alias") or "").strip()
+                    etype = p.get("entity_type") or "organization"
+                    if not canonical or not alias:
+                        continue
+                    try:
+                        # Создаём canonical если нет
+                        session.run(
+                            """
+                            MERGE (c:Entity {name: $canon, type: $type})
+                            SET c.is_canonical = true
+                            """,
+                            canon=canonical, type=etype,
+                        )
+                        result["created"] += 1
+                        # Сливаем alias в canonical
+                        session.run(
+                            """
+                            MATCH (c:Entity {name: $canon, type: $type})
+                            MATCH (a:Entity {name: $alias, type: $type})
+                            WHERE id(a) <> id(c)
+                            SET c.aliases = [x IN (coalesce(c.aliases, []) + [a.name]) WHERE NOT x IN coalesce(c.aliases, [])]
+                            WITH c, a
+                            OPTIONAL MATCH (ch:Chunk)-[r:MENTIONS]->(a)
+                            FOREACH (_ IN CASE WHEN ch IS NOT NULL THEN [1] ELSE [] END |
+                                MERGE (ch)-[:MENTIONS]->(c)
+                            )
+                            WITH c, a
+                            SET c.source_docs = [x IN coalesce(c.source_docs, []) + coalesce(a.source_docs, []) | x]
+                            WITH c, a
+                            OPTIONAL MATCH (a)-[r2]->(t)
+                            FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+                                MERGE (c)-[nr:RELATED_TO]->(t)
+                                SET nr = properties(r2)
+                            )
+                            WITH c, a
+                            OPTIONAL MATCH (s)-[r3]->(a)
+                            FOREACH (_ IN CASE WHEN s IS NOT NULL THEN [1] ELSE [] END |
+                                MERGE (s)-[nr2:RELATED_TO]->(c)
+                                SET nr2 = properties(r3)
+                            )
+                            DETACH DELETE a
+                            """,
+                            canon=canonical, alias=alias, type=etype,
+                        )
+                        result["applied"] += 1
+                    except Exception as e:
+                        logger.warning(f"[aliases] Ошибка применения {alias}→{canonical}: {e}")
+            if result["applied"]:
+                logger.info(f"[aliases] Применено пар: {result['applied']}")
+        except Exception as e:
+            logger.warning(f"[aliases] apply_alias_pairs: {e}")
+        return result
+
+    def save_alias_pair(self, canonical: str, alias: str, entity_type: str = "organization",
+                        source: str = "manual", comment: str = "") -> bool:
+        """Сохранить пару алиасов в таблицу entity_aliases (для скриптов/админки)."""
+        try:
+            import uuid
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                existing = session.query(EntityAlias).filter_by(
+                    canonical_name=canonical, alias=alias, entity_type=entity_type
+                ).first()
+                if existing:
+                    return True  # уже есть
+                row = EntityAlias(
+                    id=str(uuid.uuid4()),
+                    canonical_name=canonical,
+                    alias=alias,
+                    entity_type=entity_type,
+                    source=source,
+                    comment=comment,
+                )
+                session.add(row)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] save_alias_pair {alias}→{canonical}: {e}")
+            return False
 
     # ============================================================
     # Валидация качества сущностей (Neo4j Best Practice)

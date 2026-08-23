@@ -17,6 +17,7 @@ from src.database.user_models import User, Group  # noqa: F401 — регист�
 from src.database.document_models import Document, DocumentVersion  # noqa: F401
 from src.database.monitoring_models import WatchedURL, WatchedFolder, Notification  # noqa: F401
 from src.database.chat_models import ChatSession, ChatMessage  # noqa: F401 — регистрация моделей
+from src.database.entity_alias_models import EntityAlias  # noqa: F401 — словарь алиасов для entity resolution
 
 logger = logging.getLogger(__name__)
 
