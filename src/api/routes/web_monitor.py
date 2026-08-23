@@ -50,6 +50,13 @@ async def list_sources():
                     "last_check": s.last_check.isoformat() if s.last_check else None,
                     "items_found": s.items_found,
                     "items_uploaded": s.items_uploaded,
+                    "batch_size": s.batch_size,
+                    "batch_delay": s.batch_delay,
+                    "item_delay": s.item_delay,
+                    "batch_jitter": s.batch_jitter,
+                    "pagination_url": s.pagination_url,
+                    "pagination_max_pages": s.pagination_max_pages,
+                    "pagination_delay": s.pagination_delay,
                     "created_at": s.created_at.isoformat() if s.created_at else None,
                 }
                 for s in sources
@@ -222,6 +229,14 @@ async def add_builtin_sources():
                 keywords=src.get("keywords", []),
                 css_selector=src.get("css_selector", "a[href$='.pdf'], a[href$='.docx']"),
                 file_types=src.get("file_types", [".pdf", ".docx"]),
+                check_interval_minutes=src.get("check_interval_minutes", 360),
+                batch_size=src.get("batch_size", 5),
+                batch_delay=src.get("batch_delay", 15.0),
+                item_delay=src.get("item_delay", 2.0),
+                batch_jitter=src.get("batch_jitter", 5.0),
+                pagination_url=src.get("pagination_url"),
+                pagination_max_pages=src.get("pagination_max_pages", 5),
+                pagination_delay=src.get("pagination_delay", 3.0),
             )
             web_monitor.save_source(source)
             added += 1
