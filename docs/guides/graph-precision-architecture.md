@@ -15,6 +15,7 @@
 - [x] схема Neo4j: description, aliases, is_current
 - [x] LLM-верификация серых пар (0.85-0.95) + аббревиатуры (f81f16f)
 - [x] словарь алиасов entity_aliases (Postgres, 36 пар для ИБ) + apply_alias_pairs
+- [x] админка: словарь алиасов + модерация сомнительных пар (8a5a953)
 - [x] политика по типам: legal_term/document_ref НЕ сливать по embedding
 - [x] развёрнуты ложные слияния legal_term (20 узлов)
 - [ ] переиндексация всех 158 документов
