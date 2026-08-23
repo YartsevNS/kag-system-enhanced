@@ -102,8 +102,11 @@ def process_document(
             document_service._documents[document_id] = record
             logger.info(f"[Celery] Документ загружен из БД: {document_id}")
         
-        # Обрабатываем
-        result = asyncio.run(document_service.process_document(document_id))
+        # Обрабатываем. force=True (переиндексация/reindex) передаём дальше —
+        # document_service при этом сначала удалит старые векторы из Qdrant и
+        # граф Neo4j, чтобы не оставалось «осиротевших» точек при изменении
+        # числа чанков (иначе старые точки с document_id висели бы вечно).
+        result = asyncio.run(document_service.process_document(document_id, force=force))
         # Успех — снимаем замок QueueGuard (задача завершена, документ
         # обработан; при необходимости его можно будет поставить заново).
         from src.indexing.queue_guard import release_lock

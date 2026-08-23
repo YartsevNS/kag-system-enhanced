@@ -159,21 +159,27 @@ class DocumentChunker:
             # При разбиении по разделителям (\n\n, \n, ". ", " ") он склеивает
             # фрагменты встык БЕЗ перекрытия — известное поведение langchain,
             # из-за которого настройка overlap из админки фактически не работала.
-            # Поэтому добавляем перекрытие вручную: хвост предыдущего чанка
-            # (последние chunk_overlap символов) подставляем в начало следующего,
-            # затем обрезаем до chunk_size — чтобы итоговый чанк не превышал лимит
-            # эмбеддинга (MAX_INPUT_CHARS=500 у GigaChat) и целиком попадал в вектор.
+            # Поэтому добавляем перекрытие вручную: хвост предыдущего СФОРМИРОВАННОГО
+            # чанка (последние chunk_overlap символов) подставляем в начало следующего.
+            # Хвост берём из prev_text (уже с добавленным overlap), а не из
+            # split_texts[i-1] — иначе граница «съезжает» и появляются дыры.
+            # Верхняя граница chunk_size + overlap: если сплиттер дал чанк больше
+            # chunk_size (сплошной текст без разделителей), эмбеддинг всё равно
+            # обрежет до лимита — но для нормальных документов чанк ≈ chunk_size,
+            # а overlap гарантирует попадание границы в оба соседних вектора.
             overlap = self.chunk_overlap or 0
+            prev_text = ""
 
             for i, text in enumerate(split_texts):
                 chunk_seq += 1
-                if i > 0 and overlap > 0:
-                    prev_tail = split_texts[i - 1][-overlap:]
+                if prev_text and overlap > 0:
+                    prev_tail = prev_text[-overlap:]
                     text = prev_tail + text
-                # Гарантия: чанк не длиннее chunk_size (после добавления хвоста).
-                # Иначе эмбеддинг обрежет его до 500 символов и хвост потеряется.
-                if len(text) > self.chunk_size:
-                    text = text[:self.chunk_size]
+                # Не режем до chunk_size (иначе теряем конец и создаём дыры) —
+                # только страхуемся от аномально длинных чанков сплиттера.
+                if len(text) > self.chunk_size + overlap:
+                    text = text[:self.chunk_size + overlap]
+                prev_text = text
                 cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                 chunks.append({
                     "chunk_id": cid,

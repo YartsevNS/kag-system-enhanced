@@ -407,16 +407,44 @@ class DocumentService:
 
         return result
 
-    async def process_document(self, document_id: str) -> Dict[str, Any]:
+    async def process_document(self, document_id: str, force: bool = False) -> Dict[str, Any]:
         """
         Обработать документ: распарсить, разбить на чанки, векторизовать.
 
         Args:
             document_id: ID документа
+            force: True — принудительная переобработка (reindex). Перед обработкой
+                удаляются старые векторы из Qdrant и старые узлы графа Neo4j,
+                чтобы не оставались «осиротевшие» точки (важно при изменении
+                chunk_size/overlap — число чанков меняется, и без явной очистки
+                старые точки с тем же document_id висели бы в Qdrant вечно).
 
         Returns:
             Результат обработки
         """
+        # При force-переобработке сначала снимаем старые данные (Qdrant + Neo4j).
+        # Это гарантирует, что после переиндексации в хранилищах не останется
+        # чанков/узлов от предыдущего прогона с другими параметрами чанкинга.
+        if force:
+            try:
+                # ВАЖНО: сначала инициализируем клиент — delete_document при
+                # _qdrant_client=None молча возвращает False (ловит AttributeError
+                # внутри), и старые точки остались бы висеть. Проверяем результат.
+                await embeddings_service.initialize()
+                deleted = await embeddings_service.delete_document(document_id)
+                if deleted:
+                    logger.info(f"Удалены старые векторы из Qdrant (force): {document_id}")
+                else:
+                    logger.warning(f"delete_document вернул False — старые векторы могли остаться: {document_id}")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить старые векторы из Qdrant: {e}")
+            try:
+                from src.indexing.knowledge_graph import kg_service
+                kg_service.clear_document(document_id)
+                logger.info(f"Очищен граф Neo4j (force): {document_id}")
+            except Exception as e:
+                logger.warning(f"Не удалось очистить граф Neo4j: {e}")
+
         # Последовательная обработка: только 1 документ за раз
         async with self._processing_lock:
             return await self._process_document_impl(document_id)
