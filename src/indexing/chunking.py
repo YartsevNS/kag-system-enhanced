@@ -153,8 +153,27 @@ class DocumentChunker:
             # Используем RecursiveCharacterTextSplitter
             split_texts = self.text_splitter.split_text(full_text)
 
+            # ВАЖНО (зачем так сделано): RecursiveCharacterTextSplitter применяет
+            # chunk_overlap ТОЛЬКО при посимвольной резке (separator="") — когда кусок
+            # текста больше chunk_size и его приходится резать принудительно.
+            # При разбиении по разделителям (\n\n, \n, ". ", " ") он склеивает
+            # фрагменты встык БЕЗ перекрытия — известное поведение langchain,
+            # из-за которого настройка overlap из админки фактически не работала.
+            # Поэтому добавляем перекрытие вручную: хвост предыдущего чанка
+            # (последние chunk_overlap символов) подставляем в начало следующего,
+            # затем обрезаем до chunk_size — чтобы итоговый чанк не превышал лимит
+            # эмбеддинга (MAX_INPUT_CHARS=500 у GigaChat) и целиком попадал в вектор.
+            overlap = self.chunk_overlap or 0
+
             for i, text in enumerate(split_texts):
                 chunk_seq += 1
+                if i > 0 and overlap > 0:
+                    prev_tail = split_texts[i - 1][-overlap:]
+                    text = prev_tail + text
+                # Гарантия: чанк не длиннее chunk_size (после добавления хвоста).
+                # Иначе эмбеддинг обрежет его до 500 символов и хвост потеряется.
+                if len(text) > self.chunk_size:
+                    text = text[:self.chunk_size]
                 cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
                 chunks.append({
                     "chunk_id": cid,
@@ -164,10 +183,11 @@ class DocumentChunker:
                         "chunk_seq": chunk_seq,
                         "total_chunks": len(split_texts),
                         "splitter": "recursive_character",
-                        "is_partial": False
+                        "is_partial": False,
+                        "overlap_applied": bool(overlap and i > 0),
                     }
                 })
-            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (RecursiveCharacterTextSplitter)")
+            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (RecursiveCharacterTextSplitter, overlap={overlap})")
         else:
             # Fallback: старый метод
             for i, segment in enumerate(segments):
