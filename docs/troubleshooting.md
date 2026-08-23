@@ -4,14 +4,14 @@
 
 ---
 
-## 1. Граф знаний не наполняется — LLM возвращает пустые ответы (АКТУАЛЬНО)
+## 1. Граф знаний не наполнялся — LLM возвращал пустые ответы (ИСПРАВЛЕНО 2026-08-23)
 
-- **Симптом:** в логах worker `Пустой ответ LLM для chunk_00001 (pass=extract):` для ВСЕХ чанков; в Neo4j только узлы Document/Chunk, сущностей (Entity) нет; граф занимает ~70 сек на документ впустую.
-- **Причина:** `function_map:graph` → `deepseek-v4-flash` (api.deepseek.com). Модель не возвращает JSON в формате промпта извлечения сущностей — пустые ответы на всех 10 чанках. Это тот же класс проблемы, что в чате: flash-модель молчит на больших промптах / требует определённого формата.
-- **Решение:** (в работе) — разобрать промпт entity_extractor, проверить формат ответа; рассмотреть смену модели для graph (локальная Ollama или более сильная модель) или переписать промпт/парсинг.
-- **Файлы:** `src/indexing/entity_extractor.py` (`_call_llm`, pass=extract), `function_map:graph`.
-- **Диагностика:** `docker logs kag-worker | grep 'Пустой ответ LLM'`; `docker exec kag-neo4j cypher-shell -u neo4j -p <pass> 'MATCH (e:Entity) RETURN count(e)'`.
-- **⚠️ Следствие:** 70 сек на документ тратятся впустую; переиндексация 150+ документов = ~3 часа из-за этого.
+- **Симптом:** в логах worker `Пустой ответ LLM для chunk_00001 (pass=extract):` для ВСЕХ чанков; в Neo4j только узлы Document/Chunk, сущностей (Entity) нет; граф занимал ~70 сек на документ впустую.
+- **Причина:** `function_map:graph` → `deepseek-v4-flash` (api.deepseek.com) — это **reasoning-модель**. Она сначала генерирует длинный `reasoning_content` (размышления), и только потом `content`. `max_tokens=800` (жёстко в `_call_llm`) ограничивает СУММАРНУЮ генерацию — модель «думала» так долго, что упиралась в лимит (`finish=length`, reasoning_len 2990-16880, content_len=0) и возвращала пустой content.
+- **Решение:** для deepseek/openai/openrouter в `_call_llm` добавлен `payload["thinking"] = {"type": "disabled"}` — отключает размышления, модель сразу пишет ответ. Проверено: content_len=1211, reasoning_len=0, finish=stop.
+- **Результат:** граф gost-r-34.pdf: 10 чанков за **25.4 сек вместо 71** (в 2.8 раза быстрее), сущности извлечены (document_ref/legal_term/date/organization/location, 27 шт).
+- **Файлы/коммиты:** `src/indexing/entity_extractor.py` — 4dcdc4d.
+- **Диагностика:** `docker logs kag-worker | grep 'Пустой ответ LLM'`; прямой вызов с полным промптом показал reasoning_content >> 0 при content=0.
 
 ## 2. RecursiveCharacterTextSplitter игнорирует chunk_overlap
 
