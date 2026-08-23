@@ -669,6 +669,9 @@ class DocumentService:
                 try:
                     from src.indexing.knowledge_graph import kg_service
                     await asyncio.to_thread(kg_service.resolve_duplicate_entities)
+                    # Версии документов: связываем цепочкой SUPERSEDED_BY
+                    # (старые редакции → новые), актуальная помечается is_current.
+                    await asyncio.to_thread(kg_service.link_document_versions)
                 except Exception as e:
                     logger.debug(f"Entity resolution пропущен: {e}")
             except Exception as e:

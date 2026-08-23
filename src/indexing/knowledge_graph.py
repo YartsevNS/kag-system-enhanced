@@ -442,6 +442,29 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка dedup: {e}")
             return 0
 
+    def _norm_name(self, s: str) -> str:
+        """Нормализация имени сущности для entity resolution.
+        Нижний регистр, NFKC, убрать пунктуацию/лишние пробелы."""
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s or "")
+        s = s.lower().strip()
+        s = re.sub(r"[.,;:!?()\"'«»„“”\-–—/\\|]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    def _extract_year(self, norm: str):
+        """Извлечь год из нормализованного имени документа, если он в конце.
+        Возвращает (base_without_year, year) или None.
+        Год должен быть правдоподобным (1900-2100) — иначе «исо мэк 18033»
+        принял бы «8033» за год."""
+        m = re.fullmatch(r"(.+?)[\s:–—-]*(\d{4})$", norm)
+        if not m:
+            return None
+        year = int(m.group(2))
+        if not (1900 <= year <= 2100):
+            return None
+        return m.group(1).strip(), year
+
     def resolve_duplicate_entities(self, threshold: float = 0.90) -> Dict[str, int]:
         """Entity Resolution: слияние сущностей, ссылающихся на один реальный объект.
 
@@ -476,12 +499,7 @@ class KnowledgeGraphService:
 
             import unicodedata
             def _norm(s: str) -> str:
-                s = unicodedata.normalize("NFKC", s or "")
-                s = s.lower().strip()
-                # Убираем знаки препинания и лишние пробелы
-                s = re.sub(r"[.,;:!?()\"'«»„“”\-–—/\\|]", " ", s)
-                s = re.sub(r"\s+", " ", s).strip()
-                return s
+                return self._norm_name(s)
 
             # Нормализуем все имена
             entities = []
@@ -611,6 +629,102 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка entity resolution: {e}")
         return result
 
+    def link_document_versions(self) -> Dict[str, int]:
+        """Связать версии документов цепочкой SUPERSEDED_BY.
+
+        Версии стандартов/приказов/законов — РАЗНЫЕ узлы (не сливаются в
+        resolve_duplicate_entities). Здесь они связываются по времени:
+        (ИСО/МЭК 18033-1:2005)-[:SUPERSEDED_BY]->(ИСО/МЭК 18033-1:2015)
+        (ИСО/МЭК 18033-1:2015)-[:SUPERSEDED_BY]->(ИСО/МЭК 18033-1:2021)
+        Последняя версия помечается is_current = true.
+
+        Группировка: нормализованное имя без года → сущности одного документа.
+        Год извлекается из суффикса (ISO :YYYY, ГОСТ —YYYY). Если в группе
+        только одна версия — она просто помечается is_current.
+
+        Returns:
+            {"chains": N, "versions": M, "current": K}
+        """
+        if not self.driver:
+            return {"chains": 0, "versions": 0, "current": 0}
+        result = {"chains": 0, "versions": 0, "current": 0}
+        try:
+            with self.driver.session() as session:
+                rows = list(session.run(
+                    "MATCH (e:Entity) WHERE e.type = 'document_ref' "
+                    "RETURN e.name AS name, id(e) AS node_id"
+                ))
+
+            # Группируем по базовому имени (без года)
+            from collections import defaultdict
+            groups = defaultdict(list)  # base -> [(year, node_id, name)]
+            for r in rows:
+                name = r["name"]
+                norm = self._norm_name(name)
+                parsed = self._extract_year(norm)
+                if not parsed:
+                    continue
+                base, year = parsed
+                # Фильтр: база должна быть осмысленной (не просто «№ 749»)
+                if len(base) < 3:
+                    continue
+                groups[base].append((year, r["node_id"], name))
+
+            with self.driver.session() as session:
+                for base, items in groups.items():
+                    # Сортируем по году, отбрасываем дубли (одинаковый год+имя)
+                    seen = set()
+                    unique = []
+                    for year, node_id, name in items:
+                        key = (year, name)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        unique.append((year, node_id, name))
+                    unique.sort(key=lambda x: x[0])
+                    if len(unique) < 2:
+                        # Одна версия — просто пометить актуальной
+                        try:
+                            session.run(
+                                "MATCH (e:Entity) WHERE id(e) = $id SET e.is_current = true",
+                                id=unique[0][1],
+                            )
+                            result["current"] += 1
+                        except Exception:
+                            pass
+                        continue
+                    # Цепочка: старая SUPERSEDED_BY новая
+                    for i in range(len(unique) - 1):
+                        old_year, old_id, old_name = unique[i]
+                        new_year, new_id, new_name = unique[i + 1]
+                        try:
+                            session.run(
+                                """
+                                MATCH (a:Entity) WHERE id(a) = $aid
+                                MATCH (b:Entity) WHERE id(b) = $bid
+                                MERGE (a)-[:SUPERSEDED_BY {old_year: $oy, new_year: $ny}]->(b)
+                                """,
+                                aid=old_id, bid=new_id, oy=old_year, ny=new_year,
+                            )
+                            result["chains"] += 1
+                        except Exception as e:
+                            logger.warning(f"[versions] Ошибка связи {old_name}→{new_name}: {e}")
+                    # Последняя — актуальная
+                    try:
+                        session.run(
+                            "MATCH (e:Entity) WHERE id(e) = $id SET e.is_current = true",
+                            id=unique[-1][1],
+                        )
+                        result["current"] += 1
+                    except Exception:
+                        pass
+                    result["versions"] += len(unique)
+            if result["chains"]:
+                logger.info(f"Версии документов: цепочек {result['chains']}, версий {result['versions']}")
+        except Exception as e:
+            logger.warning(f"Ошибка link_document_versions: {e}")
+        return result
+
     async def _embed_entities_resolution(self, entities: List[Dict], threshold: float):
         """Вспомогательный шаг: embedding-сходство имён для entity resolution.
 
@@ -660,11 +774,12 @@ class KnowledgeGraphService:
                         # с Банком России — это недопустимо.
                         if len(ei["name"]) < 4 or len(ej["name"]) < 4:
                             continue
-                        # ⚠️ document_ref: embedding-слияние только для ВЕРСИЙ.
-                        # «ИСО/МЭК 18033» (серия) и «ИСО/МЭК 18033-1:2015» (часть 1)
-                        # имеют почти идентичные эмбеддинги (один текст), но это
-                        # РАЗНЫЕ документы. Разрешаем слияние только когда пара —
-                        # версия (суффикс = год) или точное совпадение (уже lexical).
+                        # ⚠️ document_ref: НЕ сливаем версии — это отдельные узлы,
+                        # связанные цепочкой SUPERSEDED_BY (link_document_versions).
+                        # «ИСО/МЭК 18033-1:2005» и «ИСО/МЭК 18033-1:2015» — редакции
+                        # одного документа, но каждая хранится отдельным узлом с
+                        # своим годом. Серия «ИСО/МЭК 18033» и часть «18033-1» —
+                        # РАЗНЫЕ документы, их тоже не сливаем.
                         if ei["type"] == "document_ref" and ej["type"] == "document_ref":
                             _n1, _n2 = ei["norm"], ej["norm"]
                             _is_ver = False
@@ -683,8 +798,11 @@ class KnowledgeGraphService:
                                 if _m1 and _m2:
                                     if _m1.group(1).strip() == _m2.group(1).strip():
                                         _is_ver = True
-                            if not _is_ver:
+                            # Версии — пропускаем (не сливаем, свяжем отдельно)
+                            if _is_ver:
                                 continue
+                            # Серия/часть/приложение — тоже не сливаем по embedding
+                            continue
                         # Guard от слияния слов с общим корнем:
                         # «зашифрование» vs «расшифрование» — эмбеддинги близки,
                         # но это РАЗНЫЕ термины. Ключевой признак: почти одинаковые
