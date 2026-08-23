@@ -300,9 +300,9 @@ class EntityExtractor:
         rel_types = self._domain_config.get("relations", {})
         rel_desc = "\n".join([f"  - {t}: {d}" for t, d in rel_types.items()])
 
-        sample = chunk_text[:2000]  # первых 2000 символов достаточно для чанка
+        sample = chunk_text[:1000]  # чанк максимум ~575 символов (500+overlap), 1000 с запасом
 
-        prompt = f"""Извлеки из текста сущности и связи. Верни ТОЛЬКО JSON.
+        prompt = f"""Извлеки сущности и связи. Только JSON.
 
 Типы сущностей:
 {type_desc}
@@ -315,15 +315,13 @@ class EntityExtractor:
 {sample}
 ---
 
-Верни СТРОГО такой JSON без markdown:
-{{"entities":[{{"name":"точное имя","type":"тип","confidence":0.0-1.0}}],"relations":[{{"source":"сущность1","target":"сущность2","type":"тип связи"}}],"facts":["краткий факт"]}}
+JSON:
+{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0}}],"relations":[{{"source":"...","target":"...","type":"тип связи"}}],"facts":["..."]}}
 
 Правила:
-- name: точное значение из текста (не придумывай)
-- type: только из списка типов сущностей
-- source и target связи: только из найденных сущностей
-- confidence: 0.9 если явно указано, 0.7 если косвенно, 0.5 если предположительно
-- Если ничего не найдено — верни {{"entities":[],"relations":[],"facts":[]}}"""
+- name строго из текста; type только из списка
+- source/target только из найденных сущностей
+- ничего не найдено → {{"entities":[],"relations":[],"facts":[]}}"""
 
         result = await self._call_llm(prompt, model, llm_url, chunk_id, "extract", api_key, provider)
 
@@ -393,6 +391,9 @@ class EntityExtractor:
                 # ~70 сек на документ тратились впустую).
                 # Параметр thinking:{"type":"disabled"} отключает размышления —
                 # модель сразу пишет ответ. Проверено: content_len>0, reasoning=0.
+                # max_tokens=800: ответ с сущностями обычно 500-1500 символов;
+                # пробовали 400 — JSON обрезался на середине (невалидный),
+                # поэтому 800 с запасом.
                 if provider in ("deepseek", "openai", "openrouter"):
                     payload["thinking"] = {"type": "disabled"}
                 async with aiohttp.ClientSession() as session:
