@@ -522,6 +522,25 @@ class DocumentService:
                 except Exception as e:
                     logger.warning(f"Суммаризация не удалась: {e}")
 
+            # ── Типизация (эвристика, БЕЗ LLM — бесплатно) ──────────────
+            # Раньше тип определялся отдельным процессом (type_watchdog — LLM
+            # батч) или на лету при просмотре /details (auto-tagger, не
+            # сохранялся). Теперь — сразу при обработке: regex-эвристика
+            # (мгновенно, без LLM-запросов), результат сохраняется в БД и
+            # попадает в payload чанков Qdrant. LLM-уточнение (type_watchdog)
+            # остаётся только для сложных случаев по кнопке.
+            if not getattr(record, 'document_type', None) or record.document_type in ('unknown', '', 'pending'):
+                try:
+                    parsed_text_full = parsed.full_text if hasattr(parsed, 'full_text') else parsed_text
+                    from src.indexing.auto_tagger import get_auto_tagger
+                    classification = get_auto_tagger().classify(
+                        (parsed_text_full or parsed_text or "")[:5000], record.filename)
+                    if classification.confidence > 0.3 and classification.document_type:
+                        record.document_type = classification.document_type.value
+                        logger.info(f"Тип определён эвристикой: {record.document_type} (conf {classification.confidence:.2f})")
+                except Exception as e:
+                    logger.warning(f"Типизация эвристикой не удалась: {e}")
+
             # Шаг 2: Чанкинг (50%)
             logger.info(f"Чанкинг документа: {document_id}")
             record.progress = 50
@@ -565,6 +584,7 @@ class DocumentService:
                     "filename": record.filename,
                     "file_type": record.file_type,
                     "file_size": record.file_size,
+                    "document_type": getattr(record, 'document_type', '') or "unknown",
                     **parsed_metadata,
                     "source_metadata": record.source_metadata or {},
                 },
