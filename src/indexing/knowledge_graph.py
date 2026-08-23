@@ -660,6 +660,31 @@ class KnowledgeGraphService:
                         # с Банком России — это недопустимо.
                         if len(ei["name"]) < 4 or len(ej["name"]) < 4:
                             continue
+                        # ⚠️ document_ref: embedding-слияние только для ВЕРСИЙ.
+                        # «ИСО/МЭК 18033» (серия) и «ИСО/МЭК 18033-1:2015» (часть 1)
+                        # имеют почти идентичные эмбеддинги (один текст), но это
+                        # РАЗНЫЕ документы. Разрешаем слияние только когда пара —
+                        # версия (суффикс = год) или точное совпадение (уже lexical).
+                        if ei["type"] == "document_ref" and ej["type"] == "document_ref":
+                            _n1, _n2 = ei["norm"], ej["norm"]
+                            _is_ver = False
+                            # 1) Подстрока: «18033-1:2005» ⊃ «18033-1» — суффикс год
+                            if _n1 in _n2 or _n2 in _n1:
+                                _short, _long = (_n1, _n2) if _n1 in _n2 else (_n2, _n1)
+                                _suffix = _long[len(_short):].strip()
+                                _is_ver = bool(re.fullmatch(r"[\s:–—-]*\d{4}", _suffix))
+                            # 2) Общий префикс + разные годы в конце:
+                            #    «ГОСТ Р 34.12—2015» vs «ГОСТ Р 34.12—2018» —
+                            #    нормализация убрала тире → «гост р 34 12 2015»
+                            #    vs «гост р 34 12 2018». Общий префикс до года.
+                            if not _is_ver:
+                                _m1 = re.fullmatch(r"(.+?)[\s:–—-]*(\d{4})$", _n1)
+                                _m2 = re.fullmatch(r"(.+?)[\s:–—-]*(\d{4})$", _n2)
+                                if _m1 and _m2:
+                                    if _m1.group(1).strip() == _m2.group(1).strip():
+                                        _is_ver = True
+                            if not _is_ver:
+                                continue
                         # Guard от слияния слов с общим корнем:
                         # «зашифрование» vs «расшифрование» — эмбеддинги близки,
                         # но это РАЗНЫЕ термины. Ключевой признак: почти одинаковые
@@ -671,11 +696,24 @@ class KnowledgeGraphService:
                         # НО: если одно норм-имя — ПОДСТРОКА другого («ПАО Сбербанк»
                         # ⊃ «Сбербанк», «ИСО/МЭК 18033-1» ⊃ «ИСО/МЭК 18033»),
                         # это полное/сокращённое → алиас, сливаем.
+                        # ⚠️ ИСКЛЮЧЕНИЕ для document_ref: для стандартов/документов
+                        # подстрока НЕ означает алиас! «ИСО/МЭК 18033» (серия) и
+                        # «ИСО/МЭК 18033-1» (часть 1) — РАЗНЫЕ документы (по правилам
+                        # ISO: -N = part, :YYYY = edition/версия). Сливать можно
+                        # только версии: «18033-1:2005» и «18033-1:2015» — это
+                        # редакции ОДНОГО документа. Проверка: у более длинного
+                        # имени суффикс — год (4 цифры после ':' или '-').
                         _n1, _n2 = ei["norm"], ej["norm"]
+                        _is_version_pair = False
+                        if ei["type"] == "document_ref" and (_n1 in _n2 or _n2 in _n1):
+                            _short, _long = (_n1, _n2) if _n1 in _n2 else (_n2, _n1)
+                            _suffix = _long[len(_short):].strip()
+                            # «18033-1:2005» vs «18033-1» → суффикс «:2005» / « 2005»
+                            _is_version_pair = bool(re.fullmatch(r"[\s:–—-]*\d{4}", _suffix))
                         _is_substring = (
                             (len(_n1) >= 4 and _n1 in _n2) or
                             (len(_n2) >= 4 and _n2 in _n1)
-                        )
+                        ) and (ei["type"] != "document_ref" or _is_version_pair)
                         if not _is_substring:
                             if _n1 and _n2 and _n1[0] != _n2[0]:
                                 import difflib
