@@ -860,12 +860,21 @@ class DocumentService:
                         rows = tb.get('rows') or []
                         if not rows:
                             continue
+                        # ВАЖНО: rows содержит ВСЕ строки таблицы, включая первую
+                        # (заголовок). Заголовок уже сохраняется отдельно в
+                        # headers_json — НЕ дублируем его в rows, иначе при
+                        # рендере в чате (thead из headers + tbody из rows)
+                        # заголовок выводится дважды.
+                        headers = tb.get('headers') or []
+                        data_rows = rows
+                        if headers and data_rows and data_rows[0] == headers:
+                            data_rows = data_rows[1:]
                         row = DocumentTable(
                             id=str(uuid.uuid4()),
                             document_id=document_id,
                             page_num=getattr(page, 'page_num', 0),
                             table_index=ti,
-                            rows_json=json.dumps(rows, ensure_ascii=False),
+                            rows_json=json.dumps(data_rows, ensure_ascii=False),
                             headers_json=json.dumps(tb.get('headers', []), ensure_ascii=False),
                             markdown=tb.get('markdown', ''),
                             html=tb.get('html', ''),

@@ -1029,7 +1029,16 @@
                 }
                 html += '<tbody>';
                 for (const r of rows) {
-                    if (r === headers) continue; // заголовок уже выведен
+                    // Пропускаем строку-заголовок: она уже в thead. Сравниваем
+                    // ПО СОДЕРЖИМОМУ (не по ссылке — r из JSON, headers отдельно),
+                    // иначе заголовок выводится дважды.
+                    if (headers.length && r.length === headers.length) {
+                        let same = true;
+                        for (let ci = 0; ci < headers.length; ci++) {
+                            if (String(r[ci] ?? '') !== String(headers[ci] ?? '')) { same = false; break; }
+                        }
+                        if (same) continue;
+                    }
                     html += '<tr>' + r.map(c => `<td>${escapeHTML(String(c ?? ''))}</td>`).join('') + '</tr>';
                 }
                 html += '</tbody></table>';
