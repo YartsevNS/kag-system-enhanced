@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Выбор embedding-модели и связка Qdrant/Neo4j</title>
+
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--blue:#60a5fa;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui, -apple-system, sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;line-height:1.7}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:32px 48px;max-width:960px}
+h1{font-size:30px;font-weight:700;letter-spacing:-0.5px;margin-bottom:6px}
+h2{font-size:20px;font-weight:600;margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border-s);color:var(--text)}
+h3{font-size:15px;font-weight:600;margin:20px 0 8px;color:var(--text2)}
+p{font-size:14px;color:var(--text3);margin-bottom:10px}
+code{font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;background:var(--surface);padding:2px 6px;border-radius:3px;color:var(--accent-h)}
+pre{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 18px;overflow-x:auto;margin:8px 0 16px;font-size:12px;line-height:1.5}
+pre code{background:none;padding:0;color:var(--text2)}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px 20px;margin-bottom:12px}
+.card h3{margin-top:0;display:flex;align-items:center;gap:8px}
+.card p{font-size:13px;color:var(--text4);margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.tag{display:inline-block;font-size:11px;padding:3px 8px;border-radius:9999px;font-weight:500;margin:2px}
+.tag-green{background:rgba(16,185,129,0.15);color:var(--green)}
+.tag-amber{background:rgba(245,158,11,0.15);color:var(--amber)}
+.tag-red{background:rgba(229,72,77,0.15);color:var(--red)}
+.tag-blue{background:rgba(96,165,250,0.15);color:var(--blue)}
+.tag-purple{background:rgba(139,92,246,0.15);color:var(--purple)}
+a{color:var(--accent-h);text-decoration:none}
+a:hover{text-decoration:underline}
+table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:13px}
+th{text-align:left;color:var(--text2);font-weight:600;padding:10px 12px;border-bottom:2px solid var(--border-strong);background:var(--surface)}
+td{padding:10px 12px;border-bottom:1px solid var(--border-s);color:var(--text3);vertical-align:top}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.warn{background:rgba(229,72,77,0.08);border:1px solid rgba(229,72,77,0.25);border-radius:var(--radius);padding:14px 18px;margin:12px 0;font-size:13px;color:var(--text3);line-height:1.6}
+.warn strong{color:var(--red)}
+.info{background:rgba(62,207,142,0.06);border:1px solid var(--accent-border);border-radius:var(--radius);padding:14px 18px;margin:12px 0;font-size:13px;color:var(--text3);line-height:1.6}
+.info strong{color:var(--accent-h)}
+.step{display:flex;gap:14px;margin:14px 0;align-items:flex-start}
+.step-num{min-width:32px;height:32px;border-radius:9999px;background:var(--accent);color:#101010;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-body{flex:1}
+.step-body p{margin-bottom:6px}
+.toc{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:16px 20px;margin:16px 0}
+.toc a{display:block;font-size:13px;padding:3px 0;color:var(--text3)}
+.toc a:hover{color:var(--accent-h);text-decoration:none}
+@media(max-width:768px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:20px 16px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo"> <span>KAG</span></div>
+  <a href="/">⬡ Дашборд</a>
+  <a href="/documents">📄 Документы</a>
+  <a href="/chunks">🧩 Чанки</a>
+  <a href="/search">🔎 Поиск</a>
+  <a href="/kg">🕸️ Граф знаний</a>
+  <a href="/monitor">🌐 Веб-монитор</a>
+  <a href="/news">📰 Новости</a>
+  <a href="/know">📚 Know</a>
+  <a href="/logs">📋 Логи</a>
+  <a href="/admin">⚙️ Админ</a>
+  <a href="/guide">📘 Руководство</a>
+  <a href="/embedding-guide" class="active">📐 Embedding-гид</a>
+  <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+</nav>
+<main>
+
+<h1>📐 Выбор embedding-модели и связка Qdrant / Neo4j</h1>
+<p style="color:var(--text4);margin-bottom:24px">Подробное руководство для правильного подбора и смены модели эмбеддингов — от простого к сложному, с примерами.</p>
+
+<div class="toc">
+  <strong style="color:var(--text2)">Содержание:</strong>
+  <a href="#ch1">1. Что такое embedding — объяснение «на пальцах»</a>
+  <a href="#ch2">2. Что такое размерность вектора (dim) и почему это важно</a>
+  <a href="#ch3">3. Из чего состоит связка: embedding → Qdrant → Neo4j</a>
+  <a href="#ch4">4. Какие модели эмбеддингов существуют у провайдера</a>
+  <a href="#ch5">5. Что стоит у нас и почему это хороший выбор</a>
+  <a href="#ch6">6. Как выбрать модель правильно (пошаговый алгоритм)</a>
+  <a href="#ch7">7. Как поменять модель — полная инструкция</a>
+  <a href="#ch8">8. Что произойдёт при смене модели (последствия)</a>
+  <a href="#ch9">9. Частые ошибки и как их избежать</a>
+  <a href="#ch10">10. Шпаргалка: цифры и факты</a>
+</div>
+
+<h2 id="ch1">1. Что такое embedding — объяснение «на пальцах»</h2>
+
+<p>Компьютер не понимает текст. Для него «Банк России устанавливает требования» — просто набор символов. Чтобы компьютер мог <strong>сравнивать смысл</strong> текстов, мы превращаем текст в <strong>список чисел</strong> (вектор).</p>
+
+<div class="card">
+  <h3>🍎 Простая аналогия</h3>
+  <p>Представь карту города. У каждого места есть координаты (x, y). Чем ближе два места друг к другу на карте — тем они «похожи» (рядом). Embedding делает то же самое с текстом: превращает смысл в координаты в многомерном пространстве. Чем ближе векторы двух текстов — тем ближе их смысл.</p>
+</div>
+
+<p><strong>Пример:</strong></p>
+<pre><code>«Как защитить информацию при переводах»  →  [0.12, -0.45, 0.78, ...]  (1024 числа)
+«Меры по защите данных в банке»           →  [0.14, -0.40, 0.75, ...]  (близко! ✅)
+«Рецепт борща с говядиной»                →  [0.90, 0.30, -0.10, ...]  (далеко! ❌)</code></pre>
+
+<p>Когда пользователь задаёт вопрос в чате, мы превращаем его вопрос в вектор и ищем в базе самые «близкие» векторы документов. Это и есть семантический поиск (RAG).</p>
+
+<h2 id="ch2">2. Что такое размерность вектора (dim) и почему это важно</h2>
+
+<p><strong>Размерность (dim)</strong> — это сколько чисел в одном векторе. У нас: <strong>1024</strong>.</p>
+
+<ul style="font-size:14px;color:var(--text3);margin:10px 0 10px 20px">
+  <li><strong>Мало чисел</strong> (например, 384) — вектор «грубый», модель различает только крупные смысловые различия. Быстро, дёшево, но точность ниже.</li>
+  <li><strong>Много чисел</strong> (например, 1024 или 3072) — вектор «тонкий», модель видит нюансы. Точнее, но медленнее и дороже (больше памяти в Qdrant).</li>
+</ul>
+
+<div class="warn">
+  <strong>⚠️ КРИТИЧЕСКИ ВАЖНО:</strong> все векторы в базе должны иметь <strong>одинаковую размерность</strong>.
+  Нельзя смешать векторы 768 и 1024 в одной коллекции Qdrant — это как смешать карты разных масштабов, поиск сломается.
+</div>
+
+<p>Размерность задаётся <strong>самой моделью</strong> и поменять её «руками» нельзя. Модель Embeddings отдаёт 1024 координаты — значит у всех векторов будет 1024 числа. Поменял модель на другую с размерностью 512 — все старые векторы (1024) становятся несовместимы.</p>
+
+<h2 id="ch3">3. Из чего состоит связка: embedding → Qdrant → Neo4j</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h3>📐 Embedding-модель</h3>
+    <p>Превращает текст в вектор (список чисел). Это «мозг», который понимает смысл.</p>
+  </div>
+  <div class="card">
+    <h3>🗄️ Qdrant</h3>
+    <p>Векторная база. Хранит сами векторы + текст чанков. Здесь происходит поиск «по смыслу».</p>
+  </div>
+  <div class="card">
+    <h3>🕸️ Neo4j</h3>
+    <p>Граф знаний. Хранит связи: документ → чанки → сущности. Векторов тут НЕТ — только текст-превью и связи.</p>
+  </div>
+  <div class="card">
+    <h3>🧩 Чанкинг</h3>
+    <p>Делит документ на куски (чанки). Размер чанка должен влезать в лимит модели.</p>
+  </div>
+</div>
+
+<p><strong>Полный путь документа:</strong></p>
+<pre><code>PDF → парсинг (PyMuPDF/Occular) → чанкинг (куски по 500 символов)
+     → embedding (каждый кусок → вектор 1024) → Qdrant (хранение + поиск)
+     → граф (чанки → сущности → связи) → Neo4j</code></pre>
+
+<h3>Что зависит от чего — таблица</h3>
+<table>
+  <tr>
+    <th>Компонент</th>
+    <th>Что задаёт</th>
+    <th>Меняется при смене модели?</th>
+  </tr>
+  <tr>
+    <td>Embedding-модель</td>
+    <td>Размерность вектора, качество понимания, лимит входного текста</td>
+    <td>— (это источник)</td>
+  </tr>
+  <tr>
+    <td>Qdrant коллекция</td>
+    <td>Размерность = размерности модели</td>
+    <td>✅ Да — если размерность другая, коллекция пересоздаётся, все векторы удаляются</td>
+  </tr>
+  <tr>
+    <td>Чанки в Qdrant</td>
+    <td>Текст + вектор + метаданные (filename, тип, группа)</td>
+    <td>✅ Да — векторы надо пересчитать заново (переиндексация)</td>
+  </tr>
+  <tr>
+    <td>Neo4j граф</td>
+    <td>Узлы Document/Chunk/Entity + связи</td>
+    <td>⚠️ Частично — узлы Chunk пересоздаются, векторов там нет</td>
+  </tr>
+  <tr>
+    <td>Размер чанка</td>
+    <td>Должен быть ≤ лимита входного текста модели</td>
+    <td>✅ Да — надо проверить и при необходимости уменьшить</td>
+  </tr>
+</table>
+
+<h2 id="ch4">4. Какие модели эмбеддингов существуют у провайдера</h2>
+
+<p>По официальной документации GigaChat (обновлено июль 2026), доступны 4 модели эмбеддингов через метод <code>/embeddings</code>:</p>
+
+<table>
+  <tr>
+    <th>Модель</th>
+    <th>Описание</th>
+    <th>Контекст</th>
+    <th>Размерность</th>
+    <th>Цена</th>
+  </tr>
+  <tr>
+    <td><code>Embeddings</code></td>
+    <td>Базовая модель для векторного представления текстов</td>
+    <td>512 токенов</td>
+    <td>1024</td>
+    <td>14 ₽ / 1 млн токенов</td>
+  </tr>
+  <tr>
+    <td><code>Embeddings-2</code></td>
+    <td>Доработанная и улучшенная версия базовой модели</td>
+    <td>512 токенов</td>
+    <td>1024</td>
+    <td>14 ₽ / 1 млн токенов</td>
+  </tr>
+  <tr>
+    <td><code>GigaEmbeddings-3B-2025-09</code></td>
+    <td>Новая модель (3B параметров), представлена в документации</td>
+    <td>Уточняется у провайдера</td>
+    <td>Уточняется у провайдера</td>
+    <td>14 ₽ / 1 млн токенов</td>
+  </tr>
+  <tr>
+    <td><code>EmbeddingsGigaR</code></td>
+    <td>Продвинутая модель с большим размером контекста</td>
+    <td>Больше, чем у базовой</td>
+    <td>Уточняется у провайдера</td>
+    <td>14 ₽ / 1 млн токенов</td>
+  </tr>
+</table>
+
+<div class="info">
+  <strong>✅ Важно:</strong> цена одинаковая для всех моделей (14 ₽ за 1 млн токенов — и для физлиц, и для юрлиц).
+  Значит, выбор делается не по цене, а по качеству и контексту.
+</div>
+
+<h3>Как проверить точные параметры модели</h3>
+<p>Размерность определяется автоматически: система отправляет модели тестовый запрос <code>"test"</code> и смотрит, сколько чисел вернулось. Так что даже если документация молчит — система сама узнает размерность.</p>
+<p>Официальная документация: <a href="https://developers.sber.ru/docs/ru/gigachat/api/embeddings" target="_blank">developers.sber.ru/docs/ru/gigachat/api/embeddings</a></p>
+
+<h2 id="ch5">5. Что стоит у нас и почему это хороший выбор</h2>
+
+<div class="info">
+  <strong>✅ Текущая конфигурация (проверена и работает):</strong>
+  <ul style="margin:8px 0 0 20px;font-size:13px">
+    <li><strong>Модель:</strong> Embeddings (базовая, проверенная временем)</li>
+    <li><strong>Размерность:</strong> 1024 — отличный баланс точности и скорости</li>
+    <li><strong>Лимит входа:</strong> ~500 символов (~350 токенов) — мы обрезаем чанки до 500</li>
+    <li><strong>Размер чанка:</strong> 500 символов (ровно под лимит)</li>
+    <li><strong>Перекрытие:</strong> 15% (75 символов) — границы смысловых блоков попадают в оба вектора</li>
+    <li><strong>Qdrant:</strong> коллекция kag_documents, dense-векторы 1024, косинусная метрика</li>
+    <li><strong>Neo4j:</strong> Document → HAS_CHUNK → Chunk, Chunk → MENTIONS → Entity</li>
+  </ul>
+</div>
+
+<p><strong>Почему 1024 — хорошо:</strong></p>
+<ul style="font-size:14px;color:var(--text3);margin:10px 0 10px 20px">
+  <li><strong>Достаточно для русского языка и нормативных документов.</strong> 1024 числа позволяют модели различать тонкие смысловые оттенки — «требование», «рекомендация», «запрет» будут в разных местах пространства.</li>
+  <li><strong>Не избыточно.</strong> Векторы 3072+ дают лишь небольшой прирост точности, но в 3 раза больше памяти и медленнее поиск.</li>
+  <li><strong>Совместимость.</strong> Вся система (чанкинг, лимиты, Qdrant) настроена именно под эту модель.</li>
+</ul>
+
+<p><strong>Почему НЕ «nomic-embed-text» (768) из старых настроек:</strong> локальная модель на 768 координат была дефолтом конфига, но фактически мы работаем с GigaChat 1024. Локальная модель требовала бы разворачивания Ollama на сервере и давала худшее качество для русского языка.</p>
+
+<h2 id="ch6">6. Как выбрать модель правильно (пошаговый алгоритм)</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <p><strong>Определи задачу.</strong> Нормативные документы, законы, стандарты — нужна модель с хорошим русским и пониманием формальных текстов. Новости и статьи — подойдёт почти любая.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <p><strong>Проверь лимит входного текста.</strong> У GigaChat — ~500 символов (512 токенов). Размер чанка должен быть ≤ лимита, иначе хвост чанка не попадёт в вектор.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <p><strong>Проверь размерность.</strong> У Embeddings и Embeddings-2 — 1024. Это уже настроено в нашей Qdrant коллекции. Если берёшь модель с другой размерностью — коллекция пересоздастся, все старые векторы пропадут (нужна полная переиндексация).</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <p><strong>Протестируй на 3-5 документах.</strong> Поменяй модель, загрузи пару тестовых PDF, проверь поиск: задай вопрос, ответ которого точно есть в документе, и посмотри, находится ли он.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <p><strong>Сравни результаты.</strong> Хороший признак: релевантные чанки в топ-3, ответы с цитатами из нужных документов. Плохой: «похожие» результаты не по теме.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">6</div>
+  <div class="step-body">
+    <p><strong>Принял решение — переиндексируй всё.</strong> После выбора финальной модели нажми «Переиндексировать все документы» и дождись завершения.</p>
+  </div>
+</div>
+
+<div class="warn">
+  <strong>⚠️ Не переключай модель «туда-сюда».</strong> Каждая смена с другой размерностью = пересоздание коллекции Qdrant = потеря всех векторов = полная переиндексация (часы). Выбирай один раз и надолго.
+</div>
+
+<h2 id="ch7">7. Как поменять модель — полная инструкция</h2>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <p><strong>Открой Админ-панель</strong> (⚙️ Админ в меню слева).</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <p><strong>В разделе «Привязка функций к провайдерам»</strong> найди функцию <strong>«Embedding (векторизация)»</strong>. Выбери провайдера GigaChat и модель (например, <code>Embeddings-2</code> или <code>EmbeddingsGigaR</code>).</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <p><strong>Сохрани.</strong> Система проверит размерность новой модели (отправит тестовый запрос).</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <p><strong>Проверь настройки чанкинга</strong> (раздел «Настройки чанкинга»): размер чанка должен быть ≤ лимита новой модели. Если модель та же серия (1024/512 токенов) — ничего менять не надо.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <p><strong>Загрузи 1-2 тестовых документа</strong> и проверь поиск вручную (страница «Поиск»). Убедись, что ответы находятся.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">6</div>
+  <div class="step-body">
+    <p><strong>Нажми «♻️ Переиндексировать все документы».</strong> Система поставит все completed-документы в очередь. Время: ~1.5 мин на документ, 150+ документов — несколько часов. Ход виден на странице «Документы» (статусы processing → completed).</p>
+  </div>
+</div>
+
+<div class="info">
+  <strong>💡 Хорошая новость:</strong> если размерность модели НЕ изменилась (например, Embeddings → Embeddings-2 — обе 1024),
+  коллекция Qdrant <strong>не пересоздаётся</strong>, старые векторы перезаписываются по document_id.
+  Но всё равно нужна переиндексация — иначе старые чанки (сделанные старой моделью) останутся.
+</div>
+
+<h2 id="ch8">8. Что произойдёт при смене модели (последствия)</h2>
+
+<h3>Сценарий А: модель с той же размерностью (Embeddings → Embeddings-2)</h3>
+<table>
+  <tr>
+    <th>Компонент</th>
+    <th>Что произойдёт</th>
+  </tr>
+  <tr>
+    <td>Qdrant коллекция</td>
+    <td>НЕ пересоздаётся (размерность 1024 = 1024). Старые точки перезаписываются при переиндексации</td>
+  </tr>
+  <tr>
+    <td>Qdrant чанки</td>
+    <td>Пересчитываются (новые векторы). Старые удаляются автоматически при force-переобработке</td>
+  </tr>
+  <tr>
+    <td>Neo4j граф</td>
+    <td>Очищается и строится заново (узлы Document/Chunk/связи)</td>
+  </tr>
+  <tr>
+    <td>Поиск</td>
+    <td>Старые и новые векторы совместимы (оба 1024), но переиндексация обязательна для единообразия</td>
+  </tr>
+</table>
+
+<h3>Сценарий Б: модель с другой размерностью (например, 384)</h3>
+<div class="warn">
+  <strong>⚠️ Это самое дорогое изменение:</strong>
+  <ul style="margin:8px 0 0 20px;font-size:13px">
+    <li>Qdrant коллекция <strong>удаляется и создаётся заново</strong> с новой размерностью — все старые векторы пропадают мгновенно</li>
+    <li>Все 150+ документов нужно переиндексировать <strong>с нуля</strong> (парсинг → чанкинг → векторизация) — несколько часов</li>
+    <li>Neo4j очищается и перестраивается</li>
+    <li>Если разрядность ниже (384 вместо 1024) — качество поиска может упасть</li>
+  </ul>
+</div>
+
+<h3>Что НЕ пострадает при любой смене</h3>
+<ul style="font-size:14px;color:var(--text3);margin:10px 0 10px 20px">
+  <li>Сами файлы документов (PDF, DOCX) — остаются на диске</li>
+  <li>OCR-результаты (распознанный текст) — остаются</li>
+  <li>Метаданные документов в PostgreSQL (название, тип, дата) — остаются</li>
+  <li>История чата — остаётся</li>
+</ul>
+
+<h2 id="ch9">9. Частые ошибки и как их избежать</h2>
+
+<table>
+  <tr>
+    <th>Ошибка</th>
+    <th>Последствие</th>
+    <th>Как избежать</th>
+  </tr>
+  <tr>
+    <td>Размер чанка больше лимита модели</td>
+    <td>Хвост чанка не попадает в вектор — часть документа «невидима» для поиска</td>
+    <td>Держи chunk_size ≤ лимита (у нас 500)</td>
+  </tr>
+  <tr>
+    <td>Переключение модели туда-сюда</td>
+    <td>Каждая смена размерности = пересоздание коллекции = потеря векторов</td>
+    <td>Выбирай модель один раз, тестируй на 2-3 документах до массовой переиндексации</td>
+  </tr>
+  <tr>
+    <td>Смена модели без переиндексации</td>
+    <td>Старые чанки со старыми векторами — поиск по ним работает по-старому, результаты перемешаны</td>
+    <td>Всегда жми «Переиндексировать все документы» после смены</td>
+  </tr>
+  <tr>
+    <td>Слишком большой overlap (&gt;25%)</td>
+    <td>Чанки почти копии друг друга, лишние векторы, лишняя стоимость, точность не растёт</td>
+    <td>10–20% от размера чанка, оптимально 15%</td>
+  </tr>
+  <tr>
+    <td>Забыть про лимит токенов</td>
+    <td>API возвращает 413 (Tokens limit exceeded) — батч отклоняется целиком</td>
+    <td>Система сама обрезает до 500 символов, но не увеличивай chunk_size бездумно</td>
+  </tr>
+</table>
+
+<h2 id="ch10">10. Шпаргалка: цифры и факты</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h3>📐 Embedding</h3>
+    <p>Модель: Embeddings (GigaChat)<br>
+    Размерность: <strong>1024</strong><br>
+    Лимит входа: ~512 токенов ≈ <strong>500 символов</strong><br>
+    Цена: 14 ₽ / 1М токенов</p>
+  </div>
+  <div class="card">
+    <h3>🧩 Чанкинг</h3>
+    <p>Размер чанка: <strong>500</strong> символов<br>
+    Перекрытие: <strong>15%</strong> (75 символов)<br>
+    Применяется: к новым документам + переиндексация</p>
+  </div>
+  <div class="card">
+    <h3>🗄️ Qdrant</h3>
+    <p>Коллекция: kag_documents<br>
+    Векторы: dense 1024, COSINE<br>
+    При смене размерности: коллекция пересоздаётся</p>
+  </div>
+  <div class="card">
+    <h3>🕸️ Neo4j</h3>
+    <p>Узлы: Document, Chunk, Entity<br>
+    Векторов НЕТ (только текст-превью)<br>
+    При переиндексации: очищается и строится заново</p>
+  </div>
+</div>
+
+<div class="info">
+  <strong>✅ Главный вывод:</strong> текущая связка (Embeddings 1024 + чанки 500/15% + Qdrant COSINE + Neo4j граф)
+  — сбалансированная и правильная для нормативных документов на русском языке.
+  Менять модель стоит только ради заметного прироста качества (например, Embeddings-2),
+  и всегда через полную переиндексацию.
+</div>
+
+<p style="margin-top:32px;padding-top:12px;border-top:1px solid var(--border-s);font-size:12px;color:var(--text4)">
+KAG v0.3.0 · Embedding-гид · данные по моделям: официальная документация GigaChat (июль 2026)
+</p>
+</main>
+<script>
+function logout() {
+  localStorage.removeItem('kag_token');
+  localStorage.removeItem('kag_sessions');
+  localStorage.removeItem('kag_user');
+  document.cookie = 'kag_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
+    .catch(function(){})
+    .finally(function(){ window.location.replace('/login'); });
+}
+</script>
+</body>
+</html>

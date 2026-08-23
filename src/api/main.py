@@ -348,6 +348,19 @@ async def docs_page():
         return FileResponse(guide_path)
     return {"error": "Docs page not found"}
 
+@app.get("/embedding-guide", summary="Руководство по выбору embedding-модели")
+async def embedding_guide_page():
+    """Страница-инструкция: выбор embedding-модели, связка Qdrant/Neo4j.
+
+    Доступна из админки (ссылка в разделе «Настройки чанкинга») и из
+    бокового меню. Содержит подробное объяснение, как связаны embedding,
+    размерность вектора, Qdrant и Neo4j, и что делать при смене модели.
+    """
+    guide_path = os.path.join(static_path, "embedding-guide.html")
+    if os.path.exists(guide_path):
+        return FileResponse(guide_path)
+    return {"error": "Embedding guide page not found"}
+
 @app.get("/kg", summary="Граф знаний")
 async def kg_page():
     """Страница графа знаний Neo4j"""
