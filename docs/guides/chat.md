@@ -20,6 +20,23 @@
 
 **Почему:** deepseek-v4-flash даёт ПУСТОЙ ответ при промпте >~3К токенов (список 60 доков ≈ 3400 токенов) и при max_tokens <500. Фронтенд шлёт max_tokens=2048.
 
+## Анализ домена (Query Routing)
+
+Мелкая модель-классификатор (function_map/query_analysis) определяет домен вопроса ДО основного LLM.
+
+- **Функция:** `query_analysis` в Provider Architecture (админка → Провайдеры → «Анализ запросов»).
+- **Провайдер:** llama.cpp (тип `llamacpp`) — http://192.168.50.41:8081 (llama-server, systemd-сервис, MiniCPM5-1B-Q4_K_M, --jinja, 8 потоков).
+- **Промпт:** system_prompt функции = пары «вопрос → домен» (few-shot). Дефолт: `prompts/query_analysis.txt`.
+- **Код:** `chat_service._detect_query_analysis()` (async) — вызывается в generate_response после `_detect_meta_intent`, до RAG. Парсит домен из ответа модели (приоритет — текст после `</think>`).
+- **Результат:** `metadata.domain` в ответе чата (legal/medical/technical/infosec/accounting/universal/...). Если функция не настроена — чат работает как раньше (None, без задержки).
+- **Назначение (следующие шаги):** фильтр RAG по document_type, выбор словаря алиасов по domain, схема графа.
+
+**Питфоллы:**
+- URL провайдера для OpenAI-совместимых БЕЗ `/v1` (chat_service._call_llm добавляет `/v1/chat/completions` сам). У ollama URL тоже без /v1.
+- llama-server (llama.cpp) слушает `0.0.0.0:8081` — иначе с другого хоста недоступен.
+- MiniCPM5-1B думает вслух (`<think>...</think>`), итоговый домен — в конце ответа; парсер берёт последнее вхождение после `</think>`.
+- httpx 0.28: `resp.text` — свойство (str), не метод: `await resp.text()` даёт `'str' object is not callable` (был баг в _call_llm, исправлен).
+
 ## Источники-документы
 
 - Backend отдаёт `sources` с `document_id` + `filename` (chat.py).

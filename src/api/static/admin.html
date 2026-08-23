@@ -1378,6 +1378,7 @@
                     'embedding': { icon: '📐', label: 'Embedding (векторизация)', desc: 'Используется текущая условная модель (размерность определяется автоматически из модели, менять вручную не нужно).' },
                     'graph': { icon: '🕸️', label: 'Извлечение графа знаний', desc: 'LLM для извлечения сущностей и связей' },
                     'doc_analysis': { icon: '📄', label: 'Анализ документов', desc: 'LLM для классификации документов' },
+                    'query_analysis': { icon: '🧭', label: 'Анализ запросов (роутинг)', desc: 'Мелкая модель-классификатор: домен вопроса (legal/medical/technical/infosec) до основного LLM. Промпт = пары «вопрос → домен» для few-shot, правь для точности.' },
                 };
 
                 // Всегда показываем все 4 функции, даже если не настроены
@@ -1429,6 +1430,7 @@
                 'embedding': { icon: '📐', label: 'Embedding', prompt: false },
                 'graph': { icon: '🕸️', label: 'Граф знаний', prompt: true },
                 'doc_analysis': { icon: '📄', label: 'Анализ документов', prompt: true },
+                'query_analysis': { icon: '🧭', label: 'Анализ запросов (роутинг)', prompt: true },
             };
             var def = defs[functionName] || { icon: '❓', label: functionName, prompt: false };
 

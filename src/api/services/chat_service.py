@@ -124,7 +124,7 @@ class ChatService:
                         "provider": provider.type,
                     }
                 else:
-                    body = await resp.text()
+                    body = resp.text
                     logger.error(f"LLM API error {resp.status_code}: {body[:200]}")
                     return {
                         "id": str(uuid.uuid4()),
@@ -182,6 +182,102 @@ class ChatService:
             return "list"
 
         return None
+
+    # Домены, которые умеет распознавать query_analysis (по умолчанию).
+    # Пользователь правит промпт с парами в админке — там могут быть и другие
+    # домены; этот список — страховка для парсинга ответа модели.
+    _QA_DOMAINS = [
+        "legal", "medical", "technical", "infosec",
+        "accounting", "financial", "universal", "general", "other",
+    ]
+
+    async def _detect_query_analysis(self, query: str) -> Optional[dict]:
+        """Определить домен вопроса через модель анализа запросов (function_map/query_analysis).
+
+        Мелкая модель-классификатор (llama.cpp / Ollama) вызывается ДО основного
+        LLM: возвращает домен (legal/medical/technical/infosec/...), по которому
+        можно фильтровать RAG-поиск и выбирать словарь алиасов/схему графа.
+
+        Промпт (system_prompt из админки) — few-shot пары «вопрос → домен»,
+        которые пользователь правит для повышения точности.
+
+        Returns:
+            {"domain": str|None, "raw": str} или None (функция не настроена).
+            None — не блокируем чат, если query_analysis не настроена.
+        """
+        try:
+            cfg = provider_service.get_function_llm_config("query_analysis")
+            if not cfg or not cfg.get("url") or not cfg.get("model"):
+                return None
+        except Exception as e:
+            logger.warning(f"Query analysis конфиг недоступен: {e}")
+            return None
+
+        system_prompt = cfg.get("system_prompt") or (
+            "Classify the user question domain. Answer with ONE word only: "
+            "legal, medical, technical, infosec, accounting, universal."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
+
+        params = cfg.get("parameters") or {}
+        try:
+            result = await self._call_llm(
+                messages=messages,
+                model=cfg.get("model", ""),
+                temperature=params.get("temperature", 0.1),
+                max_tokens=params.get("max_tokens", 150),
+                provider=type(
+                    "QACfg", (), {
+                        "url": cfg.get("url", ""),
+                        "api_key": cfg.get("api_key", ""),
+                        "type": cfg.get("provider", "custom"),
+                    }
+                )(),
+            )
+        except Exception as e:
+            logger.warning(f"Query analysis вызов не удался: {e}")
+            return None
+
+        raw = (result.get("content") or "").strip()
+        if not raw:
+            return None
+
+        domain = self._parse_domain(raw)
+        logger.info(f"Query analysis: domain={domain}, ответ={raw[:120]!r}")
+        return {"domain": domain, "raw": raw[:500]}
+
+    @staticmethod
+    def _parse_domain(raw: str) -> Optional[str]:
+        """Извлечь домен из ответа модели.
+
+        Приоритет: текст ПОСЛЕ последнего </think> (модель может рассуждать
+        вслух, а итог писать в конце). Ищем последнее вхождение известного
+        домена как целого слова.
+        """
+        import re
+        text = raw
+        # Если модель думала вслух — берём только финальную часть после </think>
+        if "</think>" in text:
+            parts = text.split("</think>")
+            text = parts[-1]
+            # Если после </think> пусто (модель не закончила) — берём и рассуждение
+            if not text.strip() and len(parts) > 1:
+                text = parts[-2]
+
+        pattern = re.compile(
+            r"\b(" + "|".join(ChatService._QA_DOMAINS) + r")\b", re.IGNORECASE
+        )
+        found = pattern.findall(text)
+        if not found:
+            # Fallback: ищем по всему ответу
+            found = pattern.findall(raw)
+        if not found:
+            return None
+        return found[-1].lower()
 
     def _build_documents_list_context(
         self, query: str, group_ids: Optional[List[str]], is_admin: bool,
@@ -293,6 +389,21 @@ class ChatService:
         # Ограничение 25: эмпирически deepseek-v4-flash на промпте >~2.5-3К
         # токенов (список 60 документов ≈ 3400) отвечает пустой строкой.
         intent = self._detect_meta_intent(user_message) if use_rag else None
+        # Домен вопроса через мелкую модель-классификатор (function_map/query_analysis).
+        # Вызывается ДО RAG: в будущем по domain можно фильтровать поиск
+        # (document_type в Qdrant), выбирать словарь алиасов и схему графа.
+        # Если query_analysis не настроена в админке — быстро возвращает None,
+        # чат работает как раньше.
+        domain = None
+        query_analysis_raw = None
+        if use_rag and intent is None:
+            try:
+                qa = await self._detect_query_analysis(user_message)
+                if qa:
+                    domain = qa.get("domain")
+                    query_analysis_raw = qa.get("raw", "")[:200]
+            except Exception as e:
+                logger.warning(f"Query analysis пропущен: {e}")
         meta_context = ""
         if intent == "count":
             # Для «сколько» хватает stats_line («В базе знаний загружено
@@ -499,6 +610,7 @@ class ChatService:
                 "total_docs": self._get_total_docs(),
                 "graph_used": use_rag,
                 "intent": intent or ("semantic" if use_rag else "none"),
+                "domain": domain,
             }
         }
 

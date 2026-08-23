@@ -38,6 +38,7 @@ from loguru import logger
 # Типы провайдеров
 PROVIDER_TYPES = {
     "ollama":     {"label": "Ollama (локальный)",      "needs_key": False, "url_placeholder": "http://192.168.50.41:11434"},
+    "llamacpp":   {"label": "llama.cpp (локальный)",   "needs_key": False, "url_placeholder": "http://192.168.50.41:8081/v1"},
     "openai":     {"label": "OpenAI API",              "needs_key": True,  "url_placeholder": "https://api.openai.com"},
     "deepseek":   {"label": "DeepSeek API",            "needs_key": True,  "url_placeholder": "https://api.deepseek.com"},
     "openrouter": {"label": "OpenRouter API",          "needs_key": True,  "url_placeholder": "https://openrouter.ai/api"},
@@ -71,6 +72,13 @@ FUNCTION_DEFINITIONS = {
         "label": "Анализ документов",
         "icon": "📄",
         "description": "LLM для классификации и анализа содержимого документов",
+        "supports_prompt": True,
+        "supports_parameters": True,
+    },
+    "query_analysis": {
+        "label": "Анализ запросов (Query Routing)",
+        "icon": "🧭",
+        "description": "Мелкая модель-классификатор: определяет домен вопроса (legal/medical/technical/infosec и др.) ДО основного LLM. Промпт = пары «вопрос → домен» для few-shot",
         "supports_prompt": True,
         "supports_parameters": True,
     },
