@@ -19,6 +19,7 @@
 - [x] политика по типам: legal_term/document_ref НЕ сливать по embedding
 - [x] развёрнуты ложные слияния legal_term (20 узлов)
 - [ ] переиндексация всех 158 документов
+- [ ] 🔮 Query Routing / Intent Classification (будущая задача — см. скилл kag-graph-precision)
 
 Результат на gost-r-34.pdf: 190 сущностей (legal_term 153, document_ref 16,
 date 8, organization 6, person 4, location 3), 72/72 чанков в графе,
