@@ -45,7 +45,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
         if [ $i -eq 3 ]; then exit 1; fi; \
         sleep 2; \
       done; \
-    done
+    done && \
+    # Предзагрузка модели reading_order (многоколоночные макеты) — чтобы
+    # не качалась в рантайме при первом документе
+    cd /opt/venv/lib/python3.11/site-packages/ocr_skel && \
+    python -c "from ocr_skel import download_reading_order; download_reading_order()" \
+    || echo "WARNING: reading_order model download failed, will download at runtime"
 
 # ===========================================
 # Stage 2: Production

@@ -38,6 +38,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
     curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
     curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth || echo "WARNING: weight downloads failed, will download at runtime"
 
+# Предзагрузка модели reading_order (многоколоночные макеты) — чтобы
+# не качалась в рантайме при первом документе. Если упала — докачается
+# автоматически при первом использовании (download_reading_order).
+RUN cd /opt/venv/lib/python3.11/site-packages/ocr_skel && \
+    python -c "from ocr_skel import download_reading_order; download_reading_order()" \
+    || echo "WARNING: reading_order model download failed, will download at runtime"
+
 # ===========================================
 # Stage 2: Production - финальный образ
 # ===========================================

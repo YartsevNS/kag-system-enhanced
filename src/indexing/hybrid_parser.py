@@ -110,9 +110,17 @@ class HybridDocumentParser:
             ocr_cfg = config_store.get("ocr", "settings") or {}
             self._force_ocr = force_ocr if force_ocr is not None else ocr_cfg.get("force_ocr", False)
             self._dpi = dpi if dpi is not None else ocr_cfg.get("dpi", 200)
+            # Новые возможности Occular-ocr (main): выравнивание сканов и
+            # многоколоночные макеты. По умолчанию ВКЛЮЧЕНЫ — заметно
+            # улучшают качество OCR (особенно таблицы). Настраиваются в
+            # админке (OCR settings).
+            self._deskew = ocr_cfg.get("deskew", True)
+            self._reading_order = ocr_cfg.get("reading_order", True)
         except Exception:
             self._force_ocr = force_ocr if force_ocr is not None else False
             self._dpi = dpi if dpi is not None else 200
+            self._deskew = True
+            self._reading_order = True
         self._init_engines()
     
     def _init_engines(self):
@@ -140,10 +148,14 @@ class HybridDocumentParser:
                     logger.info(f"  Copied weight from persist: {f}")
         try:
             from ocr_skel import OCRPipeline
-            # Новые версии Occular-ocr: конструктор принимает (settings, deskew,
-            # reading_order, lm, num_threads, gpu, detector, recognizer). Параметра
-            # onnx больше нет — onnxruntime всегда используется для инференса.
-            self._ocular = OCRPipeline(gpu=False)
+            # Новые версии Occular-ocr: deskew (выравнивание сканов) и
+            # reading_order (многоколоночные макеты) — заметно улучшают
+            # качество, особенно таблицы. Включены по умолчанию.
+            self._ocular = OCRPipeline(
+                gpu=False,
+                deskew=self._deskew,
+                reading_order=self._reading_order,
+            )
             self._ocular_available = True
             logger.info("Occular-ocr initialized (CPU)")
         except Exception as e:
