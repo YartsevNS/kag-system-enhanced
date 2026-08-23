@@ -32,6 +32,9 @@ _COLUMN_MIGRATIONS = [
     ("documents", "previous_hash", "VARCHAR DEFAULT ''"),
     ("documents", "original_text", "TEXT"),
     ("documents", "source_metadata", "TEXT"),
+    # entity_aliases — модерация сомнительных пар (entity resolution)
+    ("entity_aliases", "reviewed", "BOOLEAN DEFAULT FALSE"),
+    ("entity_aliases", "verdict", "VARCHAR DEFAULT ''"),
 ]
 
 

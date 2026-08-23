@@ -12,7 +12,7 @@
 import os
 import asyncio
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -2285,5 +2285,105 @@ print("compose patched")
         # ── Шаг 3: перезапуск worker (новые лимиты + свежий код) ─────────
         w.restart()
         return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker обновлён и перезапущен"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ===========================================
+# Словарь алиасов сущностей (entity resolution)
+# ===========================================
+
+class AliasPairRequest(BaseModel):
+    """Запрос на добавление/обновление пары алиасов."""
+    canonical_name: str = Field(..., min_length=1, max_length=500)
+    alias: str = Field(..., min_length=1, max_length=500)
+    entity_type: str = Field(default="organization", max_length=50)
+    comment: str = Field(default="")
+    source: str = Field(default="manual", max_length=50)
+
+
+@router.get("/aliases", summary="Список пар алиасов")
+async def list_aliases(include_pending: bool = False, verdict: str = ""):
+    """Список пар из словаря entity_aliases.
+
+    include_pending=true — показать и непросмотренные (сомнительные) пары.
+    verdict=approved/rejected — фильтр по вердикту админа.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        pairs = kg_service.list_alias_pairs(include_pending=include_pending, verdict=verdict)
+        # Если просим pending — отдельно показываем счётчик непросмотренных
+        pending_count = len(kg_service.list_alias_pairs(include_pending=True))
+        return {
+            "status": "ok",
+            "pairs": pairs,
+            "total": len(pairs),
+            "pending_count": pending_count,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/aliases", summary="Добавить пару алиасов")
+async def add_alias(request: AliasPairRequest):
+    """Добавить пару (alias → canonical) в словарь."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        ok = kg_service.save_alias_pair(
+            canonical=request.canonical_name.strip(),
+            alias=request.alias.strip(),
+            entity_type=request.entity_type,
+            source=request.source or "manual",
+            comment=request.comment,
+            reviewed=True,      # добавлено админом — сразу применяемое
+            verdict="approved",
+        )
+        if ok:
+            return {"status": "ok", "message": "Пара добавлена"}
+        return {"status": "error", "message": "Не удалось добавить (возможно, уже есть)"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/aliases/apply", summary="Применить словарь к графу")
+async def apply_aliases():
+    """Применить все approved-пары к графу Neo4j (слить алиасы в канонические узлы)."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        res = kg_service.apply_alias_pairs()
+        return {"status": "ok", **res, "message": f"Применено пар: {res.get('applied', 0)}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/aliases/{pair_id}/review", summary="Решение админа по сомнительной паре")
+async def review_alias(pair_id: str, verdict: str = Query("approved", pattern="^(approved|rejected)$")):
+    """Подтвердить или отклонить сомнительную пару.
+
+    approved — пара попадёт в применяемый словарь;
+    rejected — отклонена, не будет применяться.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        ok = kg_service.review_alias_pair(pair_id, verdict)
+        if not ok:
+            return {"status": "error", "message": "Пара не найдена"}
+        # Если approved — сразу применяем к графу
+        if verdict == "approved":
+            kg_service.apply_alias_pairs()
+        return {"status": "ok", "message": f"Пара {'подтверждена' if verdict == 'approved' else 'отклонена'}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.delete("/aliases/{pair_id}", summary="Удалить пару алиасов")
+async def delete_alias(pair_id: str):
+    """Удалить пару из словаря."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        ok = kg_service.delete_alias_pair(pair_id)
+        if not ok:
+            return {"status": "error", "message": "Пара не найдена"}
+        return {"status": "ok", "message": "Пара удалена"}
     except Exception as e:
         return {"status": "error", "message": str(e)}

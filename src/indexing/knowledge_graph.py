@@ -593,6 +593,12 @@ class KnowledgeGraphService:
                     _vt.join(timeout=180)
                 except Exception as e:
                     logger.warning(f"[resolution] LLM-верификация пропущена: {e}")
+                # ВСЕ кандидаты (и подтверждённые LLM, и нет) → на модерацию
+                # админу: он видит в админке и решает, применять ли.
+                try:
+                    self.save_pending_pairs(candidates)
+                except Exception as e:
+                    logger.warning(f"[resolution] save_pending_pairs: {e}")
                 self._resolution_candidates = []
 
             # ── 4. Применяем слияния в Neo4j ──────────────────────────────────
@@ -1077,9 +1083,10 @@ class KnowledgeGraphService:
         return None
 
     def load_alias_pairs(self) -> List[Dict]:
-        """Загрузить известные пары алиасов из таблицы entity_aliases (PostgreSQL).
+        """Загрузить ПРИМЕНЯЕМЫЕ пары алиасов (reviewed + approved).
 
-        Возвращает список {canonical_name, alias, entity_type, source}.
+        Пары с source='pending' или verdict='rejected' НЕ применяются
+        автоматически — их решает админ в админке (review_alias_pair).
         """
         try:
             from src.database.session import get_session_local
@@ -1087,7 +1094,10 @@ class KnowledgeGraphService:
             maker = get_session_local()
             session = maker()
             try:
-                rows = session.query(EntityAlias).all()
+                rows = session.query(EntityAlias).filter(
+                    EntityAlias.reviewed == True,  # noqa: E712
+                    EntityAlias.verdict == "approved",
+                ).all()
                 return [r.to_dict() for r in rows]
             finally:
                 session.close()
@@ -1171,7 +1181,8 @@ class KnowledgeGraphService:
         return result
 
     def save_alias_pair(self, canonical: str, alias: str, entity_type: str = "organization",
-                        source: str = "manual", comment: str = "") -> bool:
+                        source: str = "manual", comment: str = "", reviewed: bool = False,
+                        verdict: str = "") -> bool:
         """Сохранить пару алиасов в таблицу entity_aliases (для скриптов/админки)."""
         try:
             import uuid
@@ -1192,6 +1203,8 @@ class KnowledgeGraphService:
                     entity_type=entity_type,
                     source=source,
                     comment=comment,
+                    reviewed=reviewed,
+                    verdict=verdict,
                 )
                 session.add(row)
                 session.commit()
@@ -1200,6 +1213,111 @@ class KnowledgeGraphService:
                 session.close()
         except Exception as e:
             logger.warning(f"[aliases] save_alias_pair {alias}→{canonical}: {e}")
+            return False
+
+    def save_pending_pairs(self, candidates: List[Dict]) -> int:
+        """Сохранить сомнительные пары (серая зона / LLM-кандидаты) на модерацию.
+
+        Эти пары не применяются автоматически — админ решает в админке
+        (подтвердить/отклонить). Источник: LLM-верификация и аббревиатуры,
+        которые embedding не может разрешить однозначно.
+
+        Args:
+            candidates: список {a_name, b_name, a_type, b_type, sim, hint}
+
+        Returns:
+            Сколько новых пар добавлено в таблицу
+        """
+        added = 0
+        for c in candidates:
+            a_name = (c.get("a_name") or "").strip()
+            b_name = (c.get("b_name") or "").strip()
+            etype = c.get("a_type") or c.get("b_type") or "organization"
+            if not a_name or not b_name or a_name == b_name:
+                continue
+            hint = c.get("hint", "")
+            sim = c.get("sim")
+            comment = f"авто: {hint}, sim={sim}" if hint or sim else "авто"
+            # Пары уже подтверждённые LLM — тоже на модерацию (чтобы админ видел)
+            if self.save_alias_pair(a_name, b_name, etype, source="pending",
+                                    comment=comment, reviewed=False, verdict=""):
+                added += 1
+        return added
+
+    def list_alias_pairs(self, include_pending: bool = False, verdict: str = "") -> List[Dict]:
+        """Список пар алиасов из таблицы entity_aliases.
+
+        Args:
+            include_pending: включать непросмотренные (pending)
+            verdict: фильтр по вердикту (approved/rejected/"" — без фильтра)
+
+        Returns:
+            Список словарей пар
+        """
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                q = session.query(EntityAlias)
+                if not include_pending:
+                    q = q.filter(EntityAlias.reviewed == True)  # noqa: E712
+                if verdict:
+                    q = q.filter(EntityAlias.verdict == verdict)
+                rows = q.order_by(EntityAlias.created_at.desc()).all()
+                return [r.to_dict() for r in rows]
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] list_alias_pairs: {e}")
+            return []
+
+    def delete_alias_pair(self, pair_id: str) -> bool:
+        """Удалить пару алиасов по id."""
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                row = session.query(EntityAlias).filter_by(id=pair_id).first()
+                if not row:
+                    return False
+                session.delete(row)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] delete_alias_pair {pair_id}: {e}")
+            return False
+
+    def review_alias_pair(self, pair_id: str, verdict: str) -> bool:
+        """Отметить пару как просмотренную с вердиктом (approved/rejected).
+
+        approved — пара применяется apply_alias_pairs (детерминированно)
+        rejected — пара отклонена админом, не применяется
+        """
+        if verdict not in ("approved", "rejected"):
+            return False
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                row = session.query(EntityAlias).filter_by(id=pair_id).first()
+                if not row:
+                    return False
+                row.reviewed = True
+                row.verdict = verdict
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] review_alias_pair {pair_id}: {e}")
             return False
 
     # ============================================================
