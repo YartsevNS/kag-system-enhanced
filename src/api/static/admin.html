@@ -377,6 +377,42 @@
                 <div style="font-size:12px;color:var(--text4);margin-top:6px">
                     Пересоздаёт embeddings всех документов. Нужно после смены embedding-модели.
                 </div>
+                <!-- ⚠️ Предупреждение о смене embedding-модели (реальный опыт: GigaChat,
+                     лимит 500 символов, размерность 1024). Не удалять — это защита
+                     пользователя от «молчаливой» потери индекса. -->
+                <div style="margin-top:12px;padding:12px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.6">
+                    <strong style="color:#ef4444">⚠️ Смена embedding-модели — это перестройка всего хранилища.</strong>
+                    <br><br>
+                    <strong>Что произойдёт:</strong>
+                    <br>• Все старые векторы в Qdrant станут <u>несовместимы</u> с новыми
+                    (разная размерность/семантика). Поиск по старым + новым чанкам одновременно
+                    даёт мусорные результаты или ошибки.
+                    <br>• Чанки в Neo4j (граф знаний) хранят только текст-превью и связи —
+                    векторов там нет. Но переиндексация пересоздаёт узлы Document/Chunk,
+                    и старые связи/сущности могут остаться, если документ был удалён/изменён.
+                    <br><br>
+                    <strong>Правильный порядок действий после смены модели:</strong>
+                    <br>1. В «Привязке функций» выберите новую embedding-модель и сохраните.
+                    <br>2. Проверьте, что размерность совпадает с ожидаемой (у GigaChat — 1024).
+                    <br>3. <strong>Очистите коллекцию Qdrant</strong> (кнопка в разделе «Векторная база»
+                    или через API), иначе старые точки останутся и будут мешать поиску.
+                    <br>4. Нажмите «♻️ Переиндексировать все документы» — это поставит все
+                    документы в очередь на полный перепрогон (парсинг → чанкинг → векторизация).
+                    <br><br>
+                    <strong>Последствия переиндексации:</strong>
+                    <br>• <u>Qdrant:</u> старые точки документа <u>перезаписываются</u> новыми
+                    (по document_id). Если чанков стало меньше — «хвостовые» точки остаются
+                    осиротевшими; чистка коллекции перед переиндексацией решает это.
+                    <br>• <u>Neo4j:</u> узлы Document/Chunk пересоздаются (MERGE), граф
+                    обновляется; сущности без связей удаляются.
+                    <br>• <u>Время:</u> ~1-2 мин на документ; 150+ документов — несколько часов.
+                    Очередь видна на странице «Документы».
+                    <br><br>
+                    <strong>ВАЖНО про лимит:</strong> если новая модель имеет меньший лимит
+                    входного текста (например, GigaChat — 500 символов), чем chunk_size —
+                    хвост чанка не попадёт в вектор. Согласуйте chunk_size с лимитом модели
+                    в разделе «Настройки чанкинга» ПЕРЕД переиндексацией.
+                </div>
             </div>
         </div>
 
@@ -427,27 +463,66 @@
         <!-- Настройки чанкинга -->
         <div class="section">
             <h2 class="section-title">✂️ Настройки чанкинга документов</h2>
+
+            <!-- ⚠️ ВАЖНО: этот блок предупреждений — результат реального инцидента.
+                 Мы выяснили, что RecursiveCharacterTextSplitter молча игнорировал
+                 overlap, а chunk_size > 500 символов приводил к потере хвоста
+                 чанка при эмбеддинге (лимит GigaChat). Не удаляйте эти пояснения. -->
+            <div style="margin-bottom:1rem;padding:12px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.6">
+                <strong style="color:#ef4444">🚨 Читать перед изменением. Крайне аккуратно.</strong>
+                <br><br>
+                <strong>1. Что произойдёт при сохранении.</strong> Настройки применяются
+                <u>только к новым документам</u> и к документам, поставленным на
+                <strong>переиндексацию</strong>. Уже обработанные документы НЕ пересчитаются
+                автоматически — их векторы в Qdrant останутся со старыми параметрами.
+                <br><br>
+                <strong>2. Как применить к существующим документам.</strong> После смены
+                настроек нажмите «♻️ Переиндексировать все документы» (секция «Привязка
+                функций» ниже). Это поставит в очередь <u>все completed-документы</u> на
+                полный перепрогон: парсинг → чанкинг → векторизация. Время: ~1-2 мин на
+                документ (зависит от размера и OCR), 150+ документов — часы. Очередь
+                видна на странице «Документы».
+                <br><br>
+                <strong>3. Лимит embedding-модели (критично).</strong> Текущая модель
+                GigaChat обрезает вход на <strong>500 символов</strong>. Если chunk_size
+                больше лимита — «хвост» чанка (всё, что за 500-м символом) <u>не попадёт
+                в вектор</u>, поиск не найдёт информацию из этой части документа.
+                Поэтому:
+                <br>• <strong>chunk_size ≤ 500</strong> — иначе часть текста не индексируется;
+                <br>• <strong>overlap = 10–20% от chunk_size</strong> (рекомендация: 15%).
+                Слишком большой overlap (>25%) = чанки-копии, лишние векторы и стоимость,
+                без роста точности.
+                <br><br>
+                <strong>4. Смена embedding-модели — это перестройка всего хранилища.</strong>
+                См. подробное описание в секции «Привязка функций» (кнопка переиндексации).
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group">
                     <label>Размер чанка (символы)</label>
-                    <input type="number" id="chunk-size" placeholder="1000" value="1000">
+                    <input type="number" id="chunk-size" placeholder="500" value="500" min="100" max="5000">
                     <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
-                        Рекомендуемо: 500-2000
+                        Текущая модель: лимит 500 символов. Рекомендуемо: <strong>500</strong>
+                        (больше — хвост чанка не векторизуется).
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Перекрытие чанков (символы)</label>
-                    <input type="number" id="chunk-overlap" placeholder="200" value="200">
+                    <label>Перекрытие чанков (проценты от размера)</label>
+                    <input type="number" id="chunk-overlap-percent" placeholder="15" value="15" min="0" max="50" step="1">
                     <div style="font-size: 0.75rem; color: var(--text4); margin-top: 0.25rem;">
-                        Рекомендуемо: 100-300
+                        Рекомендуемо: <strong>10–20%</strong> (по умолчанию 15%).
+                        Перекрытие добавляет хвост предыдущего чанка в начало следующего —
+                        граница смыслового блока попадает в оба вектора.
                     </div>
                 </div>
             </div>
             <div style="margin-top:1rem;padding:12px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3);line-height:1.5">
-                <strong style="color:var(--amber)">⚠️ Важно:</strong> размер чанка и перекрытия должны соответствовать рекомендациям авторов embedding-модели.
-                Проверьте документацию модели в разделе «Привязка функций» (Ollama, HuggingFace, сайт разработчика).
-                <strong>Неправильные значения снижают качество поиска</strong> — модель может не «увидеть» нужный контекст или потерять связность текста.
-                <br>Текущая модель: <strong>bge-m3</strong> — рекомендовано 512–1024 токенов на чанк, перекрытие 10–20% от размера.
+                <strong style="color:var(--amber)">⚠️ Важно:</strong> значения должны соответствовать рекомендациям
+                авторов embedding-модели. Проверьте документацию модели в разделе «Привязка функций».
+                <br>Текущая модель: <strong>GigaChat (Embeddings)</strong> — рекомендовано
+                <strong>500 символов на чанк</strong> (лимит API), перекрытие <strong>10–20%</strong>.
+                <br>Значение перекрытия вводится в <strong>процентах</strong>; в символах оно
+                считается автоматически: <span id="chunk-overlap-chars-label">75 символов</span>.
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
                 <button class="btn btn-primary" onclick="saveChunkingSettings()">💾 Сохранить настройки</button>
@@ -1413,16 +1488,42 @@
                 const response = await apiFetch(`${API_URL}/chunking-config`);
                 const config = await response.json();
                 
-                document.getElementById('chunk-size').value = config.chunk_size || 1000;
-                document.getElementById('chunk-overlap').value = config.chunk_overlap || 200;
+                const chunkSize = config.chunk_size || 500;
+                const overlapChars = config.chunk_overlap || 75;
+                document.getElementById('chunk-size').value = chunkSize;
+                // Показываем overlap в процентах от chunk_size (настройка хранится
+                // в символах, но для пользователя удобнее проценты — 10-20%).
+                const pct = chunkSize > 0 ? Math.round((overlapChars / chunkSize) * 100) : 15;
+                document.getElementById('chunk-overlap-percent').value = pct;
+                updateOverlapCharsLabel();
             } catch (error) {
                 console.error('Ошибка загрузки настроек чанкинга:', error);
             }
         }
-        
+
+        // Показывает, сколько символов получится из процента при текущем chunk_size
+        function updateOverlapCharsLabel() {
+            const chunkSize = parseInt(document.getElementById('chunk-size').value) || 500;
+            const pct = parseInt(document.getElementById('chunk-overlap-percent').value) || 0;
+            const chars = Math.round(chunkSize * pct / 100);
+            const label = document.getElementById('chunk-overlap-chars-label');
+            if (label) label.textContent = `${chars} символов`;
+        }
+
+        // Пересчёт при изменении полей
+        document.addEventListener('DOMContentLoaded', function () {
+            var cs = document.getElementById('chunk-size');
+            var co = document.getElementById('chunk-overlap-percent');
+            if (cs) cs.addEventListener('input', updateOverlapCharsLabel);
+            if (co) co.addEventListener('input', updateOverlapCharsLabel);
+        });
+
         async function saveChunkingSettings() {
-            const chunkSize = parseInt(document.getElementById('chunk-size').value) || 1000;
-            const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value) || 200;
+            const chunkSize = parseInt(document.getElementById('chunk-size').value) || 500;
+            const overlapPct = parseInt(document.getElementById('chunk-overlap-percent').value) || 15;
+            // Перекрытие задаётся в процентах от размера чанка → переводим в символы.
+            // Пример: chunk_size=500, overlap=15% → 75 символов.
+            const chunkOverlap = Math.max(0, Math.round(chunkSize * overlapPct / 100));
             
             try {
                 const response = await apiFetch(`${API_URL}/chunking-config`, {
@@ -1439,7 +1540,10 @@
                     const statusDiv = document.getElementById('chunking-status');
                     statusDiv.innerHTML = `<div style="color: #22c55e;">✅ ${result.message}</div>
                         <div style="color: var(--text4); font-size: 0.875rem; margin-top: 0.5rem;">
-                            Размер чанка: ${result.config.chunk_size} символов | Перекрытие: ${result.config.chunk_overlap} символов
+                            Размер чанка: ${result.config.chunk_size} символов | Перекрытие: ${result.config.chunk_overlap} символов (${overlapPct}%)
+                        </div>
+                        <div style="color: var(--amber); font-size: 0.75rem; margin-top: 0.5rem;">
+                            ⚠️ Применяется к НОВЫМ документам. Чтобы пересчитать существующие — нажмите «♻️ Переиндексировать все документы» в секции «Привязка функций».
                         </div>`;
                     
                     showNotification('✅ Настройки чанкинга сохранены в Redis');
