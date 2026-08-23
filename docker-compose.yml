@@ -109,11 +109,10 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     # МАСШТАБИРОВАНИЕ (500+ пользователей): для запуска нескольких worker'ов
-    # убрать строку container_name ниже и выполнить:
-    #   docker-compose up -d --scale worker=N
+    # выполнить: docker compose up -d --scale worker=N
     # (N — количество, см. админку → «Масштабирование»). QueueGuard
     # защищает от дублей задач — несколько worker'ов безопасны.
-    container_name: kag-worker
+    # container_name убран (2026-08-24): мешал --scale worker=N.
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
