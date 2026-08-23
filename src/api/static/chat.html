@@ -298,6 +298,58 @@
             color:var(--text3);
             margin-bottom:0.25rem;
         }
+
+        /* ── Таблицы в чате (table RAG) ──────────────────────────────
+           Рендер HTML-таблиц из document_tables: структурно, с рамками,
+           зебра-строками. Не ломает тёмную тему Supabase. */
+        .table-render{
+            margin-top:0.5rem;
+            max-height:320px;
+            overflow:auto;
+            border:1px solid var(--border-s);
+            border-radius:var(--radius-sm);
+            background:var(--surface);
+        }
+        .table-render table{
+            width:100%;
+            border-collapse:collapse;
+            font-size:0.7rem;
+            font-family:var(--mono);
+        }
+        .table-render th{
+            background:var(--elevated);
+            color:var(--text2);
+            padding:5px 8px;
+            border-bottom:1px solid var(--border-strong);
+            text-align:left;
+            position:sticky;
+            top:0;
+            white-space:nowrap;
+        }
+        .table-render td{
+            padding:4px 8px;
+            border-bottom:1px solid var(--border-s);
+            color:var(--text3);
+            vertical-align:top;
+        }
+        .table-render tr:nth-child(even) td{
+            background:rgba(255,255,255,0.02);
+        }
+        .table-render tr:hover td{
+            background:rgba(62,207,142,0.05);
+        }
+        .table-caption{
+            font-size:0.65rem;
+            color:var(--text4);
+            margin-top:0.35rem;
+            display:flex;
+            gap:0.5rem;
+            align-items:center;
+        }
+        .table-caption .btn{
+            font-size:0.6rem;
+            padding:2px 8px;
+        }
         
         /* Ссылки на документы: светлый контрастный, НЕ синий и НЕ белый
            (--text #fafafa — обычный шрифт). --accent-l — светлый зелёный. */
@@ -925,6 +977,7 @@
                         <div class="source-item">
                             📄 Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
                         </div>
+                        ${buildTablesHTML(sources)}
                     </div>
                 `;
             }
@@ -945,7 +998,56 @@
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-        
+
+        // ── Рендер таблиц в чате (table RAG) ────────────────────────────
+        // Источники (sources) могут содержать tables: [{headers, rows, html, page_num}]
+        // из document_tables. Рендерим их структурно (HTML), а не текстом.
+        // Безопасность: используем только свою сгенерированную HTML-таблицу
+        // (не innerHTML произвольного контента) — ячейки экранируем.
+        function buildTablesHTML(sources) {
+            if (!sources || !sources.length) return '';
+            let all = [];
+            const seenTables = new Set();
+            for (const s of sources) {
+                if (!s.tables || !s.tables.length) continue;
+                for (const t of s.tables) {
+                    const key = (s.document_id || '') + '|' + (t.page_num || 0) + '|' + (t.table_index || 0);
+                    if (seenTables.has(key)) continue;
+                    seenTables.add(key);
+                    all.push({doc: s, table: t});
+                }
+            }
+            if (!all.length) return '';
+
+            const blocks = all.map(({doc, table}) => {
+                const headers = table.headers || [];
+                const rows = table.rows || [];
+                // Строим таблицу сами — ячейки экранируем
+                let html = '<table>';
+                if (headers.length) {
+                    html += '<thead><tr>' + headers.map(h => `<th>${escapeHTML(h)}</th>`).join('') + '</tr></thead>';
+                }
+                html += '<tbody>';
+                for (const r of rows) {
+                    if (r === headers) continue; // заголовок уже выведен
+                    html += '<tr>' + r.map(c => `<td>${escapeHTML(String(c ?? ''))}</td>`).join('') + '</tr>';
+                }
+                html += '</tbody></table>';
+                const fname = escapeHTML(doc.filename || (doc.document_id || '').slice(0, 12));
+                const docUrl = doc.document_id
+                    ? `${API_URL}/upload/${encodeURIComponent(doc.document_id)}/preview`
+                    : '#';
+                return `
+                    <div class="table-render">${html}</div>
+                    <div class="table-caption">
+                        <span>📊 Таблица из: <a href="${docUrl}" target="_blank" rel="noopener">${fname}</a></span>
+                        <span>стр. ${table.page_num || '—'}</span>
+                    </div>
+                `;
+            });
+            return `<div style="margin-top:0.5rem">${blocks.join('<div style="height:0.75rem"></div>')}</div>`;
+        }
+
         // Сохранение сообщения
         function saveMessage(role, content, metadata = null) {
             if (!currentSessionId) {

@@ -341,6 +341,40 @@ class ChatService:
                         )
                     context = "\n\n".join(context_parts)
                     sources = search_results
+
+                    # ── Обогащение источников таблицами (table RAG) ────────────
+                    # Если чанк — таблица (markdown-структура) или документ имеет
+                    # таблицы в document_tables — прикрепляем HTML-версии к source,
+                    # чтобы чат мог отрендерить их пользователю структурно.
+                    # Исследование (2026): лучший подход — слоёный: markdown для
+                    # LLM-контекста + HTML для отображения пользователю
+                    # (Microsoft Azure Document Intelligence v4.0, LlamaIndex).
+                    try:
+                        from src.database.session import get_session_local
+                        from src.database.document_table_models import DocumentTable
+                        _doc_tables_cache = {}
+                        for src in sources:
+                            did = src.get('document_id')
+                            if not did or did in _doc_tables_cache:
+                                continue
+                            _maker = get_session_local()
+                            _s = _maker()
+                            try:
+                                _tabs = _s.query(DocumentTable).filter_by(document_id=did).all()
+                                _doc_tables_cache[did] = [t.to_dict() for t in _tabs[:3]]
+                            finally:
+                                _s.close()
+                        for src in sources:
+                            did = src.get('document_id')
+                            tabs = _doc_tables_cache.get(did) or []
+                            if tabs:
+                                src['tables'] = tabs
+                        _with_tables = sum(1 for s in sources if s.get('tables'))
+                        if _with_tables:
+                            logger.info(f"Table RAG: {_with_tables} источников с таблицами")
+                    except Exception as e:
+                        logger.debug(f"Table RAG обогащение пропущено: {e}")
+
                     logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
 
                 # 2b. Поиск в графе Neo4j
