@@ -56,7 +56,12 @@ class ParsedDocument:
             if len(self.pages) > 1:
                 md_parts.append(f"## Страница {page.page_num}\n")
 
-            # Если есть layout-элементы
+            # Текст страницы — ВСЕГДА (иначе при layout таблиц текст терялся)
+            if page.text:
+                md_parts.append(page.text.strip())
+                md_parts.append("")
+
+            # Если есть layout-элементы (таблицы, изображения, формулы)
             if page.layout:
                 for item in page.layout:
                     item_type = item.get('type', 'text')
@@ -82,21 +87,7 @@ class ParsedDocument:
                         md_parts.append(f"$$\n{latex}\n$$")
                         md_parts.append("")
 
-                    else:
-                        # Text block — берём текст страницы
-                        if page.text:
-                            # Разбиваем на параграфы по пустым строкам
-                            paragraphs = page.text.strip().split('\n\n')
-                            for p in paragraphs:
-                                p = p.strip()
-                                if p:
-                                    md_parts.append(p)
-                                    md_parts.append("")
-            else:
-                # Нет layout — просто текст страницы
-                if page.text:
-                    md_parts.append(page.text.strip())
-                    md_parts.append("")
+                    # type='text' пропускаем — текст страницы уже выведен выше
 
         result = "\n".join(md_parts).strip()
         return result if result else self.full_text
@@ -334,13 +325,59 @@ class HybridDocumentParser:
             pages = []
             total_text = 0
             pages_with_text = 0
+            total_tables = 0
+            code_heavy = False
 
             for page_num in range(len(doc)):
-                text = (doc[page_num].get_text() or "").strip()
+                page = doc[page_num]
+                text = (page.get_text() or "").strip()
+                layout = []
+                tables = []
+
+                # ── Таблицы: fitz.find_tables → структурированные ячейки ──
+                # Иначе таблицы «склеятся» в плоский текст без структуры.
+                try:
+                    found = page.find_tables()
+                    for tb in found.tables:
+                        data = tb.extract()  # 2D массив ячеек
+                        if not data or len(data) < 2:
+                            continue
+                        total_tables += 1
+                        # Markdown-таблица
+                        md_lines = []
+                        md_lines.append("| " + " | ".join(str(c or "") for c in data[0]) + " |")
+                        md_lines.append("|" + "|".join("---" for _ in data[0]) + "|")
+                        for row in data[1:]:
+                            md_lines.append("| " + " | ".join(str(c or "") for c in row) + " |")
+                        md_table = "\n".join(md_lines)
+                        tables.append({"markdown": md_table, "text": "\n".join(" | ".join(str(c or "") for c in r) for r in data)})
+                except Exception as e:
+                    logger.debug(f"find_tables page {page_num + 1}: {e}")
+
+                # ── Код: эвристика — много отступов/служебных символов ──
+                if not code_heavy and text:
+                    code_indicators = sum(
+                        text.count(tok) for tok in ("def ", "import ", "class ", "function ", "const ", "```", "{", "}", "=>")
+                    )
+                    # Много отступов (4+ пробелов в начале строк)
+                    indent_lines = sum(1 for line in text.splitlines() if line.startswith("    ") or line.startswith("\t"))
+                    if code_indicators > 20 or (indent_lines > 10 and len(text) > 2000):
+                        code_heavy = True
+
+                # Таблицы → layout (to_markdown умеет рендерить type=table)
+                for tb in tables:
+                    layout.append({"type": "table", "data": tb})
+
                 if text:
                     total_text += len(text)
                     pages_with_text += 1
-                pages.append(ParsedPage(page_num=page_num + 1, text=text))
+
+                pages.append(ParsedPage(
+                    page_num=page_num + 1,
+                    text=text,
+                    layout=layout,
+                    tables=tables,
+                ))
 
             doc.close()
 
@@ -355,14 +392,19 @@ class HybridDocumentParser:
 
             full_text = "\n\n".join(p.text for p in pages if p.text)
             logger.info(
-                f"PyMuPDF: извлечён текстовый слой: {total_text} симв, "
-                f"{pages_with_text}/{len(pages)} стр (OCR не нужен)"
+                f"PyMuPDF: текстовый слой {total_text} симв, {pages_with_text}/{len(pages)} стр, "
+                f"таблиц: {total_tables}, код: {code_heavy} (OCR не нужен)"
             )
             return ParsedDocument(
                 filename=path.name,
                 pages=pages,
                 full_text=full_text,
-                metadata={"page_count": len(pages), "parser": "pymupdf"},
+                metadata={
+                    "page_count": len(pages),
+                    "parser": "pymupdf",
+                    "tables_count": total_tables,
+                    "code_heavy": code_heavy,
+                },
                 parse_method="pymupdf",
             )
         except Exception as e:
@@ -445,3 +487,43 @@ def get_hybrid_parser() -> HybridDocumentParser:
     if _parser is None:
         _parser = HybridDocumentParser()
     return _parser
+
+
+def route_document(file_path: str) -> Dict[str, Any]:
+    """Маршрутизатор: классифицировать документ и вернуть стратегию обработки.
+
+    Решение принимается эвристиками (без LLM — быстро):
+    - расширение файла (PDF / DOCX / XLSX / CSV / TXT / MD)
+    - для PDF: наличие текстового слоя (fitz get_text) → PyMuPDF или Occular
+    - содержание: плотность таблиц (find_tables), код (эвристика)
+
+    Возвращает: {route, fallback, tables, code, reason}
+    """
+    path = Path(file_path)
+    ext = path.suffix.lower()
+
+    if ext in (".docx", ".doc"):
+        return {"route": "docx", "fallback": None, "tables": False, "code": False, "reason": "DOCX"}
+    if ext == ".xlsx":
+        return {"route": "xlsx", "fallback": None, "tables": True, "code": False, "reason": "XLSX"}
+    if ext in (".csv", ".txt", ".md", ".markdown"):
+        return {"route": "text", "fallback": None, "tables": False, "code": False, "reason": ext.upper()}
+
+    if ext == ".pdf":
+        try:
+            import fitz
+            doc = fitz.open(str(path))
+            total_text = sum(len((doc[i].get_text() or "").strip()) for i in range(len(doc)))
+            pages = len(doc)
+            doc.close()
+            if total_text < 500:
+                return {"route": "ocular", "fallback": "document_parser", "tables": False, "code": False,
+                        "reason": f"скан: текстового слоя {total_text} симв"}
+            # Таблицы/код — оценка (сам parse_pymupdf_first извлечёт детально)
+            return {"route": "pymupdf", "fallback": "ocular", "tables": True, "code": False,
+                    "reason": f"текстовый слой {total_text} симв, {pages} стр"}
+        except Exception as e:
+            return {"route": "ocular", "fallback": "document_parser", "tables": False, "code": False,
+                    "reason": f"fitz failed: {e}"}
+
+    return {"route": "document_parser", "fallback": None, "tables": False, "code": False, "reason": "default"}
