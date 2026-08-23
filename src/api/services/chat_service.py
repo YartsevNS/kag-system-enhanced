@@ -78,13 +78,16 @@ class ChatService:
         model: str,
         temperature: float,
         max_tokens: int,
-        provider
+        provider,
+        extra_payload: Optional[dict] = None,
     ) -> Dict[str, Any]:
         """
         Вызвать LLM через API провайдера (OpenAI-совместимый формат).
 
         Все провайдеры (Ollama, OpenAI, DeepSeek, OpenRouter)
         поддерживают /v1/chat/completions.
+        extra_payload — дополнительные поля тела запроса (например
+        chat_template_kwargs для llama.cpp: отключить think у MiniCPM5).
         """
         url = f"{provider.url.rstrip('/')}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
@@ -98,6 +101,8 @@ class ChatService:
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if extra_payload:
+            payload.update(extra_payload)
 
         start = time.time()
         try:
@@ -199,7 +204,10 @@ class ChatService:
         можно фильтровать RAG-поиск и выбирать словарь алиасов/схему графа.
 
         Промпт (system_prompt из админки) — few-shot пары «вопрос → домен»,
-        которые пользователь правит для повышения точности.
+        которые пользователь правит для повышения точности. К нему АВТОМАТИЧЕСКИ
+        добавляются пары «домен → сущности» из словаря алиасов (entity_aliases,
+        approved): админ ведёт словарь — классификатор обучается без ручной
+        синхронизации промпта.
 
         Returns:
             {"domain": str|None, "raw": str} или None (функция не настроена).
@@ -217,6 +225,10 @@ class ChatService:
             "Classify the user question domain. Answer with ONE word only: "
             "legal, medical, technical, infosec, accounting, universal."
         )
+        # Автоматические пары из словаря алиасов (не перезаписываем промпт админа)
+        auto_pairs = self._build_alias_domain_pairs()
+        if auto_pairs:
+            system_prompt = f"{system_prompt}\n\n{auto_pairs}"
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -224,6 +236,12 @@ class ChatService:
         ]
 
         params = cfg.get("parameters") or {}
+        # MiniCPM5 думает вслух (<think>...) — для классификации это лишнее:
+        # через llama.cpp отключаем think (chat_template_kwargs). Для других
+        # провайдеров (Ollama/OpenAI) параметр не передаём.
+        extra_payload = None
+        if cfg.get("provider") == "llamacpp":
+            extra_payload = {"chat_template_kwargs": {"enable_thinking": False}}
         try:
             result = await self._call_llm(
                 messages=messages,
@@ -237,6 +255,7 @@ class ChatService:
                         "type": cfg.get("provider", "custom"),
                     }
                 )(),
+                extra_payload=extra_payload,
             )
         except Exception as e:
             logger.warning(f"Query analysis вызов не удался: {e}")
@@ -249,6 +268,53 @@ class ChatService:
         domain = self._parse_domain(raw)
         logger.info(f"Query analysis: domain={domain}, ответ={raw[:120]!r}")
         return {"domain": domain, "raw": raw[:500]}
+
+    def _build_alias_domain_pairs(self, limit: int = 80) -> str:
+        """Собрать пары «домен → сущности» из словаря алиасов (entity_aliases).
+
+        Approved-пары (reviewed=True, verdict=approved) с заполненным domain
+        автоматически подставляются в промпт query_analysis — классификатор
+        обучается на словаре, который админ ведёт вручную. Пары группируются
+        по домену, чтобы промпт оставался компактным.
+
+        Returns:
+            Строка вида "- infosec: ФСТЭК России, СЗИ, антивирус" или "".
+        """
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            s = maker()
+            try:
+                rows = (
+                    s.query(EntityAlias.alias, EntityAlias.domain)
+                    .filter(
+                        EntityAlias.reviewed.is_(True),
+                        EntityAlias.verdict == "approved",
+                        EntityAlias.domain.isnot(None),
+                        EntityAlias.domain != "",
+                    )
+                    .limit(limit)
+                    .all()
+                )
+            finally:
+                s.close()
+        except Exception as e:
+            logger.debug(f"Алиасы для промпта query_analysis недоступны: {e}")
+            return ""
+
+        if not rows:
+            return ""
+
+        by_domain: Dict[str, list] = {}
+        for alias, domain in rows:
+            by_domain.setdefault(domain, []).append(alias)
+
+        lines = ["Известные сущности по доменам (из словаря алиасов):"]
+        for domain in sorted(by_domain):
+            aliases = by_domain[domain][:15]
+            lines.append(f"- {domain}: {', '.join(aliases)}")
+        return "\n".join(lines)
 
     @staticmethod
     def _parse_domain(raw: str) -> Optional[str]:
