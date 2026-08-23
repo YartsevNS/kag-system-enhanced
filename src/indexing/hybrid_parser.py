@@ -309,6 +309,66 @@ class HybridDocumentParser:
         path = Path(file_path)
         return self._parse_with_ocular_only(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())
 
+    def parse_pymupdf_first(self, file_path: str) -> Optional[ParsedDocument]:
+        """PyMuPDF текстовый слой В ПРИОРИТЕТЕ — OCR не нужен.
+
+        Зачем: электронные PDF (Word/госконтора) содержат текстовый слой —
+        PyMuPDF извлекает его мгновенно и без OOM (в отличие от Occular,
+        который рендерит страницы и прогоняет через нейросеть). Occular
+        остаётся для СКАНОВ (нет текстового слоя).
+
+        Возвращает ParsedDocument (parse_method="pymupdf"), если текста
+        достаточно; None — если это скан (нужен Occular).
+        """
+        try:
+            import fitz
+        except ImportError:
+            return None
+
+        path = Path(file_path)
+        if not path.exists():
+            return None
+
+        try:
+            doc = fitz.open(str(path))
+            pages = []
+            total_text = 0
+            pages_with_text = 0
+
+            for page_num in range(len(doc)):
+                text = (doc[page_num].get_text() or "").strip()
+                if text:
+                    total_text += len(text)
+                    pages_with_text += 1
+                pages.append(ParsedPage(page_num=page_num + 1, text=text))
+
+            doc.close()
+
+            # Критерий «достаточно текста»: суммарно > 500 символов И
+            # больше половины страниц имеют текстовый слой. Иначе — скан.
+            if total_text < 500 or pages_with_text < max(1, len(pages) // 2):
+                logger.info(
+                    f"PyMuPDF: мало текстового слоя ({total_text} симв, "
+                    f"{pages_with_text}/{len(pages)} стр) — скан, нужен OCR"
+                )
+                return None
+
+            full_text = "\n\n".join(p.text for p in pages if p.text)
+            logger.info(
+                f"PyMuPDF: извлечён текстовый слой: {total_text} симв, "
+                f"{pages_with_text}/{len(pages)} стр (OCR не нужен)"
+            )
+            return ParsedDocument(
+                filename=path.name,
+                pages=pages,
+                full_text=full_text,
+                metadata={"page_count": len(pages), "parser": "pymupdf"},
+                parse_method="pymupdf",
+            )
+        except Exception as e:
+            logger.warning(f"PyMuPDF failed ({e})")
+            return None
+
     def _needs_ocr(self, text: str, filename: str) -> bool:
         """Check if text needs OCR enhancement.
 

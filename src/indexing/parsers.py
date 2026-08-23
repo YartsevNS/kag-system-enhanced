@@ -109,100 +109,100 @@ class DocumentParser:
         """
         Распарсить PDF файл.
 
-        Использует PyPDF2 для извлечения текста.
-        Если текст на странице пустой или слишком короткий — автоматически
-        применяется OCR через Tesseract (распознавание русского/английского).
+        Использует PyMuPDF (fitz) для извлечения текстового слоя — быстрее
+        PyPDF2 и лучше работает с русским (юникод). Если текст на странице
+        пустой или слишком короткий — автоматически применяется OCR через
+        Tesseract (распознавание русского/английского), затем LLM OCR.
         """
         try:
-            import PyPDF2
+            import fitz  # PyMuPDF
         except ImportError:
-            logger.warning("PyPDF2 не установлен. Установите: pip install PyPDF2")
-            return self._create_fallback_result(path, "pdf", "PyPDF2 не установлен")
+            logger.warning("PyMuPDF не установлен. Установите: pip install pymupdf")
+            return self._create_fallback_result(path, "pdf", "PyMuPDF не установлен")
 
         segments = []
         metadata = {}
         ocr_used = False
 
         try:
-            with open(path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
+            doc = fitz.open(str(path))
 
-                # Метаданные PDF
-                if reader.metadata:
-                    metadata = {
-                        "author": reader.metadata.get('/Author', ''),
-                        "title": reader.metadata.get('/Title', ''),
-                        "subject": reader.metadata.get('/Subject', ''),
-                        "creator": reader.metadata.get('/Creator', ''),
-                        "producer": reader.metadata.get('/Producer', ''),
-                    }
+            # Метаданные PDF
+            md = doc.metadata or {}
+            metadata = {
+                "author": md.get("author", ""),
+                "title": md.get("title", ""),
+                "subject": md.get("subject", ""),
+                "creator": md.get("creator", ""),
+                "producer": md.get("producer", ""),
+            }
 
-                # Извлечение текста по страницам
-                for page_num, page in enumerate(reader.pages):
-                    text = page.extract_text()
+            # Извлечение текста по страницам
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
 
-                    # Если текст пустой или слишком короткий — используем OCR
+                # Если текст пустой или слишком короткий — используем OCR
+                if not text or len(text.strip()) < 50:
+                    logger.info(
+                        f"Страница {page_num + 1}: текст не найден или "
+                        f"слишком короткий ({len(text) if text else 0} символов), "
+                        f"применяю OCR..."
+                    )
+
+                    # Сначала пробуем Tesseract
+                    from src.indexing.ocr_engine import ocr_engine
+                    if ocr_engine.is_available:
+                        try:
+                            ocr_result = ocr_engine.extract_text_from_pdf(str(path))
+                            if ocr_result.get("pages") and page_num < len(ocr_result["pages"]):
+                                page_data = ocr_result["pages"][page_num]
+                                text = page_data.get("text", "")
+                                if text:
+                                    ocr_used = True
+                                    logger.info(
+                                        f"Страница {page_num + 1}: Tesseract OCR распознал "
+                                        f"{len(text)} символов"
+                                    )
+                        except Exception as e:
+                            logger.warning(f"Tesseract OCR не работает: {e}")
+
+                    # Если Tesseract не помог - пробуем LLM OCR
                     if not text or len(text.strip()) < 50:
-                        logger.info(
-                            f"Страница {page_num + 1}: текст не найден или "
-                            f"слишком короткий ({len(text) if text else 0} символов), "
-                            f"применяю OCR..."
-                        )
-                        
-                        # Сначала пробуем Tesseract
-                        from src.indexing.ocr_engine import ocr_engine
-                        if ocr_engine.is_available:
-                            try:
-                                ocr_result = ocr_engine.extract_text_from_pdf(str(path))
-                                if ocr_result.get("pages") and page_num < len(ocr_result["pages"]):
-                                    page_data = ocr_result["pages"][page_num]
-                                    text = page_data.get("text", "")
+                        try:
+                            from src.indexing.llm_ocr import get_llm_ocr_engine
+                            llm_ocr = get_llm_ocr_engine()
+                            if llm_ocr.is_available:
+                                # Рендерим страницу в изображение
+                                pix = page.get_pixmap(dpi=150)
+                                import tempfile
+                                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                    pix.save(tmp.name)
+                                    text = llm_ocr.extract_from_image(tmp.name)
                                     if text:
                                         ocr_used = True
                                         logger.info(
-                                            f"Страница {page_num + 1}: Tesseract OCR распознал "
+                                            f"Страница {page_num + 1}: LLM OCR распознал "
                                             f"{len(text)} символов"
                                         )
-                            except Exception as e:
-                                logger.warning(f"Tesseract OCR не работает: {e}")
-                        
-                        # Если Tesseract не помог - пробуем LLM OCR
-                        if not text or len(text.strip()) < 50:
-                            try:
-                                from src.indexing.llm_ocr import get_llm_ocr_engine
-                                llm_ocr = get_llm_ocr_engine()
-                                if llm_ocr.is_available:
-                                    # Рендерим страницу в изображение
-                                    from pdf2image import convert_from_path
-                                    images = convert_from_path(str(path), dpi=150, first_page=page_num+1, last_page=page_num+1)
-                                    if images:
-                                        import tempfile
-                                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                                            images[0].save(tmp.name, "PNG")
-                                            text = llm_ocr.extract_from_image(tmp.name)
-                                            if text:
-                                                ocr_used = True
-                                                logger.info(
-                                                    f"Страница {page_num + 1}: LLM OCR распознал "
-                                                    f"{len(text)} символов"
-                                                )
-                            except Exception as e:
-                                logger.debug(f"LLM OCR не работает: {e}")
+                        except Exception as e:
+                            logger.debug(f"LLM OCR не работает: {e}")
 
-                    if text and text.strip():
-                        segments.append(DocumentSegment(
-                            segment_type="text",
-                            content=text.strip(),
-                            page=page_num + 1,
-                            metadata={
-                                "page_number": page_num + 1,
-                                "char_count": len(text),
-                                "ocr_used": ocr_used
-                            }
-                        ).__dict__)
+                if text and text.strip():
+                    segments.append(DocumentSegment(
+                        segment_type="text",
+                        content=text.strip(),
+                        page=page_num + 1,
+                        metadata={
+                            "page_number": page_num + 1,
+                            "char_count": len(text),
+                            "ocr_used": ocr_used
+                        }
+                    ).__dict__)
 
-                metadata["total_pages"] = len(reader.pages)
-                metadata["ocr_used"] = ocr_used
+            metadata["total_pages"] = len(doc)
+            metadata["ocr_used"] = ocr_used
+            doc.close()
 
         except Exception as e:
             logger.error(f"Ошибка чтения PDF {path}: {e}")
