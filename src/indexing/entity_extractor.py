@@ -385,6 +385,16 @@ class EntityExtractor:
                     "temperature": 0.05,
                     "max_tokens": 800
                 }
+                # ВАЖНО (почему так сделано): deepseek-v4-flash — reasoning-модель.
+                # Она сначала генерирует длинный reasoning_content (размышления),
+                # и только потом content. max_tokens ограничивает СУММАРНУЮ
+                # генерацию — модель «думала» так долго, что упиралась в лимит
+                # и возвращала ПУСТОЙ content (граф знаний не наполнялся,
+                # ~70 сек на документ тратились впустую).
+                # Параметр thinking:{"type":"disabled"} отключает размышления —
+                # модель сразу пишет ответ. Проверено: content_len>0, reasoning=0.
+                if provider in ("deepseek", "openai", "openrouter"):
+                    payload["thinking"] = {"type": "disabled"}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         f"{llm_url}/v1/chat/completions",
