@@ -87,6 +87,11 @@ class MonitorSource:
     batch_delay: float = 15.0  # Секунд между партиями
     item_delay: float = 2.0    # Секунд между файлами внутри партии
     batch_jitter: float = 5.0  # Случайная добавка к паузе (0..N секунд)
+    # Пагинация «загрузить ещё» (JS/AJAX-сайты: cbr.ru и т.п.)
+    # pagination_url — шаблон с {page} (страницы 1, 2, 3...), как грузит кнопка
+    pagination_url: Optional[str] = None
+    pagination_max_pages: int = 5  # максимум доп. страниц за проверку (аккуратно!)
+    pagination_delay: float = 3.0  # пауза между запросами страниц (чтобы не блокировали)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -171,6 +176,26 @@ class WebMonitorService:
             "css_selector": "a[href*='file/load']",
             "keywords": [],
             "description": "Действующие стандарты ГОСТ Р по информационной безопасности: криптография, защита информации, ЭЦП"
+        },
+        {
+            "name": "ЦБ РФ — акты по информационной безопасности",
+            "url": "https://www.cbr.ru/information_security/acts/",
+            "type": "scrape",
+            "css_selector": "a[href*='/Crosscut/LawActs/File/']",
+            "keywords": [],
+            "file_types": [".pdf", ".docx", ".doc"],
+            # Страница 1 в HTML; далее «Загрузить еще» грузит страницы через
+            # /Crosscut/LawActs/Page/{section}?Page=N. Шаблон с {page}.
+            # ВАЖНО: скачиваем АККУРАТНО (не более ~5 файлов/мин) —
+            # item_delay=15с, batch_size=3, чтобы не заблокировали.
+            "pagination_url": "https://www.cbr.ru/Crosscut/LawActs/Page/95016?Date.Time=Any&Page={page}",
+            "pagination_max_pages": 8,
+            "pagination_delay": 4.0,
+            "batch_size": 3,
+            "item_delay": 15.0,
+            "batch_delay": 20.0,
+            "check_interval_minutes": 720,
+            "description": "Нормативные акты Банка России по информационной безопасности: методические рекомендации, приказы, стандарты, указания (защита информации, ИИ, финансовые операции)"
         },
     ]
 
@@ -341,6 +366,13 @@ class WebMonitorService:
                     last_hash=s.get("last_hash"),
                     items_found=s.get("items_found", 0),
                     items_uploaded=s.get("items_uploaded", 0),
+                    batch_size=s.get("batch_size", 5),
+                    batch_delay=s.get("batch_delay", 15.0),
+                    item_delay=s.get("item_delay", 2.0),
+                    batch_jitter=s.get("batch_jitter", 5.0),
+                    pagination_url=s.get("pagination_url"),
+                    pagination_max_pages=s.get("pagination_max_pages", 5),
+                    pagination_delay=s.get("pagination_delay", 3.0),
                     created_at=datetime.fromisoformat(s["created_at"]) if s.get("created_at") else datetime.utcnow()
                 )
                 for s in sources_data
@@ -394,6 +426,13 @@ class WebMonitorService:
             "last_hash": s.last_hash,
             "items_found": s.items_found,
             "items_uploaded": s.items_uploaded,
+            "batch_size": s.batch_size,
+            "batch_delay": s.batch_delay,
+            "item_delay": s.item_delay,
+            "batch_jitter": s.batch_jitter,
+            "pagination_url": s.pagination_url,
+            "pagination_max_pages": s.pagination_max_pages,
+            "pagination_delay": s.pagination_delay,
             "created_at": s.created_at.isoformat() if s.created_at else datetime.utcnow().isoformat()
         }
 
@@ -743,6 +782,46 @@ class WebMonitorService:
                             'metadata': meta
                         })
 
+                    # ── Пагинация «загрузить ещё» (cbr.ru и т.п.) ──────────
+                    # Страница 1 уже в HTML; далее грузим Page=2..N по шаблону
+                    # pagination_url, аккуратно (пауза pagination_delay).
+                    if source.pagination_url:
+                        try:
+                            for pg in range(1, source.pagination_max_pages + 1):
+                                pag_url = source.pagination_url.replace("{page}", str(pg))
+                                await asyncio.sleep(source.pagination_delay)
+                                async with session.get(pag_url, headers={
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                }, timeout=aiohttp.ClientTimeout(total=30)) as presp:
+                                    if presp.status != 200:
+                                        break
+                                    phtml = await presp.text()
+                                    if len(phtml) < 200:
+                                        break  # пустая страница — конец
+                                    psoup = BeautifulSoup(phtml, 'html.parser')
+                                    plinks = psoup.select(source.css_selector)
+                                    if not plinks:
+                                        break
+                                    for link in plinks:
+                                        href = link.get('href', '')
+                                        if not href:
+                                            continue
+                                        abs_url = urljoin(source.url, href)
+                                        if not self._is_document_url(abs_url, source.file_types):
+                                            continue
+                                        text = link.get_text(strip=True)
+                                        meta = self._extract_link_metadata(link, psoup, source)
+                                        new_urls.append({
+                                            'url': abs_url,
+                                            'title': text or meta.get('title') or Path(href).name,
+                                            'source': source.name,
+                                            'metadata': meta
+                                        })
+                                    logger.info(f"Пагинация {source.name}: страница {pg + 1}, найдено ссылок {len(plinks)}")
+                        except Exception as e:
+                            logger.warning(f"Пагинация {source.name} не удалась: {e}")
+
                 result.items = new_urls
 
                 if new_urls:
@@ -961,6 +1040,7 @@ class WebMonitorService:
                                            # файлы лежат по токену БЕЗ расширения
                                            # (напр. https://fs.cap.ru/file/sqMJ8ty8ccmf...),
                                            # тип определяется по Content-Type при скачивании
+            '/crosscut/lawacts/file/',     # cbr.ru — Банк России: /Crosscut/LawActs/File/{id}
         ]
         if any(pattern in path for pattern in file_service_patterns):
             return True
