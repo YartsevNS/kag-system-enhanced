@@ -13,7 +13,10 @@
 - [x] entity resolution: lexical + embedding (0.95) + подстрока + aliases
 - [x] версионирование стандартов: версии = отдельные узлы + SUPERSEDED_BY + is_current
 - [x] схема Neo4j: description, aliases, is_current
-- [ ] LLM-верификация сомнительных пар (кореференция «ЦБ»=«Банк России»)
+- [x] LLM-верификация серых пар (0.85-0.95) + аббревиатуры (f81f16f)
+- [x] словарь алиасов entity_aliases (Postgres, 36 пар для ИБ) + apply_alias_pairs
+- [x] политика по типам: legal_term/document_ref НЕ сливать по embedding
+- [x] развёрнуты ложные слияния legal_term (20 узлов)
 - [ ] переиндексация всех 158 документов
 
 Результат на gost-r-34.pdf: 190 сущностей (legal_term 153, document_ref 16,
