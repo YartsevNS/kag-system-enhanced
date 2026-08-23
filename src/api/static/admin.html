@@ -602,7 +602,7 @@
             </div>
 
             <!-- Форма добавления -->
-            <div style="display:grid;grid-template-columns:1fr 1fr 0.6fr 0.8fr auto;gap:8px;align-items:end;margin-bottom:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 0.5fr 0.5fr 0.7fr auto;gap:8px;align-items:end;margin-bottom:12px">
                 <div class="form-group">
                     <label style="font-size:12px">Каноническое имя</label>
                     <input type="text" id="alias-canonical" placeholder="Банк России" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
@@ -623,10 +623,27 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label style="font-size:12px">Домен</label>
+                    <select id="alias-domain" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                        <option value="universal">universal (общий)</option>
+                        <option value="legal">legal (юр.)</option>
+                        <option value="medical">medical (мед.)</option>
+                        <option value="technical">technical (тех.)</option>
+                        <option value="infosec">infosec (ИБ)</option>
+                        <option value="standard">standard (ГОСТ)</option>
+                        <option value="order">order (приказы)</option>
+                        <option value="policy">policy (политики)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label style="font-size:12px">Комментарий</label>
                     <input type="text" id="alias-comment" placeholder="необязательно" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
                 </div>
                 <button class="btn btn-primary" onclick="addAliasPair()" style="white-space:nowrap">➕ Добавить</button>
+            </div>
+            <div style="font-size:11px;color:var(--text4);margin-bottom:12px">
+                💡 Домен = предметная область. Пары <strong>universal</strong> применяются ко всем документам.
+                Пары конкретного домена — только при обработке документов этого типа. Это ускоряет применение при большом словаре.
             </div>
 
             <!-- Таблица словаря -->
@@ -637,7 +654,7 @@
                             <th style="padding:8px 10px;text-align:left">Алиас</th>
                             <th style="padding:8px 10px;text-align:left">→ Каноническое</th>
                             <th style="padding:8px 10px;text-align:left">Тип</th>
-                            <th style="padding:8px 10px;text-align:left">Источник</th>
+                            <th style="padding:8px 10px;text-align:left">Домен</th>
                             <th style="padding:8px 10px;text-align:left">Комментарий</th>
                             <th style="padding:8px 10px;text-align:right">Действия</th>
                         </tr>
@@ -1647,7 +1664,7 @@
                             <td style="padding:6px 10px;color:var(--accent-h)">${escHtml(p.alias)}</td>
                             <td style="padding:6px 10px">${escHtml(p.canonical_name)}</td>
                             <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.entity_type)}</td>
-                            <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.source)}</td>
+                            <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.domain || 'universal')}</td>
                             <td style="padding:6px 10px;color:var(--text4)">${escHtml(p.comment || '')}</td>
                             <td style="padding:6px 10px;text-align:right">
                                 <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="deleteAliasPair('${p.id}')">🗑</button>
@@ -1694,6 +1711,7 @@
             const canonical = document.getElementById('alias-canonical').value.trim();
             const alias = document.getElementById('alias-alias').value.trim();
             const type = document.getElementById('alias-type').value;
+            const domain = document.getElementById('alias-domain').value;
             const comment = document.getElementById('alias-comment').value.trim();
             if (!canonical || !alias) {
                 showNotification('❌ Заполни оба имени', true);
@@ -1702,7 +1720,7 @@
             const r = await apiFetch(`${API_URL}/aliases`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({canonical_name: canonical, alias: alias, entity_type: type, comment: comment})
+                body: JSON.stringify({canonical_name: canonical, alias: alias, entity_type: type, domain: domain, comment: comment})
             });
             const d = await r.json();
             if (d.status === 'ok') {

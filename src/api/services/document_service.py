@@ -669,8 +669,13 @@ class DocumentService:
                 try:
                     from src.indexing.knowledge_graph import kg_service
                     await asyncio.to_thread(kg_service.resolve_duplicate_entities)
-                    # Известные пары алиасов из таблицы entity_aliases (детерминированно)
-                    await asyncio.to_thread(kg_service.apply_alias_pairs)
+                    # Известные пары алиасов из таблицы entity_aliases (детерминированно).
+                    # Применяем пары домена документа + universal (общие).
+                    # document_type (standard/policy/order/technical/certificate/news)
+                    # используется как домен словаря — админ задаёт domain пар
+                    # в админке («Словарь алиасов»), universal применяется всегда.
+                    _doc_domain = (record.document_type or "").strip() or "universal"
+                    await asyncio.to_thread(kg_service.apply_alias_pairs, _doc_domain)
                     # Версии документов: связываем цепочкой SUPERSEDED_BY
                     # (старые редакции → новые), актуальная помечается is_current.
                     await asyncio.to_thread(kg_service.link_document_versions)

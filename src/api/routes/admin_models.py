@@ -2298,6 +2298,7 @@ class AliasPairRequest(BaseModel):
     canonical_name: str = Field(..., min_length=1, max_length=500)
     alias: str = Field(..., min_length=1, max_length=500)
     entity_type: str = Field(default="organization", max_length=50)
+    domain: str = Field(default="universal", max_length=50)
     comment: str = Field(default="")
     source: str = Field(default="manual", max_length=50)
 
@@ -2333,6 +2334,7 @@ async def add_alias(request: AliasPairRequest):
             canonical=request.canonical_name.strip(),
             alias=request.alias.strip(),
             entity_type=request.entity_type,
+            domain=request.domain or "universal",
             source=request.source or "manual",
             comment=request.comment,
             reviewed=True,      # добавлено админом — сразу применяемое

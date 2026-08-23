@@ -35,6 +35,7 @@ _COLUMN_MIGRATIONS = [
     # entity_aliases — модерация сомнительных пар (entity resolution)
     ("entity_aliases", "reviewed", "BOOLEAN DEFAULT FALSE"),
     ("entity_aliases", "verdict", "VARCHAR DEFAULT ''"),
+    ("entity_aliases", "domain", "VARCHAR DEFAULT 'universal'"),
 ]
 
 

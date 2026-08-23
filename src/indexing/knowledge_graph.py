@@ -1082,11 +1082,15 @@ class KnowledgeGraphService:
             pass
         return None
 
-    def load_alias_pairs(self) -> List[Dict]:
+    def load_alias_pairs(self, domain: str = "") -> List[Dict]:
         """Загрузить ПРИМЕНЯЕМЫЕ пары алиасов (reviewed + approved).
 
         Пары с source='pending' или verdict='rejected' НЕ применяются
         автоматически — их решает админ в админке (review_alias_pair).
+
+        Args:
+            domain: фильтр по предметной области (legal/medical/technical/...).
+                Пустая строка = universal (общие пары) — применяются всегда.
         """
         try:
             from src.database.session import get_session_local
@@ -1094,10 +1098,14 @@ class KnowledgeGraphService:
             maker = get_session_local()
             session = maker()
             try:
-                rows = session.query(EntityAlias).filter(
+                q = session.query(EntityAlias).filter(
                     EntityAlias.reviewed == True,  # noqa: E712
                     EntityAlias.verdict == "approved",
-                ).all()
+                )
+                if domain:
+                    # Пары домена + universal (общие применяются всегда)
+                    q = q.filter(EntityAlias.domain.in_([domain, "universal"]))
+                rows = q.all()
                 return [r.to_dict() for r in rows]
             finally:
                 session.close()
@@ -1105,7 +1113,7 @@ class KnowledgeGraphService:
             logger.warning(f"[aliases] Не удалось загрузить entity_aliases: {e}")
             return []
 
-    def apply_alias_pairs(self) -> Dict[str, int]:
+    def apply_alias_pairs(self, domain: str = "") -> Dict[str, int]:
         """Применить известные пары алиасов к графу (детерминированно, без LLM).
 
         Для каждой пары (alias → canonical) из таблицы entity_aliases:
@@ -1114,12 +1122,16 @@ class KnowledgeGraphService:
         - переносим связи, source_docs, MENTIONS с alias на canonical
         - alias помечаем как aliases у canonical
 
+        Args:
+            domain: фильтр по предметной области. Пусто = только universal.
+                Если None — применить ВСЕ approved (для админки «Применить всё»).
+
         Returns:
             {"applied": N, "created": M}
         """
         if not self.driver:
             return {"applied": 0, "created": 0}
-        pairs = self.load_alias_pairs()
+        pairs = self.load_alias_pairs(domain=domain if domain is not None else "")
         if not pairs:
             return {"applied": 0, "created": 0}
         result = {"applied": 0, "created": 0}
@@ -1182,7 +1194,7 @@ class KnowledgeGraphService:
 
     def save_alias_pair(self, canonical: str, alias: str, entity_type: str = "organization",
                         source: str = "manual", comment: str = "", reviewed: bool = False,
-                        verdict: str = "") -> bool:
+                        verdict: str = "", domain: str = "universal") -> bool:
         """Сохранить пару алиасов в таблицу entity_aliases (для скриптов/админки)."""
         try:
             import uuid
@@ -1201,6 +1213,7 @@ class KnowledgeGraphService:
                     canonical_name=canonical,
                     alias=alias,
                     entity_type=entity_type,
+                    domain=domain or "universal",
                     source=source,
                     comment=comment,
                     reviewed=reviewed,

@@ -9,6 +9,7 @@
 - canonical_name — каноническое имя (остаётся узлом в Neo4j)
 - alias — вариант написания (сливается в canonical)
 - entity_type — тип (organization, document_ref, legal_term, person)
+- domain — предметная область (universal, legal, medical, technical, infosec, ...)
 - source — откуда пара (manual, dictionary, llm_verified, pending)
 - reviewed — просмотрена ли админом (для source='pending')
 - verdict — решение админа: approved / rejected / None
@@ -27,6 +28,9 @@ class EntityAlias(Base):
     canonical_name = Column(String, nullable=False, index=True)
     alias = Column(String, nullable=False, index=True)
     entity_type = Column(String, default="organization", index=True)
+    # Предметная область: universal/legal/medical/technical/infosec и т.д.
+    # Применяются только пары нужного домена (фильтр при обработке документа).
+    domain = Column(String, default="universal", index=True)
     source = Column(String, default="manual")
     comment = Column(Text, default="")
     # Модерация сомнительных пар (из LLM-верификации / серой зоны)
@@ -40,6 +44,7 @@ class EntityAlias(Base):
             "canonical_name": self.canonical_name,
             "alias": self.alias,
             "entity_type": self.entity_type,
+            "domain": self.domain,
             "source": self.source,
             "comment": self.comment,
             "reviewed": bool(self.reviewed),
