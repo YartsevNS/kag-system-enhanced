@@ -362,7 +362,33 @@ class HybridDocumentParser:
                         for row in data[1:]:
                             md_lines.append("| " + " | ".join(str(c or "") for c in row) + " |")
                         md_table = "\n".join(md_lines)
-                        tables.append({"markdown": md_table, "text": "\n".join(" | ".join(str(c or "") for c in r) for r in data)})
+                        # HTML-таблица (лучший формат для LLM и рендера в чате)
+                        html_parts = ["<table>"]
+                        for ri, row in enumerate(data):
+                            tag = "th" if ri == 0 else "td"
+                            html_parts.append("<tr>" + "".join(
+                                f"<{tag}>{str(c or '')}</{tag}>" for c in row
+                            ) + "</tr>")
+                        html_parts.append("</table>")
+                        html_table = "\n".join(html_parts)
+                        # Эвристика сложности: объединённые ячейки / пустые в шапке /
+                        # разное число колонок в строках → нужен TableFormer/модель
+                        col_counts = {len(r) for r in data}
+                        empty_header = any(not str(c).strip() for c in data[0])
+                        complex_table = (
+                            len(col_counts) > 1        # строки разной ширины (colspan)
+                            or empty_header            # пустые ячейки в шапке
+                            or len(data[0]) > 8        # очень широкая таблица
+                        )
+                        tables.append({
+                            "markdown": md_table,
+                            "html": html_table,
+                            "text": "\n".join(" | ".join(str(c or "") for c in r) for r in data),
+                            "rows": data,
+                            "headers": [str(c or "") for c in data[0]],
+                            "bbox": [round(v, 1) for v in tb.bbox],
+                            "complex": complex_table,
+                        })
                 except Exception as e:
                     logger.debug(f"find_tables page {page_num + 1}: {e}")
 

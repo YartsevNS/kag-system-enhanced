@@ -502,6 +502,23 @@ class DocumentService:
                             "page": page.page_num,
                             "metadata": {}
                         })
+                    # ── Таблицы → отдельные сегменты (структурированные) ──────
+                    # ВАЖНО (зачем так сделано): page.text содержит таблицы как
+                    # плоский склеенный текст — колонки перемешаны, структура
+                    # потеряна, вектор «не понимает» таблицу. Поэтому каждую
+                    # таблицу (из find_tables) кладём ОТДЕЛЬНЫМ сегментом в
+                    # markdown — LLM хорошо понимает markdown-таблицы, и они
+                    # попадают в Qdrant со структурой. HTML-версия уходит в
+                    # document_tables для точных запросов.
+                    for tb in getattr(page, 'tables', []):
+                        md = tb.get('markdown', '')
+                        if md:
+                            segments.append({
+                                "type": "table",
+                                "content": md,
+                                "page": page.page_num,
+                                "metadata": {"is_table": True, "complex": tb.get('complex', False)}
+                            })
                 parsed_metadata = parsed.metadata
                 parser_name = parsed.parse_method
                 if not segments:
@@ -625,6 +642,15 @@ class DocumentService:
                 "embedding_model": getattr(_emb_client, "model", "unknown"),
                 "dimensions": getattr(_emb_client, "_dimensions", None) or 0
             })
+
+            # ── Таблицы → document_tables (структурно, для точных запросов) ──
+            # Таблицы уже в сегментах (markdown в Qdrant). Дополнительно храним
+            # их в SQL: rows (2D), html — для точных запросов («что в строке X
+            # колонки Y») и рендера в чате. См. src/database/document_table_models.py
+            try:
+                self._save_document_tables(document_id, parsed)
+            except Exception as e:
+                logger.debug(f"document_tables не сохранены: {e}")
 
             # Генерируем миниатюру
             try:
@@ -798,6 +824,65 @@ class DocumentService:
         
         logger.info(f"Документ удален: {document_id}")
         return True
+
+    def _save_document_tables(self, document_id: str, parsed) -> int:
+        """Сохранить таблицы документа в document_tables (структурно).
+
+        Таблицы (markdown/HTML/rows) берутся из parsed.pages[].tables —
+        их строит PyMuPDF find_tables в hybrid_parser. Сохраняем:
+        - rows_json: 2D массив ячеек (для точных запросов)
+        - headers_json: строка заголовков
+        - markdown, html: для LLM и рендера в чате
+
+        Returns:
+            Сколько таблиц сохранено
+        """
+        try:
+            import uuid, json
+            from src.database.session import get_session_local
+            from src.database.document_table_models import DocumentTable
+
+            # Удаляем старые (переиндексация)
+            maker = get_session_local()
+            session = maker()
+            try:
+                session.query(DocumentTable).filter_by(document_id=document_id).delete()
+                session.commit()
+            finally:
+                session.close()
+
+            saved = 0
+            maker = get_session_local()
+            session = maker()
+            try:
+                for page in getattr(parsed, 'pages', []):
+                    for ti, tb in enumerate(getattr(page, 'tables', [])):
+                        rows = tb.get('rows') or []
+                        if not rows:
+                            continue
+                        row = DocumentTable(
+                            id=str(uuid.uuid4()),
+                            document_id=document_id,
+                            page_num=getattr(page, 'page_num', 0),
+                            table_index=ti,
+                            rows_json=json.dumps(rows, ensure_ascii=False),
+                            headers_json=json.dumps(tb.get('headers', []), ensure_ascii=False),
+                            markdown=tb.get('markdown', ''),
+                            html=tb.get('html', ''),
+                            bbox=json.dumps(tb.get('bbox', []), ensure_ascii=False),
+                            model="pymupdf",
+                        )
+                        session.add(row)
+                        saved += 1
+                session.commit()
+            finally:
+                session.close()
+            if saved:
+                logger.info(f"document_tables: сохранено {saved} таблиц для {document_id}")
+            return saved
+        except Exception as e:
+            logger.warning(f"Ошибка _save_document_tables для {document_id}: {e}")
+            return 0
 
     def _generate_thumbnail(self, document_id: str, file_path: Path, document_type: str = "") -> Optional[Path]:
         """Сгенерировать WebP-миниатюру: первая страница PDF или текстовая карточка.

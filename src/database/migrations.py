@@ -18,6 +18,7 @@ from src.database.document_models import Document, DocumentVersion  # noqa: F401
 from src.database.monitoring_models import WatchedURL, WatchedFolder, Notification  # noqa: F401
 from src.database.chat_models import ChatSession, ChatMessage  # noqa: F401 — регистрация моделей
 from src.database.entity_alias_models import EntityAlias  # noqa: F401 — словарь алиасов для entity resolution
+from src.database.document_table_models import DocumentTable  # noqa: F401 — таблицы документов для table RAG
 
 logger = logging.getLogger(__name__)
 

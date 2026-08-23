@@ -564,6 +564,20 @@
                         <strong>100-150:</strong> быстро, низкое качество · <strong>200:</strong> оптимально (по умолчанию) · <strong>300-400:</strong> высокое качество, медленно
                     </div>
                 </div>
+                <div class="form-group">
+                    <label>Модель распознавания таблиц</label>
+                    <select id="ocr-table-model" onchange="saveOcrSettings()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                        <option value="pymupdf">PyMuPDF find_tables (сейчас, быстро)</option>
+                        <option value="docling">Docling TableFormer (точнее, если layout работает)</option>
+                        <option value="granite">Granite Vision (кластер, таблицы → HTML/JSON)</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        Как распознавать структуру таблиц. <strong>pymupdf</strong> — встроенный, быстрый.
+                        <strong>docling</strong> — TableFormer (93.6% точности, сложные таблицы).
+                        <strong>granite</strong> — IBM Granite Vision на будущем кластере.
+                        Таблицы всегда попадают в Qdrant (markdown) и document_tables (HTML/rows).
+                    </div>
+                </div>
             </div>
             <div class="form-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -2262,13 +2276,15 @@ async function loadOcrSettings() {
     document.getElementById('ocr-dpi').value = d.dpi || 200;
     document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
     document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
+    document.getElementById('ocr-table-model').value = d.table_model || 'pymupdf';
   } catch(e) {}
 }
 async function saveOcrSettings() {
   var data = {
     force_ocr: document.getElementById('ocr-force').checked,
     enable_summarization: document.getElementById('ocr-summarize').checked,
-    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200
+    dpi: parseInt(document.getElementById('ocr-dpi').value) || 200,
+    table_model: document.getElementById('ocr-table-model').value || 'pymupdf'
   };
   try {
     var r = await fetch('/api/v1/admin/models/ocr-settings', {

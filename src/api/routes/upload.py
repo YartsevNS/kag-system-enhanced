@@ -811,6 +811,79 @@ async def delete_document(document_id: str):
     return {"status": "ok", "document_id": document_id}
 
 
+@router.get("/{document_id}/tables", summary="Таблицы документа (структурно)")
+async def get_document_tables(document_id: str, limit: int = 100):
+    """Список таблиц документа из document_tables (rows, headers, markdown, html).
+
+    Для точных запросов («что в таблице по ОКВЭД 61.10.1») и рендера в чате.
+    """
+    try:
+        from src.database.session import get_session_local
+        from src.database.document_table_models import DocumentTable
+        maker = get_session_local()
+        session = maker()
+        try:
+            rows = session.query(DocumentTable).filter_by(document_id=document_id) \
+                .order_by(DocumentTable.page_num, DocumentTable.table_index).limit(limit).all()
+            return {"status": "ok", "document_id": document_id, "total": len(rows),
+                    "tables": [r.to_dict() for r in rows]}
+        finally:
+            session.close()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/{document_id}/tables/search", summary="Поиск по таблицам документа")
+async def search_document_tables(document_id: str, query: str = "", column: str = ""):
+    """Поиск значения в таблицах документа (точный, по ячейкам).
+
+    query — искомый текст в ячейках; column — фильтр по заголовку колонки.
+    Возвращает найденные строки (целиком) — для точных ответов в чате.
+    """
+    try:
+        import json
+        from src.database.session import get_session_local
+        from src.database.document_table_models import DocumentTable
+        maker = get_session_local()
+        session = maker()
+        try:
+            tables = session.query(DocumentTable).filter_by(document_id=document_id).all()
+            q = (query or "").strip().lower()
+            col = (column or "").strip().lower()
+            matches = []
+            for t in tables:
+                rows = t.to_dict()
+                headers = [h.lower() for h in rows.get("headers", [])]
+                col_idx = None
+                if col:
+                    try:
+                        col_idx = headers.index(col)
+                    except ValueError:
+                        col_idx = None
+                for ri, r in enumerate(rows.get("rows", [])):
+                    if not q:
+                        continue
+                    if col_idx is not None:
+                        cell = str(r[col_idx] if col_idx < len(r) else "")
+                        if q in cell.lower():
+                            matches.append({"table_id": t.id, "page": t.page_num,
+                                            "row_index": ri, "row": r,
+                                            "headers": rows.get("headers", [])})
+                    else:
+                        joined = " ".join(str(c) for c in r).lower()
+                        if q in joined:
+                            matches.append({"table_id": t.id, "page": t.page_num,
+                                            "row_index": ri, "row": r,
+                                            "headers": rows.get("headers", [])})
+            # лимит
+            matches = matches[:50]
+            return {"status": "ok", "found": len(matches), "matches": matches}
+        finally:
+            session.close()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/{document_id}/reindex", summary="Переиндексировать документ")
 async def reindex_document(document_id: str):
     """

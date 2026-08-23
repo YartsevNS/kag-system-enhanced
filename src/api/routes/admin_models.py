@@ -1817,17 +1817,26 @@ class OcrSettingsRequest(BaseModel):
     force_ocr: bool = False
     dpi: int = 200
     enable_summarization: bool = False
+    # Модель распознавания таблиц: pymupdf (сейчас) | docling | granite (будущее)
+    # pymupdf — быстрый, встроенный find_tables; docling — TableFormer (нужен
+    # рабочий layout); granite — Granite Vision на кластере (таблицы → HTML/JSON)
+    table_model: str = "pymupdf"
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
     from src.api.services.config_store import config_store
     cfg = config_store.get("ocr", "settings") or {"force_ocr": False, "dpi": 200}
+    cfg.setdefault("table_model", "pymupdf")
     return cfg
 
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
 async def save_ocr_settings(body: OcrSettingsRequest):
     from src.api.services.config_store import config_store
-    config_store.set("ocr", "settings", {"force_ocr": body.force_ocr, "dpi": body.dpi, "enable_summarization": body.enable_summarization})
+    config_store.set("ocr", "settings", {
+        "force_ocr": body.force_ocr, "dpi": body.dpi,
+        "enable_summarization": body.enable_summarization,
+        "table_model": body.table_model or "pymupdf",
+    })
     return {"status": "ok"}
 # Backup endpoint
 from fastapi.responses import JSONResponse
