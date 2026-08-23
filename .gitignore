@@ -45,6 +45,9 @@ user_data/api_token.json
 # Docker
 docker-compose.override.yml
 
+# Разовые скрипты (применение Supabase-темы кнопок/страниц, 2026-08)
+apply_supabase_*.py
+
 # Logs
 *.log
 logs/
