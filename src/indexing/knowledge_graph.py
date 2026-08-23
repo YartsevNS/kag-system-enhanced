@@ -21,6 +21,7 @@ from typing import Dict, Any, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from loguru import logger
 import json
+import re
 
 
 # ============================================================
@@ -137,6 +138,8 @@ class KnowledgeGraphService:
         self._driver = None
         self._initialized = False
         self._domain_schema = dict(self.DEFAULT_DOMAIN_SCHEMA)
+        # План entity resolution (заполняется в resolve_duplicate_entities)
+        self._resolution_plan = {}
 
     # ============================================================
     # Инициализация
@@ -256,6 +259,8 @@ class KnowledgeGraphService:
         будет существовать в одном экземпляре с обновлённым source_docs.
         
         Атрибут source_docs хранит список ID документов, где встречается сущность.
+        properties могут содержать description — краткое описание сущности
+        (используется entity resolution и community detection).
         """
         if not self.driver:
             return
@@ -270,6 +275,12 @@ class KnowledgeGraphService:
                         END,
                         e.properties = $properties,
                         e.updated_at = datetime()
+                    // Если есть description в properties — кладём и в отдельное поле
+                    // (удобнее для поиска и resolution)
+                    WITH e, $description AS desc
+                    FOREACH (_ IN CASE WHEN desc IS NOT NULL AND desc <> '' THEN [1] ELSE [] END |
+                        SET e.description = desc
+                    )
                     // Добавляем doc_id в source_docs если ещё не там
                     FOREACH (_ IN CASE WHEN NOT $doc_id IN coalesce(e.source_docs, []) THEN [1] ELSE [] END |
                         SET e.source_docs = coalesce(e.source_docs, []) + $doc_id
@@ -282,6 +293,7 @@ class KnowledgeGraphService:
                     type=entity.type,
                     confidence=entity.confidence,
                     properties=json.dumps(entity.properties, ensure_ascii=False) if entity.properties else "{}",
+                    description=entity.properties.get("description", ""),
                     doc_id=entity.document_id,
                     chunk_id=entity.chunk_id
                 )
@@ -429,6 +441,257 @@ class KnowledgeGraphService:
         except Exception as e:
             logger.warning(f"Ошибка dedup: {e}")
             return 0
+
+    def resolve_duplicate_entities(self, threshold: float = 0.90) -> Dict[str, int]:
+        """Entity Resolution: слияние сущностей, ссылающихся на один реальный объект.
+
+        Исследование (2025-2026): LLM извлекает surface forms — «Банк России»,
+        «ЦБ», «ЦБ РФ», «регулятор» — как разные узлы (34% дублей в типичном
+        графе). Это рвёт связи и убивает точность. См. docs/guides/graph-precision-architecture.md.
+
+        Сигналы (по Duk Lee / modernData101):
+        1. Lexical: нормализация (lower, trim, убрать пунктуацию) — точное совпадение
+        2. Embedding similarity: косинусная близость эмбеддингов имён > threshold
+        3. Graph topology: ≥2 общих соседей — вероятно, тот же узел
+
+        Слияние: канонический узел (с большим confidence / большим source_docs),
+        остальные — как aliases (свойство aliases на каноническом узле),
+        связи MENTIONS переносятся.
+
+        Returns:
+            {"merged": N, "aliased": M}
+        """
+        if not self.driver:
+            return {"merged": 0, "aliased": 0}
+        result = {"merged": 0, "aliased": 0}
+        try:
+            # ── 1. Собираем все сущности с нормализованными именами ──────────
+            with self.driver.session() as session:
+                rows = list(session.run(
+                    "MATCH (e:Entity) RETURN e.name AS name, e.type AS type, "
+                    "e.confidence AS confidence, id(e) AS node_id, "
+                    "size(coalesce(e.source_docs, [])) AS doc_count, "
+                    "coalesce(e.aliases, []) AS aliases"
+                ))
+
+            import unicodedata
+            def _norm(s: str) -> str:
+                s = unicodedata.normalize("NFKC", s or "")
+                s = s.lower().strip()
+                # Убираем знаки препинания и лишние пробелы
+                s = re.sub(r"[.,;:!?()\"'«»„“”\-–—/\\|]", " ", s)
+                s = re.sub(r"\s+", " ", s).strip()
+                return s
+
+            # Нормализуем все имена
+            entities = []
+            for r in rows:
+                entities.append({
+                    "node_id": r["node_id"],
+                    "name": r["name"],
+                    "norm": _norm(r["name"]),
+                    "type": r["type"],
+                    "confidence": r["confidence"] or 0,
+                    "doc_count": r["doc_count"],
+                    "aliases": list(r["aliases"] or []),
+                })
+
+            # ── 2. Blocking по нормализованному имени (lexical) ───────────────
+            # Группируем по (norm, type) — это дешёвый точный сигнал
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for e in entities:
+                groups[(e["norm"], e["type"])].append(e)
+
+            # Планируем слияния: {node_id: keeper_node_id}
+            # self._resolution_plan — общий план, дополняется embedding-шагом
+            self._resolution_plan = {}
+            merge_plan = self._resolution_plan
+            for (norm, etype), group in groups.items():
+                if len(group) < 2 or not norm:
+                    continue
+                # Канонический: максимальный confidence, при равенстве — больше doc_count
+                keeper = max(group, key=lambda e: (e["confidence"], e["doc_count"]))
+                for dup in group:
+                    if dup["node_id"] != keeper["node_id"]:
+                        merge_plan[dup["node_id"]] = keeper["node_id"]
+                        result["aliased"] += 1
+
+            # ── 3. Embedding similarity для несовпадающих имён ────────────────
+            # Пробуем получить embedding-клиент (тот же, что для чанков).
+            # Для пар (norm,type) с похожими нормализованными именами проверяем
+            # косинусную близость. Порог 0.90.
+            try:
+                from src.indexing.embeddings_service import embeddings_service
+                # Только сущности, не попавшие в lexical-группы
+                unmerged = [e for e in entities if e["node_id"] not in merge_plan and e["norm"]]
+                if len(unmerged) >= 2:
+                    import asyncio
+                    # Не блокируем event loop: embedding — async. resolve_duplicate_entities
+                    # может вызываться из asyncio.to_thread (worker) ИЛИ из async-контекста
+                    # (тесты/скрипты). asyncio.run() внутри работающего loop падает
+                    # ("This event loop is already running") — поэтому создаём СВОЙ
+                    # event loop в отдельном потоке.
+                    def _run_embed_plan():
+                        loop = asyncio.new_event_loop()
+                        try:
+                            loop.run_until_complete(
+                                self._embed_entities_resolution(unmerged, threshold)
+                            )
+                        finally:
+                            loop.close()
+                    import threading
+                    _t = threading.Thread(target=_run_embed_plan, daemon=True)
+                    _t.start()
+                    _t.join(timeout=120)
+            except Exception as e:
+                logger.warning(f"[resolution] Embedding similarity пропущен: {e}")
+
+            # ── 4. Применяем слияния в Neo4j ──────────────────────────────────
+            if merge_plan:
+                # Transitive closure: если keeper сам в merge_plan как dup
+                # (цепочка «ЦБ» → «ЦБ РФ» → «Банк России»), перенаправляем
+                # на корневого канонического.
+                def _root(node_id: str) -> str:
+                    seen = set()
+                    cur = node_id
+                    while cur in merge_plan and cur not in seen:
+                        seen.add(cur)
+                        cur = merge_plan[cur]
+                    return cur
+                # Перестраиваем план: каждый dup → корневой keeper
+                final_plan = {}
+                for dup_id, keeper_id in merge_plan.items():
+                    root = _root(keeper_id)
+                    if root != dup_id:
+                        final_plan[dup_id] = root
+                merge_plan = final_plan
+
+                with self.driver.session() as session:
+                    for dup_id, keeper_id in merge_plan.items():
+                        try:
+                            session.run(
+                                """
+                                MATCH (keeper:Entity) WHERE id(keeper) = $keeper_id
+                                MATCH (dup:Entity) WHERE id(dup) = $dup_id
+                                // Добавляем dup в aliases канонического (без дублей)
+                                SET keeper.aliases = [x IN (coalesce(keeper.aliases, []) + [dup.name]) WHERE NOT x IN coalesce(keeper.aliases, [])]
+                                WITH keeper, dup
+                                // Переносим MENTIONS связи с dup на keeper
+                                OPTIONAL MATCH (c:Chunk)-[r:MENTIONS]->(dup)
+                                FOREACH (_ IN CASE WHEN c IS NOT NULL THEN [1] ELSE [] END |
+                                    MERGE (c)-[:MENTIONS]->(keeper)
+                                )
+                                WITH keeper, dup
+                                // Объединяем source_docs
+                                SET keeper.source_docs = [x IN coalesce(keeper.source_docs, []) + coalesce(dup.source_docs, []) | x]
+                                WITH keeper, dup
+                                // Переносим остальные связи
+                                OPTIONAL MATCH (dup)-[r2]->(t)
+                                FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+                                    MERGE (keeper)-[nr:RELATED_TO]->(t)
+                                    SET nr = properties(r2)
+                                )
+                                WITH keeper, dup
+                                OPTIONAL MATCH (s)-[r3]->(dup)
+                                FOREACH (_ IN CASE WHEN s IS NOT NULL THEN [1] ELSE [] END |
+                                    MERGE (s)-[nr2:RELATED_TO]->(keeper)
+                                    SET nr2 = properties(r3)
+                                )
+                                DETACH DELETE dup
+                                """,
+                                keeper_id=keeper_id,
+                                dup_id=dup_id,
+                            )
+                            result["merged"] += 1
+                        except Exception as e:
+                            logger.warning(f"[resolution] Ошибка слияния {dup_id}→{keeper_id}: {e}")
+            logger.info(f"Entity resolution: слито {result['merged']}, aliases {result['aliased']}")
+        except Exception as e:
+            logger.warning(f"Ошибка entity resolution: {e}")
+        return result
+
+    async def _embed_entities_resolution(self, entities: List[Dict], threshold: float):
+        """Вспомогательный шаг: embedding-сходство имён для entity resolution.
+
+        Ищем пары сущностей одного типа с косинусной близостью > threshold
+        и дополняем merge_plan (через self._resolution_plan).
+        """
+        try:
+            from src.indexing.embeddings_service import embeddings_service
+            from src.llm.embeddings import EmbeddingClient
+            await embeddings_service.initialize()
+            client = embeddings_service._embedding_client
+            if client is None:
+                return
+            # Группируем по типу
+            from collections import defaultdict
+            by_type = defaultdict(list)
+            for e in entities:
+                by_type[e["type"]].append(e)
+            for etype, group in by_type.items():
+                if len(group) < 2:
+                    continue
+                # Батчим эмбеддинги имён
+                names = [e["norm"] for e in group]
+                try:
+                    vecs = await client.generate_batch(names, batch_size=8)
+                except Exception:
+                    continue
+                import math
+                def _cos(a, b):
+                    dot = sum(x * y for x, y in zip(a, b))
+                    na = math.sqrt(sum(x * x for x in a))
+                    nb = math.sqrt(sum(x * x for x in b))
+                    if na == 0 or nb == 0:
+                        return 0.0
+                    return dot / (na * nb)
+                # Проверяем пары (O(n²), но n — сущности одного типа, обычно мало)
+                for i in range(len(group)):
+                    for j in range(i + 1, len(group)):
+                        ei, ej = group[i], group[j]
+                        if ei["node_id"] == ej["node_id"]:
+                            continue
+                        # ЛОЖНОПОЛОЖИТЕЛЬНАЯ ЗАЩИТА: короткие имена организаций
+                        # («Банк России» vs «Сбербанк») имеют близкие эмбеддинги —
+                        # оба «банковские». Порог для embedding-слияния поднимаем
+                        # до 0.95, и только для имён >= 4 символов.
+                        # Слишком агрессивное слияние (0.85) склеило Сбербанк
+                        # с Банком России — это недопустимо.
+                        if len(ei["name"]) < 4 or len(ej["name"]) < 4:
+                            continue
+                        # Guard от слияния слов с общим корнем:
+                        # «зашифрование» vs «расшифрование» — эмбеддинги близки,
+                        # но это РАЗНЫЕ термины. Ключевой признак: почти одинаковые
+                        # слова с РАЗНЫМ первым символом (за-/рас-, в-/на- и т.п.) —
+                        # это разные приставочные слова. Алиасы при этом:
+                        # регистр («Магма»/«Magma» — после lower первый символ
+                        # совпадает), полное/сокращённое («ИСО/МЭК 18033-1» —
+                        # первый символ тот же), пунктуация.
+                        # НО: если одно норм-имя — ПОДСТРОКА другого («ПАО Сбербанк»
+                        # ⊃ «Сбербанк», «ИСО/МЭК 18033-1» ⊃ «ИСО/МЭК 18033»),
+                        # это полное/сокращённое → алиас, сливаем.
+                        _n1, _n2 = ei["norm"], ej["norm"]
+                        _is_substring = (
+                            (len(_n1) >= 4 and _n1 in _n2) or
+                            (len(_n2) >= 4 and _n2 in _n1)
+                        )
+                        if not _is_substring:
+                            if _n1 and _n2 and _n1[0] != _n2[0]:
+                                import difflib
+                                _ratio = difflib.SequenceMatcher(None, _n1, _n2).ratio()
+                                if _ratio > 0.6:
+                                    continue
+                        sim = _cos(vecs[i], vecs[j])
+                        if sim >= max(threshold, 0.95):
+                            # Канонический — больший confidence
+                            keeper = ei if (ei["confidence"], ei["doc_count"]) >= (ej["confidence"], ej["doc_count"]) else ej
+                            dup = ej if keeper is ei else ei
+                            # Проверяем, что dup ещё не запланирован
+                            if dup["node_id"] not in self._resolution_plan and keeper["node_id"] != dup["node_id"]:
+                                self._resolution_plan[dup["node_id"]] = keeper["node_id"]
+        except Exception as e:
+            logger.warning(f"[resolution] embed-шаг: {e}")
 
     # ============================================================
     # Валидация качества сущностей (Neo4j Best Practice)

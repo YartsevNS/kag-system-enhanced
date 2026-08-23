@@ -663,6 +663,14 @@ class DocumentService:
                 await self._build_knowledge_graph_async(
                     document_id, record.filename, chunks
                 )
+                # Entity Resolution: слияние дубликатов сущностей после построения
+                # графа (lexical + embedding + топология). Снижает дубли на 30-40%,
+                # улучшает точность связей. См. docs/guides/graph-precision-architecture.md
+                try:
+                    from src.indexing.knowledge_graph import kg_service
+                    await asyncio.to_thread(kg_service.resolve_duplicate_entities)
+                except Exception as e:
+                    logger.debug(f"Entity resolution пропущен: {e}")
             except Exception as e:
                 logger.debug(f"Не удалось построить граф знаний: {e}")
 
@@ -949,7 +957,16 @@ class DocumentService:
         # Таймауты: на одну Neo4j-операцию, на один чанк, на весь граф.
         NEO4J_OP_TIMEOUT = 20
         CHUNK_TIMEOUT = 60
-        GRAPH_TOTAL_TIMEOUT = 300
+        # GRAPH_TOTAL_TIMEOUT увеличен (было 300с) — теперь обрабатываются ВСЕ
+        # чанки документа (не первые 10), а не только начало. При 161 чанке
+        # и 2 LLM-вызовах на чанк (entities→relations) даже с параллельностью
+        # нужно больше времени. Граф вторичен — при превышении пропускается,
+        # документ завершается.
+        GRAPH_TOTAL_TIMEOUT = 1800
+        # Параллельные LLM-вызовы при извлечении сущностей (адаптивный граф).
+        # 3-4 одновременных запроса: не упираемся в rate-limit DeepSeek и не
+        # вешаем worker; для будущего кластера это число = число реплик модели.
+        MAX_PARALLEL_LLM = 3
         # Метка тайминга: граф идёт в фоне (create_task) и НЕ попадает в plog,
         # поэтому меряем здесь через time.monotonic() и пишем в logger — это
         # второй кандидат на «медленное» место (LLM-извлечение сущностей + Neo4j).
@@ -988,8 +1005,15 @@ class DocumentService:
                 # Создаём узел документа
                 await _neo4j_op(kg_service.create_document_node, document_id, filename, label="create_document_node")
 
-                # Обрабатываем чанки (первые 10 для скорости, остальные в фоне)
-                for i, chunk in enumerate(chunks[:10]):
+                # ВАЖНО (зачем так сделано): обрабатываем ВСЕ чанки, а не первые 10.
+                # Раньше chunks[:10] при среднем 161 чанке давал покрытие ~6% текста —
+                # сущности из хвоста документа (таблицы, приложения) терялись, граф
+                # был неполным. Параллельность (Semaphore) компенсирует рост числа
+                # вызовов: LLM-запросы независимы, запускаем до MAX_PARALLEL_LLM
+                # одновременно. Neo4j-записи — последовательно (они дёшевы).
+                sem = asyncio.Semaphore(MAX_PARALLEL_LLM)
+
+                async def _process_chunk(i: int, chunk: dict):
                     chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
                     chunk_text = chunk.get("content", "")
                     chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
@@ -1001,19 +1025,24 @@ class DocumentService:
                         label="create_chunk_node",
                     )
 
-                    # Извлечение сущностей (LLM) — ограничено на чанк
-                    try:
-                        await asyncio.wait_for(
-                            entity_extractor.extract_and_store(
-                                document_id, chunk_id, chunk_text, chunk_seq, filename
-                            ),
-                            timeout=CHUNK_TIMEOUT,
-                        )
-                    except asyncio.TimeoutError:
-                        logger.warning(
-                            f"[graph] Извлечение сущностей таймаут для {chunk_id} "
-                            f"({CHUNK_TIMEOUT}с) — пропуск чанка"
-                        )
+                    # Извлечение сущностей (LLM) — ограничено семафором и таймаутом
+                    async with sem:
+                        try:
+                            await asyncio.wait_for(
+                                entity_extractor.extract_and_store(
+                                    document_id, chunk_id, chunk_text, chunk_seq, filename
+                                ),
+                                timeout=CHUNK_TIMEOUT,
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"[graph] Извлечение сущностей таймаут для {chunk_id} "
+                                f"({CHUNK_TIMEOUT}с) — пропуск чанка"
+                            )
+
+                # Параллельно обрабатываем все чанки (не только первые 10)
+                tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
+                await asyncio.gather(*tasks)
 
             # Весь граф — в общий таймаут: если LLM/Neo4j висят суммарно
             # дольше GRAPH_TOTAL_TIMEOUT, граф пропускается, но документ
@@ -1021,7 +1050,7 @@ class DocumentService:
             await asyncio.wait_for(_build(), timeout=GRAPH_TOTAL_TIMEOUT)
 
             logger.info(
-                f"Граф знаний построен для {document_id}: {len(chunks[:10])} чанков обработано "
+                f"Граф знаний построен для {document_id}: {len(chunks)} чанков обработано "
                 f"(+{round((time.monotonic() - _t_graph) * 1000, 1)}ms)"
             )
         except asyncio.TimeoutError:

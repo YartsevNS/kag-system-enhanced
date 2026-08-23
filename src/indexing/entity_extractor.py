@@ -267,13 +267,12 @@ class EntityExtractor:
         document_id: str,
         filename: str = ""
     ) -> Dict[str, Any]:
-        """Извлечь сущности и связи из чанка ОДНИМ LLM-вызовом.
+        """Извлечь сущности и связи из чанка ДВУМЯ последовательными LLM-вызовами.
 
-        Раньше было 3 отдельных прохода (core → relations → extended) — по
-        3 LLM-вызова на каждый чанк. Объединено в один промпт: все типы
-        сущностей (core + extended) и все типы связей в одном JSON-ответе.
-        Это в ~3 раза меньше вызовов к внешнему Ollama и в ~3 раза быстрее
-        построение графа.
+        KGGen-подход (arxiv 2502.09956): сначала сущности, потом связи ТОЛЬКО
+        между найденными сущностями. Это даёт консистентность: связи не ссылаются
+        на несуществующие сущности (частая проблема одного объединённого промпта,
+        где модель «выдумывает» source/target).
 
         Returns:
             {"entities": [...], "relations": [...], "facts": [...], "warnings": [...]}
@@ -302,13 +301,13 @@ class EntityExtractor:
 
         sample = chunk_text[:1000]  # чанк максимум ~575 символов (500+overlap), 1000 с запасом
 
-        prompt = f"""Извлеки сущности и связи. Только JSON.
+        # ── ЭТАП 1: сущности ──────────────────────────────────────────────
+        # Сначала только entities (с description — нужно для entity resolution
+        # и community detection). Связи — на этапе 2, между найденными сущностями.
+        prompt_entities = f"""Извлеки сущности. Только JSON.
 
 Типы сущностей:
 {type_desc}
-
-Типы связей:
-{rel_desc}
 
 Текст:
 ---
@@ -316,17 +315,48 @@ class EntityExtractor:
 ---
 
 JSON:
-{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0}}],"relations":[{{"source":"...","target":"...","type":"тип связи"}}],"facts":["..."]}}
+{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0,"description":"1-2 слова чем является"}}]}}
 
 Правила:
 - name строго из текста; type только из списка
-- source/target только из найденных сущностей
-- ничего не найдено → {{"entities":[],"relations":[],"facts":[]}}"""
+- description: кратко чем является сущность (для дедупликации)
+- ничего не найдено → {{"entities":[]}}"""
 
-        result = await self._call_llm(prompt, model, llm_url, chunk_id, "extract", api_key, provider)
+        entities_result = await self._call_llm(prompt_entities, model, llm_url, chunk_id, "extract_entities", api_key, provider)
+        entities = entities_result.get("entities", [])
+
+        # ── ЭТАП 2: связи между найденными сущностями ─────────────────────
+        relations = []
+        if entities:
+            # Список имён для консистентности: связи строим ТОЛЬКО между ними
+            names = "\n".join([f"  - {e.get('name', '')}" for e in entities if e.get('name')])
+            prompt_relations = f"""Извлеки связи между сущностями. Только JSON.
+
+Типы связей:
+{rel_desc}
+
+Известные сущности (source/target ТОЛЬКО из них, точные имена):
+{names}
+
+Текст:
+---
+{sample}
+---
+
+JSON:
+{{"relations":[{{"source":"...","target":"...","type":"тип связи"}}]}}
+
+Правила:
+- source и target: точные имена из списка известных сущностей
+- связи нет → {{"relations":[]}}"""
+
+            relations_result = await self._call_llm(prompt_relations, model, llm_url, chunk_id, "extract_relations", api_key, provider)
+            relations = relations_result.get("relations", [])
+
+        result = {"entities": entities, "relations": relations, "facts": [], "warnings": []}
 
         # Валидация
-        warnings = self._validate_extraction(result.get("entities", []), result.get("relations", []))
+        warnings = self._validate_extraction(entities, relations)
         result["warnings"] = warnings
 
         return result
@@ -481,7 +511,8 @@ JSON:
                 {
                     "name": str(e.get("name", ""))[:200],
                     "type": str(e.get("type", "unknown")),
-                    "confidence": min(1.0, max(0.0, float(e.get("confidence", 0.7))))
+                    "confidence": min(1.0, max(0.0, float(e.get("confidence", 0.7)))),
+                    "description": str(e.get("description", ""))[:300],
                 }
                 for e in data["entities"]
                 if e.get("name") and len(str(e["name"]).strip()) > 1
@@ -578,13 +609,17 @@ JSON:
 
             # Сохраняем сущности в Domain Graph
             for e in entities:
+                props = dict(e.get("properties", {}))
+                # description из LLM — для entity resolution и community detection
+                if e.get("description"):
+                    props["description"] = e["description"]
                 entity = Entity(
                     name=e["name"],
                     type=e["type"],
                     chunk_id=chunk_id,
                     document_id=document_id,
                     confidence=e["confidence"],
-                    properties=e.get("properties", {})
+                    properties=props
                 )
                 await _neo4j_write(kg_service.create_entity, entity, label="create_entity")
 
