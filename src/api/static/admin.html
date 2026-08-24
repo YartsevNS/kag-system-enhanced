@@ -549,6 +549,32 @@
         </div>
 
 
+        <!-- Брендинг -->
+        <div class="section">
+            <h2 class="section-title">🎨 Брендинг</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:10px">
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Название</label>
+                    <input id="brand-name" type="text" value="KAG" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:160px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Версия</label>
+                    <input id="brand-version" type="text" value="" placeholder="v0.2.0" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:110px">
+                </div>
+                <div style="flex:1;min-width:240px">
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Подпись (футер всех страниц)</label>
+                    <input id="brand-footer" type="text" value="" placeholder="KAG — Knowledge Augmentation Generation" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+                </div>
+                <button class="btn btn-primary" onclick="saveBrandingConfig()">💾 Сохранить</button>
+                <span id="branding-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <div style="font-size:12px;color:var(--text3);line-height:1.6;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px">
+                <strong>Единая настройка бренда.</strong> Название, версия и подпись применяются на <strong>всех</strong> страницах
+                (чат, документы, мониторинг, админка и т.д.) через <code>/api/v1/branding</code> + <code>branding.js</code>.
+                Раньше каждая страница содержала свою надпись («KAG v0.2.0 • Ollama • Qdrant» и т.п.) — теперь всё меняется здесь.
+            </div>
+        </div>
+
         <!-- Настройки поиска (Hybrid Search) -->
         <div class="section">
             <h2 class="section-title">🔍 Настройки поиска (Hybrid Search)</h2>
@@ -1116,6 +1142,42 @@
                 });
                 const d = await r.json();
                 status.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message || 'ошибка');
+            } catch (e) {
+                status.textContent = '❌ ' + e.message;
+            }
+        }
+
+        // ── Брендинг ─────────────────────────────────────────────────────
+        async function loadBrandingConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/branding-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const n = document.getElementById('brand-name');
+                const v = document.getElementById('brand-version');
+                const f = document.getElementById('brand-footer');
+                if (n) n.value = d.name || 'KAG';
+                if (v) v.value = d.version || '';
+                if (f) f.value = d.footer || '';
+            } catch (e) { console.error('branding load:', e); }
+        }
+        async function saveBrandingConfig() {
+            const status = document.getElementById('branding-status');
+            if (!status) return;
+            status.textContent = '⏳...';
+            const body = {
+                name: document.getElementById('brand-name').value,
+                version: document.getElementById('brand-version').value,
+                footer: document.getElementById('brand-footer').value,
+            };
+            try {
+                const r = await apiFetch(`${API_URL}/branding-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                status.textContent = d.status === 'ok' ? '✅ сохранено (применится на всех страницах)' : '❌ ' + (d.message || 'ошибка');
             } catch (e) {
                 status.textContent = '❌ ' + e.message;
             }
@@ -2360,6 +2422,7 @@
         loadDocTypes();
         loadSearchConfig();
         loadNeo4jConfig();
+        loadBrandingConfig();
 
         loadAll();
         setInterval(loadStatus, 30000);
@@ -2858,5 +2921,6 @@ async function saveSystemConfig(){
 loadSystemConfig();
 
 </script>
+<script src="/static/branding.js"></script>
 </body>
 </html>

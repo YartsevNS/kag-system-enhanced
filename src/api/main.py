@@ -13,6 +13,7 @@ import os
 from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor
 from src.api.routes.chat import router_export
 from src.api.routes import setup
+from src.api.routes import branding
 from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
@@ -145,6 +146,7 @@ app.add_middleware(SecurityMiddleware)
 # Подключение роутеров
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(setup.router, prefix="/api/v1", tags=["setup"])
+app.include_router(branding.router, prefix="/api/v1", tags=["branding"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(router_export, prefix="/api/v1/chat/export", tags=["export"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])

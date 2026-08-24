@@ -1753,6 +1753,45 @@ async def migrate_old_config():
 
 # ============================================================
 # ═══════════════════════════════════════
+# Брендинг (единая настройка для всех страниц)
+# ═══════════════════════════════════════
+
+@router.get("/branding-config", summary="Настройки брендинга")
+async def get_branding_config():
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "branding") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {
+            "name": cfg.get("name", "KAG"),
+            "version": cfg.get("version", ""),
+            "footer": cfg.get("footer", ""),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/branding-config", summary="Сохранить брендинг")
+async def save_branding_config(data: dict):
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "branding") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        if "name" in data:
+            cfg["name"] = str(data["name"]).strip()[:40] or "KAG"
+        if "version" in data:
+            cfg["version"] = str(data["version"]).strip()[:20]
+        if "footer" in data:
+            cfg["footer"] = str(data["footer"]).strip()[:120]
+        config_store.set("system", "branding", cfg)
+        return {"status": "ok", **cfg}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
 # Настройки поиска (Hybrid Search)
 # ═══════════════════════════════════════
 

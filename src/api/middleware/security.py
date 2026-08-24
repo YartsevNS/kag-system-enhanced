@@ -25,7 +25,7 @@ def _is_public(path: str) -> bool:
     if path in ("/", "/login", "/setup", "/know", "/favicon.ico"):
         return True
     # Префиксы
-    for p in ["/api/v1/auth/", "/api/v1/health", "/api/v1/setup", 
+    for p in ["/api/v1/auth/", "/api/v1/health", "/api/v1/setup", "/api/v1/branding",
               "/api/docs", "/api/redoc", "/api/openapi.json", "/static/"]:
         if path.startswith(p):
             return True
