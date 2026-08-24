@@ -19,6 +19,7 @@
 - [x] модерация: клик по паре → выделение + inline-редактирование (PUT /aliases/{id}, 2026-08-24)
 - [x] политика по типам: legal_term/document_ref НЕ сливать по embedding
 - [x] развёрнуты ложные слияния legal_term (20 узлов)
+- [x] оптимизации 2026-08-24: батч-запись Neo4j (UNWIND), кэш LLM, single_pass, Hybrid Search (admin), Query Decomposition
 - [ ] переиндексация всех 158 документов
 - [ ] 🔮 Query Routing / Intent Classification (будущая задача — см. скилл kag-graph-precision)
 
