@@ -460,14 +460,19 @@ services:
   # ===========================================
   
   neo4j:
-    image: neo4j:5.26-community
+    # DozerDB — бесплатный GPL-плагин/дистрибутив для Neo4j Community:
+    # multi-database, schema constraints (NODE KEY), telemetry off, hardened,
+    # OpenGDS (Graph Data Science без Enterprise-лицензии — community detection).
+    # Версия 5.26.27.0 → Neo4j CE 5.26.27 LTS (минор совпадает с 5.26-community).
+    # Данные хранятся в volume neo4j_data — смена образа их не трогает.
+    image: graphstack/dozerdb:5.26.27.0
     container_name: kag-neo4j
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
     environment:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
-      - NEO4J_PLUGINS=["apoc","graph-data-science"]
+      - NEO4J_PLUGINS=["apoc","open-gds"]
       # Память Neo4j — при росте графа (500+ пользователей) увеличить:
       # heap → 2G-4G, pagecache → 1G-2G (зависит от RAM сервера).
       # Менять можно и через админку (раздел «Масштабирование» — заготовка).
