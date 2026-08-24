@@ -112,7 +112,19 @@
             font-size: 16px; font-weight: 600; color: var(--text2);
             margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
             letter-spacing: -0.3px;
+            /* Сворачиваемые секции: клик по заголовку разворачивает/сворачивает */
+            cursor: pointer; user-select: none; border-radius: var(--radius-sm);
+            padding: 4px 6px; margin-left: -6px; transition: background 0.1s;
         }
+        .section-title:hover { background: rgba(62,207,142,0.06); }
+        .section-title::after {
+            content: '▾'; margin-left: auto; color: var(--text4); font-size: 14px;
+            transition: transform 0.15s;
+        }
+        .section.collapsed .section-title { margin-bottom: 0; }
+        .section.collapsed .section-title::after { transform: rotate(-90deg); }
+        /* В свёрнутой секции скрываем всё, кроме заголовка */
+        .section.collapsed > *:not(.section-title) { display: none !important; }
 
         /* ---- Table ---- */
         table { width: 100%; border-collapse: collapse; }
@@ -961,6 +973,14 @@
                 showNotification('❌ Ошибка бэкапа: ' + e.message, true);
             }
         }
+
+        // ── Сворачиваемые секции: клик по заголовку (▾/▸) ────────────────
+        document.addEventListener('click', function(e) {
+            const t = e.target.closest('.section-title');
+            if (!t) return;
+            const sec = t.closest('.section');
+            if (sec) sec.classList.toggle('collapsed');
+        });
 
         async function loadStatus() {
             try {
