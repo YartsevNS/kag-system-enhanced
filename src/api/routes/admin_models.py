@@ -21,6 +21,7 @@ from src.api.services.model_manager import model_manager
 from src.api.services.ssh_manager import ssh_manager, SSHConnectionConfig
 from src.api.services.docker_monitor import docker_monitor
 from src.api.services.system_monitor import system_monitor
+from src.config import get_settings
 from src.llm import LLMBackendType
 
 router = APIRouter(tags=["models"])
@@ -2157,13 +2158,31 @@ async def save_scaling(req: ScalingConfigRequest):
 # Worker Resources — настройка CPU/памяти
 # ═══════════════════════════════════════
 
+def _find_worker_container(client):
+    """Найти контейнер worker.
+
+    После `docker compose up -d --scale worker=N` контейнер называется
+    kag-system_worker_1/2 (container_name убран), а не kag-worker — ищем по
+    compose-метке, с fallback на старое имя.
+    """
+    try:
+        workers = client.containers.list(
+            all=True, filters={"label": "com.docker.compose.service=worker"}
+        )
+        if workers:
+            return workers[0]
+    except Exception:
+        pass
+    return client.containers.get("kag-worker")
+
+
 @router.get("/worker-resources", summary="Текущие ресурсы worker")
 async def get_worker_resources():
     """Читает текущие cpus/memory из docker-compose.yml для worker."""
     import docker
     try:
         client = docker.from_env()
-        w = client.containers.get("kag-worker")
+        w = _find_worker_container(client)
         host_cfg = w.attrs["HostConfig"]
         return {
             "cpus": str(host_cfg.get("NanoCpus", 0) / 1e9) if host_cfg.get("NanoCpus") else "2.0",
@@ -2206,7 +2225,7 @@ async def update_worker_resources(req: dict):
 
     try:
         client = docker.from_env()
-        w = client.containers.get("kag-worker")
+        w = _find_worker_container(client)
 
         # ── Шаг 1: мгновенное применение к живому контейнеру ─────────────
         # ВНИМАНИЕ: docker SDK Container.update() НЕ принимает cpus/memory,
