@@ -1685,13 +1685,17 @@
                         <tr id="arow-${escHtml(p.id)}" data-id="${escHtml(p.id)}"
                             data-alias="${escHtml(p.alias)}" data-canonical="${escHtml(p.canonical_name)}"
                             data-type="${escHtml(p.entity_type)}" data-domain="${escHtml(p.domain || 'universal')}"
-                            data-comment="${escHtml(p.comment || '')}">
+                            data-comment="${escHtml(p.comment || '')}"
+                            onclick="editAliasTableRow('${escHtml(p.id)}')"
+                            title="Клик — редактировать пару"
+                            style="cursor:pointer;transition:background 0.1s"
+                            onmouseover="this.style.background='rgba(62,207,142,0.06)'" onmouseout="this.style.background=''">
                             <td style="padding:6px 10px;color:var(--accent-h)">${escHtml(p.alias)}</td>
                             <td style="padding:6px 10px">${escHtml(p.canonical_name)}</td>
                             <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.entity_type)}</td>
                             <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.domain || 'universal')}</td>
                             <td style="padding:6px 10px;color:var(--text4)">${escHtml(p.comment || '')}</td>
-                            <td style="padding:6px 10px;text-align:right;white-space:nowrap">
+                            <td style="padding:6px 10px;text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
                                 <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="editAliasTableRow('${escHtml(p.id)}')" title="Открыть редактирование пары">✏️ Править</button>
                                 <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;color:var(--red)" onclick="deleteAliasPair('${escHtml(p.id)}')" title="Удалить пару из словаря">🗑 Удалить</button>
                             </td>
@@ -1847,11 +1851,13 @@
                     <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text4)">Комментарий</label>
                         <input id="pe-comment" value="${escHtml(cm)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
                     <div style="display:flex;gap:8px">
-                        <button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="savePendingAlias('${escHtml(id)}')">💾 Сохранить</button>
-                        <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px" onclick="cancelPendingEdit()">Отмена</button>
+                        <button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();savePendingAlias('${escHtml(id)}')">💾 Сохранить</button>
+                        <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();cancelPendingEdit()">Отмена</button>
                         <span id="pe-status" style="font-size:12px;align-self:center"></span>
                     </div>
                 </td>`;
+            // Клики по полям/кнопкам не должны всплывать на <tr> (иначе форма закроется)
+            tr.querySelectorAll('input,select,button').forEach(i => i.addEventListener('click', e => e.stopPropagation()));
         }
 
         async function addAliasPair() {
