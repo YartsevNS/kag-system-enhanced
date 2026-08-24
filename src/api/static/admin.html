@@ -549,7 +549,27 @@
         </div>
 
 
-        <!-- Настройки OCR -->
+        <!-- Настройки поиска (Hybrid Search) -->
+        <div class="section">
+            <h2 class="section-title">🔍 Настройки поиска (Hybrid Search)</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <input type="checkbox" id="search-sparse" onchange="saveSearchConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                <label for="search-sparse" style="font-size:14px;font-weight:600;cursor:pointer">Гибридный поиск (dense + BM25)</label>
+                <span id="search-config-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px">
+                <strong>Зачем.</strong> Семантический (dense) поиск находит «по смыслу», но плохо ловит точные термины, номера ГОСТов, аббревиатуры
+                («ГОСТ Р 57580», «ИСПДн», «п. 5.3»). Классический (sparse/BM25) — наоборот, ловит точные слова, но не синонимы.
+                Гибрид объединяет оба и повышает точность поиска по нормативным документам.<br><br>
+                <strong>Как работает.</strong> У каждого чанка хранится два вектора: dense (эмбеддинг, 1024) и sparse (частоты слов BM25).
+                При запросе Qdrant ищет по обоим и объединяет результаты через RRF (Reciprocal Rank Fusion).<br><br>
+                <strong>На что влияет.</strong> Включает sparse-векторы при ИНДЕКСАЦИИ новых документов и гибридный запрос при ПОИСКЕ.
+                Важно: уже проиндексированные чанки не имеют sparse-векторов — они продолжат находиться по dense, а новые получат оба.
+                Для полного эффекта нужна переиндексация. Отключение вернёт прежний (только dense) поиск.
+            </div>
+        </div>
+
+        <!-- Настройки OCR (Occular) -->
         <div class="section">
             <h2 class="section-title">🔍 Настройки OCR (Occular)</h2>
             <p style="font-size:12px;color:var(--text4);margin-bottom:12px">
@@ -816,6 +836,37 @@
             </div>
         </div>
 
+        <!-- Настройки Neo4j (граф) -->
+        <div class="section">
+            <h2 class="section-title">🕸️ Настройки Neo4j (граф знаний)</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:12px">
+                <div>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                        <input type="checkbox" id="neo4j-batch" onchange="saveNeo4jConfig()" style="width:16px;height:16px;accent-color:var(--accent)">
+                        <strong>Батч-запись (UNWIND)</strong>
+                    </label>
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Размер батча</label>
+                    <input id="neo4j-batch-size" type="number" min="1" max="500" value="100" onchange="saveNeo4jConfig()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:7px 10px;width:90px">
+                </div>
+                <div>
+                    <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Таймаут операции (сек)</label>
+                    <input id="neo4j-timeout" type="number" min="5" max="120" value="20" onchange="saveNeo4jConfig()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:7px 10px;width:90px">
+                </div>
+                <span id="neo4j-config-status" style="font-size:12px;color:var(--text4)"></span>
+            </div>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px">
+                <strong>Зачем.</strong> Запись сущностей и связей в Neo4j по одной операции — медленно: каждый MERGE — отдельный round-trip.
+                Батч-запись (UNWIND) пишет пачку узлов/связей одним запросом — в разы быстрее при построении графа больших документов.<br><br>
+                <strong>Как работает.</strong> Сущности одного чанка группируются и записываются одним UNWIND-запросом (MERGE по name+type, как раньше).
+                Связи группируются по типу — по одному UNWIND на тип. Размер батча ограничивает число записей за один запрос
+                (меньше — аккуратнее с памятью Neo4j, больше — быстрее).<br><br>
+                <strong>На что влияет.</strong> Скорость построения графа при переиндексации. «Батч-запись» можно выключить — вернётся
+                поодиночная запись (для отладки). Таймаут — максимальное ожидание одной операции Neo4j, при превышении операция пропускается.
+            </div>
+        </div>
+
         <!-- Worker Resources -->
         <div class="section">
             <h2 class="section-title">⚙️ Ресурсы Worker (CPU/память)</h2>
@@ -1002,6 +1053,73 @@
             if (sec) { sec.classList.toggle('collapsed'); saveCollapsedState(); }
         });
         restoreCollapsedState();
+
+        // ── Hybrid Search: настройки поиска ──────────────────────────────
+        async function loadSearchConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/search-config`);
+                const d = await r.json();
+                const cb = document.getElementById('search-sparse');
+                if (cb && d && typeof d.sparse_enabled === 'boolean') cb.checked = d.sparse_enabled;
+            } catch (e) { console.error('search-config load:', e); }
+        }
+        async function saveSearchConfig() {
+            const cb = document.getElementById('search-sparse');
+            const status = document.getElementById('search-config-status');
+            if (!cb) return;
+            status.textContent = '⏳...';
+            try {
+                const r = await apiFetch(`${API_URL}/search-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sparse_enabled: cb.checked})
+                });
+                const d = await r.json();
+                if (d.status === 'ok') {
+                    status.textContent = cb.checked ? '✅ гибридный поиск включён (новые чанки получат sparse; для полного эффекта — переиндексация)' : '✅ выключен (только dense)';
+                } else {
+                    status.textContent = '❌ ' + (d.message || 'ошибка');
+                }
+            } catch (e) {
+                status.textContent = '❌ ' + e.message;
+            }
+        }
+
+        // ── Настройки Neo4j (граф) ───────────────────────────────────────
+        async function loadNeo4jConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/neo4j-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const cb = document.getElementById('neo4j-batch');
+                const bs = document.getElementById('neo4j-batch-size');
+                const to = document.getElementById('neo4j-timeout');
+                if (cb && typeof d.batch_enabled === 'boolean') cb.checked = d.batch_enabled;
+                if (bs) bs.value = d.batch_size;
+                if (to) to.value = d.timeout;
+            } catch (e) { console.error('neo4j-config load:', e); }
+        }
+        async function saveNeo4jConfig() {
+            const status = document.getElementById('neo4j-config-status');
+            if (!status) return;
+            status.textContent = '⏳...';
+            const body = {
+                batch_enabled: document.getElementById('neo4j-batch').checked,
+                batch_size: parseInt(document.getElementById('neo4j-batch-size').value || '100', 10),
+                timeout: parseInt(document.getElementById('neo4j-timeout').value || '20', 10),
+            };
+            try {
+                const r = await apiFetch(`${API_URL}/neo4j-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                status.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message || 'ошибка');
+            } catch (e) {
+                status.textContent = '❌ ' + e.message;
+            }
+        }
 
         async function loadStatus() {
             try {
@@ -2240,6 +2358,8 @@
         }
 
         loadDocTypes();
+        loadSearchConfig();
+        loadNeo4jConfig();
 
         loadAll();
         setInterval(loadStatus, 30000);

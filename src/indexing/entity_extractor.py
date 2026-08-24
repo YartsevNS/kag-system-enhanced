@@ -285,6 +285,25 @@ class EntityExtractor:
             logger.warning(f"[graph] Функция 'graph' не настроена в админке — извлечение пропущено для {chunk_id}")
             return {"entities": [], "relations": [], "facts": [], "warnings": ["graph model not configured"]}
 
+        # ── Кэш LLM-ответов: одинаковый текст чанка → тот же результат ──
+        # Экономит токены при переиндексации и на повторяющихся фрагментах
+        # (одинаковые страницы/таблицы в разных версиях документов).
+        import hashlib as _hl
+        _cache_key = f"llm_{_hl.sha256(chunk_text.encode('utf-8')).hexdigest()[:20]}"
+        try:
+            from src.api.services.config_store import config_store
+            _cached = config_store.get("entity_cache", _cache_key)
+            if _cached and isinstance(_cached, dict) and _cached.get("entities"):
+                logger.debug(f"[graph] Кэш LLM: {chunk_id} ({_cache_key[:16]}…)")
+                return {
+                    "entities": _cached.get("entities", []),
+                    "relations": _cached.get("relations", []),
+                    "facts": [],
+                    "warnings": ["cache"],
+                }
+        except Exception:
+            pass
+
         model = cfg.get("model")
         llm_url = cfg.get("url", "")
         api_key = cfg.get("api_key", "")
@@ -301,10 +320,44 @@ class EntityExtractor:
 
         sample = chunk_text[:1000]  # чанк максимум ~575 символов (500+overlap), 1000 с запасом
 
-        # ── ЭТАП 1: сущности ──────────────────────────────────────────────
-        # Сначала только entities (с description — нужно для entity resolution
-        # и community detection). Связи — на этапе 2, между найденными сущностями.
-        prompt_entities = f"""Извлеки сущности. Только JSON.
+        # ── РЕЖИМ ИЗВЛЕЧЕНИЯ ─────────────────────────────────────────────
+        # two_pass (по умолчанию): entities → relations (консистентность,
+        # связи только между найденными сущностями, KGGen).
+        # single_pass: ОДИН LLM-вызов (entities + relations в одном JSON) —
+        # вдвое меньше запросов, чуть менее консистентные связи.
+        extraction_mode = cfg.get("extraction_mode", "two_pass")
+
+        if extraction_mode == "single":
+            prompt_single = f"""Извлеки сущности и связи. Только JSON.
+
+Типы сущностей:
+{type_desc}
+
+Типы связей:
+{rel_desc}
+
+Текст:
+---
+{sample}
+---
+
+JSON:
+{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0,"description":"1-2 слова чем является"}}],"relations":[{{"source":"...","target":"...","type":"тип связи"}}]}}
+
+Правила:
+- name строго из текста; type только из списка
+- description: кратко чем является сущность (для дедупликации)
+- source/target связей — ТОЛЬКО из списка entities этого же ответа, точные имена
+- ничего не найдено → {{"entities":[],"relations":[]}}"""
+
+            single_result = await self._call_llm(prompt_single, model, llm_url, chunk_id, "extract_all", api_key, provider)
+            entities = single_result.get("entities", [])
+            relations = single_result.get("relations", [])
+        else:
+            # ── ЭТАП 1: сущности ──────────────────────────────────────────
+            # Сначала только entities (с description — нужно для entity resolution
+            # и community detection). Связи — на этапе 2, между найденными сущностями.
+            prompt_entities = f"""Извлеки сущности. Только JSON.
 
 Типы сущностей:
 {type_desc}
@@ -322,15 +375,15 @@ JSON:
 - description: кратко чем является сущность (для дедупликации)
 - ничего не найдено → {{"entities":[]}}"""
 
-        entities_result = await self._call_llm(prompt_entities, model, llm_url, chunk_id, "extract_entities", api_key, provider)
-        entities = entities_result.get("entities", [])
+            entities_result = await self._call_llm(prompt_entities, model, llm_url, chunk_id, "extract_entities", api_key, provider)
+            entities = entities_result.get("entities", [])
 
-        # ── ЭТАП 2: связи между найденными сущностями ─────────────────────
-        relations = []
-        if entities:
-            # Список имён для консистентности: связи строим ТОЛЬКО между ними
-            names = "\n".join([f"  - {e.get('name', '')}" for e in entities if e.get('name')])
-            prompt_relations = f"""Извлеки связи между сущностями. Только JSON.
+            # ── ЭТАП 2: связи между найденными сущностями ─────────────────
+            relations = []
+            if entities:
+                # Список имён для консистентности: связи строим ТОЛЬКО между ними
+                names = "\n".join([f"  - {e.get('name', '')}" for e in entities if e.get('name')])
+                prompt_relations = f"""Извлеки связи между сущностями. Только JSON.
 
 Типы связей:
 {rel_desc}
@@ -350,14 +403,25 @@ JSON:
 - source и target: точные имена из списка известных сущностей
 - связи нет → {{"relations":[]}}"""
 
-            relations_result = await self._call_llm(prompt_relations, model, llm_url, chunk_id, "extract_relations", api_key, provider)
-            relations = relations_result.get("relations", [])
+                relations_result = await self._call_llm(prompt_relations, model, llm_url, chunk_id, "extract_relations", api_key, provider)
+                relations = relations_result.get("relations", [])
 
         result = {"entities": entities, "relations": relations, "facts": [], "warnings": []}
 
         # Валидация
         warnings = self._validate_extraction(entities, relations)
         result["warnings"] = warnings
+
+        # Сохраняем в кэш LLM (только если что-то извлечено)
+        if entities:
+            try:
+                from src.api.services.config_store import config_store
+                config_store.set("entity_cache", _cache_key, {
+                    "entities": entities,
+                    "relations": relations,
+                })
+            except Exception:
+                pass
 
         return result
 
@@ -594,44 +658,55 @@ JSON:
             # Выполняем их в отдельном потоке с таймаутом — зависший вызов
             # не заморозит обработку документа (аналогично _build_knowledge_graph_async).
             async def _neo4j_write(fn, *args, label: str = ""):
+                # Таймаут из админки (Настройки Neo4j), дефолт 20с
+                _t = NEO4J_TIMEOUT
+                try:
+                    from src.api.services.config_store import config_store
+                    _cfg = config_store.get("neo4j", "config") or {}
+                    _t = int(_cfg.get("timeout", NEO4J_TIMEOUT) or NEO4J_TIMEOUT)
+                except Exception:
+                    pass
                 try:
                     await asyncio.wait_for(
                         asyncio.to_thread(fn, *args),
-                        timeout=NEO4J_TIMEOUT,
+                        timeout=_t,
                     )
                 except asyncio.TimeoutError:
                     logger.warning(
-                        f"[graph] Neo4j таймаут {label} ({NEO4J_TIMEOUT}с) "
+                        f"[graph] Neo4j таймаут {label} ({_t}с) "
                         f"для {chunk_id} — пропуск"
                     )
                 except Exception as e:
                     logger.warning(f"[graph] Neo4j ошибка {label} для {chunk_id}: {e}")
 
-            # Сохраняем сущности в Domain Graph
+            # Сохраняем сущности в Domain Graph (БАТЧ: один UNWIND вместо N одиночных)
+            entity_objs = []
             for e in entities:
                 props = dict(e.get("properties", {}))
                 # description из LLM — для entity resolution и community detection
                 if e.get("description"):
                     props["description"] = e["description"]
-                entity = Entity(
+                entity_objs.append(Entity(
                     name=e["name"],
                     type=e["type"],
                     chunk_id=chunk_id,
                     document_id=document_id,
                     confidence=e["confidence"],
                     properties=props
-                )
-                await _neo4j_write(kg_service.create_entity, entity, label="create_entity")
+                ))
+            if entity_objs:
+                await _neo4j_write(kg_service.batch_create_entities, entity_objs, label="batch_entities")
 
-            # Сохраняем связи
-            for r in relations:
-                rel = Relation(
-                    source=r["source"],
-                    target=r["target"],
-                    type=r["type"],
-                    document_id=document_id
+            # Сохраняем связи (батч)
+            rel_objs = [
+                Relation(
+                    source=r["source"], target=r["target"],
+                    type=r["type"], document_id=document_id
                 )
-                await _neo4j_write(kg_service.create_relation, rel, label="create_relation")
+                for r in relations
+            ]
+            if rel_objs:
+                await _neo4j_write(kg_service.batch_create_relations, rel_objs, label="batch_relations")
 
             # Сохраняем в config_store для быстрого доступа из UI
             from src.api.services.config_store import config_store

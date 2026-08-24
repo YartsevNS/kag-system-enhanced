@@ -309,8 +309,13 @@ class EmbeddingsService:
         # Генерируем embeddings батчами
         embeddings = await self._embedding_client.generate_batch(texts, batch_size=self._batch_size)
 
-        # Генерируем sparse векторы (BM25) — отключено для скорости, включить после обработки
-        sparse_embeddings = [None] * len(texts)
+        # Генерируем sparse векторы (BM25-частотные) — если включён Hybrid Search
+        sparse_enabled = self._sparse_enabled()
+        if sparse_enabled:
+            sparse_embeddings = [self._sparse_vec(t) for t in texts]
+            logger.info(f"Hybrid Search: sparse BM25 включён ({len(texts)} векторов)")
+        else:
+            sparse_embeddings = [None] * len(texts)
 
         # Создаем точки для Qdrant
         points = []
@@ -405,6 +410,41 @@ class EmbeddingsService:
             logger.warning(f"Не удалось обновить document_type в Qdrant: {e}")
             return False
 
+    # ── Hybrid Search (dense + sparse BM25) ──────────────────────────────
+    # Включается в админке (Настройки поиска → «Гибридный поиск»).
+    # Без переиндексации работает для новых точек; старые чанки без sparse
+    # просто не участвуют в sparse-ветке (RRF всё равно учтёт dense).
+
+    def _sparse_enabled(self) -> bool:
+        try:
+            from src.api.services.config_store import config_store
+            cfg = config_store.get("search", "config") or {}
+            return bool(cfg.get("sparse_enabled"))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _tokenize_sparse(text: str) -> Dict[str, int]:
+        """Токенизировать текст → {стабильный id слова: частота}.
+
+        id = crc32 слова (стабилен между документами и запросами), чтобы
+        sparse-векторы разных чанков и запроса были согласованы.
+        """
+        import re, zlib
+        words = re.findall(r"[a-zа-яё0-9]+", (text or "").lower())
+        freq: Dict[str, int] = {}
+        for w in words:
+            freq[w] = freq.get(w, 0) + 1
+        out: Dict[int, int] = {}
+        for w, c in freq.items():
+            tid = zlib.crc32(w.encode("utf-8")) & 0x7FFFFFFF
+            out[tid] = out.get(tid, 0) + c
+        return out
+
+    def _sparse_vec(self, text: str) -> Dict[str, list]:
+        m = self._tokenize_sparse(text)
+        return {"indices": list(m.keys()), "values": list(m.values())}
+
     async def search(
         self,
         query: str,
@@ -489,13 +529,34 @@ class EmbeddingsService:
                 if must:
                     query_filter = QFilter(must=must)
 
-            hits = self._qdrant_client.search(
-                collection_name=self.collection_name,
-                query_vector=("dense", query_embedding),
-                limit=limit,
-                query_filter=query_filter,
-                with_payload=True,
-            )
+            if self._sparse_enabled():
+                # Hybrid Search: dense + sparse (BM25) через RRF-фьюжн
+                from qdrant_client.models import (
+                    QueryRequest, Prefetch, FusionQuery, Fusion,
+                    SparseVector as QSparseVector,
+                )
+                query_sparse = self._sparse_vec(query)
+                resp = self._qdrant_client.query_points(
+                    collection_name=self.collection_name,
+                    query=QueryRequest(
+                        prefetch=[
+                            Prefetch(query=query_embedding, using="dense", filter=query_filter, limit=limit * 3),
+                            Prefetch(query=QSparseVector(**query_sparse), using="sparse", filter=query_filter, limit=limit * 3),
+                        ],
+                        query=FusionQuery(fusion=Fusion.RRF),
+                        limit=limit,
+                        with_payload=True,
+                    ),
+                )
+                hits = resp.points
+            else:
+                hits = self._qdrant_client.search(
+                    collection_name=self.collection_name,
+                    query_vector=("dense", query_embedding),
+                    limit=limit,
+                    query_filter=query_filter,
+                    with_payload=True,
+                )
 
             for hit in hits:
                 payload = hit.payload or {}

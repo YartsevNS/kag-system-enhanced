@@ -196,6 +196,62 @@ class ChatService:
         "accounting", "financial", "universal", "general", "other",
     ]
 
+    async def _decompose_query(self, query: str) -> List[str]:
+        """Query Decomposition: разбить сложный вопрос на простые подвопросы.
+
+        Использует модель function_map/query_analysis (мелкая, быстрая).
+        Возвращает список подзапросов; если вопрос простой — [query].
+        """
+        # Простой/короткий вопрос не декомпозируем
+        q = (query or "").strip()
+        if len(q) < 60 or not any(m in q.lower() for m in
+                                  [" и ", " а также", " также ", "сравн", "какие из", "перечисли", "отличи"]):
+            return [q]
+        try:
+            cfg = provider_service.get_function_llm_config("query_analysis")
+            if not cfg or not cfg.get("url") or not cfg.get("model"):
+                return [q]
+        except Exception:
+            return [q]
+
+        prompt = (
+            "Разбей сложный вопрос на 2-4 простых подвопроса для поиска по базе документов. "
+            "Верни ТОЛЬКО JSON, без пояснений: {\"subqueries\":[\"...\",\"...\"]}. "
+            "Каждый подвопрос — самостоятельный, без «и»/«а также». Вопрос: " + q
+        )
+        messages = [{"role": "user", "content": prompt}]
+        try:
+            result = await self._call_llm(
+                messages=messages,
+                model=cfg.get("model", ""),
+                temperature=0.0,
+                max_tokens=200,
+                provider=type("QACfg", (), {
+                    "url": cfg.get("url", ""),
+                    "api_key": cfg.get("api_key", ""),
+                    "type": cfg.get("provider", "custom"),
+                })(),
+            )
+            raw = (result.get("content") or "").strip()
+            import re, json as _json
+            m = re.search(r"\{.*\}", raw, re.S)
+            if not m:
+                return [q]
+            data = _json.loads(m.group(0))
+            subs = [s.strip() for s in data.get("subqueries", []) if s and s.strip()]
+            if subs:
+                return subs[:4]
+        except Exception as e:
+            logger.warning(f"Query decomposition пропущен: {e}")
+
+        # Эвристика для «сравни А и Б» / «А против Б» — если модель не разбила
+        for sep in [" против ", " vs ", " VS ", " и "]:
+            if sep in q and any(w in q.lower() for w in ["сравн", "отличи", "разниц"]):
+                parts = [p.strip() for p in q.split(sep) if p.strip()]
+                if len(parts) >= 2:
+                    return parts[:3]
+        return [q]
+
     async def _detect_query_analysis(self, query: str) -> Optional[dict]:
         """Определить домен вопроса через модель анализа запросов (function_map/query_analysis).
 
@@ -518,6 +574,29 @@ class ChatService:
                         )
                     context = "\n\n".join(context_parts)
                     sources = search_results
+
+                    # ── Query Decomposition: сложный вопрос → подзапросы ────
+                    # Для «сравни А и Б», «какие из X и Y» и т.п. разбиваем на
+                    # подвопросы и дополняем поиск (уникальные чанки).
+                    try:
+                        _subs = await self._decompose_query(user_message)
+                        if len(_subs) > 1:
+                            _seen_ids = set(r.get("id") for r in search_results if r.get("id"))
+                            _added = 0
+                            for _sq in _subs[:4]:
+                                _extra = await embeddings_service.search(
+                                    query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin
+                                )
+                                for _r in _extra:
+                                    _rid = _r.get("id")
+                                    if _rid and _rid not in _seen_ids:
+                                        _seen_ids.add(_rid)
+                                        search_results.append(_r)
+                                        _added += 1
+                            if _added:
+                                logger.info(f"Query decomposition: {len(_subs)} подзапроса, добавлено чанков: {_added}")
+                    except Exception as e:
+                        logger.debug(f"Query decomposition пропущен: {e}")
 
                     # ── Обогащение источников таблицами (table RAG) ────────────
                     # Если чанк — таблица (markdown-структура) или документ имеет

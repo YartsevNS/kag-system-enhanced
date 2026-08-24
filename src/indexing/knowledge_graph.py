@@ -327,6 +327,119 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка создания связи {rel.type}: {e}")
 
     # ============================================================
+    # Батч-запись (UNWIND) — вместо N одиночных create_entity/relation
+    # ============================================================
+
+    def batch_create_entities(self, entities: List["Entity"]) -> int:
+        """Записать пачку сущностей ОДНИМ UNWIND-запросом.
+
+        Логика та же, что у create_entity (MERGE по name+type, усреднение
+        confidence, source_docs, MENTIONS к Chunk), но за один round-trip.
+        """
+        if not self.driver or not entities:
+            return 0
+        batch = []
+        for e in entities:
+            props = e.properties or {}
+            batch.append({
+                "name": e.name,
+                "type": e.type,
+                "confidence": float(e.confidence or 0.5),
+                "properties": json.dumps(props, ensure_ascii=False),
+                "description": props.get("description", ""),
+                "doc_id": e.document_id,
+                "chunk_id": e.chunk_id,
+            })
+        try:
+            from src.api.services.config_store import config_store
+            _cfg = config_store.get("neo4j", "config") or {}
+            _bs = int(_cfg.get("batch_size", 100) or 100)
+            _batch_enabled = bool(_cfg.get("batch_enabled", True))
+        except Exception:
+            _bs, _batch_enabled = 100, True
+        if not _batch_enabled:
+            # Откат к поодиночной записи (create_entity)
+            saved = 0
+            for e in entities:
+                self.create_entity(e)
+                saved += 1
+            return saved
+        try:
+            with self.driver.session() as session:
+                for i in range(0, len(batch), _bs):
+                    session.run(
+                        """
+                        UNWIND $batch AS e
+                        MERGE (n:Entity {name: e.name, type: e.type})
+                        SET n.confidence = CASE
+                                WHEN n.confidence IS NULL THEN e.confidence
+                                ELSE (n.confidence + e.confidence) / 2.0
+                            END,
+                            n.properties = e.properties,
+                            n.updated_at = datetime()
+                        FOREACH (_ IN CASE WHEN e.description IS NOT NULL AND e.description <> '' THEN [1] ELSE [] END |
+                            SET n.description = e.description
+                        )
+                        FOREACH (_ IN CASE WHEN NOT e.doc_id IN coalesce(n.source_docs, []) THEN [1] ELSE [] END |
+                            SET n.source_docs = coalesce(n.source_docs, []) + e.doc_id
+                        )
+                        WITH n, e
+                        MATCH (c:Chunk {id: e.chunk_id})
+                        MERGE (c)-[:MENTIONS]->(n)
+                        """,
+                        batch=batch[i:i + _bs],
+                    )
+            return len(batch)
+        except Exception as e:
+            logger.warning(f"Ошибка batch_create_entities ({len(batch)}): {e}")
+            return 0
+
+    def batch_create_relations(self, rels: List["Relation"]) -> int:
+        """Записать пачку связей UNWIND-запросами (по одному на тип связи).
+
+        Динамическое имя связи нельзя задать внутри UNWIND без APOC, поэтому
+        группируем по safe_type и делаем один запрос на тип.
+        """
+        if not self.driver or not rels:
+            return 0
+        by_type: Dict[str, list] = {}
+        for r in rels:
+            safe = r.type.replace("`", "").replace(" ", "_")
+            by_type.setdefault(safe, []).append({"source": r.source, "target": r.target})
+        total = 0
+        try:
+            from src.api.services.config_store import config_store
+            _cfg = config_store.get("neo4j", "config") or {}
+            _bs = int(_cfg.get("batch_size", 100) or 100)
+            _batch_enabled = bool(_cfg.get("batch_enabled", True))
+        except Exception:
+            _bs, _batch_enabled = 100, True
+        if not _batch_enabled:
+            saved = 0
+            for r in rels:
+                self.create_relation(r)
+                saved += 1
+            return saved
+        try:
+            with self.driver.session() as session:
+                for safe_type, batch in by_type.items():
+                    for i in range(0, len(batch), _bs):
+                        session.run(
+                            f"""
+                            UNWIND $batch AS r
+                            MATCH (a:Entity {{name: r.source}})
+                            MATCH (b:Entity {{name: r.target}})
+                            MERGE (a)-[:`{safe_type}`]->(b)
+                            """,
+                            batch=batch[i:i + _bs],
+                        )
+                        total += len(batch[i:i + _bs])
+            return total
+        except Exception as e:
+            logger.warning(f"Ошибка batch_create_relations ({len(rels)}): {e}")
+            return 0
+
+    # ============================================================
     # Пост-обработка: Entity Linking и Dedup (Neo4j Best Practice)
     # ============================================================
 

@@ -1752,8 +1752,79 @@ async def migrate_old_config():
 
 
 # ============================================================
+# ═══════════════════════════════════════
+# Настройки поиска (Hybrid Search)
+# ═══════════════════════════════════════
+
+@router.get("/search-config", summary="Настройки поиска (Hybrid Search)")
+async def get_search_config():
+    """Вернуть настройки поиска: sparse_enabled (BM25)."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("search", "config") or {}
+        return {"sparse_enabled": bool(cfg.get("sparse_enabled"))}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/search-config", summary="Сохранить настройки поиска")
+async def save_search_config(data: dict):
+    """Включить/выключить Hybrid Search (sparse BM25)."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("search", "config") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        cfg["sparse_enabled"] = bool(data.get("sparse_enabled", False))
+        config_store.set("search", "config", cfg)
+        return {"status": "ok", "sparse_enabled": cfg["sparse_enabled"]}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
+# Настройки Neo4j (граф знаний)
+# ═══════════════════════════════════════
+
+@router.get("/neo4j-config", summary="Настройки Neo4j (граф)")
+async def get_neo4j_config():
+    """Вернуть настройки графа: батч-запись, размер батча, таймаут."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("neo4j", "config") or {}
+        return {
+            "batch_enabled": bool(cfg.get("batch_enabled", True)),
+            "batch_size": int(cfg.get("batch_size", 100) or 100),
+            "timeout": int(cfg.get("timeout", 20) or 20),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/neo4j-config", summary="Сохранить настройки Neo4j")
+async def save_neo4j_config(data: dict):
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("neo4j", "config") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        if "batch_enabled" in data:
+            cfg["batch_enabled"] = bool(data["batch_enabled"])
+        if "batch_size" in data:
+            bs = int(data["batch_size"])
+            cfg["batch_size"] = max(1, min(500, bs))
+        if "timeout" in data:
+            t = int(data["timeout"])
+            cfg["timeout"] = max(5, min(120, t))
+        config_store.set("neo4j", "config", cfg)
+        return {"status": "ok", **cfg}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
 # Типы документов (авто-пополняемый список)
-# ============================================================
+# ═══════════════════════════════════════
 
 @router.get("/doc-types", summary="Получить список типов документов")
 async def get_doc_types():
