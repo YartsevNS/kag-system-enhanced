@@ -7,9 +7,13 @@
 
 - Админка → кнопка «💾 Скачать документы (backup)» рядом с «Переиндексировать».
 - API: `GET /api/v1/admin/models/backup-documents` (admin-роль) → ZIP:
-  `documents/{id}_{filename}` (файлы из /app/data/uploads) + `documents_meta.json`
-  (метаданные всех документов из DocumentRepository).
+  - `documents/{id}_{filename}` — файлы из /app/data/uploads
+  - `documents_meta.json` — метаданные документов (DocumentRepository)
+  - `aliases.json` — словарь алиасов (entity_aliases, включая pending)
+  - `config_store.json` — все настройки (категории из system_configs)
+  - `chat_history.json` — chat_sessions + chat_messages
 - ZIP формируется во временном файле, отдаётся FileResponse и удаляется после отправки.
+- Каждый JSON-блок в try/except — ошибка одного не ломает весь ZIP.
 - Файлы: src/api/routes/admin_models.py (backup_documents), src/api/static/admin.html (backupDocuments).
 
 ## Правила (критично, из опыта)
