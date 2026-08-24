@@ -2443,3 +2443,67 @@ async def delete_alias(pair_id: str):
         return {"status": "ok", "message": "Пара удалена"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
+# Бэкап документов (ZIP: файлы + метаданные)
+# ═══════════════════════════════════════
+
+@router.get("/backup-documents", summary="Скачать все документы (ZIP: файлы + метаданные)")
+async def backup_documents():
+    """Собрать все документы (файлы из uploads + documents_meta.json) в ZIP.
+
+    Файлы кладутся в подпапку documents/, метаданные — documents_meta.json
+    (id → все колонки из DocumentRepository). ZIP формируется во временном
+    файле (не в памяти) и удаляется после отправки.
+    """
+    import json, os, tempfile, zipfile
+    from pathlib import Path
+    from starlette.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    from src.api.services.document_repository import get_doc_repo
+    from src.api.services.document_service import document_service
+
+    docs = get_doc_repo().get_all() or {}
+    upload_dir = Path(document_service._upload_dir)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp_path = tmp.name
+    tmp.close()
+
+    files_added = 0
+    try:
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for doc_id, meta in docs.items():
+                filename = meta.get("filename") or doc_id
+                fname = f"{doc_id}_{filename}"
+                path = upload_dir / fname
+                if path.exists():
+                    zf.write(path, arcname=f"documents/{fname}")
+                    files_added += 1
+            zf.writestr(
+                "documents_meta.json",
+                json.dumps(docs, ensure_ascii=False, indent=1, default=str),
+            )
+    except Exception as e:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        return {"status": "error", "message": f"Ошибка формирования ZIP: {e}"}
+
+    logger.info(f"[backup] ZIP готов: {len(docs)} документов, файлов: {files_added}, {os.path.getsize(tmp_path)} байт")
+    return FileResponse(
+        tmp_path,
+        media_type="application/zip",
+        filename="kag_documents_backup.zip",
+        background=BackgroundTask(lambda: _safe_unlink(tmp_path)),
+    )
+
+
+def _safe_unlink(path: str):
+    try:
+        os.unlink(path)
+    except Exception:
+        pass

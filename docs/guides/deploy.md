@@ -3,6 +3,15 @@
 > Сервер: 192.168.50.18 (внутренний), SSH `yartsevn@` по ключу.
 > Внешний: qd.gostsecret.ru (nginx :80/:443).
 
+## Бэкап документов (2026-08-24)
+
+- Админка → кнопка «💾 Скачать документы (backup)» рядом с «Переиндексировать».
+- API: `GET /api/v1/admin/models/backup-documents` (admin-роль) → ZIP:
+  `documents/{id}_{filename}` (файлы из /app/data/uploads) + `documents_meta.json`
+  (метаданные всех документов из DocumentRepository).
+- ZIP формируется во временном файле, отдаётся FileResponse и удаляется после отправки.
+- Файлы: src/api/routes/admin_models.py (backup_documents), src/api/static/admin.html (backupDocuments).
+
 ## Правила (критично, из опыта)
 
 1. **scp по одному файлу с полным путём.** `scp a.py b.py c.py user@host:/path/` ПЕРЕЗАПИШЕТ файлы друг другом (последний побеждает). Всегда:

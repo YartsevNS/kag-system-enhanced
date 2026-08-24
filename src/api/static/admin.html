@@ -373,6 +373,7 @@
             </div>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
                 <button class="btn btn-primary" onclick="reindexAll()">♻️ Переиндексировать все документы</button>
+                <button class="btn btn-secondary" onclick="backupDocuments()" title="Скачать ZIP: файлы документов + метаданные (documents_meta.json)">💾 Скачать документы (backup)</button>
                 <span id="reindex-status" style="font-size:13px;margin-left:12px;color:var(--text3)"></span>
                 <div style="font-size:12px;color:var(--text4);margin-top:6px">
                     Пересоздаёт embeddings всех документов. Нужно после смены embedding-модели.
@@ -929,6 +930,35 @@
             } catch (e) {
                 status.textContent = 'Ошибка запроса';
                 showNotification('❌ Не удалось запустить переиндексацию: ' + e.message, true);
+            }
+        }
+
+        async function backupDocuments() {
+            const status = document.getElementById('reindex-status');
+            status.textContent = '⏳ формирование ZIP (файлы + метаданные)...';
+            try {
+                const r = await apiFetch(`${API_URL}/backup-documents`);
+                if (!r.ok) {
+                    let msg = 'HTTP ' + r.status;
+                    try { const d = await r.json(); msg = d.message || msg; } catch (e) {}
+                    status.textContent = '❌ ' + msg;
+                    showNotification('❌ Ошибка бэкапа: ' + msg, true);
+                    return;
+                }
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'kag_documents_backup.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                status.textContent = '✅ скачано: ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ';
+                showNotification('✅ Бэкап документов скачан');
+            } catch (e) {
+                status.textContent = '❌ ' + e.message;
+                showNotification('❌ Ошибка бэкапа: ' + e.message, true);
             }
         }
 
