@@ -817,7 +817,7 @@
         </div>
 
         <!-- Worker Resources -->
-        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
+        <div class="section">
             <h2 class="section-title">⚙️ Ресурсы Worker (CPU/память)</h2>
             <p style="color:var(--text4);font-size:12px;margin-bottom:12px">Лимиты контейнера worker. Изменение применяется мгновенно (docker update) и персистентно (патч docker-compose.yml) — переживает редеплой. Worker перезапускается автоматически.</p>
             <div id="worker-res-info" style="display:flex;gap:16px;font-size:14px;opacity:0.8;margin-bottom:12px">Загрузка...</div>
@@ -838,7 +838,7 @@
         </div>
 
         <!-- Масштабирование (заготовка для роста) -->
-        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
+        <div class="section">
             <h2 class="section-title">📈 Масштабирование (для роста: 500+ пользователей)</h2>
             <p style="color:var(--text4);font-size:12px;margin-bottom:12px">
                 Целевые настройки масштабирования. <b>НЕ применяются на лету</b> — сохраняются в БД
@@ -881,7 +881,7 @@
         </div>
 
         <!-- Внешний адрес системы (настройка Keycloak после развёртывания) -->
-        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:16px">
+        <div class="section">
             <h2 class="section-title">🔗 Внешний адрес системы</h2>
             <p style="color:var(--text4);font-size:12px;margin-bottom:12px">
                 Проект разворачивают в разных сетях за reverse proxy — внешний адрес неизвестен при деплое.
@@ -1748,6 +1748,10 @@
             try {
                 const r = await apiFetch(`${API_URL}/aliases`);
                 const d = await r.json();
+                if (!r.ok || d.status === 'error' || !d.pairs) {
+                    console.error('Ошибка загрузки алиасов:', d.message || r.status);
+                    return; // НЕ затираем список при ошибке
+                }
                 const tbody = document.getElementById('alias-table-body');
                 if (!d.pairs || !d.pairs.length) {
                     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text4)">Словарь пуст. Добавьте первую пару.</td></tr>';
@@ -1782,6 +1786,10 @@
             try {
                 const r = await apiFetch(`${API_URL}/aliases?include_pending=true`);
                 const d = await r.json();
+                if (!r.ok || d.status === 'error' || !d.pairs) {
+                    console.error('Ошибка загрузки pending:', d.message || r.status);
+                    return; // НЕ затираем список при ошибке
+                }
                 const box = document.getElementById('alias-pending-list');
                 const pending = (d.pairs || []).filter(p => !p.reviewed);
                 if (!pending.length) {
