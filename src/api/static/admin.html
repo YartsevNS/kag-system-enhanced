@@ -975,12 +975,33 @@
         }
 
         // ── Сворачиваемые секции: клик по заголовку (▾/▸) ────────────────
+        // Состояние свёрнутых секций сохраняется в localStorage и
+        // восстанавливается при загрузке страницы.
+        const COLLAPSE_KEY = 'kag_admin_collapsed_sections';
+        function sectionKey(sec) {
+            const t = sec.querySelector('.section-title');
+            return (t ? t.textContent.trim() : '') || (sec.className || '');
+        }
+        function saveCollapsedState() {
+            const keys = [];
+            document.querySelectorAll('.section.collapsed').forEach(s => keys.push(sectionKey(s)));
+            try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(keys)); } catch (e) {}
+        }
+        function restoreCollapsedState() {
+            let keys = [];
+            try { keys = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'); } catch (e) {}
+            if (!keys.length) return;
+            document.querySelectorAll('.section').forEach(s => {
+                if (keys.indexOf(sectionKey(s)) !== -1) s.classList.add('collapsed');
+            });
+        }
         document.addEventListener('click', function(e) {
             const t = e.target.closest('.section-title');
             if (!t) return;
             const sec = t.closest('.section');
-            if (sec) sec.classList.toggle('collapsed');
+            if (sec) { sec.classList.toggle('collapsed'); saveCollapsedState(); }
         });
+        restoreCollapsedState();
 
         async function loadStatus() {
             try {
