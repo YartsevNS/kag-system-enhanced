@@ -621,7 +621,21 @@ class DocumentService:
             
             # Инициализируем embeddings сервис
             await embeddings_service.initialize()
-            
+
+            # ── Домен документа (для фильтра RAG по домену) ───────────────
+            # Определяется мелкой моделью query_analysis (qwen) по названию +
+            # началу текста; пишется в Qdrant payload (domain) при векторизации.
+            domain = ""
+            try:
+                if chunks:
+                    _probe = (record.filename or "") + ". " + (chunks[0].get("content", "") or "")[:400]
+                    from src.api.services.chat_service import chat_service
+                    _qa = await chat_service._detect_query_analysis(_probe)
+                    if _qa and _qa.get("domain"):
+                        domain = _qa["domain"]
+            except Exception as e:
+                logger.debug(f"domain документа не определён: {e}")
+
             vectors_count = await embeddings_service.embed_and_store(
                 document_id=document_id,
                 chunks=chunks,
@@ -630,6 +644,7 @@ class DocumentService:
                     "file_type": record.file_type,
                     "file_size": record.file_size,
                     "document_type": getattr(record, 'document_type', '') or "unknown",
+                    "domain": domain,
                     **parsed_metadata,
                     "source_metadata": record.source_metadata or {},
                 },

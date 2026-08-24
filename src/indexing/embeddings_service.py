@@ -342,6 +342,8 @@ class EmbeddingsService:
                 "content": chunk.get("content", ""),
                 "file_type": metadata.get("file_type", "unknown") if metadata else "unknown",
                 "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
+                "document_type": metadata.get("document_type", "") if metadata else "",
+                "domain": metadata.get("domain", "") if metadata else "",
                 "group_ids": group_ids or [],
                 "metadata": {
                     **(metadata or {}),
@@ -451,7 +453,8 @@ class EmbeddingsService:
         limit: int = 10,
         filters: Optional[Dict[str, Any]] = None,
         group_ids: Optional[List[str]] = None,
-        is_admin: bool = False
+        is_admin: bool = False,
+        domain: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Семантический поиск по embeddings.
@@ -495,6 +498,14 @@ class EmbeddingsService:
                     FieldCondition(
                         key="file_type",
                         match=MatchValue(value=filters["file_type"])
+                    )
+                )
+
+            if domain:
+                conditions.append(
+                    FieldCondition(
+                        key="domain",
+                        match=MatchValue(value=domain)
                     )
                 )
 

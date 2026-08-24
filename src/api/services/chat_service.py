@@ -550,7 +550,9 @@ class ChatService:
                     query=user_message,
                     limit=self._search_limit,  # Количество чанков для контекста
                     group_ids=group_ids,
-                    is_admin=is_admin
+                    is_admin=is_admin,
+                    # Фильтр RAG по домену (если query_analysis определила домен)
+                    domain=domain if domain else None,
                 )
 
                 if search_results:
@@ -585,7 +587,8 @@ class ChatService:
                             _added = 0
                             for _sq in _subs[:4]:
                                 _extra = await embeddings_service.search(
-                                    query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin
+                                    query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin,
+                                    domain=domain if domain else None,
                                 )
                                 for _r in _extra:
                                     _rid = _r.get("id")
@@ -818,11 +821,20 @@ class ChatService:
 
         # RAG поиск
         from src.indexing.embeddings_service import embeddings_service
+        # Домен для фильтра (лёгкий вызов query_analysis, если настроена)
+        _stream_domain = None
+        try:
+            _qa = await self._detect_query_analysis(user_message)
+            if _qa and _qa.get("domain"):
+                _stream_domain = _qa["domain"]
+        except Exception:
+            pass
         search_results = await embeddings_service.search(
             query=user_message,
             limit=self._search_limit,
             group_ids=group_ids,
-            is_admin=is_admin
+            is_admin=is_admin,
+            domain=_stream_domain,
         )
 
         context = ""
