@@ -2486,6 +2486,58 @@ async def backup_documents():
                 "documents_meta.json",
                 json.dumps(docs, ensure_ascii=False, indent=1, default=str),
             )
+
+            # ── Словарь алиасов (entity_aliases) ────────────────────────────
+            try:
+                from src.indexing.knowledge_graph import kg_service
+                aliases = kg_service.list_alias_pairs(include_pending=True)
+                zf.writestr("aliases.json", json.dumps(aliases, ensure_ascii=False, indent=1, default=str))
+            except Exception as e:
+                zf.writestr("aliases.json", json.dumps({"error": str(e)}, ensure_ascii=False))
+
+            # ── Настройки (config_store: все категории из system_configs) ──
+            try:
+                from src.api.services.config_store import config_store
+                from src.database.session import get_session_local
+                from sqlalchemy import text as _text
+                categories = []
+                try:
+                    _maker = get_session_local()
+                    _s = _maker()
+                    try:
+                        rows = _s.execute(_text("SELECT DISTINCT category FROM system_configs")).fetchall()
+                        categories = [r[0] for r in rows if r[0]]
+                    finally:
+                        _s.close()
+                except Exception:
+                    categories = []
+                cfg_all = {}
+                for cat in categories:
+                    cfg_all[cat] = config_store.get_all(cat)
+                zf.writestr("config_store.json", json.dumps(cfg_all, ensure_ascii=False, indent=1, default=str))
+            except Exception as e:
+                zf.writestr("config_store.json", json.dumps({"error": str(e)}, ensure_ascii=False))
+
+            # ── Чат-истории (chat_sessions + chat_messages) ────────────────
+            try:
+                from src.database.chat_models import ChatSession, ChatMessage
+                chat = {"sessions": [], "messages": []}
+                _maker = get_session_local()
+                _s = _maker()
+                try:
+                    for _r in _s.query(ChatSession).all():
+                        chat["sessions"].append(
+                            {c.name: getattr(_r, c.name) for c in ChatSession.__table__.columns}
+                        )
+                    for _r in _s.query(ChatMessage).all():
+                        chat["messages"].append(
+                            {c.name: getattr(_r, c.name) for c in ChatMessage.__table__.columns}
+                        )
+                finally:
+                    _s.close()
+                zf.writestr("chat_history.json", json.dumps(chat, ensure_ascii=False, indent=1, default=str))
+            except Exception as e:
+                zf.writestr("chat_history.json", json.dumps({"error": str(e)}, ensure_ascii=False))
     except Exception as e:
         try:
             os.unlink(tmp_path)
