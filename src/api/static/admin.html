@@ -1682,14 +1682,18 @@
                     tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text4)">Словарь пуст. Добавьте первую пару.</td></tr>';
                 } else {
                     tbody.innerHTML = d.pairs.map(p => `
-                        <tr>
+                        <tr id="arow-${escHtml(p.id)}" data-id="${escHtml(p.id)}"
+                            data-alias="${escHtml(p.alias)}" data-canonical="${escHtml(p.canonical_name)}"
+                            data-type="${escHtml(p.entity_type)}" data-domain="${escHtml(p.domain || 'universal')}"
+                            data-comment="${escHtml(p.comment || '')}">
                             <td style="padding:6px 10px;color:var(--accent-h)">${escHtml(p.alias)}</td>
                             <td style="padding:6px 10px">${escHtml(p.canonical_name)}</td>
                             <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.entity_type)}</td>
                             <td style="padding:6px 10px;color:var(--text3)">${escHtml(p.domain || 'universal')}</td>
                             <td style="padding:6px 10px;color:var(--text4)">${escHtml(p.comment || '')}</td>
-                            <td style="padding:6px 10px;text-align:right">
-                                <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="deleteAliasPair('${p.id}')">🗑</button>
+                            <td style="padding:6px 10px;text-align:right;white-space:nowrap">
+                                <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="editAliasTableRow('${escHtml(p.id)}')" title="Открыть редактирование пары">✏️ Править</button>
+                                <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;color:var(--red)" onclick="deleteAliasPair('${escHtml(p.id)}')" title="Удалить пару из словаря">🗑 Удалить</button>
                             </td>
                         </tr>`).join('');
                 }
@@ -1812,6 +1816,42 @@
             } catch (e) {
                 status.textContent = '❌ ' + e.message;
             }
+        }
+
+        // Редактирование строки основной таблицы словаря (кнопка «Править»)
+        function editAliasTableRow(id) {
+            const tr = document.getElementById('arow-' + id);
+            if (!tr) return;
+            if (pendingEditId === id) { cancelPendingEdit(); return; }
+            if (pendingEditId) cancelPendingEdit();
+            pendingEditId = id;
+            const a = tr.dataset.alias || '', c = tr.dataset.canonical || '',
+                  t = tr.dataset.type || 'organization', dom = tr.dataset.domain || 'universal',
+                  cm = tr.dataset.comment || '';
+            const typeOpts = ['organization','person','legal_term','document_ref'].map(x =>
+                `<option value="${x}" ${x === t ? 'selected' : ''}>${x}</option>`).join('');
+            const domOpts = ['universal','legal','medical','technical','infosec','accounting','financial','other'].map(x =>
+                `<option value="${x}" ${x === dom ? 'selected' : ''}>${x}</option>`).join('');
+            tr.innerHTML = `
+                <td colspan="6" style="padding:8px 10px;background:rgba(62,207,142,0.06)">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 140px 130px;gap:8px;margin-bottom:8px">
+                        <div><label style="font-size:11px;color:var(--text4)">Алиас</label>
+                            <input id="pe-alias" value="${escHtml(a)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Каноническое</label>
+                            <input id="pe-canonical" value="${escHtml(c)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Тип</label>
+                            <select id="pe-type" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px">${typeOpts}</select></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Домен</label>
+                            <select id="pe-domain" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px">${domOpts}</select></div>
+                    </div>
+                    <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text4)">Комментарий</label>
+                        <input id="pe-comment" value="${escHtml(cm)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="savePendingAlias('${escHtml(id)}')">💾 Сохранить</button>
+                        <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px" onclick="cancelPendingEdit()">Отмена</button>
+                        <span id="pe-status" style="font-size:12px;align-self:center"></span>
+                    </div>
+                </td>`;
         }
 
         async function addAliasPair() {
