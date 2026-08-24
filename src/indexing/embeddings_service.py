@@ -325,11 +325,8 @@ class EmbeddingsService:
             # Формируем вектор: dense (основной) + sparse (BM25)
             vectors = {"dense": embedding}
             if sparse_embeddings[i] is not None:
-                se = sparse_embeddings[i]
-                vectors["sparse"] = {
-                    "indices": se.indices.tolist(),
-                    "values": se.values.tolist(),
-                }
+                # sparse_embeddings[i] — уже {"indices": [...], "values": [...]}
+                vectors["sparse"] = sparse_embeddings[i]
 
             # Извлекаем filename из metadata для прямого сохранения в payload
             filename = ""
