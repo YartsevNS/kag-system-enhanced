@@ -1712,7 +1712,13 @@
                 }
                 box.style.display = 'block';
                 box.innerHTML = pending.map(p => `
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-s)">
+                    <div id="pend-${escHtml(p.id)}" data-id="${escHtml(p.id)}"
+                         data-alias="${escHtml(p.alias)}" data-canonical="${escHtml(p.canonical_name)}"
+                         data-type="${escHtml(p.entity_type)}" data-domain="${escHtml(p.domain || 'universal')}"
+                         data-comment="${escHtml(p.comment || '')}"
+                         onclick="editPendingAlias('${escHtml(p.id)}')"
+                         style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border-s);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.1s"
+                         onmouseover="this.style.background='rgba(62,207,142,0.06)'" onmouseout="this.style.background='transparent'">
                         <div style="font-size:12px">
                             <span style="color:var(--accent-h)">${escHtml(p.alias)}</span>
                             <span style="color:var(--text4)"> → </span>
@@ -1720,12 +1726,91 @@
                             <span style="color:var(--text4);font-size:11px"> (${escHtml(p.entity_type)}) ${escHtml(p.comment || '')}</span>
                         </div>
                         <div style="display:flex;gap:6px">
-                            <button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="reviewAliasPair('${p.id}','approved')">✓ Подтвердить</button>
-                            <button class="btn btn-outline" style="font-size:11px;padding:3px 10px;color:var(--red)" onclick="reviewAliasPair('${p.id}','rejected')">✗ Отклонить</button>
+                            <button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="event.stopPropagation();reviewAliasPair('${escHtml(p.id)}','approved')">✓ Подтвердить</button>
+                            <button class="btn btn-outline" style="font-size:11px;padding:3px 10px;color:var(--red)" onclick="event.stopPropagation();reviewAliasPair('${escHtml(p.id)}','rejected')">✗ Отклонить</button>
                         </div>
                     </div>`).join('');
             } catch (e) {
                 console.error('Ошибка загрузки pending:', e);
+            }
+        }
+
+        // Выделение пары кликом + inline-редактирование
+        let pendingEditId = null;
+        function editPendingAlias(id) {
+            const el = document.getElementById('pend-' + id);
+            if (!el) return;
+            // Повторный клик по уже редактируемой паре — просто снимаем выделение
+            if (pendingEditId === id) { cancelPendingEdit(); return; }
+            if (pendingEditId) cancelPendingEdit();
+            pendingEditId = id;
+            const a = el.dataset.alias || '', c = el.dataset.canonical || '',
+                  t = el.dataset.type || 'organization', dom = el.dataset.domain || 'universal',
+                  cm = el.dataset.comment || '';
+            el.style.background = 'rgba(62,207,142,0.10)';
+            el.style.border = '1px solid var(--accent)';
+            el.style.cursor = 'default';
+            el.onmouseover = el.onmouseout = null;
+            const typeOpts = ['organization','person','legal_term','document_ref'].map(x =>
+                `<option value="${x}" ${x === t ? 'selected' : ''}>${x}</option>`).join('');
+            const domOpts = ['universal','legal','medical','technical','infosec','accounting','financial','other'].map(x =>
+                `<option value="${x}" ${x === dom ? 'selected' : ''}>${x}</option>`).join('');
+            el.innerHTML = `
+                <div style="width:100%">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 140px 130px;gap:8px;margin-bottom:8px">
+                        <div><label style="font-size:11px;color:var(--text4)">Алиас</label>
+                            <input id="pe-alias" value="${escHtml(a)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Каноническое</label>
+                            <input id="pe-canonical" value="${escHtml(c)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Тип</label>
+                            <select id="pe-type" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px">${typeOpts}</select></div>
+                        <div><label style="font-size:11px;color:var(--text4)">Домен</label>
+                            <select id="pe-domain" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px">${domOpts}</select></div>
+                    </div>
+                    <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--text4)">Комментарий</label>
+                        <input id="pe-comment" value="${escHtml(cm)}" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);font-size:12px"></div>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();savePendingAlias('${escHtml(id)}')">💾 Сохранить</button>
+                        <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();cancelPendingEdit()">Отмена</button>
+                        <span id="pe-status" style="font-size:12px;align-self:center"></span>
+                    </div>
+                </div>`;
+            // Поля не должны сворачивать форму по клику
+            el.querySelectorAll('input,select').forEach(i => i.addEventListener('click', e => e.stopPropagation()));
+        }
+
+        function cancelPendingEdit() {
+            pendingEditId = null;
+            loadPendingAliases();
+        }
+
+        async function savePendingAlias(id) {
+            const status = document.getElementById('pe-status');
+            status.textContent = '⏳ сохранение...';
+            const body = {
+                alias: document.getElementById('pe-alias').value.trim(),
+                canonical_name: document.getElementById('pe-canonical').value.trim(),
+                entity_type: document.getElementById('pe-type').value,
+                domain: document.getElementById('pe-domain').value,
+                comment: document.getElementById('pe-comment').value.trim(),
+                source: 'manual',
+            };
+            if (!body.alias || !body.canonical_name) {
+                status.textContent = '❌ Заполни оба имени';
+                return;
+            }
+            try {
+                const r = await apiFetch(`${API_URL}/aliases/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const d = await r.json();
+                if (d.status === 'ok') {
+                    status.textContent = '✅ сохранено';
+                    pendingEditId = null;
+                    setTimeout(() => { loadPendingAliases(); loadAliasPairs(); }, 400);
+                } else {
+                    status.textContent = '❌ ' + (d.message || 'ошибка');
+                }
+            } catch (e) {
+                status.textContent = '❌ ' + e.message;
             }
         }
 

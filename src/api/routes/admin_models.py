@@ -2323,7 +2323,10 @@ async def list_aliases(include_pending: bool = False, verdict: str = ""):
         from src.indexing.knowledge_graph import kg_service
         pairs = kg_service.list_alias_pairs(include_pending=include_pending, verdict=verdict)
         # Если просим pending — отдельно показываем счётчик непросмотренных
-        pending_count = len(kg_service.list_alias_pairs(include_pending=True))
+        pending_count = len([
+            p for p in kg_service.list_alias_pairs(include_pending=True)
+            if not p.get("reviewed")
+        ])
         return {
             "status": "ok",
             "pairs": pairs,
@@ -2352,6 +2355,29 @@ async def add_alias(request: AliasPairRequest):
         if ok:
             return {"status": "ok", "message": "Пара добавлена"}
         return {"status": "error", "message": "Не удалось добавить (возможно, уже есть)"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/aliases/{pair_id}", summary="Обновить пару алиасов")
+async def update_alias(pair_id: str, request: AliasPairRequest):
+    """Обновить содержимое пары (alias/canonical/type/domain/comment).
+
+    reviewed/verdict не трогаем — пара остаётся в модерации до подтверждения.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        ok = kg_service.update_alias_pair(
+            pair_id,
+            alias=request.alias,
+            canonical=request.canonical_name,
+            entity_type=request.entity_type,
+            domain=request.domain or "universal",
+            comment=request.comment,
+        )
+        if ok:
+            return {"status": "ok", "message": "Пара обновлена"}
+        return {"status": "error", "message": "Пара не найдена"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

@@ -1333,6 +1333,46 @@ class KnowledgeGraphService:
             logger.warning(f"[aliases] review_alias_pair {pair_id}: {e}")
             return False
 
+    def update_alias_pair(
+        self, pair_id: str,
+        alias: Optional[str] = None,
+        canonical: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        domain: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> bool:
+        """Обновить содержимое пары алиасов (alias/canonical/type/domain/comment).
+
+        reviewed/verdict НЕ трогаем: после правки пара остаётся в модерации,
+        пока админ не подтвердит/отклонит. Возвращает False, если пара не найдена.
+        """
+        try:
+            from src.database.session import get_session_local
+            from src.database.entity_alias_models import EntityAlias
+            maker = get_session_local()
+            session = maker()
+            try:
+                row = session.query(EntityAlias).filter_by(id=pair_id).first()
+                if not row:
+                    return False
+                if alias is not None and alias.strip():
+                    row.alias = alias.strip()
+                if canonical is not None and canonical.strip():
+                    row.canonical_name = canonical.strip()
+                if entity_type:
+                    row.entity_type = entity_type
+                if domain:
+                    row.domain = domain
+                if comment is not None:
+                    row.comment = comment
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"[aliases] update_alias_pair {pair_id}: {e}")
+            return False
+
     # ============================================================
     # Валидация качества сущностей (Neo4j Best Practice)
     # ============================================================
