@@ -1774,17 +1774,37 @@ async def update_doc_types(data: dict):
         name = data.get("name", "").strip().lower()
         if not name:
             return {"status": "error", "message": "Имя типа не указано"}
-        
+
         type_list = config_store.get("kg_config", "doc_types") or {}
         types = type_list.get("types", []) if isinstance(type_list, dict) else []
-        
-        if action == "add" and name not in types:
-            types.append(name)
-        elif action == "remove" and name in types:
-            types.remove(name)
+
+        def _keys(ts):
+            """Ключи типов: поддерживаем строки и объекты {key, label}."""
+            keys = []
+            for t in ts:
+                if isinstance(t, dict):
+                    keys.append((t.get("key") or "").lower())
+                else:
+                    keys.append(str(t).lower())
+            return keys
+
+        if action == "add":
+            if name not in _keys(types):
+                types.append({"key": name, "label": name})
+            else:
+                return {"status": "ok", "message": "Без изменений"}
+        elif action == "remove":
+            before = len(types)
+            types = [
+                t for t in types
+                if not (isinstance(t, dict) and (t.get("key") or "").lower() == name)
+                and str(t).lower() != name
+            ]
+            if len(types) == before:
+                return {"status": "ok", "message": "Без изменений"}
         else:
             return {"status": "ok", "message": "Без изменений"}
-        
+
         config_store.set("kg_config", "doc_types", {"types": types})
         return {"status": "ok", "message": f"Тип '{name}' {'добавлен' if action == 'add' else 'удалён'}"}
     except Exception as e:
