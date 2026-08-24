@@ -97,11 +97,16 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen-max"
 
-    # Embedding модели (Ollama)
-    EMBEDDING_BASE_URL: str = "http://192.168.50.41:11434"
-    EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+    # Embedding модели
+    # ВАЖНО (2026-08-24): реальная embedding-модель берётся из АДМИНКИ
+    # (function_map/embedding → провайдер gigachat, http://192.168.50.42:8090/v1,
+    # модель "Embeddings", 1024 dim, обрезка текста 500 символов).
+    # Дефолты ниже — только FALLBACK, если function_map не настроен.
+    # НЕ возвращать к nomic-embed-text/bge-m3 (768) — их нет на сервере.
+    EMBEDDING_BASE_URL: str = "http://192.168.50.42:8090/v1"
+    EMBEDDING_MODEL: str = "Embeddings"
     EMBEDDING_TIMEOUT: float = 300.0
-    EMBEDDING_DIMENSIONS: int = 768
+    EMBEDDING_DIMENSIONS: int = 1024
 
     # Настройки чанкинга для документов
     # Оптимально для русского языка: 512 токенов ≈ 2000-2500 символов
