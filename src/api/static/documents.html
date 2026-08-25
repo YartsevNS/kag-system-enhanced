@@ -245,6 +245,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <option value="pending">⏳ Ожидает</option>
       <option value="failed">❌ Ошибка</option>
     </select>
+    <select id="source-filter" onchange="applyFilters()" title="Фильтр по источнику">
+      <option value="">Все источники</option>
+      <option value="user">👤 Файлы загруженные пользователем</option>
+    </select>
     <select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка">
       <option value="date_desc">📅 Новые сверху</option>
       <option value="date_asc">📅 Старые сверху</option>
@@ -541,6 +545,7 @@ async function loadAll() {
     if (!r.ok) throw new Error('Ошибка загрузки списка');
     const data = await r.json();
     allDocs = data.documents || [];
+    populateSourceFilter();
     // НЕ вызываем enrichDocs(): backend /upload/list теперь отдаёт всё
     // (document_type, recognized_title, uploaded_by_name, tags) одним
     // запросом. Раньше на каждый документ уходил отдельный /details —
@@ -643,12 +648,28 @@ function getFiltered() {
   const search = (document.getElementById('search-input')?.value || '').toLowerCase();
   const tf = document.getElementById('type-filter')?.value || '';
   const sf = document.getElementById('status-filter')?.value || '';
+  const srcf = document.getElementById('source-filter')?.value || '';
   return allDocs.filter(d => {
     if (search && !d.filename.toLowerCase().includes(search) && !(d.document_type||'').includes(search) && !(d.tags||[]).some(t=>t.includes(search))) return false;
     if (tf && d.document_type !== tf) return false;
     if (sf && d.status !== sf) return false;
+    if (srcf === 'user' && !d.uploaded_by) return false;
+    if (srcf && srcf !== 'user' && (d.source_name || '') !== srcf) return false;
     return true;
   });
+}
+
+function populateSourceFilter() {
+  const sel = document.getElementById('source-filter');
+  if (!sel) return;
+  const current = sel.value;
+  const srcs = {};
+  allDocs.forEach(d => { if (d.source_name) srcs[d.source_name] = true; });
+  // сохраняем первые 2 option ('' и 'user'), добавляем источники
+  let html = '<option value="">Все источники</option><option value="user">👤 Файлы загруженные пользователем</option>';
+  Object.keys(srcs).sort().forEach(s => { html += `<option value="${s.replace(/"/g,'&quot;')}">🗂 ${s}</option>`; });
+  sel.innerHTML = html;
+  sel.value = current || '';
 }
 
 var currentPage = 0;  // Текущая страница (0-based)
@@ -709,6 +730,11 @@ function renderAll() {
   renderTable(slice.shown);
 }
 
+function sourceLabel(d) {
+  if (d.source_name) return '🗂 ' + d.source_name;
+  return '👤 ' + (d.uploaded_by_name || 'Загружено пользователем');
+}
+
 function renderCards(docs) {
   const grid = document.getElementById('docs-grid');
   if (!docs.length) {
@@ -729,7 +755,7 @@ function renderCards(docs) {
       </div>
       <div class="card-body">
         <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>
-        <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${d.uploaded_by_name||'—'}</div>
+        <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${sourceLabel(d)}</div>
         <div class="card-meta" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
           <button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>
@@ -761,7 +787,7 @@ function renderTable(docs) {
       <td><span class="tag ${typeBadgeClass(d.document_type||'unknown')}" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
       <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
       <td><a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0}</a></td>
-      <td>${d.uploaded_by_name||'—'}</td>
+      <td>${sourceLabel(d)}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
       <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>

@@ -54,6 +54,21 @@ def _parse_id_list(raw: str) -> list:
     return []
 
 
+def _json_parse_source(raw) -> str:
+    """Из source_metadata (JSON-строка) достать source_name (источник web_monitor)."""
+    if not raw:
+        return ""
+    if isinstance(raw, dict):
+        return str(raw.get("source_name") or "")
+    try:
+        v = _json.loads(raw)
+        if isinstance(v, dict):
+            return str(v.get("source_name") or "")
+    except Exception:
+        pass
+    return ""
+
+
 import asyncio
 import json
 from pathlib import Path
@@ -799,6 +814,8 @@ async def list_documents(
             "topics": meta.get("topics", []),
             # tags в системе не хранятся — пустой список (фронтенд готов)
             "tags": [],
+            # Источник (web_monitor): из source_metadata JSON
+            "source_name": _json_parse_source(meta.get("source_metadata")),
         }
         enriched.append(item)
 
