@@ -279,6 +279,41 @@ async def add_cbr_sources():
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/add-gos", summary="Добавить гос.источники документов")
+async def add_gos_sources():
+    """Добавить гос.источники оригиналов документов: банкинг, экономика,
+    бухгалтерия, отчётность, безопасность (ЦБ, АСВ, Минфин, ФНС, Росстат, docs.cntd)."""
+    try:
+        from src.api.services.web_monitor import web_monitor, MonitorSource, WebMonitorService
+
+        existing = {s.url for s in web_monitor.get_sources()}
+        added = 0
+
+        for src in WebMonitorService.GOS_SOURCES:
+            if src["url"] in existing:
+                continue
+            source = MonitorSource(
+                id=str(uuid.uuid4()),
+                name=src["name"],
+                url=src["url"],
+                type=src.get("type", "scrape"),
+                keywords=src.get("keywords", []),
+                css_selector=src.get("css_selector", "a[href$='.pdf'], a[href$='.docx']"),
+                file_types=src.get("file_types", [".pdf", ".docx"]),
+                check_interval_minutes=src.get("check_interval_minutes", 1440),
+                batch_size=5,
+                batch_delay=15.0,
+                item_delay=2.0,
+                batch_jitter=5.0,
+            )
+            web_monitor.save_source(source)
+            added += 1
+
+        return {"status": "ok", "message": f"Добавлено {added} гос.источников документов"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/add-rkn", summary="Добавить RSS Роскомнадзора")
 async def add_rkn_sources():
     """Добавить RSS-канал Роскомнадзора."""

@@ -200,6 +200,91 @@ class WebMonitorService:
     ]
 
     # Отдельный набор: RSS-каналы Центрального Банка РФ
+    # Гос.источники оригиналов документов: банкинг, экономика, бухгалтерия,
+    # отчётность, безопасность. Проверены на доступность с сервера (2026-08-25).
+    GOS_SOURCES = [
+        {
+            "name": "ЦБ РФ — Банковский сектор (документы)",
+            "url": "https://www.cbr.ru/banking_sector/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='file/load']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "Банк России: банковский сектор, документы, формы",
+        },
+        {
+            "name": "АСВ — Документы агентства",
+            "url": "https://www.asv.org.ru/agency/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='file/']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "Агентство по страхованию вкладов: документы, отчётность, реестры",
+        },
+        {
+            "name": "Минфин — Бухгалтерский учёт (ФСБУ/ПБУ)",
+            "url": "https://minfin.gov.ru/ru/perfomance/accounting/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.docx']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "Минфин: федеральные стандарты бухучёта (ФСБУ), ПБУ, приказы",
+        },
+        {
+            "name": "ЕМИСС — Госстатистика",
+            "url": "https://fedstat.ru/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.xls'], a[href*='.xlsx'], a[href*='.zip']",
+            "file_types": [".pdf", ".xls", ".xlsx", ".zip"],
+            "description": "ЕМИСС: официальная статистика (методология, формы)",
+        },
+        {
+            "name": "ФНС — Налогообложение (документы)",
+            "url": "https://www.nalog.gov.ru/rn77/taxation/reference_work/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.docx'], a[href*='.zip']",
+            "file_types": [".pdf", ".doc", ".docx", ".zip"],
+            "description": "ФНС: приказы, письма, разъяснения по налогообложению",
+        },
+        {
+            "name": "ФНС — Формы и бланки отчётности",
+            "url": "https://www.nalog.gov.ru/rn77/service/forms/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.xls'], a[href*='.zip'], a[href*='.xml']",
+            "file_types": [".pdf", ".doc", ".xls", ".xlsx", ".zip", ".xml"],
+            "description": "ФНС: формы отчётности, бланки, XML-схемы",
+        },
+        {
+            "name": "Ассоциация банков России — документы",
+            "url": "https://asros.ru/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.docx']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "АБР: документы, письма, позиции ассоциации",
+        },
+        {
+            "name": "НАУФОР — Документы",
+            "url": "https://www.naufor.ru/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.docx']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "НАУФОР: документы по фондовому рынку, стандарты",
+        },
+        {
+            "name": "Минэк — Документы",
+            "url": "https://economy.gov.ru/",
+            "type": "scrape",
+            "css_selector": "a[href*='.pdf'], a[href*='.doc'], a[href*='.docx']",
+            "file_types": [".pdf", ".doc", ".docx"],
+            "description": "Минэкономразвития: стратегии, программы, приказы",
+        },
+        {
+            "name": "docs.cntd.ru — Фонд ГОСТов/СНиП",
+            "url": "https://docs.cntd.ru/",
+            "type": "scrape",
+            "css_selector": "a[href*='document'], a[href*='.pdf']",
+            "file_types": [".pdf"],
+            "description": "Открытый фонд нормативных документов: ГОСТы, СНиП, приказы",
+        },
+    ]
+
     CBR_SOURCES = [
         {
             "name": "ЦБ РФ — Новое на сайте",

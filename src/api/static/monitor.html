@@ -141,6 +141,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <button class="btn-outline" onclick="addCbrSources()" style="margin-top:6px">🏦 Добавить RSS-каналы ЦБ РФ (8)</button>
     <button class="btn-outline" onclick="addRknSources()" style="margin-top:6px">🛡 Добавить RSS Роскомнадзора (1)</button>
     <button class="btn-outline" onclick="addSecnewsSources()" style="margin-top:6px">🔐 Добавить RSS SecurityNews (5)</button>
+    <button class="btn-outline" onclick="addGosSources()" style="margin-top:6px">🏛 Добавить гос.источники документов (10): ЦБ, АСВ, Минфин, ФНС, Росстат, docs.cntd</button>
   </div>
 
   <!-- Список источников -->
@@ -284,6 +285,14 @@ async function addRknSources() {
 async function addSecnewsSources() {
   try {
     var r = await fetch(API + '/add-secnews', { method: 'POST', headers: authHeaders() });
+    var d = await r.json();
+    toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+async function addGosSources() {
+  try {
+    var r = await fetch(API + '/add-gos', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
     toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
     loadSources();
