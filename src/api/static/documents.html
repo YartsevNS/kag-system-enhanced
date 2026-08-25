@@ -153,33 +153,40 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
-  <!-- Права доступа при загрузке -->
-  <div style="margin-top:14px;padding:12px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
-    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px">
-      <div>
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
-        <select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px">
-          <option value="public">Доступен всем</option>
-          <option value="restricted">Только избранным</option>
-        </select>
-      </div>
+  <!-- Права доступа при загрузке (сворачиваемый блок) -->
+  <div style="margin-top:14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
+    <div onclick="toggleUploadAccess()" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">
+      <span id="upload-access-arrow" style="color:var(--text4);font-size:11px">▸</span>
+      <strong>Права доступа к документам</strong>
+      <span style="color:var(--text4);font-size:11px;margin-left:auto">права учитываются при доступе к документу и в чате</span>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1.2;min-width:200px">
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
-        <div class="access-pool" id="upload-all"></div>
+    <div id="upload-access-body" style="display:none;padding:0 12px 12px">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
+          <select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px">
+            <option value="public">Доступен всем</option>
+            <option value="restricted">Только избранным</option>
+          </select>
+        </div>
       </div>
-      <div style="flex:1;min-width:170px">
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
-        <div class="access-drop" id="upload-allow"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1.2;min-width:200px">
+          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
+          <div class="access-pool" id="upload-all"></div>
+        </div>
+        <div style="flex:1;min-width:170px">
+          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
+          <div class="access-drop" id="upload-allow"></div>
+        </div>
+        <div style="flex:1;min-width:170px">
+          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
+          <div class="access-drop" id="upload-deny"></div>
+        </div>
       </div>
-      <div style="flex:1;min-width:170px">
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
-        <div class="access-drop" id="upload-deny"></div>
+      <div style="font-size:11px;color:var(--text4);margin-top:6px">
+        «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
       </div>
-    </div>
-    <div style="font-size:11px;color:var(--text4);margin-top:6px">
-      «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
     </div>
   </div>
 
@@ -415,6 +422,15 @@ function renderAccess(prefix) {
     const chip = _allChips().find(x => x.v === c);
     return `<span class="access-chip" draggable="true" data-v="${c}">${chip ? chip.label : c}<span class="chip-x" onclick="accessRemove('${prefix}','${c}','deny')">×</span></span>`;
   }).join('') || '<span style="color:var(--text4);font-size:11px">перетащите сюда</span>';
+}
+
+function toggleUploadAccess() {
+  const body = document.getElementById('upload-access-body');
+  const arrow = document.getElementById('upload-access-arrow');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
 }
 
 function accessRemove(prefix, value, zone) {
