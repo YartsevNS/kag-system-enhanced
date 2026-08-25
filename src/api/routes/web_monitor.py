@@ -100,6 +100,7 @@ async def add_source(data: dict = Body(...)):
             batch_delay=float(data.get("batch_delay", 15.0)),
             item_delay=float(data.get("item_delay", 2.0)),
             batch_jitter=float(data.get("batch_jitter", 5.0)),
+            sample_limit=int(data.get("sample_limit", 0) or 0),
         )
 
         if not source.url:
@@ -128,9 +129,12 @@ async def update_source(source_id: str, data: dict = Body(...)):
 
         # Обновляем только переданные поля
         for field in ['name', 'url', 'type', 'enabled', 'check_interval_minutes',
-                       'keywords', 'file_types', 'css_selector']:
+                       'keywords', 'file_types', 'css_selector', 'sample_limit']:
             if field in data:
-                setattr(existing, field, data[field])
+                if field == 'sample_limit':
+                    setattr(existing, field, int(data[field] or 0))
+                else:
+                    setattr(existing, field, data[field])
 
         web_monitor.save_source(existing)
         return {"status": "ok", "message": "Источник обновлён"}

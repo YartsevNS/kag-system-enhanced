@@ -76,6 +76,7 @@ class MonitorSource:
     keywords: List[str] = field(default_factory=list)  # фильтр по словам
     file_types: List[str] = field(default_factory=lambda: [".pdf", ".docx"])  # какие файлы скачивать
     css_selector: str = "a[href]"  # CSS для поиска ссылок (дальше фильтруем программно по href)
+    sample_limit: int = 0  # Тестовый режим: максимум файлов за одну проверку (0 = все)
     last_check: Optional[datetime] = None
     last_etag: Optional[str] = None
     last_modified: Optional[str] = None
@@ -1174,6 +1175,24 @@ class WebMonitorService:
         new_count = 0
         skip_count = 0
         total = len(items)
+
+        # ── Тестовый режим (sample): скачать максимум N файлов за проверку ──
+        # Позволяет проверить источник («ссылки находятся, файлы качаются,
+        # обрабатываются») без полной загрузки всех документов (дорого/долго).
+        sample = getattr(source, "sample_limit", 0) or 0
+        if sample > 0 and total > sample:
+            for extra in items[sample:]:
+                self.track_download({
+                    'url': extra.get('url', ''),
+                    'filename': (extra.get('filename') or extra.get('url') or '')[:80],
+                    'source_id': source.id, 'source_name': source.name,
+                    'status': 'skipped', 'error': 'sample limit (тест)',
+                    'file_hash': None, 'file_size': None,
+                    'kag_document_id': None, 'content_type': None,
+                    'downloaded_at': datetime.utcnow().isoformat()
+                })
+            items = items[:sample]
+            total = len(items)
         batches = (total + batch_size - 1) // batch_size  # Округление вверх
 
         logger.info(

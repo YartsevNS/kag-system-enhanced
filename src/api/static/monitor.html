@@ -142,6 +142,11 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <button class="btn-outline" onclick="addRknSources()" style="margin-top:6px">🛡 Добавить RSS Роскомнадзора (1)</button>
     <button class="btn-outline" onclick="addSecnewsSources()" style="margin-top:6px">🔐 Добавить RSS SecurityNews (5)</button>
     <button class="btn-outline" onclick="addGosSources()" style="margin-top:6px">🏛 Добавить гос.источники документов (10): ЦБ, АСВ, Минфин, ФНС, Росстат, docs.cntd</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <button class="btn-outline" onclick="sampleAllSources(3)">🧪 Быстрая проверка всех (по 3 файла)</button>
+      <button class="btn-outline" onclick="resetSampleLimits()">♻️ Сбросить лимиты (качать всё)</button>
+      <span style="font-size:11px;color:var(--text4);align-self:center">Тест: скачивается по N файлов с каждого источника, остальные помечаются skipped</span>
+    </div>
   </div>
 
   <!-- Список источников -->
@@ -295,6 +300,49 @@ async function addGosSources() {
     var r = await fetch(API + '/add-gos', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
     toast(d.status === 'ok' ? '✅ ' + d.message : '❌ ' + (d.message || 'Ошибка'), d.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+// Тестовый режим: sample_limit = N у всех включённых источников + проверка
+async function sampleAllSources(n) {
+  if (!confirm('🧪 Установить лимит ' + n + ' файла на источник и запустить проверку всех?')) return;
+  try {
+    var r = await fetch(API + '/sources');
+    var d = await r.json();
+    var srcs = d.sources || [];
+    var updated = 0;
+    for (var i = 0; i < srcs.length; i++) {
+      if (!srcs[i].enabled) continue;
+      var up = await fetch(API + '/sources/' + srcs[i].id, {
+        method: 'PUT', headers: authHeaders(),
+        body: JSON.stringify({sample_limit: n})
+      });
+      if (up.ok) updated++;
+    }
+    toast('✅ Лимит ' + n + ' установлен для ' + updated + ' источников. Запускаю проверку...');
+    // Запускаем проверку всех (использует новые лимиты)
+    var ch = await fetch(API + '/check', { method: 'POST', headers: authHeaders() });
+    var cd = await ch.json();
+    toast(cd.status === 'ok' ? '✅ Проверка запущена (sample ' + n + ')' : '❌ ' + (cd.message || 'ошибка'), cd.status !== 'ok');
+    loadSources();
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+async function resetSampleLimits() {
+  try {
+    var r = await fetch(API + '/sources');
+    var d = await r.json();
+    var srcs = d.sources || [];
+    for (var i = 0; i < srcs.length; i++) {
+      if (srcs[i].sample_limit) {
+        await fetch(API + '/sources/' + srcs[i].id, {
+          method: 'PUT', headers: authHeaders(),
+          body: JSON.stringify({sample_limit: 0})
+        });
+      }
+    }
+    toast('♻️ Лимиты сброшены (качаем всё)');
     loadSources();
   } catch(e) { toast('❌ ' + e.message, true); }
 }
