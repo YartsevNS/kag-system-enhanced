@@ -1234,6 +1234,14 @@ class WebMonitorService:
                             from src.api.services.document_service import document_service
                             existing = document_service._find_by_hash(file_hash)
                             if existing:
+                                self.track_duplicate({
+                                    'url': url, 'filename': filename,
+                                    'source_id': source.id, 'source_name': source.name,
+                                    'file_hash': file_hash, 'file_size': len(content),
+                                    'existing_document_id': getattr(existing, 'document_id', None),
+                                    'existing_filename': getattr(existing, 'filename', ''),
+                                    'found_at': datetime.utcnow().isoformat()
+                                })
                                 skip_count += 1
                                 if news_key:
                                     self._news_keys.add(news_key)  # Запоминаем что видели
@@ -1317,6 +1325,14 @@ class WebMonitorService:
                                 from src.api.services.document_service import document_service
                                 existing = document_service._find_by_hash(file_hash)
                                 if existing:
+                                    self.track_duplicate({
+                                        'url': url, 'filename': filename,
+                                        'source_id': source.id, 'source_name': source.name,
+                                        'file_hash': file_hash, 'file_size': len(content),
+                                        'existing_document_id': getattr(existing, 'document_id', None),
+                                        'existing_filename': getattr(existing, 'filename', ''),
+                                        'found_at': datetime.utcnow().isoformat()
+                                    })
                                     skip_count += 1
                                     continue
                             except Exception:
@@ -1439,6 +1455,32 @@ class WebMonitorService:
                         # SHA-256 для логирования
                         file_hash = hashlib.sha256(content).hexdigest()
 
+                        # Реестр дубликатов: файл уже есть в KAG (возможно, хуже качеством)
+                        try:
+                            from src.api.services.document_service import document_service
+                            _existing = document_service._find_by_hash(file_hash)
+                            if _existing:
+                                self.track_duplicate({
+                                    'url': url, 'filename': filename,
+                                    'source_id': source.id, 'source_name': source.name,
+                                    'file_hash': file_hash, 'file_size': len(content),
+                                    'existing_document_id': getattr(_existing, 'document_id', None),
+                                    'existing_filename': getattr(_existing, 'filename', ''),
+                                    'found_at': datetime.utcnow().isoformat()
+                                })
+                                self.track_download({
+                                    'url': url, 'filename': filename,
+                                    'source_id': source.id, 'source_name': source.name,
+                                    'status': 'duplicate',
+                                    'file_hash': file_hash, 'file_size': len(content),
+                                    'kag_document_id': getattr(_existing, 'document_id', None),
+                                    'content_type': content_type,
+                                    'downloaded_at': datetime.utcnow().isoformat()
+                                })
+                                logger.info(f"🔁 Дубликат (реестр): {filename[:50]} уже есть как {getattr(_existing, 'document_id', '?')[:8]}")
+                        except Exception:
+                            pass
+
                         # Загружаем в KAG Pipeline (force_new — каждый файл отдельным документом)
                         try:
                             from src.api.services.document_service import document_service
@@ -1515,6 +1557,31 @@ class WebMonitorService:
             config_store.set("web_monitor", "downloads", downloads[-2000:])
         except Exception as e:
             logger.warning(f"track_download: {e}")
+
+    def track_duplicate(self, entry: dict):
+        """Реестр дубликатов: файл из источника уже есть в KAG по SHA-256.
+
+        Цель: если существующий документ хуже качеством (маленький/скан без OCR),
+        можно позже заменить его лучшей версией. Реестр фиксирует факт и метаданные.
+        """
+        try:
+            from src.api.services.config_store import config_store
+            dups = config_store.get("web_monitor", "duplicates") or []
+            # Не дублируем одинаковую пару url+hash
+            if not any(d.get("url") == entry.get("url") and d.get("file_hash") == entry.get("file_hash") for d in dups):
+                dups.append(entry)
+            config_store.set("web_monitor", "duplicates", dups[-5000:])
+        except Exception as e:
+            logger.warning(f"track_duplicate: {e}")
+
+    def get_duplicates(self, limit: int = 200) -> List[Dict]:
+        """Реестр дубликатов (новые сверху)."""
+        try:
+            from src.api.services.config_store import config_store
+            dups = config_store.get("web_monitor", "duplicates") or []
+            return list(reversed(dups))[:limit]
+        except Exception:
+            return []
 
     def get_downloads(self, limit: int = 100, status: str = None,
                       source_id: str = None) -> List[Dict]:
