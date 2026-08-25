@@ -17,6 +17,7 @@
 - [x] словарь алиасов entity_aliases (Postgres, 36 пар для ИБ) + apply_alias_pairs
 - [x] админка: словарь алиасов + модерация сомнительных пар (8a5a953)
 - [x] модерация: клик по паре → выделение + inline-редактирование (PUT /aliases/{id}, 2026-08-24)
+- [x] фильтр RAG по домену (8a0bb75): domain в Qdrant payload при индексации + search(domain=...) — вступает после переиндексации
 - [x] политика по типам: legal_term/document_ref НЕ сливать по embedding
 - [x] развёрнуты ложные слияния legal_term (20 узлов)
 - [x] оптимизации 2026-08-24: батч-запись Neo4j (UNWIND), кэш LLM, single_pass, Hybrid Search (admin), Query Decomposition
