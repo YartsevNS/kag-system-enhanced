@@ -74,6 +74,11 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Системные библиотеки Chromium (Playwright) — в PRODUCTION-слое.
+# В builder-слое `--with-deps` не помогает: apt-пакеты не наследуются.
+RUN apt-get update && python -m playwright install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag
 
 WORKDIR /app
