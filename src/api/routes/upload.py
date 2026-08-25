@@ -38,6 +38,22 @@ def _cached(ttl=2.0):
 import os
 import io
 import uuid
+import json as _json
+
+
+def _parse_id_list(raw: str) -> list:
+    """Распарсить JSON-строку списка id (allow/deny) в list[str]."""
+    if not raw:
+        return []
+    try:
+        v = _json.loads(raw)
+        if isinstance(v, list):
+            return [str(x) for x in v if x]
+    except Exception:
+        return [x.strip() for x in raw.split(",") if x.strip()]
+    return []
+
+
 import asyncio
 import json
 from pathlib import Path
@@ -45,7 +61,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response, Form
 from loguru import logger
 
 from src.models import DocumentStatus
@@ -348,7 +364,13 @@ def _cleanup_tus(upload_id: str):
 async def upload_document(
     file: UploadFile = File(...),
     request: Request = None,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    # ── Права доступа (ACL): задаются при загрузке ──────────────────────
+    visibility: str = Form("public"),
+    allow_group_ids: str = Form("[]"),
+    deny_group_ids: str = Form("[]"),
+    allow_user_ids: str = Form("[]"),
+    deny_user_ids: str = Form("[]"),
 ):
     """
     Загрузить документ.
@@ -412,7 +434,14 @@ async def upload_document(
             file_type=file.content_type,
             uploaded_by=uploaded_by,
             group_ids=group_ids,
-            upload_id=upload_id
+            upload_id=upload_id,
+            access={
+                "visibility": visibility if visibility in ("public", "restricted") else "public",
+                "allow_group_ids": _parse_id_list(allow_group_ids),
+                "deny_group_ids": _parse_id_list(deny_group_ids),
+                "allow_user_ids": _parse_id_list(allow_user_ids),
+                "deny_user_ids": _parse_id_list(deny_user_ids),
+            }
         )
 
         # В очередь Celery (QueueGuard — защита от дублей)
@@ -809,6 +838,84 @@ async def delete_document(document_id: str):
         raise HTTPException(status_code=404, detail="Документ не найден")
 
     return {"status": "ok", "document_id": document_id}
+
+
+# ═══════════════════════════════════════
+# Права доступа (ACL) — настраиваются при загрузке/редактировании документа
+# ═══════════════════════════════════════
+
+@router.get("/access-options", summary="Группы и пользователи для формы прав")
+async def get_access_options():
+    """Списки групп и пользователей для формы прав документа (страница «Документы»)."""
+    try:
+        from src.database.session import get_session_local
+        from src.database.user_models import User, Group
+        maker = get_session_local()
+        s = maker()
+        try:
+            groups = [{"id": g.id, "name": g.name} for g in s.query(Group).all()]
+            users = [{"id": u.id, "username": u.username} for u in s.query(User).all() if not u.is_admin]
+        finally:
+            s.close()
+        return {"groups": groups, "users": users}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/{document_id}/access", summary="Права доступа документа")
+async def get_document_access(document_id: str):
+    from src.api.services.document_repository import get_doc_repo
+    doc = get_doc_repo().get(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return {
+        "visibility": doc.visibility or "public",
+        "allow_group_ids": _parse_id_list(doc.allow_group_ids or "[]"),
+        "deny_group_ids": _parse_id_list(doc.deny_group_ids or "[]"),
+        "allow_user_ids": _parse_id_list(doc.allow_user_ids or "[]"),
+        "deny_user_ids": _parse_id_list(doc.deny_user_ids or "[]"),
+    }
+
+
+@router.put("/{document_id}/access", summary="Сохранить права доступа документа")
+async def update_document_access(document_id: str, data: dict):
+    """Обновить права документа и payload чанков в Qdrant (без переиндексации текста)."""
+    try:
+        from src.api.services.document_repository import get_doc_repo
+        doc = get_doc_repo().get(document_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Документ не найден")
+
+        access = {
+            "visibility": data.get("visibility", doc.visibility or "public"),
+            "allow_group_ids": data.get("allow_group_ids", []),
+            "deny_group_ids": data.get("deny_group_ids", []),
+            "allow_user_ids": data.get("allow_user_ids", []),
+            "deny_user_ids": data.get("deny_user_ids", []),
+        }
+        if access["visibility"] not in ("public", "restricted"):
+            access["visibility"] = "public"
+
+        get_doc_repo().upsert(document_id, {
+            "visibility": access["visibility"],
+            "allow_group_ids": access["allow_group_ids"],
+            "deny_group_ids": access["deny_group_ids"],
+            "allow_user_ids": access["allow_user_ids"],
+            "deny_user_ids": access["deny_user_ids"],
+        })
+
+        # Обновляем payload чанков в Qdrant (быстро, без переиндексации)
+        try:
+            from src.indexing.embeddings_service import embeddings_service
+            await embeddings_service.set_document_access(document_id, access)
+        except Exception as e:
+            logger.warning(f"payload access не обновлён: {e}")
+
+        return {"status": "ok", **access}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/{document_id}/tables", summary="Таблицы документа (структурно)")

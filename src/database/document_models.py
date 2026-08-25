@@ -26,6 +26,16 @@ class Document(Base):
     is_active = Column(Boolean, default=True)
     delayed_until = Column(DateTime(timezone=True), nullable=True)
     group_ids = Column(Text, default="[]")  # JSON list
+    # ── Права доступа (ACL) ──────────────────────────────────────────────
+    # visibility: public | restricted («всем запрещено, избранным разрешено»)
+    # allow_*/deny_* — JSON списки id групп/пользователей. Чанки наследуют
+    # права при индексации (payload access). Настраивается при загрузке/
+    # редактировании документа (страница «Документы»).
+    visibility = Column(String, default="public")
+    allow_group_ids = Column(Text, default="[]")  # JSON list
+    deny_group_ids = Column(Text, default="[]")   # JSON list
+    allow_user_ids = Column(Text, default="[]")   # JSON list
+    deny_user_ids = Column(Text, default="[]")    # JSON list
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=True)
     # Классификация (заполняется document_analyzer / type_watchdog)
     document_type = Column(String, default="")

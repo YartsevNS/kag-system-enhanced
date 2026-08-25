@@ -33,6 +33,12 @@ _COLUMN_MIGRATIONS = [
     ("documents", "previous_hash", "VARCHAR DEFAULT ''"),
     ("documents", "original_text", "TEXT"),
     ("documents", "source_metadata", "TEXT"),
+    # documents — права доступа (ACL)
+    ("documents", "visibility", "VARCHAR DEFAULT 'public'"),
+    ("documents", "allow_group_ids", "TEXT DEFAULT '[]'"),
+    ("documents", "deny_group_ids", "TEXT DEFAULT '[]'"),
+    ("documents", "allow_user_ids", "TEXT DEFAULT '[]'"),
+    ("documents", "deny_user_ids", "TEXT DEFAULT '[]'"),
     # entity_aliases — модерация сомнительных пар (entity resolution)
     ("entity_aliases", "reviewed", "BOOLEAN DEFAULT FALSE"),
     ("entity_aliases", "verdict", "VARCHAR DEFAULT ''"),

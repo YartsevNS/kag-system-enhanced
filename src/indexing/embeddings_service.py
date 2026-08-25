@@ -341,6 +341,12 @@ class EmbeddingsService:
                 "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
                 "document_type": metadata.get("document_type", "") if metadata else "",
                 "domain": metadata.get("domain", "") if metadata else "",
+                # Права доступа (ACL)
+                "visibility": metadata.get("visibility", "public") if metadata else "public",
+                "allow_group_ids": (metadata.get("allow_group_ids") or []) if metadata else [],
+                "deny_group_ids": (metadata.get("deny_group_ids") or []) if metadata else [],
+                "allow_user_ids": (metadata.get("allow_user_ids") or []) if metadata else [],
+                "deny_user_ids": (metadata.get("deny_user_ids") or []) if metadata else [],
                 "group_ids": group_ids or [],
                 "metadata": {
                     **(metadata or {}),
@@ -444,6 +450,30 @@ class EmbeddingsService:
         m = self._tokenize_sparse(text)
         return {"indices": list(m.keys()), "values": list(m.values())}
 
+    async def set_document_access(self, document_id: str, access: dict):
+        """Обновить payload access у всех чанков документа (без переиндексации).
+
+        Быстрый путь: set payload по document_id (Qdrant обновляет только эти поля).
+        """
+        try:
+            payload = {
+                "visibility": access.get("visibility", "public"),
+                "allow_group_ids": access.get("allow_group_ids", []),
+                "deny_group_ids": access.get("deny_group_ids", []),
+                "allow_user_ids": access.get("allow_user_ids", []),
+                "deny_user_ids": access.get("deny_user_ids", []),
+            }
+            self._qdrant_client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=Filter(
+                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+                ),
+            )
+            logger.info(f"ACL: payload обновлён для {document_id[:12]}")
+        except Exception as e:
+            logger.warning(f"ACL: не удалось обновить payload {document_id[:12]}: {e}")
+
     async def search(
         self,
         query: str,
@@ -452,6 +482,7 @@ class EmbeddingsService:
         group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
         domain: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Семантический поиск по embeddings.
@@ -506,14 +537,23 @@ class EmbeddingsService:
                     )
                 )
 
-        # Group-based access control: filter by group_ids unless admin
-        if not is_admin and group_ids:
-            conditions.append(
-                FieldCondition(
-                    key="group_ids",
-                    match=MatchAny(any=group_ids)
-                )
-            )
+        # ── ACL pre-filter: права доступа (visibility + allow/deny) ───────
+        # Доступно, если: public ИЛИ пользователь/группа в allow-списках.
+        # Запрещено (must_not), если: пользователь/группа в deny-списках (даже если allow).
+        # is_admin — полный доступ. Без user_id (аноним) — только public.
+        acl_must_not = []
+        if not is_admin:
+            from qdrant_client.models import Filter as _QF, FieldCondition as _FC, MatchValue as _MV, MatchAny as _MA
+            allow_conds = [_FC(key="visibility", match=_MV(value="public"))]
+            if group_ids:
+                allow_conds.append(_FC(key="allow_group_ids", match=_MA(any=list(group_ids))))
+            if user_id:
+                allow_conds.append(_FC(key="allow_user_ids", match=_MA(any=[user_id])))
+            conditions.append(_QF(should=allow_conds))
+            if group_ids:
+                acl_must_not.append(_FC(key="deny_group_ids", match=_MA(any=list(group_ids))))
+            if user_id:
+                acl_must_not.append(_FC(key="deny_user_ids", match=_MA(any=[user_id])))
 
         # Поиск через qdrant_client (прямой, надёжный). REST-запрос с
         # prefetch+rrf-fusion падал на этой версии Qdrant — заменён на клиентский.
@@ -523,9 +563,13 @@ class EmbeddingsService:
 
             query_filter = None
             if conditions:
-                from qdrant_client.models import FieldCondition as _FC
+                from qdrant_client.models import FieldCondition as _FC, Filter as _QF2
                 must = []
                 for c in conditions:
+                    # Вложенный Filter (OR-группа ACL) — добавляем как есть
+                    if isinstance(c, _QF2) or hasattr(c, "should") or hasattr(c, "must") or hasattr(c, "must_not"):
+                        must.append(c)
+                        continue
                     # c — это наш FieldCondition (key, match). Пересобираем в qdrant-модель.
                     if hasattr(c, "key") and hasattr(c, "match"):
                         m = c.match
@@ -535,7 +579,7 @@ class EmbeddingsService:
                         elif hasattr(m, "any"):
                             must.append(_FC(key=c.key, match=MatchAny(any=m.any)))
                 if must:
-                    query_filter = QFilter(must=must)
+                    query_filter = QFilter(must=must, must_not=acl_must_not if acl_must_not else None)
 
             if self._sparse_enabled():
                 # Hybrid Search: dense + sparse (BM25) через RRF-фьюжн
@@ -576,7 +620,12 @@ class EmbeddingsService:
                     "chunk_id": payload.get("chunk_id"),
                     "file_type": payload.get("file_type"),
                     "filename": payload.get("filename", ""),
-                    "metadata": payload.get("metadata", {})
+                    "metadata": payload.get("metadata", {}),
+                    "visibility": payload.get("visibility", "public"),
+                    "allow_group_ids": payload.get("allow_group_ids", []),
+                    "deny_group_ids": payload.get("deny_group_ids", []),
+                    "allow_user_ids": payload.get("allow_user_ids", []),
+                    "deny_user_ids": payload.get("deny_user_ids", []),
                 })
         except Exception as e:
             logger.warning(f"Поиск не выполнен: {e}")

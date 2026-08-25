@@ -441,6 +441,35 @@ class ChatService:
             logger.warning(f"Не удалось собрать список документов: {e}")
             return "СПИСОК ДОКУМЕНТОВ: ошибка получения списка."
 
+    @staticmethod
+    def _access_guard(results: list, user_id: Optional[str], group_ids: Optional[list], is_admin: bool) -> list:
+        """Post-guard: отфильтровать результаты по правам (2-й слой защиты).
+
+        Дублирует ACL pre-filter из Qdrant — на случай регрессий фильтра,
+        чтобы запрещённый чанк не попал в контекст LLM.
+        """
+        if is_admin or not results:
+            return results
+        gset = set(group_ids or [])
+        out = []
+        for r in results:
+            v = r.get("visibility", "public")
+            if v == "public":
+                allowed = True
+            else:
+                allowed = bool(
+                    (user_id and user_id in (r.get("allow_user_ids") or []))
+                    or (gset and bool(gset & set(r.get("allow_group_ids") or [])))
+                )
+            if not allowed:
+                continue
+            if user_id and user_id in (r.get("deny_user_ids") or []):
+                continue
+            if gset and gset & set(r.get("deny_group_ids") or []):
+                continue
+            out.append(r)
+        return out
+
     async def generate_response(
         self,
         user_message: str,
@@ -553,6 +582,8 @@ class ChatService:
                     is_admin=is_admin,
                     # Фильтр RAG по домену (если query_analysis определила домен)
                     domain=domain if domain else None,
+                    # ACL pre-filter (права доступа)
+                    user_id=user_id,
                 )
 
                 if search_results:
@@ -589,6 +620,7 @@ class ChatService:
                                 _extra = await embeddings_service.search(
                                     query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin,
                                     domain=domain if domain else None,
+                                    user_id=user_id,
                                 )
                                 for _r in _extra:
                                     _rid = _r.get("id")
@@ -600,6 +632,9 @@ class ChatService:
                                 logger.info(f"Query decomposition: {len(_subs)} подзапроса, добавлено чанков: {_added}")
                     except Exception as e:
                         logger.debug(f"Query decomposition пропущен: {e}")
+
+                    # ── Post-guard: 2-й слой проверки прав доступа ──────────
+                    search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
 
                     # ── Обогащение источников таблицами (table RAG) ────────────
                     # Если чанк — таблица (markdown-структура) или документ имеет
@@ -794,7 +829,8 @@ class ChatService:
         session_id: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
         group_ids: Optional[List[str]] = None,
-        is_admin: bool = False
+        is_admin: bool = False,
+        user_id: Optional[str] = None,
     ):
         """
         Потоковая генерация ответа.
@@ -835,7 +871,9 @@ class ChatService:
             group_ids=group_ids,
             is_admin=is_admin,
             domain=_stream_domain,
+            user_id=user_id,
         )
+        search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
 
         context = ""
         if search_results:

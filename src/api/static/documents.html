@@ -144,6 +144,59 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
+  <!-- Права доступа при загрузке -->
+  <div style="margin-top:14px;padding:12px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <div>
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
+        <select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px">
+          <option value="public">Доступен всем</option>
+          <option value="restricted">Только избранным</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Разрешено (Ctrl/⌘ для выбора нескольких)</label>
+        <select id="upload-allow" multiple size="4" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Запрещено</label>
+        <select id="upload-deny" multiple size="4" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text4);margin-top:6px">
+      «Только избранным» = доступ разрешён только выбранным группам/пользователям. Запрет действует даже если есть разрешение.
+    </div>
+  </div>
+
+  <!-- Модалка прав доступа -->
+  <div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:520px;max-width:94vw">
+      <div style="font-size:15px;font-weight:600;margin-bottom:12px">🔒 Права доступа документа</div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
+        <select id="edit-visibility" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+          <option value="public">Доступен всем</option>
+          <option value="restricted">Только избранным</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Разрешено</label>
+          <select id="edit-allow" multiple size="6" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+        </div>
+        <div style="flex:1">
+          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Запрещено</label>
+          <select id="edit-deny" multiple size="6" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="document.getElementById('access-modal').style.display='none'">Отмена</button>
+        <button class="btn btn-primary" onclick="saveAccessModal()">💾 Сохранить</button>
+      </div>
+      <div id="access-modal-status" style="font-size:12px;color:var(--text4);margin-top:8px"></div>
+    </div>
+  </div>
+
   <!-- Filters + View toggle -->
   <div class="filters">
     <input type="text" id="search-input" placeholder="🔍 Поиск по названию, типу, тэгам..." oninput="applyFilters()">
@@ -221,6 +274,7 @@ let view = 'cards';
 document.addEventListener('DOMContentLoaded', () => {
   loadAll();
   loadFormatsBar();
+  loadAccessOptions();
   document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
   document.getElementById('file-input').onchange = (e) => uploadFiles(Array.from(e.target.files));
   setupDragDrop();
@@ -281,11 +335,22 @@ async function uploadFiles(files) {
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '⏳ Загрузка...';
 
+  // Права доступа из формы
+  const vis = document.getElementById('upload-visibility').value;
+  const allowSel = Array.from(document.getElementById('upload-allow').selectedOptions || []).map(o => o.value);
+  const denySel = Array.from(document.getElementById('upload-deny').selectedOptions || []).map(o => o.value);
+  const pick = (sel, prefix) => sel.filter(v => v.startsWith(prefix)).map(v => v.slice(2));
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (pn) pn.textContent = `📤 ${file.name}`;
     const fd = new FormData();
     fd.append('file', file);
+    fd.append('visibility', vis);
+    fd.append('allow_group_ids', JSON.stringify(pick(allowSel, 'g:')));
+    fd.append('allow_user_ids', JSON.stringify(pick(allowSel, 'u:')));
+    fd.append('deny_group_ids', JSON.stringify(pick(denySel, 'g:')));
+    fd.append('deny_user_ids', JSON.stringify(pick(denySel, 'u:')));
     try {
       const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
       if (!r.ok) {
@@ -299,6 +364,68 @@ async function uploadFiles(files) {
     }
   }
   setTimeout(() => { loadAll(); }, 500);
+}
+
+async function loadAccessOptions() {
+  try {
+    const r = await fetch(`${API}/upload/access-options`);
+    const d = await r.json();
+    if (!d || d.status === 'error' || !d.groups) return;
+    const fill = (selId) => {
+      const sel = document.getElementById(selId);
+      if (!sel) return;
+      let html = '<option value="g:">— группы —</option>';
+      d.groups.forEach(g => { html += `<option value="g:${g.id}">Группа: ${g.name}</option>`; });
+      html += '<option value="u:">— пользователи —</option>';
+      d.users.forEach(u => { html += `<option value="u:${u.id}">Пользователь: ${u.username}</option>`; });
+      sel.innerHTML = html;
+    };
+    fill('upload-allow');
+    fill('upload-deny');
+  } catch(e) { console.error('access-options:', e); }
+}
+
+let _accessDocId = null;
+async function openAccessModal(docId) {
+  _accessDocId = docId;
+  const st = document.getElementById('access-modal-status');
+  if (st) st.textContent = '';
+  try {
+    const r = await fetch(`${API}/upload/${docId}/access`);
+    const d = await r.json();
+    document.getElementById('edit-visibility').value = d.visibility || 'public';
+    await loadAccessOptions();
+    ['upload-allow','upload-deny'].forEach(f => {
+      document.getElementById(f.replace('upload','edit')).innerHTML = document.getElementById(f).innerHTML;
+    });
+    const mark = (selId, vals) => {
+      const sel = document.getElementById(selId);
+      Array.from(sel.options).forEach(o => { if (vals.includes(o.value.slice(2))) o.selected = true; });
+    };
+    mark('edit-allow', (d.allow_group_ids||[]).concat(d.allow_user_ids||[]));
+    mark('edit-deny', (d.deny_group_ids||[]).concat(d.deny_user_ids||[]));
+    document.getElementById('access-modal').style.display = 'flex';
+  } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
+}
+async function saveAccessModal() {
+  const st = document.getElementById('access-modal-status');
+  if (st) st.textContent = '⏳...';
+  const pick = (sel, prefix) => Array.from(document.getElementById(sel).selectedOptions||[]).map(o=>o.value).filter(v=>v.startsWith(prefix)).map(v=>v.slice(2));
+  try {
+    const r = await fetch(`${API}/upload/${_accessDocId}/access`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        visibility: document.getElementById('edit-visibility').value,
+        allow_group_ids: pick('edit-allow','g:'),
+        allow_user_ids: pick('edit-allow','u:'),
+        deny_group_ids: pick('edit-deny','g:'),
+        deny_user_ids: pick('edit-deny','u:'),
+      })
+    });
+    const d = await r.json();
+    if (st) st.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message||'ошибка');
+    if (d.status === 'ok') setTimeout(()=>{document.getElementById('access-modal').style.display='none';}, 600);
+  } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
 }
 
 async function loadAll() {
@@ -500,6 +627,7 @@ function renderCards(docs) {
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${d.uploaded_by_name||'—'}</div>
         <div class="card-meta">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
+        <div style="margin-top:6px"><button class="btn btn-sm" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button></div>
       </div>
     </div>`;
   }).join('');

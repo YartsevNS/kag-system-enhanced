@@ -51,6 +51,12 @@ class DocumentRecord(BaseModel):
     previous_hash: Optional[str] = Field(default=None, description="Хеш предыдущей версии (если была замена)")
     original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
     source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
+    # Права доступа (ACL)
+    visibility: str = Field(default="public", description="public | restricted")
+    allow_group_ids: Optional[List[str]] = Field(default=None, description="Разрешённые группы")
+    deny_group_ids: Optional[List[str]] = Field(default=None, description="Запрещённые группы")
+    allow_user_ids: Optional[List[str]] = Field(default=None, description="Разрешённые пользователи")
+    deny_user_ids: Optional[List[str]] = Field(default=None, description="Запрещённые пользователи")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -184,7 +190,8 @@ class DocumentService:
         group_ids: Optional[List[str]] = None,
         force_new: bool = False,
         upload_id: Optional[str] = None,
-        source_metadata: Optional[dict] = None
+        source_metadata: Optional[dict] = None,
+        access: Optional[dict] = None,
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
@@ -284,7 +291,12 @@ class DocumentService:
             original_text=original_text,
             status="pending",
             uploaded_by=uploaded_by,
-            group_ids=group_ids or []
+            group_ids=group_ids or [],
+            visibility=(access or {}).get("visibility", "public") or "public",
+            allow_group_ids=(access or {}).get("allow_group_ids") or [],
+            deny_group_ids=(access or {}).get("deny_group_ids") or [],
+            allow_user_ids=(access or {}).get("allow_user_ids") or [],
+            deny_user_ids=(access or {}).get("deny_user_ids") or [],
         )
 
         self._documents[doc_id] = record
@@ -645,6 +657,12 @@ class DocumentService:
                     "file_size": record.file_size,
                     "document_type": getattr(record, 'document_type', '') or "unknown",
                     "domain": domain,
+                    # Права доступа (ACL): наследуются чанками
+                    "visibility": getattr(record, 'visibility', 'public') or 'public',
+                    "allow_group_ids": getattr(record, 'allow_group_ids', None) or [],
+                    "deny_group_ids": getattr(record, 'deny_group_ids', None) or [],
+                    "allow_user_ids": getattr(record, 'allow_user_ids', None) or [],
+                    "deny_user_ids": getattr(record, 'deny_user_ids', None) or [],
                     **parsed_metadata,
                     "source_metadata": record.source_metadata or {},
                 },
