@@ -103,6 +103,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
+
+/* Права доступа: чипы и зоны (drag & drop) */
+.access-pool,.access-drop{min-height:96px;max-height:200px;overflow-y:auto;background:var(--elevated);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:6px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+.access-drop{background:rgba(62,207,142,0.04)}
+.access-drop.drag-over{border-color:var(--accent);background:rgba(62,207,142,0.12)}
+.access-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-pill);padding:4px 10px;font-size:11px;color:var(--text2);cursor:grab;user-select:none}
+.access-chip:hover{border-color:var(--accent)}
+.access-chip .chip-x{cursor:pointer;color:var(--red);font-weight:bold;margin-left:2px;font-size:12px}
+.access-chip.dragging{opacity:0.4}
 </style>
 </head>
 <body>
@@ -146,7 +155,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Права доступа при загрузке -->
   <div style="margin-top:14px;padding:12px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
-    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px">
       <div>
         <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
         <select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px">
@@ -154,23 +163,29 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <option value="restricted">Только избранным</option>
         </select>
       </div>
-      <div style="flex:1;min-width:180px">
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Разрешено (Ctrl/⌘ для выбора нескольких)</label>
-        <select id="upload-allow" multiple size="4" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1.2;min-width:200px">
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
+        <div class="access-pool" id="upload-all"></div>
       </div>
-      <div style="flex:1;min-width:180px">
-        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Запрещено</label>
-        <select id="upload-deny" multiple size="4" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+      <div style="flex:1;min-width:170px">
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
+        <div class="access-drop" id="upload-allow"></div>
+      </div>
+      <div style="flex:1;min-width:170px">
+        <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
+        <div class="access-drop" id="upload-deny"></div>
       </div>
     </div>
     <div style="font-size:11px;color:var(--text4);margin-top:6px">
-      «Только избранным» = доступ разрешён только выбранным группам/пользователям. Запрет действует даже если есть разрешение.
+      «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
     </div>
   </div>
 
   <!-- Модалка прав доступа -->
   <div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:520px;max-width:94vw">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw">
       <div style="font-size:15px;font-weight:600;margin-bottom:12px">🔒 Права доступа документа</div>
       <div style="margin-bottom:10px">
         <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
@@ -179,14 +194,18 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <option value="restricted">Только избранным</option>
         </select>
       </div>
-      <div style="display:flex;gap:10px">
-        <div style="flex:1">
-          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Разрешено</label>
-          <select id="edit-allow" multiple size="6" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1.2;min-width:200px">
+          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
+          <div class="access-pool" id="edit-all"></div>
         </div>
-        <div style="flex:1">
-          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Запрещено</label>
-          <select id="edit-deny" multiple size="6" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:4px"></select>
+        <div style="flex:1;min-width:170px">
+          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
+          <div class="access-drop" id="edit-allow"></div>
+        </div>
+        <div style="flex:1;min-width:170px">
+          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
+          <div class="access-drop" id="edit-deny"></div>
         </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
@@ -335,11 +354,9 @@ async function uploadFiles(files) {
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '⏳ Загрузка...';
 
-  // Права доступа из формы
+  // Права доступа из drag&drop зон
   const vis = document.getElementById('upload-visibility').value;
-  const allowSel = Array.from(document.getElementById('upload-allow').selectedOptions || []).map(o => o.value);
-  const denySel = Array.from(document.getElementById('upload-deny').selectedOptions || []).map(o => o.value);
-  const pick = (sel, prefix) => sel.filter(v => v.startsWith(prefix)).map(v => v.slice(2));
+  const acc = collectAccess('upload');
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -347,10 +364,10 @@ async function uploadFiles(files) {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('visibility', vis);
-    fd.append('allow_group_ids', JSON.stringify(pick(allowSel, 'g:')));
-    fd.append('allow_user_ids', JSON.stringify(pick(allowSel, 'u:')));
-    fd.append('deny_group_ids', JSON.stringify(pick(denySel, 'g:')));
-    fd.append('deny_user_ids', JSON.stringify(pick(denySel, 'u:')));
+    fd.append('allow_group_ids', JSON.stringify(acc.allow_group_ids));
+    fd.append('allow_user_ids', JSON.stringify(acc.allow_user_ids));
+    fd.append('deny_group_ids', JSON.stringify(acc.deny_group_ids));
+    fd.append('deny_user_ids', JSON.stringify(acc.deny_user_ids));
     try {
       const r = await fetch(`${API}/upload/`, {method:'POST',body:fd});
       if (!r.ok) {
@@ -366,22 +383,102 @@ async function uploadFiles(files) {
   setTimeout(() => { loadAll(); }, 500);
 }
 
+// ── Права доступа: drag & drop чипы ──────────────────────────────────────
+let _accessOptions = {groups: [], users: []};          // все группы/пользователи
+let _accState = {                                       // выбранные: {allow:[], deny:[]} для upload/edit
+  upload: {allow: [], deny: []},
+  edit:   {allow: [], deny: []},
+};
+
+function _allChips() {
+  const out = [];
+  _accessOptions.groups.forEach(g => out.push({v: 'g:' + g.id, label: '👥 ' + g.name}));
+  _accessOptions.users.forEach(u => out.push({v: 'u:' + u.id, label: '👤 ' + u.username}));
+  return out;
+}
+
+function renderAccess(prefix) {
+  const st = _accState[prefix] || {allow: [], deny: []};
+  const used = new Set(st.allow.concat(st.deny));
+  const pool = document.getElementById(prefix + '-all');
+  const allow = document.getElementById(prefix + '-allow');
+  const deny = document.getElementById(prefix + '-deny');
+  if (!pool || !allow || !deny) return;
+  pool.innerHTML = _allChips().filter(c => !used.has(c.v))
+    .map(c => `<span class="access-chip" draggable="true" data-v="${c.v}">${c.label}</span>`).join('')
+    || '<span style="color:var(--text4);font-size:11px">все назначены</span>';
+  allow.innerHTML = st.allow.map(c => {
+    const chip = _allChips().find(x => x.v === c);
+    return `<span class="access-chip" draggable="true" data-v="${c}">${chip ? chip.label : c}<span class="chip-x" onclick="accessRemove('${prefix}','${c}','allow')">×</span></span>`;
+  }).join('') || '<span style="color:var(--text4);font-size:11px">перетащите сюда</span>';
+  deny.innerHTML = st.deny.map(c => {
+    const chip = _allChips().find(x => x.v === c);
+    return `<span class="access-chip" draggable="true" data-v="${c}">${chip ? chip.label : c}<span class="chip-x" onclick="accessRemove('${prefix}','${c}','deny')">×</span></span>`;
+  }).join('') || '<span style="color:var(--text4);font-size:11px">перетащите сюда</span>';
+}
+
+function accessRemove(prefix, value, zone) {
+  const st = _accState[prefix] || ( _accState[prefix] = {allow: [], deny: []} );
+  st[zone] = st[zone].filter(v => v !== value);
+  renderAccess(prefix);
+}
+
+// Делегирование drag & drop
+document.addEventListener('dragstart', e => {
+  const chip = e.target.closest('.access-chip');
+  if (!chip) return;
+  chip.classList.add('dragging');
+  e.dataTransfer.setData('text/plain', chip.dataset.v);
+});
+document.addEventListener('dragend', e => {
+  const chip = e.target.closest('.access-chip');
+  if (chip) chip.classList.remove('dragging');
+  document.querySelectorAll('.access-drop.drag-over').forEach(z => z.classList.remove('drag-over'));
+});
+document.addEventListener('dragover', e => {
+  const zone = e.target.closest('.access-drop');
+  if (zone) { e.preventDefault(); zone.classList.add('drag-over'); }
+});
+document.addEventListener('dragleave', e => {
+  const zone = e.target.closest('.access-drop');
+  if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+});
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const zone = e.target.closest('.access-drop');
+  document.querySelectorAll('.access-drop.drag-over').forEach(z => z.classList.remove('drag-over'));
+  if (!zone) return;
+  const value = e.dataTransfer.getData('text/plain');
+  if (!value) return;
+  const prefix = zone.id.split('-')[0];
+  const target = zone.id.endsWith('allow') ? 'allow' : 'deny';
+  const st = _accState[prefix] || ( _accState[prefix] = {allow: [], deny: []} );
+  // убрать из обоих зон, добавить в целевую
+  st.allow = st.allow.filter(v => v !== value);
+  st.deny = st.deny.filter(v => v !== value);
+  st[target].push(value);
+  renderAccess(prefix);
+});
+
+function collectAccess(prefix) {
+  const st = _accState[prefix] || {allow: [], deny: []};
+  const pick = (list, p) => list.filter(v => v.startsWith(p)).map(v => v.slice(2));
+  return {
+    allow_group_ids: pick(st.allow, 'g:'),
+    allow_user_ids: pick(st.allow, 'u:'),
+    deny_group_ids: pick(st.deny, 'g:'),
+    deny_user_ids: pick(st.deny, 'u:'),
+  };
+}
+
 async function loadAccessOptions() {
   try {
     const r = await fetch(`${API}/upload/access-options`);
     const d = await r.json();
     if (!d || d.status === 'error' || !d.groups) return;
-    const fill = (selId) => {
-      const sel = document.getElementById(selId);
-      if (!sel) return;
-      let html = '<option value="g:">— группы —</option>';
-      d.groups.forEach(g => { html += `<option value="g:${g.id}">Группа: ${g.name}</option>`; });
-      html += '<option value="u:">— пользователи —</option>';
-      d.users.forEach(u => { html += `<option value="u:${u.id}">Пользователь: ${u.username}</option>`; });
-      sel.innerHTML = html;
-    };
-    fill('upload-allow');
-    fill('upload-deny');
+    _accessOptions = {groups: d.groups || [], users: d.users || []};
+    renderAccess('upload');
+    renderAccess('edit');
   } catch(e) { console.error('access-options:', e); }
 }
 
@@ -394,32 +491,24 @@ async function openAccessModal(docId) {
     const r = await fetch(`${API}/upload/${docId}/access`);
     const d = await r.json();
     document.getElementById('edit-visibility').value = d.visibility || 'public';
-    await loadAccessOptions();
-    ['upload-allow','upload-deny'].forEach(f => {
-      document.getElementById(f.replace('upload','edit')).innerHTML = document.getElementById(f).innerHTML;
-    });
-    const mark = (selId, vals) => {
-      const sel = document.getElementById(selId);
-      Array.from(sel.options).forEach(o => { if (vals.includes(o.value.slice(2))) o.selected = true; });
+    if (!_accessOptions.groups.length) await loadAccessOptions();
+    _accState.edit = {
+      allow: (d.allow_group_ids||[]).map(x => 'g:' + x).concat((d.allow_user_ids||[]).map(x => 'u:' + x)),
+      deny:  (d.deny_group_ids||[]).map(x => 'g:' + x).concat((d.deny_user_ids||[]).map(x => 'u:' + x)),
     };
-    mark('edit-allow', (d.allow_group_ids||[]).concat(d.allow_user_ids||[]));
-    mark('edit-deny', (d.deny_group_ids||[]).concat(d.deny_user_ids||[]));
+    renderAccess('edit');
     document.getElementById('access-modal').style.display = 'flex';
   } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
 }
 async function saveAccessModal() {
   const st = document.getElementById('access-modal-status');
   if (st) st.textContent = '⏳...';
-  const pick = (sel, prefix) => Array.from(document.getElementById(sel).selectedOptions||[]).map(o=>o.value).filter(v=>v.startsWith(prefix)).map(v=>v.slice(2));
   try {
     const r = await fetch(`${API}/upload/${_accessDocId}/access`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         visibility: document.getElementById('edit-visibility').value,
-        allow_group_ids: pick('edit-allow','g:'),
-        allow_user_ids: pick('edit-allow','u:'),
-        deny_group_ids: pick('edit-deny','g:'),
-        deny_user_ids: pick('edit-deny','u:'),
+        ...collectAccess('edit'),
       })
     });
     const d = await r.json();
