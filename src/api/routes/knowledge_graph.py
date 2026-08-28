@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Optional, List
 from loguru import logger
 
-from src.api.middleware.auth_v2 import get_current_user_optional
+from src.api.middleware.auth_v2 import get_current_user_optional, get_current_admin
 from src.database.user_models import User
 
 router = APIRouter()
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.post("/cypher", summary="Произвольный Cypher-запрос")
 async def execute_cypher(
     query: dict = Body(...),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_admin)
 ):
     """Выполнение произвольного Cypher-запроса (только чтение)."""
     try:
@@ -156,78 +156,58 @@ async def hybrid_search(
         return {"query": q, "results": [], "total": 0, "error": str(e)}
 
 
-@router.post("/rebuild-graph", summary="Перестроить граф для существующих документов")
+@router.post("/rebuild-graph", summary="Перестроить граф для существующих документов (в фоне)")
 async def rebuild_graph(
     document_ids: Optional[List[str]] = Body(None, embed=True),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_admin)
 ):
-    """
-    Переизвлечь сущности и перестроить граф для указанных документов.
+    """Запустить фоновое перестроение графа знаний.
+
+    Тяжёлая работа (LLM-извлечение сущностей по всем документам) выполняется
+    в Celery-задаче rebuild_graph_task, эндпоинт возвращает сразу.
+    Прогресс можно смотреть через GET /rebuild-status.
     Если document_ids=None — обработать все документы со статусом completed.
     """
+    from src.api.services.config_store import config_store
+
+    status = config_store.get("kg_config", "rebuild_status") or "idle"
+    if status == "running":
+        raise HTTPException(status_code=409, detail="Перестроение графа уже идёт")
+
     try:
-        from src.indexing.knowledge_graph import kg_service
-        from src.indexing.entity_extractor import entity_extractor
-        from src.api.services.document_repository import get_doc_repo
-        from src.indexing.embeddings_service import embeddings_service
-
-        if document_ids:
-            docs = []
-            for did in document_ids:
-                doc = get_doc_repo().get_dict(did)
-                if doc:
-                    doc["document_id"] = did
-                    docs.append(doc)
-        else:
-            all_docs = get_doc_repo().get_all() or {}
-            docs = []
-            for did, doc in all_docs.items():
-                if isinstance(doc, dict) and doc.get("status") == "completed":
-                    doc["document_id"] = did
-                    docs.append(doc)
-
-        results = []
-        for doc in docs:
-            doc_id = doc.get("document_id") or doc.get("id")
-            filename = doc.get("filename", "unknown")
-            
-            # Очищаем старые данные графа
-            kg_service.clear_document(doc_id)
-            
-            # Создаём узел документа
-            kg_service.create_document_node(doc_id, filename)
-            
-            # Получаем чанки из Qdrant
-            chunks = await embeddings_service.get_document_chunks(doc_id)
-            if not chunks:
-                results.append({"document_id": doc_id, "status": "no_chunks"})
-                continue
-            
-            # Переизвлекаем сущности
-            entity_count = 0
-            for i, chunk in enumerate(chunks[:10]):
-                chunk_id = chunk.get("chunk_id", f"chunk_{i}")
-                chunk_text = chunk.get("content", "")
-                chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
-                
-                kg_service.create_chunk_node(chunk_id, doc_id, chunk_text, chunk_seq)
-                await entity_extractor.extract_and_store(doc_id, chunk_id, chunk_text, chunk_seq, filename)
-                
-                # Считаем сущности после каждого чанка
-                stats = kg_service.get_stats()
-                entity_count = stats.get("entities", 0)
-            
-            results.append({
-                "document_id": doc_id,
-                "filename": filename,
-                "chunks_processed": min(len(chunks), 10),
-                "entities_found": entity_count
-            })
-        
-        total_stats = kg_service.get_stats()
-        return {"status": "ok", "results": results, "total_stats": total_stats}
+        from src.indexing.tasks import rebuild_graph_task
+        config_store.set("kg_config", "rebuild_stop", False)
+        config_store.set("kg_config", "rebuild_status", "running")
+        config_store.set("kg_config", "rebuild_progress", {
+            "processed": 0, "total": 0, "current_doc": "",
+            "started_at": "", "finished_at": "",
+        })
+        rebuild_graph_task.delay(document_ids=document_ids)
+        logger.info(f"Перестроение графа поставлено в очередь (документов: {len(document_ids) if document_ids else 'все completed'})")
+        return {"status": "ok", "started": True,
+                "message": "Перестроение запущено в фоне"}
     except Exception as e:
-        logger.error(f"Rebuild graph error: {e}")
+        config_store.set("kg_config", "rebuild_status", "error")
+        logger.error(f"Ошибка запуска перестроения графа: {e}")
+        raise HTTPException(status_code=503, detail=f"Не удалось запустить перестроение: {e}")
+
+
+@router.get("/rebuild-status", summary="Статус перестроения графа")
+async def rebuild_status(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Статус фонового перестроения графа (для страницы /kg)."""
+    try:
+        from src.api.services.config_store import config_store
+        status = config_store.get("kg_config", "rebuild_status") or "idle"
+        progress = config_store.get("kg_config", "rebuild_progress") or {}
+        return {
+            "status": status,
+            "processed": progress.get("processed", 0),
+            "total": progress.get("total", 0),
+            "current_doc": progress.get("current_doc", ""),
+            "started_at": progress.get("started_at", ""),
+            "finished_at": progress.get("finished_at", ""),
+        }
+    except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
@@ -236,7 +216,10 @@ async def rebuild_graph(
 # ============================================================
 
 @router.post("/post-process", summary="Пост-обработка графа")
-async def post_process_graph(document_id: Optional[str] = None):
+async def post_process_graph(
+    document_id: Optional[str] = None,
+    current_user: User = Depends(get_current_admin)
+):
     """
     Запустить пост-обработку графа: dedup, entity linking.
     
@@ -254,7 +237,7 @@ async def post_process_graph(document_id: Optional[str] = None):
 
 
 @router.post("/stop-rebuild", summary="Остановить перестроение графа")
-async def stop_rebuild():
+async def stop_rebuild(current_user: User = Depends(get_current_admin)):
     """Установить флаг остановки перестроения графа знаний."""
     try:
         from src.api.services.config_store import config_store
@@ -291,7 +274,10 @@ async def get_domain_schema():
 
 
 @router.post("/domain-schema", summary="Обновить доменную схему")
-async def update_domain_schema(data: dict):
+async def update_domain_schema(
+    data: dict,
+    current_user: User = Depends(get_current_admin)
+):
     """
     Обновить доменную схему сущностей.
     
@@ -330,7 +316,7 @@ async def update_domain_schema(data: dict):
 # ============================================================
 
 @router.post("/watchdog/start", summary="Запустить сторожа перестроения")
-async def start_watchdog():
+async def start_watchdog(current_user: User = Depends(get_current_admin)):
     try:
         from src.indexing.rebuild_watchdog import rebuild_watchdog
         rebuild_watchdog.start()
@@ -340,7 +326,7 @@ async def start_watchdog():
 
 
 @router.post("/watchdog/stop", summary="Остановить сторожа")
-async def stop_watchdog():
+async def stop_watchdog(current_user: User = Depends(get_current_admin)):
     try:
         from src.indexing.rebuild_watchdog import rebuild_watchdog
         await rebuild_watchdog.stop()

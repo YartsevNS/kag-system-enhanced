@@ -13,6 +13,7 @@ API (через config_store):
 
 import asyncio
 import time
+from datetime import datetime, timezone
 from loguru import logger
 
 class RebuildWatchdog:
@@ -149,7 +150,14 @@ class RebuildWatchdog:
             logger.info("Watchdog: старые сущности и чанки удалены")
             
             docs = get_doc_repo().get_all() or {}
-            
+            total = len(docs)
+            processed = 0
+            started_at = datetime.now(timezone.utc).isoformat()
+            config_store.set("kg_config", "rebuild_progress", {
+                "processed": 0, "total": total, "current_doc": "",
+                "started_at": started_at, "finished_at": "",
+            })
+
             for did, doc in docs.items():
                 # Проверка флага остановки
                 if config_store.get("kg_config", "rebuild_stop"):
@@ -159,10 +167,16 @@ class RebuildWatchdog:
                     continue
                 
                 fn = doc.get("filename", "?")[:50]
+                config_store.set("kg_config", "rebuild_progress", {
+                    "processed": processed, "total": total,
+                    "current_doc": fn[:80],
+                    "started_at": started_at, "finished_at": "",
+                })
                 kg_service.create_document_node(did, fn)
                 
                 chunks = await embeddings_service.get_document_chunks(did)
                 if not chunks:
+                    processed += 1
                     continue
                 
                 for i, ch in enumerate(chunks[:1]):
@@ -174,6 +188,12 @@ class RebuildWatchdog:
                         await entity_extractor.extract_and_store(did, cid, ctext, cseq, fn)
                     except Exception as e:
                         logger.debug(f"Watchdog: ошибка {fn}: {e}")
+                processed += 1
+            
+            config_store.set("kg_config", "rebuild_progress", {
+                "processed": processed, "total": total, "current_doc": "",
+                "started_at": started_at, "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
             
             config_store.set("kg_config", "rebuild_status", "running")
             self._stall_counter = 0

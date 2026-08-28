@@ -99,7 +99,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="tools-panel">
     <h2>🛠 Инструменты графа (Neo4j Best Practices)</h2>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <button class="btn-outline" onclick="postProcess()" title="Слияние дубликатов, entity linking, очистка сирот" style="background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">🔄 Пост-обработка</button>
@@ -156,7 +156,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     <div id="hybrid-results"></div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="cypher-panel">
     <h2>💻 Прямой запрос Neo4j (Cypher)</h2>
     <div class="search-row" style="flex-direction: column; gap: 8px;">
       <textarea id="cypher-query" placeholder="MATCH (n) RETURN n LIMIT 10..." style="background:var(--elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; color:var(--text); font-size:13px; outline:none; font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace; width:100%; height:80px; resize:vertical;"></textarea>
@@ -171,6 +171,23 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 
 <script>
 const API = '/api/v1/kg';
+
+let currentUser = null;
+
+async function loadCurrentUser() {
+  try {
+    const r = await fetch('/api/v1/auth/me', { credentials: 'include' });
+    if (r.ok) currentUser = await r.json();
+  } catch(e) { currentUser = null; }
+  // Админ-панели (перестроение, инструменты, Cypher) — только админу
+  const isAdmin = !!(currentUser && currentUser.is_admin);
+  ['rebuild-panel', 'tools-panel', 'cypher-panel'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAdmin ? '' : 'none';
+  });
+  if (isAdmin) checkAndWatch();
+}
+loadCurrentUser();
 
 function getToken() {
   // Read from cookie
@@ -314,34 +331,35 @@ async function runCypher() {
 loadStats();
 setInterval(loadStats, 30000);
 
-// === Мониторинг перестроения графа ===
+// === Мониторинг перестроения графа (фоновая задача Celery) ===
 var rebuildWatchTimer = null;
-var rebuildStartCount = 0;
-var rebuildStartTime = null;
 var rebuildRunning = false;
-var totalDocs = 0;
+var rebuildStartTime = null;
+var rebuildLastProcessed = 0;
 
 async function startRebuild() {
   var panel = document.getElementById('rebuild-panel');
   document.getElementById('rebuild-start-btn').style.display = 'none';
   document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
   document.getElementById('rebuild-error').style.display = 'none';
-  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Запуск...</span>';
-  document.getElementById('rebuild-progress').textContent = 'Запуск перестроения...';
+  document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--amber)">⏳ Запуск...</span>';
+  document.getElementById('rebuild-progress').textContent = 'Постановка в очередь...';
   panel.style.display = 'block';
-  
+  rebuildRunning = true;
+  rebuildStartTime = Date.now();
+  rebuildLastProcessed = 0;
+  rebuildWatchTimer = setTimeout(watchRebuild, 1500);
+
   try {
     var r = await fetch(API + '/rebuild-graph', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
-    if (d.status === 'ok') {
-      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт...</span>';
-      rebuildRunning = true;
-      rebuildStartCount = 0;
-      rebuildStartTime = null;
-      totalDocs = (d.total_stats || {}).documents || 130;
-      watchRebuild();
+    if (r.status === 409) {
+      // Перестроение уже идёт — просто наблюдаем
+      document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--amber)">⏳ Идёт...</span>';
+    } else if (d.status === 'ok' && d.started) {
+      document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--amber)">⏳ Идёт...</span>';
     } else {
-      showRebuildError(d.message || 'Ошибка запуска');
+      showRebuildError(d.detail || d.message || 'Ошибка запуска');
     }
   } catch(e) {
     showRebuildError(e.message);
@@ -354,76 +372,106 @@ function showRebuildError(msg) {
   document.getElementById('rebuild-stop-btn').style.display = 'none';
   document.getElementById('rebuild-start-btn').style.display = 'inline-block';
   document.getElementById('rebuild-start-btn').textContent = '▶ Перезапустить';
-  document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">Ошибка</span>';
+  document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--red)">Ошибка</span>';
   document.getElementById('rebuild-bar').style.background = 'var(--red)';
   rebuildRunning = false;
+  clearTimeout(rebuildWatchTimer);
+}
+
+function rebuildSetBar(bar, pct, color) {
+  bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+  if (color) bar.style.background = color;
 }
 
 async function watchRebuild() {
   try {
-    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const r = await fetch(API + '/rebuild-status', { headers: authHeaders() });
+    if (!r.ok) { rebuildWatchTimer = setTimeout(watchRebuild, 5000); return; }
     const d = await r.json();
-    const docs = d.documents || 0;
-    if (totalDocs === 0) totalDocs = Math.max(docs, 1);
-    
-    if (rebuildStartCount === 0) {
-      rebuildStartCount = docs;
-      rebuildStartTime = Date.now();
-    }
-    
+
     var panel = document.getElementById('rebuild-panel');
     var bar = document.getElementById('rebuild-bar');
     var prog = document.getElementById('rebuild-progress');
     var status = document.getElementById('rebuild-status');
     var eta = document.getElementById('rebuild-eta');
-    
+
     panel.style.display = 'block';
-    document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
-    document.getElementById('rebuild-start-btn').style.display = 'none';
-    
-    var pct = Math.min(100, Math.round(docs / totalDocs * 100));
-    bar.style.width = pct + '%';
-    bar.style.background = 'linear-gradient(90deg,var(--amber),var(--accent-h))';
-    prog.textContent = docs + ' / ' + totalDocs + ' документов (' + pct + '%)';
-    
-    var elapsed = (Date.now() - rebuildStartTime) / 1000;
-    var docsSince = docs - rebuildStartCount;
-    if (docsSince > 0 && elapsed > 30) {
-      var rate = docsSince / elapsed;
-      var remaining = (totalDocs - docs) / rate;
-      var minutes = Math.ceil(remaining / 60);
-      if (minutes < 120) {
-        eta.textContent = '≈ ' + minutes + ' мин до завершения';
-        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+
+    if (d.status === 'running') {
+      var pct = d.total > 0 ? Math.round(d.processed / d.total * 100) : 0;
+      rebuildSetBar(bar, pct, 'linear-gradient(90deg,var(--amber),var(--accent-h))');
+      var label = d.processed + ' / ' + d.total + ' документов (' + pct + '%)';
+      if (d.current_doc) label += ' — ' + d.current_doc;
+      prog.textContent = label;
+      status.innerHTML = '<span style="color:var(--amber)">⏳ Идёт...</span>';
+      document.getElementById('rebuild-stop-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').style.display = 'none';
+
+      // ETA по скорости
+      var elapsed = (Date.now() - rebuildStartTime) / 1000;
+      var since = d.processed - rebuildLastProcessed;
+      rebuildLastProcessed = d.processed;
+      if (elapsed > 20) {
+        if (since > 0) {
+          var rate = since / 5; // док/сек за последний тик (5с)
+          var remaining = d.total - d.processed;
+          var secs = rate > 0 ? remaining / rate : 0;
+          if (secs > 0 && secs < 7200) {
+            eta.textContent = '≈ ' + Math.ceil(secs / 60) + ' мин до завершения';
+          } else if (secs >= 7200) {
+            eta.textContent = '≈ ' + Math.floor(secs / 3600) + ' ч ' + Math.ceil((secs % 3600) / 60) + ' мин';
+          } else { eta.textContent = ''; }
+        } else {
+          eta.textContent = 'Расчёт времени...';
+        }
       } else {
-        var hours = Math.floor(minutes / 60);
-        eta.textContent = '≈ ' + hours + ' ч ' + (minutes % 60) + ' мин';
-        status.innerHTML = '<span style=\"color:var(--amber)\">⏳ Идёт (' + Math.round(rate * 60) + ' док/мин)</span>';
+        eta.textContent = '';
       }
-    } else if (elapsed > 30) {
-      eta.textContent = 'Расчёт времени...';
-    }
-    
-    if (docs >= totalDocs || totalDocs === 0 || !rebuildRunning) {
-      if (docs >= totalDocs) {
-        status.innerHTML = '<span style=\"color:var(--emerald)\">✅ Завершено!</span>';
-        bar.style.background = 'var(--emerald)';
-      }
+
+      rebuildWatchTimer = setTimeout(watchRebuild, 5000);
+    } else if (d.status === 'completed') {
+      status.innerHTML = '<span style="color:var(--emerald)">✅ Завершено!</span>';
+      rebuildSetBar(bar, 100, 'var(--emerald)');
+      prog.textContent = d.processed + ' / ' + d.total + ' документов';
+      eta.textContent = d.finished_at ? 'Завершено ' + new Date(d.finished_at).toLocaleTimeString('ru-RU') : '';
       document.getElementById('rebuild-stop-btn').style.display = 'none';
       document.getElementById('rebuild-start-btn').style.display = 'inline-block';
       document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
-      eta.textContent = docs >= totalDocs ? 'Все документы обработаны' : '';
+      rebuildRunning = false;
+      clearTimeout(rebuildWatchTimer);
+      loadStats();
+      rebuildWatchTimer = setTimeout(function() { panel.style.display = 'none'; }, 10000);
+    } else if (d.status === 'stopped') {
+      status.innerHTML = '<span style="color:var(--red)">⏹ Остановлено</span>';
+      rebuildSetBar(bar, d.total > 0 ? Math.round(d.processed / d.total * 100) : 0, 'var(--red)');
+      prog.textContent = d.processed + ' / ' + d.total + ' документов';
+      eta.textContent = 'Остановлено пользователем';
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
       rebuildRunning = false;
       clearTimeout(rebuildWatchTimer);
       rebuildWatchTimer = setTimeout(function() { panel.style.display = 'none'; }, 10000);
-      loadStats();
-      return;
+    } else if (d.status === 'error') {
+      status.innerHTML = '<span style="color:var(--red)">❌ Ошибка</span>';
+      rebuildSetBar(bar, 0, 'var(--red)');
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Перезапустить';
+      rebuildRunning = false;
+      clearTimeout(rebuildWatchTimer);
+    } else {
+      // idle — показать кнопку запуска
+      document.getElementById('rebuild-stop-btn').style.display = 'none';
+      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
+      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
+      document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--text4)">Ожидание</span>';
+      document.getElementById('rebuild-progress').textContent = 'Нажмите «Запустить» для перестроения графа';
+      rebuildSetBar(bar, 0, 'linear-gradient(90deg,var(--amber),var(--accent-h))');
+      rebuildRunning = false;
     }
-    
-    rebuildWatchTimer = setTimeout(watchRebuild, 5000);
   } catch(e) {
-    showRebuildError(e.message);
-    clearTimeout(rebuildWatchTimer);
+    rebuildWatchTimer = setTimeout(watchRebuild, 5000);
   }
 }
 
@@ -435,44 +483,41 @@ async function stopRebuild() {
     var r = await fetch(API + '/stop-rebuild', { method: 'POST', headers: authHeaders() });
     var d = await r.json();
     if (d.status === 'ok') {
-      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--red)\">⏹ Остановлено</span>';
-      document.getElementById('rebuild-bar').style.background = 'var(--red)';
-      document.getElementById('rebuild-stop-btn').style.display = 'none';
-      document.getElementById('rebuild-start-btn').style.display = 'inline-block';
-      document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
-      document.getElementById('rebuild-eta').textContent = 'Остановлено пользователем';
-      rebuildRunning = false;
-      clearTimeout(rebuildWatchTimer);
+      document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--red)">⏹ Останавливается...</span>';
+      btn.disabled = false;
+      btn.textContent = '⏹ Стоп';
+      // Ждём, пока фоновая задача дойдёт до точки остановки
+      rebuildWatchTimer = setTimeout(watchRebuild, 2000);
+    } else {
+      showRebuildError(d.message || 'Ошибка остановки');
     }
   } catch(e) {
     showRebuildError(e.message);
   }
 }
 
-// Авто-определение: если граф пуст — показать кнопку Старт
+// Авто-определение: если перестроение уже идёт — подключиться к нему
 async function checkAndWatch() {
   try {
-    const r = await fetch(API + '/stats', { headers: authHeaders() });
+    const r = await fetch(API + '/rebuild-status', { headers: authHeaders() });
+    if (!r.ok) return;
     const d = await r.json();
-    totalDocs = d.documents || 0;
-    if (totalDocs === 0 || totalDocs > 100) totalDocs = 130;
-    
-    if (totalDocs > 0 && totalDocs < 100) {
-      // Идёт перестроение — подключаемся
+    if (d.status === 'running') {
       rebuildRunning = true;
+      rebuildStartTime = Date.now();
+      rebuildLastProcessed = d.processed || 0;
       watchRebuild();
     } else {
-      // Показать панель с кнопкой Старт
       var panel = document.getElementById('rebuild-panel');
       panel.style.display = 'block';
       document.getElementById('rebuild-start-btn').style.display = 'inline-block';
       document.getElementById('rebuild-start-btn').textContent = '▶ Запустить';
-      document.getElementById('rebuild-status').innerHTML = '<span style=\"color:var(--text4)\">Ожидание</span>';
+      document.getElementById('rebuild-status').innerHTML = '<span style="color:var(--text4)">Ожидание</span>';
       document.getElementById('rebuild-progress').textContent = 'Нажмите «Запустить» для перестроения графа';
     }
   } catch(e) {}
 }
-checkAndWatch();
+// checkAndWatch() вызывается из loadCurrentUser() (только для админа)
 
 async function postProcess() {
   const div = document.getElementById('tools-result');

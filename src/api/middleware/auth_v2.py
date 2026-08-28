@@ -164,6 +164,24 @@ async def get_current_user_optional(
         return None
 
 
+async def get_current_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """FastAPI dependency: endpoint доступен только администратору.
+
+    Raises 401 если не авторизован (get_current_user), 403 если
+    пользователь не является админом (is_admin=False).
+
+    Использование: current_user: User = Depends(get_current_admin)
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
+
+
 async def auth_middleware(request: Request, call_next):
     """
     ASGI middleware: decode JWT and attach user to request.state.current_user.

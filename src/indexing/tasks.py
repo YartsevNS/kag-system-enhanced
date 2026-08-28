@@ -343,6 +343,127 @@ def batch_process_documents(
     }
 
 
+@celery_app.task(
+    bind=True,
+    queue="maintenance",
+    max_retries=1,
+)
+def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, Any]:
+    """Фоновая задача: перестроение графа знаний для документов.
+
+    Запускается из POST /api/v1/kg/rebuild-graph (только админ).
+    Тяжёлая работа (LLM-извлечение сущностей) выполняется здесь, в воркере,
+    а не в HTTP-запросе. Прогресс пишется в config_store:
+      - kg_config.rebuild_status  = running | completed | stopped | error
+      - kg_config.rebuild_progress = {processed, total, current_doc,
+                                      started_at, finished_at}
+    Страница /kg опрашивает GET /api/v1/kg/rebuild-status каждые 5 секунд.
+    """
+    from src.api.services.config_store import config_store
+    from src.api.services.document_repository import get_doc_repo
+    from src.indexing.knowledge_graph import kg_service
+    from src.indexing.entity_extractor import entity_extractor
+    from src.indexing.embeddings_service import embeddings_service
+
+    now_iso = lambda: datetime.now(timezone.utc).isoformat()
+
+    async def _run() -> Dict[str, Any]:
+        await embeddings_service.initialize()
+
+        # Собираем список документов
+        if document_ids:
+            docs = []
+            for did in document_ids:
+                doc = get_doc_repo().get_dict(did)
+                if doc:
+                    doc["document_id"] = did
+                    docs.append(doc)
+        else:
+            all_docs = get_doc_repo().get_all() or {}
+            docs = []
+            for did, doc in all_docs.items():
+                if isinstance(doc, dict) and doc.get("status") == "completed":
+                    doc["document_id"] = did
+                    docs.append(doc)
+
+        total = len(docs)
+        started_at = now_iso()
+        config_store.set("kg_config", "rebuild_progress", {
+            "processed": 0, "total": total, "current_doc": "",
+            "started_at": started_at, "finished_at": "",
+        })
+
+        results = []
+        processed = 0
+        for idx, doc in enumerate(docs, start=1):
+            # Сигнал остановки (POST /stop-rebuild)
+            if config_store.get("kg_config", "rebuild_stop"):
+                logger.info("[rebuild] Получен сигнал STOP — останавливаюсь")
+                config_store.set("kg_config", "rebuild_status", "stopped")
+                config_store.set("kg_config", "rebuild_progress", {
+                    "processed": processed, "total": total, "current_doc": "",
+                    "started_at": started_at, "finished_at": now_iso(),
+                })
+                return {"status": "stopped", "processed": processed, "total": total}
+
+            doc_id = doc.get("document_id") or doc.get("id")
+            filename = doc.get("filename", "unknown")
+
+            config_store.set("kg_config", "rebuild_progress", {
+                "processed": processed, "total": total,
+                "current_doc": filename[:80],
+                "started_at": started_at, "finished_at": "",
+            })
+
+            # Очищаем старые данные графа и создаём узел документа
+            kg_service.clear_document(doc_id)
+            kg_service.create_document_node(doc_id, filename)
+
+            chunks = await embeddings_service.get_document_chunks(doc_id)
+            if not chunks:
+                results.append({"document_id": doc_id, "status": "no_chunks"})
+                processed += 1
+                continue
+
+            for i, chunk in enumerate(chunks[:10]):
+                chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+                chunk_text = chunk.get("content", "")
+                chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
+                kg_service.create_chunk_node(chunk_id, doc_id, chunk_text, chunk_seq)
+                try:
+                    await entity_extractor.extract_and_store(doc_id, chunk_id, chunk_text, chunk_seq, filename)
+                except Exception as e:
+                    logger.debug(f"[rebuild] Ошибка извлечения {filename}: {e}")
+
+            results.append({
+                "document_id": doc_id,
+                "filename": filename,
+                "chunks_processed": min(len(chunks), 10),
+            })
+            processed += 1
+
+        config_store.set("kg_config", "rebuild_stop", False)
+        config_store.set("kg_config", "rebuild_status", "completed")
+        config_store.set("kg_config", "rebuild_progress", {
+            "processed": processed, "total": total, "current_doc": "",
+            "started_at": started_at, "finished_at": now_iso(),
+        })
+        total_stats = kg_service.get_stats()
+        logger.info(f"[rebuild] Готово: {processed}/{total} документов")
+        return {"status": "completed", "processed": processed, "total": total,
+                "results": results, "total_stats": total_stats}
+
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.error(f"[rebuild] Ошибка перестроения графа: {e}")
+        try:
+            config_store.set("kg_config", "rebuild_status", "error")
+        except Exception:
+            pass
+        return {"status": "error", "message": str(e)}
+
+
 def revoke_document_tasks(document_id: str) -> int:
     """
     Отозвать все pending/active Celery задачи для указанного документа.
