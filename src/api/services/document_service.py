@@ -792,54 +792,70 @@ class DocumentService:
         return list(self._documents.values())[-limit:]
 
     async def delete_document(self, document_id: str) -> bool:
-        """
-        Удалить документ и его векторы.
-        
-        Args:
-            document_id: ID документа
-            
-        Returns:
-            True если успешно
+        """Удалить документ КОНСИСТЕНТНО: БД + Qdrant + Neo4j + файлы/миниатюры.
+
+        Не зависит от кэша: если записи нет в памяти — берём из БД; если и там
+        нет — всё равно чистим Qdrant/Neo4j (осиротевшие данные). Идемпотентно.
         """
         record = self._documents.get(document_id)
-        if not record:
-            return False
-        
-        # Удаляем файл
-        file_path = self._find_file(document_id, record.filename)
-        if file_path and file_path.exists():
-            file_path.unlink()
-        
-        # Удаляем из Qdrant
-        await embeddings_service.delete_document(document_id)
-        
-        # Удаляем файлы OCR, Markdown и миниатюры
-        ocr_dir = self._ocr_dir
-        for suffix in ["", ".md"]:
-            ocr_path = ocr_dir / f"{record.filename}{suffix}"
-            if ocr_path.exists():
+        filename = None
+        if record is None:
+            # Кэш мог быть очищен рестартом — берём из БД
+            try:
+                from src.api.services.document_repository import get_doc_repo
+                doc = get_doc_repo().get(document_id)
+                if doc is not None:
+                    filename = getattr(doc, "filename", None)
+            except Exception as e:
+                logger.warning(f"delete: не удалось прочитать запись {document_id}: {e}")
+        else:
+            filename = getattr(record, "filename", None)
+
+        # Удаляем файл документа + OCR/Markdown + миниатюру
+        if filename:
+            file_path = self._find_file(document_id, filename)
+            if file_path and file_path.exists():
                 try:
-                    ocr_path.unlink()
-                    logger.debug(f"Удалён {ocr_path}")
+                    file_path.unlink()
                 except Exception as e:
-                    logger.warning(f"Не удалось удалить {ocr_path}: {e}")
+                    logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+
+            ocr_dir = self._ocr_dir
+            for suffix in ["", ".md"]:
+                ocr_path = ocr_dir / f"{filename}{suffix}"
+                if ocr_path.exists():
+                    try:
+                        ocr_path.unlink()
+                        logger.debug(f"Удалён {ocr_path}")
+                    except Exception as e:
+                        logger.warning(f"Не удалось удалить {ocr_path}: {e}")
         thumb_path = self._thumb_dir / f"{document_id}.webp"
         if thumb_path.exists():
             try:
                 thumb_path.unlink()
             except Exception as e:
                 logger.warning(f"Не удалось удалить миниатюру: {e}")
-        
+
+        # Удаляем векторы из Qdrant (клиент ОБЯЗАТЕЛЬНО инициализировать!)
+        qdrant_ok = False
+        try:
+            await embeddings_service.initialize()
+            qdrant_ok = await embeddings_service.delete_document(document_id)
+            if not qdrant_ok:
+                logger.warning(f"Qdrant: не удалось удалить чанки {document_id}")
+        except Exception as e:
+            logger.warning(f"Qdrant: ошибка удаления {document_id}: {e}")
+
         # Удаляем из Neo4j (граф знаний)
         try:
             from src.indexing.knowledge_graph import kg_service
             kg_service.clear_document(document_id)
         except Exception as e:
-            logger.warning(f"Не удалось удалить из Neo4j: {e}")
-        
-        # Удаляем запись
-        del self._documents[document_id]
-        
+            logger.warning(f"Neo4j: не удалось удалить {document_id}: {e}")
+
+        # Убираем из кэша
+        self._documents.pop(document_id, None)
+
         # Отзываем Celery задачи для этого документа (если висят в очереди)
         try:
             from src.indexing.tasks import revoke_document_tasks
@@ -855,8 +871,8 @@ class DocumentService:
             get_doc_repo().delete(document_id)
         except Exception as e:
             logger.warning(f"Не удалось удалить документ {document_id} из БД: {e}")
-        
-        logger.info(f"Документ удален: {document_id}")
+
+        logger.info(f"Документ удалён: {document_id} (qdrant_ok={qdrant_ok})")
         return True
 
     def _save_document_tables(self, document_id: str, parsed) -> int:

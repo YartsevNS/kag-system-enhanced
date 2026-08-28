@@ -843,23 +843,33 @@ async def list_documents(
 
 
 @router.delete("/{document_id}", summary="Удалить документ")
-async def delete_document(document_id: str):
+async def delete_document(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """
-    Удалить документ и его индексы.
+    Удалить документ и его индексы (БД + Qdrant + Neo4j + файлы/миниатюры).
 
-    - **document_id**: Идентификатор документа
+    Многопользовательность: удалять можно только свои документы (или админу).
     """
+    # Проверка владельца
+    from src.api.services.document_repository import get_doc_repo
+    doc = get_doc_repo().get(document_id)
+    if doc is not None:
+        owner = getattr(doc, "uploaded_by", None)
+        is_admin = bool(current_user and getattr(current_user, "is_admin", False))
+        if owner and (not current_user or str(owner) != str(current_user.id)) and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Недостаточно прав: можно удалять только свои документы",
+            )
+    elif current_user is None:
+        raise HTTPException(status_code=401, detail="Требуется аутентификация")
+
     success = await document_service.delete_document(document_id)
-    
-    # Удаляем также из SQL таблицы (DocumentRepository)
-    try:
-        from src.api.services.document_repository import get_doc_repo
-        get_doc_repo().delete(document_id)
-    except Exception:
-        pass
 
     if not success:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+        raise HTTPException(status_code=500, detail="Не удалось удалить документ")
 
     return {"status": "ok", "document_id": document_id}
 

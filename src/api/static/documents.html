@@ -858,9 +858,11 @@ async function showDetail(docId) {
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
 async function delDoc(id) {
-  if (!confirm('Удалить документ безвозвратно?')) return;
+  if (!confirm('Удалить документ безвозвратно? Будут удалены файл, векторы и граф.')) return;
   try {
-    await fetch(`${API}/upload/${id}`, {method:'DELETE'});
+    const r = await fetch(`${API}/upload/${id}`, {method:'DELETE', credentials:'include'});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось удалить'));
     toast('✅ Удалён');
     loadAll();
   } catch(e) { toast('❌ '+e.message, true); }
