@@ -783,7 +783,31 @@ class DocumentService:
             raise
 
     def get_document_status(self, document_id: str) -> Optional[DocumentRecord]:
-        """Получить статус обработки документа"""
+        """Получить статус обработки документа.
+
+        Читаем СВЕЖИЙ статус из БД: кэш в памяти может устареть после того,
+        как worker обновил статус в SQL (иначе status навсегда останется
+        pending, пока API не перезапущен). Кэш при этом синхронизируем.
+        """
+        try:
+            from src.api.services.document_repository import get_doc_repo
+            doc = get_doc_repo().get(document_id)
+            if doc is not None:
+                record = DocumentRecord(
+                    document_id=doc.id,
+                    filename=doc.filename or "unknown",
+                    file_hash=doc.file_hash or "",
+                    status=doc.status or "pending",
+                    progress=doc.progress or 0,
+                    error=doc.error or "",
+                    chunks_count=doc.chunks_count or 0,
+                    file_size=doc.file_size or 0,
+                    version=doc.version or 1,
+                )
+                self._documents[document_id] = record  # синхронизируем кэш
+                return record
+        except Exception as e:
+            logger.debug(f"get_document_status: БД недоступна ({e}), из кэша")
         return self._documents.get(document_id)
 
     def list_documents(self, limit: int = 100) -> List[DocumentRecord]:
