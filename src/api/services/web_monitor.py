@@ -678,12 +678,14 @@ class WebMonitorService:
                             continue
 
                     # Ищем ссылки на документы
+                    entry_has_docs = False
                     # 1. Вложения (enclosures) — самый надёжный способ
                     for enc in entry.get('enclosures', []):
                         url = enc.get('href', '')
                         if url and self._is_document_url(url, source.file_types):
                             new_urls.append({'url': url, 'title': title, 'source': source.name,
                                              'published': pub_date.isoformat() if pub_date else None})
+                            entry_has_docs = True
 
                     # 2. Ссылки в description/content
                     desc = entry.get('description', '') + entry.get('content', [{}])[0].get('value', '') if hasattr(entry, 'content') else ''
@@ -692,10 +694,11 @@ class WebMonitorService:
                         if not any(u['url'] == url for u in new_urls):
                             new_urls.append({'url': url, 'title': title, 'source': source.name,
                                              'published': pub_date.isoformat() if pub_date else None})
+                            entry_has_docs = True
 
-                    # 3. Если нет вложений — сохраняем саму новость как текстовый документ
-                    #    (для новостных RSS типа ЦБ РФ, где нет PDF, но есть ценный текст)
-                    if not new_urls:
+                    # 3. Если в записи нет ссылок на документы — сохраняем саму новость
+                    #    как текстовый документ (для новостных RSS типа Хабр/РИА/ЦБ РФ)
+                    if not entry_has_docs:
                         link = entry.get('link', '')
                         summary = entry.get('summary', entry.get('description', ''))
                         text_content = f"{title}\n\n{summary}\n\nИсточник: {link}"
