@@ -118,9 +118,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div id="quick-result" style="margin-top:10px;font-size:13px"></div>
   </div>
 
-  <!-- Добавление источника -->
+  <!-- Добавление источника (сворачиваемое) -->
   <div class="panel">
-    <h2>➕ Добавить источник</h2>
+    <h2 style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px" onclick="toggleAddPanel()">
+      <span id="add-panel-arrow" style="color:var(--accent);font-size:15px;line-height:1">▾</span>➕ Добавить источник
+    </h2>
+    <div id="add-body">
     <div class="form-row">
       <div class="form-group"><label>Название</label><input type="text" id="add-name" placeholder="Например: ФСТЭК — документы"></div>
       <div class="form-group"><label>URL</label><input type="text" id="add-url" placeholder="https://..."></div>
@@ -152,6 +155,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <button class="btn-outline" onclick="sampleAllSources(3)">🧪 Быстрая проверка всех (по 3 файла)</button>
       <button class="btn-outline" onclick="resetSampleLimits()">♻️ Сбросить лимиты (качать всё)</button>
       <span style="font-size:11px;color:var(--text4);align-self:center">Тест: скачивается по N файлов с каждого источника, остальные помечаются skipped</span>
+    </div>
+    <div id="add-edit-bar" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-s)">
+      <span style="font-size:12px;color:var(--text2)">✏️ Редактирование источника: <strong id="edit-source-name"></strong></span>
+      <button class="btn" style="margin-left:10px" onclick="saveSourceEdit()">💾 Сохранить изменения</button>
+      <button class="btn-outline" style="margin-left:6px" onclick="cancelSourceEdit()">Отмена</button>
+    </div>
     </div>
   </div>
 
@@ -200,6 +209,7 @@ async function loadSources() {
     const r = await fetch(API + '/sources', { credentials: 'include' });
     const d = await r.json();
     const sources = d.sources || [];
+    window._monitorSources = sources;
     
     // Статистика
     document.getElementById('stat-sources').textContent = sources.length;
@@ -252,7 +262,7 @@ async function loadSources() {
             '<td>' + (s.items_found||0) + '</td>' +
             '<td>' + (s.items_uploaded||0) + '</td>' +
             '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
-            '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">🔍 Проверить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
+            '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--panel);border:1px solid var(--border);cursor:pointer;border-radius:4px" onclick="editSource(\'' + s.id + '\')" title="Редактировать">✏️</button> <button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">🔍</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
             '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -288,6 +298,87 @@ function updateAddFields() {
   ['add-fld-keywords','add-fld-css','add-fld-json','add-fld-pag','add-fld-pages'].forEach(function(id) {
     document.getElementById(id).style.display = (show[t]||[]).indexOf(id) !== -1 ? '' : 'none';
   });
+}
+
+function toggleAddPanel() {
+  var body = document.getElementById('add-body');
+  var arrow = document.getElementById('add-panel-arrow');
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+}
+
+var _editSourceId = null;
+
+function editSource(id) {
+  var src = (window._monitorSources || []).find(function(s) { return s.id === id; });
+  if (!src) { toast('Источник не найден', true); return; }
+  _editSourceId = id;
+  document.getElementById('add-name').value = src.name || '';
+  document.getElementById('add-url').value = src.url || '';
+  document.getElementById('add-type').value = src.type || 'rss';
+  document.getElementById('add-interval').value = src.check_interval_minutes || 360;
+  document.getElementById('add-keywords').value = (src.keywords || []).join(', ');
+  document.getElementById('add-css-selector').value = src.css_selector || '';
+  document.getElementById('add-json-path').value = src.json_path || '';
+  document.getElementById('add-pagination-url').value = src.pagination_url || '';
+  document.getElementById('add-pagination-pages').value = src.pagination_max_pages || 5;
+  document.getElementById('add-batch-size').value = src.batch_size || 5;
+  document.getElementById('add-batch-delay').value = src.batch_delay || 15;
+  document.getElementById('add-item-delay').value = src.item_delay || 2;
+  document.getElementById('add-batch-jitter').value = src.batch_jitter || 5;
+  document.getElementById('edit-source-name').textContent = src.name;
+  document.getElementById('add-edit-bar').style.display = '';
+  document.getElementById('add-body').style.display = '';
+  document.getElementById('add-panel-arrow').textContent = '▾';
+  updateAddFields();
+  document.getElementById('add-body').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function saveSourceEdit() {
+  if (!_editSourceId) return;
+  var name = document.getElementById('add-name').value.trim();
+  var url = document.getElementById('add-url').value.trim();
+  if (!name || !url) { toast('Заполните название и URL', true); return; }
+  try {
+    var r = await fetch(API + '/sources/' + _editSourceId, {
+      method: 'PUT', headers: authHeaders(),
+      body: JSON.stringify({
+        name: name, url: url,
+        type: document.getElementById('add-type').value,
+        check_interval_minutes: parseInt(document.getElementById('add-interval').value) || 360,
+        keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+        css_selector: document.getElementById('add-css-selector').value.trim() || undefined,
+        json_path: document.getElementById('add-json-path').value.trim() || undefined,
+        pagination_url: document.getElementById('add-pagination-url').value.trim() || undefined,
+        pagination_max_pages: parseInt(document.getElementById('add-pagination-pages').value) || 5,
+        batch_size: parseInt(document.getElementById('add-batch-size').value) || 5,
+        batch_delay: parseFloat(document.getElementById('add-batch-delay').value) || 15,
+        item_delay: parseFloat(document.getElementById('add-item-delay').value) || 2,
+        batch_jitter: parseFloat(document.getElementById('add-batch-jitter').value) || 5
+      })
+    });
+    var d = await r.json();
+    if (d.status === 'ok') {
+      toast('✅ Источник обновлён');
+      cancelSourceEdit();
+      loadSources();
+    } else {
+      toast('❌ ' + (d.message || 'Ошибка'), true);
+    }
+  } catch(e) { toast('❌ ' + e.message, true); }
+}
+
+function cancelSourceEdit() {
+  _editSourceId = null;
+  document.getElementById('add-edit-bar').style.display = 'none';
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-url').value = '';
+  document.getElementById('add-keywords').value = '';
+  document.getElementById('add-css-selector').value = '';
+  document.getElementById('add-json-path').value = '';
+  document.getElementById('add-pagination-url').value = '';
 }
 
 async function addSource() {
