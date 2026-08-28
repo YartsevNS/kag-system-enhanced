@@ -1084,6 +1084,61 @@ async def process_document_now(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/process-all", summary="Обработать все необработанные документы пользователя")
+async def process_all_mine(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Поставить в очередь ВСЕ необработанные документы текущего пользователя.
+
+    - обычный пользователь: только свои документы (pending/failed, uploaded_by == id)
+    - админ: все pending/failed (включая системные без владельца)
+    Уважает блокировку обработки из админки (423).
+    """
+    from src.api.services.config_store import config_store
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Требуется аутентификация")
+
+    cfg = config_store.get("system", "processing") or {}
+    if isinstance(cfg, dict) and cfg.get("blocked"):
+        msg = str(cfg.get("message", "")) or "обработка временно недоступна (техническое обслуживание)"
+        raise HTTPException(
+            status_code=423,
+            detail=f"Обработка заблокирована администратором: {msg}. Обратитесь к администратору.",
+        )
+
+    from src.api.services.document_repository import get_doc_repo
+    docs = get_doc_repo().get_all() or {}
+    is_admin = bool(getattr(current_user, "is_admin", False))
+
+    targets = []
+    for did, meta in docs.items():
+        status = meta.get("status") if isinstance(meta, dict) else getattr(meta, "status", None)
+        if status not in ("pending", "failed"):
+            continue
+        owner = meta.get("uploaded_by") if isinstance(meta, dict) else getattr(meta, "uploaded_by", None)
+        if is_admin:
+            targets.append(did)  # админ — любые (включая системные без владельца)
+        elif owner and str(owner) == str(current_user.id):
+            targets.append(did)  # только свои
+        elif not owner:
+            continue  # системные/чужие обычному пользователю не трогаем
+
+    if not targets:
+        return {"status": "ok", "queued": 0, "total_pending": 0,
+                "message": "Нет необработанных документов"}
+
+    from src.indexing.queue_guard import enqueue_document
+    queued = 0
+    for did in targets:
+        try:
+            enqueue_document(did, force=True)
+            queued += 1
+        except Exception as e:
+            logger.warning(f"process-all: не удалось поставить {did}: {e}")
+
+    return {"status": "ok", "queued": queued, "total_pending": len(targets),
+            "message": f"Поставлено в очередь: {queued} из {len(targets)}"}
+
+
 @router.get("/{document_id}/chunks", summary="Чанки документа")
 async def get_document_chunks(
     document_id: str,

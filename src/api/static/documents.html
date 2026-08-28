@@ -201,6 +201,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
   </div>
 
+  <!-- Обработка необработанных документов (общая кнопка) -->
+  <div id="proc-all-wrap" style="display:none;margin:0 0 14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="proc-all-btn" onclick="processAllMine()" style="padding:8px 14px">▶️ Обработать все необработанные</button>
+      <span id="proc-all-count" style="color:var(--text4)"></span>
+      <span style="color:var(--text3);flex:1;min-width:200px">Запускает обработку только ваших документов со статусом «Ожидает»/«Ошибка». Документы других пользователей не затрагиваются.</span>
+    </div>
+  </div>
+
   <!-- Модалка прав доступа -->
   <div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw">
@@ -569,6 +578,7 @@ async function loadAll() {
     // 145 документов = 145 HTTP + ~290 Qdrant scroll + 145 SQL (N+1).
     updateStats();
     renderAll();
+    updateProcAllButton();
     checkTypeWatchdog();
     // Автообновление если есть документы в обработке
     const hasProcessing = allDocs.some(d => d.status === 'processing' || d.status === 'pending');
@@ -777,7 +787,6 @@ function renderCards(docs) {
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
           <button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>
         </div>
-        ${canProcess(d)?`<div class="card-meta" style="margin-top:2px"><button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;background:${processingBlocked?'var(--border)':'var(--accent)'};opacity:${processingBlocked?'0.6':'1'};width:100%" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку (OCR → чанки → векторы)'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button></div>`:''}
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
       </div>
     </div>`;
@@ -808,8 +817,7 @@ function renderTable(docs) {
       <td>${sourceLabel(d)}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
-      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button>
-      ${canProcess(d)?`<button class="tag" style="background:${processingBlocked?'var(--border)':'rgba(62,207,143,0.15)'};color:${processingBlocked?'var(--text4)':'var(--accent)'};cursor:${processingBlocked?'not-allowed':'pointer'};border:none;font-size:11px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}</td>
+      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
     </tr>`).join('');
 }
 
@@ -965,6 +973,7 @@ async function loadCurrentUser() {
     if (r.ok) currentUser = await r.json();
   } catch(e) { currentUser = null; }
   if (typeof renderAll === 'function') renderAll();
+  if (typeof updateProcAllButton === 'function') updateProcAllButton();
 }
 
 // Можно ли пользователю запускать обработку документа
@@ -990,6 +999,7 @@ async function loadProcessingConfig() {
         if (msgEl && processingBlocked) msgEl.textContent = ` (${processingBlockMsg})`;
       }
       if (typeof renderAll === 'function') renderAll();
+      if (typeof updateProcAllButton === 'function') updateProcAllButton();
     }
   } catch(e) { console.error('processing-config load:', e); }
 }
@@ -1005,6 +1015,38 @@ async function processDocument(id) {
   } catch(e) {
     toast('❌ ' + e.message, true);
   }
+}
+
+// Общая кнопка: обработать все необработанные документы пользователя
+async function processAllMine() {
+  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  const btn = document.getElementById('proc-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Постановка в очередь...'; }
+  try {
+    const r = await fetch(`${API}/upload/process-all`, { method: 'POST', credentials: 'include' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Ошибка запуска обработки'));
+    toast('✅ ' + (d.message || 'Обработка запущена'));
+    setTimeout(() => { loadAll(); }, 800);
+  } catch(e) {
+    toast('❌ ' + e.message, true);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '▶️ Обработать все необработанные'; }
+}
+
+function updateProcAllButton() {
+  const wrap = document.getElementById('proc-all-wrap');
+  const cnt = document.getElementById('proc-all-count');
+  if (!wrap || !allDocs) return;
+  const mine = allDocs.filter(d => canProcess(d));
+  if (processingBlocked || !mine.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  if (cnt) cnt.textContent = `Необработанных: ${mine.length}`;
+  const btn = document.getElementById('proc-all-btn');
+  if (btn) btn.disabled = false;
 }
 
 async function viewOcr(id) {
