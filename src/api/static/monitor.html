@@ -19,6 +19,11 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .sub{font-size:13px;color:var(--text4);margin-bottom:20px}
 .panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:18px;margin-bottom:16px}
 .panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
+/* Сворачиваемые панели: заголовок кликабелен, тело скрыто по умолчанию */
+.cp-head{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.cp-head:hover{color:var(--accent)}
+.cp-arrow{color:var(--accent);font-size:15px;line-height:1}
+.cp-body{display:none}
 .stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 16px}
 .stat-num{font-size:22px;font-weight:700;color:var(--text)}
@@ -101,9 +106,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
   </div>
 
-  <!-- Быстрая проверка URL -->
-  <div class="panel">
-    <h2>🔍 Быстрая проверка страницы</h2>
+  <!-- Быстрая проверка URL (сворачиваемая) -->
+  <div class="panel cp">
+    <h2 class="cp-head" onclick="toggleCp(this)"><span class="cp-arrow">▸</span>🔍 Быстрая проверка страницы</h2>
+    <div class="cp-body">
     <p style="font-size:12px;color:var(--text4);margin-bottom:10px">Проверить конкретный URL без добавления в список источников. Документ будет обработан и загружен в KAG.</p>
     <div class="form-row">
       <div class="form-group" style="flex:1"><label>URL страницы или документа</label><input type="text" id="quick-url" placeholder="https://..."></div>
@@ -116,14 +122,13 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <button class="btn" onclick="quickCheck()" id="quick-btn">⚡ Проверить</button>
     </div>
     <div id="quick-result" style="margin-top:10px;font-size:13px"></div>
+    </div>
   </div>
 
   <!-- Добавление источника (сворачиваемое) -->
-  <div class="panel">
-    <h2 style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px" onclick="toggleAddPanel()">
-      <span id="add-panel-arrow" style="color:var(--accent);font-size:15px;line-height:1">▾</span>➕ Добавить источник
-    </h2>
-    <div id="add-body">
+  <div class="panel cp">
+    <h2 class="cp-head" onclick="toggleCp(this)"><span class="cp-arrow">▸</span>➕ Добавить источник</h2>
+    <div class="cp-body" id="add-body">
     <div class="form-row">
       <div class="form-group"><label>Название</label><input type="text" id="add-name" placeholder="Например: ФСТЭК — документы"></div>
       <div class="form-group"><label>URL</label><input type="text" id="add-url" placeholder="https://..."></div>
@@ -233,8 +238,8 @@ async function loadSources() {
       api:     { icon: '⚙️', label: 'API — JSON-эндпоинты' }
     };
     var ORDER = ['rss', 'scrape', 'browser', 'change', 'api'];
-    var collapsed = [];
-    try { collapsed = JSON.parse(localStorage.getItem('kag_monitor_collapsed') || '[]'); } catch(e) {}
+    var expanded = [];
+    try { expanded = JSON.parse(localStorage.getItem('kag_monitor_expanded') || '[]'); } catch(e) {}
     var html = '';
     if (!sources.length) {
       html = '<div style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</div>';
@@ -243,13 +248,13 @@ async function loadSources() {
         var group = sources.filter(function(s) { return (s.type || 'rss') === type; });
         if (!group.length) return;
         var meta = TYPE_META[type] || { icon: '❔', label: type };
-        var isCol = collapsed.indexOf(type) !== -1;
+        var isExp = expanded.indexOf(type) !== -1;
         html += '<div style="margin-bottom:14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);overflow:hidden">' +
           '<div class="src-sec" data-sec="' + type + '" onclick="toggleSrcSec(\'' + type + '\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">' +
-          '<span id="sec-arrow-' + type + '" style="color:var(--accent);font-size:15px;line-height:1">' + (isCol ? '▸' : '▾') + '</span>' +
+          '<span id="sec-arrow-' + type + '" style="color:var(--accent);font-size:15px;line-height:1">' + (isExp ? '▾' : '▸') + '</span>' +
           '<strong>' + meta.icon + ' ' + meta.label + '</strong>' +
           '<span class="badge badge-info">' + group.length + '</span>' +
-          '</div><div id="sec-body-' + type + '" style="display:' + (isCol ? 'none' : '') + '">' +
+          '</div><div id="sec-body-' + type + '" style="display:' + (isExp ? '' : 'none') + '">' +
           '<table><thead><tr><th>Название</th><th>URL</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
         group.forEach(function(s) {
           var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
@@ -281,13 +286,13 @@ function toggleSrcSec(type) {
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   if (arrow) arrow.textContent = open ? '▸' : '▾';
-  // Запоминаем свёрнутые секции
-  var collapsed = [];
-  try { collapsed = JSON.parse(localStorage.getItem('kag_monitor_collapsed') || '[]'); } catch(e) {}
-  var idx = collapsed.indexOf(type);
-  if (open && idx === -1) collapsed.push(type);
-  if (!open && idx !== -1) collapsed.splice(idx, 1);
-  try { localStorage.setItem('kag_monitor_collapsed', JSON.stringify(collapsed)); } catch(e) {}
+  // Запоминаем развёрнутые секции
+  var expanded = [];
+  try { expanded = JSON.parse(localStorage.getItem('kag_monitor_expanded') || '[]'); } catch(e) {}
+  var idx = expanded.indexOf(type);
+  if (!open && idx === -1) expanded.push(type);
+  if (open && idx !== -1) expanded.splice(idx, 1);
+  try { localStorage.setItem('kag_monitor_expanded', JSON.stringify(expanded)); } catch(e) {}
 }
 
 function updateAddFields() {
@@ -300,9 +305,11 @@ function updateAddFields() {
   });
 }
 
-function toggleAddPanel() {
-  var body = document.getElementById('add-body');
-  var arrow = document.getElementById('add-panel-arrow');
+function toggleCp(head) {
+  var panel = head.closest('.cp');
+  if (!panel) return;
+  var body = panel.querySelector('.cp-body');
+  var arrow = panel.querySelector('.cp-arrow');
   if (!body) return;
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
@@ -330,10 +337,13 @@ function editSource(id) {
   document.getElementById('add-batch-jitter').value = src.batch_jitter || 5;
   document.getElementById('edit-source-name').textContent = src.name;
   document.getElementById('add-edit-bar').style.display = '';
-  document.getElementById('add-body').style.display = '';
-  document.getElementById('add-panel-arrow').textContent = '▾';
+  // Открыть панель добавления
+  var body = document.getElementById('add-body');
+  body.style.display = '';
+  var arrow = document.getElementById('add-body').closest('.cp').querySelector('.cp-arrow');
+  if (arrow) arrow.textContent = '▾';
   updateAddFields();
-  document.getElementById('add-body').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  body.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveSourceEdit() {
