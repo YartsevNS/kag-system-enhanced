@@ -110,3 +110,13 @@ download_url > url > href > link; для GitHub contents API пропускаю�
 
 Форма добавления показывает поля под выбранный метод. json_path/sample_limit
 сериализуются в config_store (был баг: терялись при save/load).
+
+## Лента новостей /news (2026-08-28)
+
+/news показывает НАЙДЕННЫЕ RSS-новости из реестра web_monitor:
+- _check_rss сохраняет каждую найденную запись в config_store `web_monitor`/`news_items`
+  (title, text, url, source_name, published, found_at; дедуп по url, лимит 500)
+- GET /api/v1/monitor/news?limit=&source=&q= — список (сортировка found_at desc)
+- /news больше НЕ создаёт временные источники (раньше создавал temp-* на каждый
+  просмотр — мусор в мониторе); источники ленты = RSS-источники web_monitor,
+  «Добавить» создаёт rss-источник в мониторе, toggle/remove — enable/delete.

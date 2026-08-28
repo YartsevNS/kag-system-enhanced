@@ -67,6 +67,32 @@ async def list_sources():
         return {"error": str(e)}
 
 
+@router.get("/news", summary="Лента найденных RSS-новостей")
+async def news_list(limit: int = 200, source: str = "", q: str = ""):
+    """Найденные web_monitor'ом RSS-новости (реестр news_items).
+
+    Фильтры: source (имя источника), q (поиск по заголовку/тексту).
+    """
+    try:
+        from src.api.services.config_store import config_store
+        all_items = config_store.get("web_monitor", "news_items") or []
+        if not isinstance(all_items, list):
+            all_items = []
+
+        sources = sorted({x.get("source_name", "") for x in all_items if x.get("source_name")})
+
+        items = all_items
+        if source:
+            items = [x for x in items if x.get("source_name") == source]
+        if q:
+            ql = q.lower()
+            items = [x for x in items if ql in ((x.get("title", "") + " " + x.get("text", "")).lower())]
+        items = sorted(items, key=lambda x: x.get("found_at", ""), reverse=True)[:limit]
+        return {"items": items, "sources": sources, "total": len(all_items)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/sources", summary="Добавить источник мониторинга")
 async def add_source(data: dict = Body(...)):
     """

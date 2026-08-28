@@ -682,14 +682,16 @@ class WebMonitorService:
                     for enc in entry.get('enclosures', []):
                         url = enc.get('href', '')
                         if url and self._is_document_url(url, source.file_types):
-                            new_urls.append({'url': url, 'title': title, 'source': source.name})
+                            new_urls.append({'url': url, 'title': title, 'source': source.name,
+                                             'published': pub_date.isoformat() if pub_date else None})
 
                     # 2. Ссылки в description/content
                     desc = entry.get('description', '') + entry.get('content', [{}])[0].get('value', '') if hasattr(entry, 'content') else ''
                     doc_urls = self._extract_document_links(desc, source.file_types)
                     for url in doc_urls:
                         if not any(u['url'] == url for u in new_urls):
-                            new_urls.append({'url': url, 'title': title, 'source': source.name})
+                            new_urls.append({'url': url, 'title': title, 'source': source.name,
+                                             'published': pub_date.isoformat() if pub_date else None})
 
                     # 3. Если нет вложений — сохраняем саму новость как текстовый документ
                     #    (для новостных RSS типа ЦБ РФ, где нет PDF, но есть ценный текст)
@@ -706,8 +708,19 @@ class WebMonitorService:
                             'source': source.name,
                             'is_rss_text': True,
                             'text_content': text_content,
-                            'news_key': news_key  # Для дедупликации по названию+дате
+                            'news_key': news_key,  # Для дедупликации по названию+дате
+                            'published': pub_date.isoformat() if pub_date else None
                         })
+
+                # Сохраняем найденные новости в реестр (для /news)
+                for item in new_urls:
+                    self._store_news_item({
+                        'title': item.get('title', ''),
+                        'text': item.get('text_content') or '',
+                        'url': item.get('url', ''),
+                        'source_name': source.name,
+                        'published': item.get('published'),
+                    })
 
                 result.items = new_urls
 
@@ -1710,6 +1723,23 @@ class WebMonitorService:
     # ============================================================
     # Документ-уровень: история скачиваний
     # ============================================================
+
+    def _store_news_item(self, item: dict, max_items: int = 500):
+        """Сохранить найденную RSS-новость в реестр (для /news). Дедуп по url."""
+        try:
+            from src.api.services.config_store import config_store
+            items = config_store.get("web_monitor", "news_items") or []
+            if not isinstance(items, list):
+                items = []
+            url = item.get("url", "")
+            if url and any(x.get("url") == url for x in items):
+                return
+            item["found_at"] = datetime.utcnow().isoformat()
+            items.append(item)
+            items = items[-max_items:]
+            config_store.set("web_monitor", "news_items", items)
+        except Exception as e:
+            logger.debug(f"news_store: {e}")
 
     def track_download(self, entry: dict):
         """Сохранить запись о попытке скачивания документа.

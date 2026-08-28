@@ -137,47 +137,53 @@ function ah(){var t=getToken();return t?{'Content-Type':'application/json','Auth
 // ============================================================
 // Загрузка источников из localStorage + API
 // ============================================================
-function loadSources(){
-  var saved = localStorage.getItem('news_sources');
-  newsSources = saved ? JSON.parse(saved) : [];
-  // Default test source
-  if(!newsSources.length){
-    newsSources = [{name:'Securelist',url:'https://securelist.com/feed/'}];
-    saveSources();
-  }
-  renderSourceChips();
-  updateSourceFilter();
-}
-
-function saveSources(){localStorage.setItem('news_sources',JSON.stringify(newsSources));}
-
-function addNewsSource(){
-  var url=document.getElementById('new-source-url').value.trim();
-  var name=document.getElementById('new-source-name').value.trim();
-  if(!url)return;
-  if(!name) name = url.replace(/https?:\/\//,'').split('/')[0];
-  if(newsSources.find(function(s){return s.url===url})){alert('Уже добавлен');return;}
-  newsSources.push({name:name,url:url});
-  saveSources();
-  document.getElementById('new-source-url').value='';
-  document.getElementById('new-source-name').value='';
+async function loadSources(){
+  // Источники новостей = RSS-источники web_monitor
+  try {
+    var r = await fetch(API + '/sources', { credentials: 'include' });
+    var d = await r.json();
+    newsSources = (d.sources || []).filter(function(s){ return s.type === 'rss'; })
+      .map(function(s){ return { name: s.name, url: s.url, id: s.id, enabled: s.enabled !== false }; });
+  } catch(e) { newsSources = []; }
   renderSourceChips();
   updateSourceFilter();
   refreshNews();
 }
 
-function removeSource(url){
-  newsSources=newsSources.filter(function(s){return s.url!==url;});
-  saveSources();
-  allNews=allNews.filter(function(n){return n.sourceUrl!==url;});
-  renderSourceChips();
-  updateSourceFilter();
-  applyFilter();
+function saveSources(){ /* источники хранятся в web_monitor, локально не сохраняем */ }
+
+async function addNewsSource(){
+  var url=document.getElementById('new-source-url').value.trim();
+  var name=document.getElementById('new-source-name').value.trim();
+  if(!url)return;
+  if(!name) name = url.replace(/https?:\/\//,'').split('/')[0];
+  try {
+    var r = await fetch(API + '/sources', { method: 'POST', headers: ah(), credentials: 'include',
+      body: JSON.stringify({ name: name, url: url, type: 'rss', check_interval_minutes: 360 }) });
+    var d = await r.json();
+    if (d.status !== 'ok') { alert('❌ ' + (d.message || 'Ошибка')); return; }
+    document.getElementById('new-source-url').value='';
+    document.getElementById('new-source-name').value='';
+    await loadSources();
+  } catch(e) { alert('❌ ' + e.message); }
 }
 
-function toggleSource(url){
-  var s=newsSources.find(function(s){return s.url===url;});
-  if(s){s.enabled=!s.enabled;saveSources();renderSourceChips();refreshNews();}
+async function removeSource(url){
+  var s = newsSources.find(function(x){ return x.url === url; });
+  if (s && s.id) {
+    try { await fetch(API + '/sources/' + s.id, { method: 'DELETE', headers: ah(), credentials: 'include' }); } catch(e) {}
+  }
+  await loadSources();
+}
+
+async function toggleSource(url){
+  var s = newsSources.find(function(x){ return x.url === url; });
+  if (!s || !s.id) return;
+  try {
+    await fetch(API + '/sources/' + s.id, { method: 'PUT', headers: ah(), credentials: 'include',
+      body: JSON.stringify({ enabled: s.enabled === false }) });
+  } catch(e) {}
+  await loadSources();
 }
 
 function renderSourceChips(){
@@ -195,8 +201,15 @@ function updateSourceFilter(){
   var sel=document.getElementById('filter-source');
   var val=sel.value;
   sel.innerHTML='<option value="">Все источники</option>';
+  var seen={};
   newsSources.forEach(function(s){
+    if(seen[s.name]) return; seen[s.name]=1;
     sel.innerHTML+='<option value="'+s.name+'"'+(s.name===val?' selected':'')+'>'+s.name+'</option>';
+  });
+  // Источники из найденных новостей (могут отсутствовать в списке RSS монитора)
+  (allNews||[]).forEach(function(n){
+    if(!n.sourceName || seen[n.sourceName]) return; seen[n.sourceName]=1;
+    sel.innerHTML+='<option value="'+n.sourceName+'"'+(n.sourceName===val?' selected':'')+'>'+n.sourceName+'</option>';
   });
 }
 
@@ -211,50 +224,27 @@ async function refreshNews(){
   var grid=document.getElementById('news-grid');
   grid.innerHTML='<div class="empty"><div class="spinner"></div></div>';
   
-  var active=newsSources.filter(function(s){return s.enabled!==false;});
-  if(!active.length){grid.innerHTML='<div class="empty">📡 Нет активных источников</div>';return;}
-  
-  var newItems=[];
-  for(var si=0; si<active.length; si++){
-    var src=active[si];
-    try{
-      // Прокси через наш API чтобы обойти CORS
-      var r=await fetch(API+'/sources',{method:'POST',headers:ah(),body:JSON.stringify({
-        name:'temp-'+src.name, url:src.url, type:'rss', enabled:true, check_interval_minutes:0
-      })});
-      var d=await r.json();
-      if(d.status!=='ok'){console.warn('Source create failed:',src.name);continue;}
-      var sid=d.source.id;
-      
-      // Запускаем проверку
-      var r2=await fetch(API+'/check',{method:'POST',headers:ah(),body:JSON.stringify({source_id:sid})});
-      var d2=await r2.json();
-      
-      // Удаляем временный источник
-      await fetch(API+'/sources/'+sid,{method:'DELETE',headers:ah()});
-      
-      // Берём найденные элементы
-      var result=(d2.results||[])[0]||{};
-      if(result.items){
-        result.items.forEach(function(item){
-          item.sourceName=src.name;
-          item.sourceUrl=src.url;
-          // Извлекаем дату из текста если есть
-          var dateMatch=(item.text_content||'').match(/(\d{2}\.\d{2}\.\d{4})/);
-          item._ts=Date.now();
-          newItems.push(item);
-        });
-      }
-    }catch(e){console.warn('Fetch failed for',src.name,e);}
+  try {
+    var r = await fetch(API + '/news?limit=200', { credentials: 'include' });
+    var d = await r.json();
+    if (!d || d.error) { grid.innerHTML='<div class="empty">❌ ' + ((d && d.error) || 'Ошибка') + '</div>'; return; }
+    allNews = (d.items || []).map(function(n){
+      return {
+        title: n.title || '',
+        text_content: n.text || '',
+        url: n.url || '',
+        sourceName: n.source_name || '',
+        sourceUrl: '',
+        published: n.published || '',
+        _ts: Date.now()
+      };
+    });
+    // Обновляем список источников-фильтров из новостей (в дополнение к RSS web_monitor)
+    updateSourceFilter();
+  } catch(e) {
+    grid.innerHTML='<div class="empty">❌ ' + e.message + '</div>';
+    return;
   }
-  
-  // Дедупликация по тексту
-  var seen=new Set();
-  allNews=[];
-  newItems.forEach(function(item){
-    var key=(item.title||'').substring(0,80)+(item.text_content||'').substring(0,80);
-    if(!seen.has(key)){seen.add(key);allNews.push(item);}
-  });
   
   applyFilter();
 }
