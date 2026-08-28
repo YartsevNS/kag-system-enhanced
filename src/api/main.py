@@ -263,15 +263,6 @@ async def chat_page():
     return _html_response(os.path.join(static_path, "chat.html"))
 
 
-@app.get("/ocr", summary="OCR Демо")
-async def ocr_page():
-    """Страница демонстрации OCR"""
-    ocr_path = os.path.join(static_path, "ocr.html")
-    if os.path.exists(ocr_path):
-        return FileResponse(ocr_path)
-    return {"error": "OCR page not found"}
-
-
 @app.get("/monitoring", summary="Мониторинг")
 async def monitoring_page():
     """Страница мониторинга"""
