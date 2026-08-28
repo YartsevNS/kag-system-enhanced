@@ -205,10 +205,7 @@ async def admin_web(request: Request):
     """
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
-    admin_path = os.path.join(static_path, "admin.html")
-    if os.path.exists(admin_path):
-        return FileResponse(admin_path)
-    return {"error": "Admin page not found"}
+    return _html_response(os.path.join(static_path, "admin.html"))
 
 
 @app.get("/docker", summary="Docker Dashboard")
@@ -237,10 +234,7 @@ async def login_page():
 @app.get("/documents", summary="Управление документами")
 async def documents_page():
     """Страница управления документами"""
-    docs_path = os.path.join(static_path, "documents.html")
-    if os.path.exists(docs_path):
-        return FileResponse(docs_path)
-    return {"error": "Documents page not found"}
+    return _html_response(os.path.join(static_path, "documents.html"))
 
 
 @app.get("/qdrant", summary="Qdrant Database Dashboard")
@@ -266,10 +260,7 @@ async def chunks_page():
 @app.get("/chat", summary="Чат с AI")
 async def chat_page():
     """Страница чата"""
-    chat_path = os.path.join(static_path, "chat.html")
-    if os.path.exists(chat_path):
-        return FileResponse(chat_path)
-    return {"error": "Chat page not found"}
+    return _html_response(os.path.join(static_path, "chat.html"))
 
 
 @app.get("/ocr", summary="OCR Демо")
@@ -374,17 +365,11 @@ async def kg_page():
 
 @app.get("/monitor", summary="Веб-мониторинг")
 async def monitor_page():
-    monitor_path = os.path.join(static_path, "monitor.html")
-    if os.path.exists(monitor_path):
-        return FileResponse(monitor_path)
-    return {"error": "Monitor page not found"}
+    return _html_response(os.path.join(static_path, "monitor.html"))
 
 
 @app.get("/news", summary="Лента новостей")
 async def news_page():
-    news_path = os.path.join(static_path, "news.html")
-    if os.path.exists(news_path):
-        return FileResponse(news_path)
-    return {"error": "News page not found"}
+    return _html_response(os.path.join(static_path, "news.html"))
 
 
