@@ -292,6 +292,7 @@ class DocumentService:
             status="pending",
             uploaded_by=uploaded_by,
             group_ids=group_ids or [],
+            source_metadata=source_metadata,
             visibility=(access or {}).get("visibility", "public") or "public",
             allow_group_ids=(access or {}).get("allow_group_ids") or [],
             deny_group_ids=(access or {}).get("deny_group_ids") or [],

@@ -1391,154 +1391,187 @@ class WebMonitorService:
                             skip_count += 1
                         continue  # Переходим к следующему элементу
 
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
-                        # Обработка rate limiting
-                        if resp.status == 429:
-                            retry_after = int(resp.headers.get('Retry-After', '30'))
-                            logger.warning(f"⏳ Rate limited ({url[:60]}), жду {retry_after}с...")
-                            await _asyncio.sleep(retry_after)
-                            skip_count += 1
-                            continue
+                    # ── Скачивание с retry/backoff (429/5xx/таймаут) ─────────
+                    content = None
+                    content_type = ''
+                    content_disposition = ''
+                    for attempt in range(1, 4):  # максимум 3 попытки
+                        try:
+                            async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                                # Обработка rate limiting: ждём Retry-After и пробуем снова
+                                if resp.status == 429:
+                                    retry_after = int(resp.headers.get('Retry-After', '30'))
+                                    logger.warning(f"⏳ Rate limited ({url[:60]}), жду {retry_after}с...")
+                                    await _asyncio.sleep(retry_after)
+                                    continue
 
-                        if resp.status == 503:
-                            logger.warning(f"🔌 Сервер недоступен ({url[:60]}), пропускаю")
-                            skip_count += 1
-                            continue
+                                # 5xx — сервер перегружен: экспоненциальный backoff
+                                if resp.status >= 500:
+                                    wait = 5 * (2 ** (attempt - 1))
+                                    logger.warning(f"🔌 HTTP {resp.status} ({url[:60]}), попытка {attempt}/3, жду {wait}с...")
+                                    await _asyncio.sleep(wait)
+                                    continue
 
-                        if resp.status != 200:
-                            logger.warning(f"Не удалось скачать {url[:60]}: HTTP {resp.status}")
-                            skip_count += 1
-                            continue
+                                if resp.status != 200:
+                                    logger.warning(f"Не удалось скачать {url[:60]}: HTTP {resp.status}")
+                                    break
 
-                        content = await resp.read()
+                                content = await resp.read()
+                                content_type = resp.headers.get('Content-Type', '')
+                                content_disposition = resp.headers.get('Content-Disposition', '')
+                                break
+                        except (aiohttp.ClientError, _asyncio.TimeoutError) as e:
+                            if attempt < 3:
+                                wait = 5 * (2 ** (attempt - 1))
+                                logger.warning(f"⚠️ Сетевая ошибка ({url[:60]}): {e}, попытка {attempt + 1}/3 через {wait}с")
+                                await _asyncio.sleep(wait)
+                            else:
+                                logger.warning(f"❌ Скачивание не удалось ({url[:60]}): {e}")
+                                break
 
-                        # Определяем тип файла по Content-Type
-                        content_type = resp.headers.get('Content-Type', '')
-                        content_disposition = resp.headers.get('Content-Disposition', '')
-                        logger.debug(f"  URL={url[:60]} CT={content_type} CD={content_disposition[:80]}")
+                    if content is None:
+                        skip_count += 1
+                        continue
+                    logger.debug(f"  URL={url[:60]} CT={content_type} CD={content_disposition[:80]}")
 
-                        # Извлекаем имя файла из Content-Disposition если есть
-                        import re as _re
-                        # Приоритет — RFC 5987 filename* (UTF-8, %-encoded):
-                        #   filename*=UTF-8''%D0%9E%D1%81%D0%BD...%2Edoc
-                        # Он корректно передаёт кириллицу; простой filename="..."
-                        # часто содержит кракозябры/подчёркивания вместо русских букв.
-                        cd_star = _re.search(
-                            r"filename\*\s*=\s*UTF-8''([^;]*)",
+                    # Извлекаем имя файла из Content-Disposition если есть
+                    import re as _re
+                    # Приоритет — RFC 5987 filename* (UTF-8, %-encoded):
+                    #   filename*=UTF-8''%D0%9E%D1%81%D0%BD...%2Edoc
+                    # Он корректно передаёт кириллицу; простой filename="..."
+                    # часто содержит кракозябры/подчёркивания вместо русских букв.
+                    cd_star = _re.search(
+                        r"filename\*\s*=\s*UTF-8''([^;]*)",
+                        content_disposition,
+                        _re.IGNORECASE,
+                    )
+                    if cd_star:
+                        try:
+                            from urllib.parse import unquote
+                            filename = unquote(cd_star.group(1).strip().strip('"')) or filename
+                        except Exception:
+                            pass
+                    else:
+                        cd_match = _re.search(
+                            r'filename[^;=\n]*=["\']?([^"\';\\n]*)',
                             content_disposition,
                             _re.IGNORECASE,
                         )
-                        if cd_star:
-                            try:
-                                from urllib.parse import unquote
-                                filename = unquote(cd_star.group(1).strip().strip('"')) or filename
-                            except Exception:
-                                pass
-                        else:
-                            cd_match = _re.search(
-                                r'filename[^;=\n]*=["\']?([^"\';\\n]*)',
-                                content_disposition,
-                                _re.IGNORECASE,
-                            )
-                            if cd_match:
-                                filename = cd_match.group(1).strip() or filename
+                        if cd_match:
+                            filename = cd_match.group(1).strip() or filename
 
-                        # Если тип файла не определён по расширению — берём из Content-Type
-                        if not any(filename.lower().endswith(ext) for ext in source.file_types):
-                            mime_to_ext = {
-                                'application/pdf': '.pdf',
-                                'application/msword': '.doc',
-                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-                                'application/vnd.ms-excel': '.xls',
-                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
-                                'text/plain': '.txt',
-                                'text/csv': '.csv',
-                                'text/html': '.html',
-                            }
-                            for mime, ext in mime_to_ext.items():
-                                if mime in content_type:
-                                    filename = filename.rsplit('.', 1)[0] + ext
-                                    break
+                    # Если тип файла не определён по расширению — берём из Content-Type
+                    if not any(filename.lower().endswith(ext) for ext in source.file_types):
+                        mime_to_ext = {
+                            'application/pdf': '.pdf',
+                            'application/msword': '.doc',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                            'application/vnd.ms-excel': '.xls',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+                            'text/plain': '.txt',
+                            'text/csv': '.csv',
+                            'text/html': '.html',
+                        }
+                        for mime, ext in mime_to_ext.items():
+                            if mime in content_type:
+                                filename = filename.rsplit('.', 1)[0] + ext
+                                break
 
-                        if len(content) < 100:  # Слишком маленький — не документ
-                            logger.info(f"⏭ Пропущен {filename[:40]}: слишком маленький ({len(content)} bytes)")
-                            skip_count += 1
-                            self.track_download({
+                    if len(content) < 100:  # Слишком маленький — не документ
+                        logger.info(f"⏭ Пропущен {filename[:40]}: слишком маленький ({len(content)} bytes)")
+                        skip_count += 1
+                        self.track_download({
+                            'url': url, 'filename': filename,
+                            'source_id': source.id, 'source_name': source.name,
+                            'status': 'skipped', 'error': 'file too small (<100 bytes)',
+                            'file_hash': None, 'file_size': len(content),
+                            'kag_document_id': None, 'content_type': None,
+                            'downloaded_at': datetime.utcnow().isoformat()
+                        })
+                        continue
+
+                    # Магические байты: отсекаем HTML-страницу ошибки вместо файла
+                    # (сайт может отдать 200 с <html> вместо PDF при сбое/JS-редиректе)
+                    _bin_ext = ('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.pptx', '.rtf')
+                    if filename.lower().endswith(_bin_ext) and content[:1] == b'<':
+                        logger.warning(f"⏭ {filename[:40]}: HTML вместо документа ({content[:40]!r})")
+                        skip_count += 1
+                        self.track_download({
+                            'url': url, 'filename': filename,
+                            'source_id': source.id, 'source_name': source.name,
+                            'status': 'skipped', 'error': 'html instead of document (magic bytes)',
+                            'file_hash': None, 'file_size': len(content),
+                            'kag_document_id': None, 'content_type': content_type,
+                            'downloaded_at': datetime.utcnow().isoformat()
+                        })
+                        continue
+
+                    # SHA-256 для логирования
+                    file_hash = hashlib.sha256(content).hexdigest()
+
+                    # Реестр дубликатов: файл уже есть в KAG (возможно, хуже качеством)
+                    try:
+                        from src.api.services.document_service import document_service
+                        _existing = document_service._find_by_hash(file_hash)
+                        if _existing:
+                            self.track_duplicate({
                                 'url': url, 'filename': filename,
                                 'source_id': source.id, 'source_name': source.name,
-                                'status': 'skipped', 'error': 'file too small (<100 bytes)',
-                                'file_hash': None, 'file_size': len(content),
-                                'kag_document_id': None, 'content_type': None,
-                                'downloaded_at': datetime.utcnow().isoformat()
-                            })
-                            continue
-
-                        # SHA-256 для логирования
-                        file_hash = hashlib.sha256(content).hexdigest()
-
-                        # Реестр дубликатов: файл уже есть в KAG (возможно, хуже качеством)
-                        try:
-                            from src.api.services.document_service import document_service
-                            _existing = document_service._find_by_hash(file_hash)
-                            if _existing:
-                                self.track_duplicate({
-                                    'url': url, 'filename': filename,
-                                    'source_id': source.id, 'source_name': source.name,
-                                    'file_hash': file_hash, 'file_size': len(content),
-                                    'existing_document_id': getattr(_existing, 'document_id', None),
-                                    'existing_filename': getattr(_existing, 'filename', ''),
-                                    'found_at': datetime.utcnow().isoformat()
-                                })
-                                self.track_download({
-                                    'url': url, 'filename': filename,
-                                    'source_id': source.id, 'source_name': source.name,
-                                    'status': 'duplicate',
-                                    'file_hash': file_hash, 'file_size': len(content),
-                                    'kag_document_id': getattr(_existing, 'document_id', None),
-                                    'content_type': content_type,
-                                    'downloaded_at': datetime.utcnow().isoformat()
-                                })
-                                logger.info(f"🔁 Дубликат (реестр): {filename[:50]} уже есть как {getattr(_existing, 'document_id', '?')[:8]}")
-                        except Exception:
-                            pass
-
-                        # Загружаем в KAG Pipeline (force_new — каждый файл отдельным документом)
-                        try:
-                            from src.api.services.document_service import document_service
-                            record = await document_service.upload_document(
-                                filename=filename,
-                                file_content=content,
-                                file_type=None,
-                                source_metadata={** (item.get('metadata') or {}),
-                                                 'source_name': source.name, 'source_url': source.url}
-                            )
-                            # Запускаем фоновую обработку
-                            from src.api.routes.upload import _process_document_async
-                            await _process_document_async(record.document_id)
-
-                            new_count += 1
-                            self._seen_urls.add(url)
-                            # Кешируем URL → {size, modified, filename, hash} для HEAD-проверки
-                            self._hash_cache[url] = {
-                                'size': str(len(content)),
-                                'modified': resp.headers.get('Last-Modified', ''),
-                                'filename': filename,
-                                'hash': file_hash,
-                            }
-                            self.track_download({
-                                'url': url, 'filename': filename,
-                                'source_id': source.id, 'source_name': source.name,
-                                'status': 'downloaded',
                                 'file_hash': file_hash, 'file_size': len(content),
-                                'kag_document_id': record.document_id,
+                                'existing_document_id': getattr(_existing, 'document_id', None),
+                                'existing_filename': getattr(_existing, 'filename', ''),
+                                'found_at': datetime.utcnow().isoformat()
+                            })
+                            self.track_download({
+                                'url': url, 'filename': filename,
+                                'source_id': source.id, 'source_name': source.name,
+                                'status': 'duplicate',
+                                'file_hash': file_hash, 'file_size': len(content),
+                                'kag_document_id': getattr(_existing, 'document_id', None),
                                 'content_type': content_type,
                                 'downloaded_at': datetime.utcnow().isoformat()
                             })
-                            logger.info(f"📥 [{new_count}/{total}] Загружен: {filename[:50]} (из {source.name})")
+                            logger.info(f"🔁 Дубликат (реестр): {filename[:50]} уже есть как {getattr(_existing, 'document_id', '?')[:8]}")
+                    except Exception:
+                        pass
 
-                        except Exception as e:
-                            logger.warning(f"Ошибка загрузки {filename[:50]}: {e}")
-                            skip_count += 1
+                    # Загружаем в KAG Pipeline (force_new — каждый файл отдельным документом)
+                    try:
+                        from src.api.services.document_service import document_service
+                        record = await document_service.upload_document(
+                            filename=filename,
+                            file_content=content,
+                            file_type=None,
+                            source_metadata={** (item.get('metadata') or {}),
+                                             'source_name': source.name, 'source_url': source.url}
+                        )
+                        # Запускаем фоновую обработку
+                        from src.api.routes.upload import _process_document_async
+                        await _process_document_async(record.document_id)
+
+                        new_count += 1
+                        self._seen_urls.add(url)
+                        # Кешируем URL → {size, modified, filename, hash} для HEAD-проверки
+                        self._hash_cache[url] = {
+                            'size': str(len(content)),
+                            'modified': resp.headers.get('Last-Modified', ''),
+                            'filename': filename,
+                            'hash': file_hash,
+                        }
+                        self.track_download({
+                            'url': url, 'filename': filename,
+                            'source_id': source.id, 'source_name': source.name,
+                            'status': 'downloaded',
+                            'file_hash': file_hash, 'file_size': len(content),
+                            'kag_document_id': record.document_id,
+                            'content_type': content_type,
+                            'downloaded_at': datetime.utcnow().isoformat()
+                        })
+                        logger.info(f"📥 [{new_count}/{total}] Загружен: {filename[:50]} (из {source.name})")
+
+                    except Exception as e:
+                        logger.warning(f"Ошибка загрузки {filename[:50]}: {e}")
+                        skip_count += 1
 
                 except aiohttp.ClientError as e:
                     logger.warning(f"Сетевая ошибка {url[:60]}: {e}")

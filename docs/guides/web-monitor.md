@@ -75,3 +75,19 @@ docker exec kag-api python -c "from src.api.services.config_store import config_
 # Очередь загрузок
 docker logs kag-worker | grep -E 'Загружен|Дубликат|web_monitor'
 ```
+
+## web_collector — отдельный проект (2026-08-27)
+
+Скрапинг/скачивание вынесено в ОТДЕЛЬНЫЙ проект `C:\VSCODE_PROJECT\web_collector`
+(собственный git-репозиторий). В KAG его кода нет — только совместимость API:
+- POST /api/v1/upload принимает `source_name` / `source_url` (Form) →
+  `source_metadata` документа (подпись «Источник: Y» в UI).
+- Фикс document_service.upload_document: `source_metadata=source_metadata`
+  при создании DocumentRecord (ранее терялся у всех загрузок).
+- Для внешних клиентов: multipart-поля с `charset=utf-8` (иначе кириллица
+  декодируется как cp1251 → мусор).
+- Служебный пользователь KAG для внешней загрузки: `kag_collector`
+  (креды в web_collector/.env отдельного проекта, в git не коммитить).
+
+Всё полезное из web_collector постепенно переносится обратно в web_monitor
+(retry/backoff, проверка магических байтов и т.д.).

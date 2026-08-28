@@ -386,6 +386,9 @@ async def upload_document(
     deny_group_ids: str = Form("[]"),
     allow_user_ids: str = Form("[]"),
     deny_user_ids: str = Form("[]"),
+    # ── Источник (внешние поставщики: web_collector и т.п.) ────────────
+    source_name: str = Form(""),
+    source_url: str = Form(""),
 ):
     """
     Загрузить документ.
@@ -450,6 +453,11 @@ async def upload_document(
             uploaded_by=uploaded_by,
             group_ids=group_ids,
             upload_id=upload_id,
+            source_metadata=(
+                {"source_name": source_name, "source_url": source_url}
+                if source_name or source_url
+                else None
+            ),
             access={
                 "visibility": visibility if visibility in ("public", "restricted") else "public",
                 "allow_group_ids": _parse_id_list(allow_group_ids),
