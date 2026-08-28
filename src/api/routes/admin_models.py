@@ -1792,6 +1792,45 @@ async def save_branding_config(data: dict):
 
 
 # ═══════════════════════════════════════
+# Обработка документов (блокировка запуска)
+# ═══════════════════════════════════════
+
+@router.get("/processing-config", summary="Статус обработки документов (блокировка)")
+async def get_processing_config():
+    """Вернуть {blocked: bool, message: str} — блокирует ли админ запуск обработки."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "processing") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {
+            "blocked": bool(cfg.get("blocked", False)),
+            "message": str(cfg.get("message", "")),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/processing-config", summary="Сохранить блокировку обработки документов")
+async def save_processing_config(data: dict):
+    """Админ блокирует/разблокирует запуск обработки (кнопка «Обработать» на странице Документы)."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "processing") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        if "blocked" in data:
+            cfg["blocked"] = bool(data["blocked"])
+        if "message" in data:
+            cfg["message"] = str(data["message"]).strip()[:200]
+        config_store.set("system", "processing", cfg)
+        return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
+                "message": str(cfg.get("message", ""))}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
 # Настройки поиска (Hybrid Search)
 # ═══════════════════════════════════════
 

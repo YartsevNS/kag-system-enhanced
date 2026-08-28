@@ -575,6 +575,27 @@
             </div>
         </div>
 
+        <!-- Обработка документов -->
+        <div class="section">
+            <h2 class="section-title">⚙️ Обработка документов</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <input type="checkbox" id="proc-blocked" onchange="saveProcessingConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                <label for="proc-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Блокировать запуск обработки документов (тех. обслуживание / работы с очередью)</label>
+            </div>
+            <div style="margin-bottom:12px">
+                <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label>
+                <input id="proc-message" type="text" placeholder="например: идёт техническое обслуживание" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+            </div>
+            <button class="btn btn-primary" onclick="saveProcessingConfig()">💾 Сохранить</button>
+            <span id="proc-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
+                <strong>Что это.</strong> При включённой блокировке кнопка «Обработать» на странице «Документы» отключается,
+                а пользователи видят предупреждение: <em>«Обработка после загрузки может не начаться — в связи с блокировкой
+                на техническое обслуживание. Обратитесь к администратору»</em>. Загруженные документы остаются сохранёнными
+                (файл + миниатюра), обработка (OCR → чанки → векторы) не запускается ни автоматически, ни по кнопке.
+            </div>
+        </div>
+
         <!-- Настройки поиска (Hybrid Search) -->
         <div class="section">
             <h2 class="section-title">🔍 Настройки поиска (Hybrid Search)</h2>
@@ -1145,6 +1166,35 @@
             } catch (e) {
                 status.textContent = '❌ ' + e.message;
             }
+        }
+
+        // ── Обработка документов: блокировка запуска ────────────────────
+        async function loadProcessingConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/processing-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const cb = document.getElementById('proc-blocked');
+                if (cb && typeof d.blocked === 'boolean') cb.checked = d.blocked;
+                const msg = document.getElementById('proc-message');
+                if (msg && d.message) msg.value = d.message;
+            } catch (e) { console.error('processing-config load:', e); }
+        }
+        async function saveProcessingConfig() {
+            const st = document.getElementById('proc-status');
+            if (st) st.textContent = '⏳ Сохранение...';
+            try {
+                const r = await apiFetch(`${API_URL}/processing-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        blocked: document.getElementById('proc-blocked').checked,
+                        message: document.getElementById('proc-message').value,
+                    })
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok' ? '✅ Сохранено' : ('❌ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
 
         // ── Брендинг ─────────────────────────────────────────────────────
@@ -2423,6 +2473,7 @@
         loadSearchConfig();
         loadNeo4jConfig();
         loadBrandingConfig();
+        loadProcessingConfig();
 
         loadAll();
         setInterval(loadStatus, 30000);

@@ -145,6 +145,17 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   </div>
 
   <!-- Upload -->
+  <!-- Баннер блокировки обработки (управляется из админки) -->
+  <div id="processing-banner" style="display:none;align-items:center;gap:10px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)">
+    <span style="font-size:16px">⚠️</span>
+    <div style="flex:1;line-height:1.5">
+      <strong>Обработка после загрузки может не начаться</strong> — в связи с блокировкой на техническое обслуживание.
+      <span id="processing-banner-msg" style="color:var(--text2)"></span>
+      Обратитесь к администратору.
+    </div>
+    <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button>
+  </div>
+
   <div class="upload-zone" id="upload-zone">
     <div class="upload-icon">📤</div>
     <div class="upload-text">Загрузить документы</div>
@@ -302,6 +313,7 @@ let allDocs = [];
 let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
+  loadProcessingConfig();
   loadAll();
   loadFormatsBar();
   loadAccessOptions();
@@ -386,7 +398,11 @@ async function uploadFiles(files) {
         const msg = typeof e.detail === 'string' ? e.detail : e.detail?.message || e.message || 'Upload failed';
         throw new Error(msg);
       }
-      toast(`✅ ${file.name} загружен`);
+      if (processingBlocked) {
+        toast(`✅ ${file.name} загружен. ⚠️ Обработка заблокирована администратором (тех. обслуживание)`);
+      } else {
+        toast(`✅ ${file.name} загружен. Нажмите «Обработать» для запуска`);
+      }
     } catch(e) {
       toast(`❌ ${file.name}: ${e.message}`, true);
     }
@@ -758,6 +774,7 @@ function renderCards(docs) {
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${sourceLabel(d)}</div>
         <div class="card-meta" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
+          ${(d.status==='pending'||d.status==='failed')?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0;background:${processingBlocked?'var(--border)':'var(--accent)'};opacity:${processingBlocked?'0.6':'1'}" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку (OCR → чанки → векторы)'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}
           <button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>
         </div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
@@ -790,7 +807,8 @@ function renderTable(docs) {
       <td>${sourceLabel(d)}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
-      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
+      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button>
+      ${(d.status==='pending'||d.status==='failed')?`<button class="tag" style="background:${processingBlocked?'var(--border)':'rgba(62,207,143,0.15)'};color:${processingBlocked?'var(--text4)':'var(--accent)'};cursor:${processingBlocked?'not-allowed':'pointer'};border:none;font-size:11px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}</td>
     </tr>`).join('');
 }
 
@@ -935,6 +953,41 @@ function ocrLink(d) {
   if (d.status !== 'completed') return '<span style="color:var(--text4);font-size:11px">—</span>';
   return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>';
 }
+// ── Блокировка обработки (управляется из админки) ─────────────────────
+let processingBlocked = false;
+let processingBlockMsg = 'техническое обслуживание';
+
+async function loadProcessingConfig() {
+  try {
+    const r = await fetch(`${API}/admin/models/processing-config`, { credentials: 'include' });
+    const d = await r.json();
+    if (d && typeof d.blocked === 'boolean') {
+      processingBlocked = d.blocked;
+      if (d.message) processingBlockMsg = d.message;
+      const b = document.getElementById('processing-banner');
+      if (b) {
+        b.style.display = processingBlocked ? 'flex' : 'none';
+        const msgEl = document.getElementById('processing-banner-msg');
+        if (msgEl && processingBlocked) msgEl.textContent = ` (${processingBlockMsg})`;
+      }
+      if (typeof renderAll === 'function') renderAll();
+    }
+  } catch(e) { console.error('processing-config load:', e); }
+}
+
+async function processDocument(id) {
+  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  try {
+    const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Ошибка запуска обработки'));
+    toast('✅ ' + (d.message || 'Документ поставлен в очередь обработки'));
+    setTimeout(() => { loadAll(); }, 800);
+  } catch(e) {
+    toast('❌ ' + e.message, true);
+  }
+}
+
 async function viewOcr(id) {
   try {
     var r = await fetch('/api/v1/upload/' + id + '/ocr', { credentials: 'include' });

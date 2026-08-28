@@ -332,11 +332,10 @@ async def tus_patch(
                 upload_id=upload_id,
             )
 
-            # В очередь Celery (retry, изоляция, Redis).
-            # QueueGuard: дедупликация — если задача для документа уже
-            # стоит/выполняется, повторная не создаётся.
-            enqueue_document(record.document_id)
-            logger.info(f"[TUS] Документ в Celery: {record.document_id}")
+            # Обработка НЕ запускается автоматически: запускается только
+            # кнопкой «Обработать» на странице Документы (может быть
+            # заблокирована администратором на тех. обслуживание).
+            logger.info(f"[TUS] Документ сохранён, обработка отложена: {record.document_id}")
 
         except Exception as e:
             logger.error(f"[TUS] Ошибка финализации {upload_id}: {e}")
@@ -467,9 +466,9 @@ async def upload_document(
             }
         )
 
-        # В очередь Celery (QueueGuard — защита от дублей)
-        enqueue_document(record.document_id)
-        logger.info(f"[{upload_id}] 📋 В Celery")
+        # Обработка НЕ запускается автоматически (кнопка «Обработать» на
+        # странице Документы; может быть заблокирована администратором).
+        logger.info(f"[{upload_id}] 📋 Сохранён, обработка отложена")
 
         return DocumentStatus(
             document_id=record.document_id,
@@ -538,8 +537,8 @@ async def upload_documents_batch(
                 upload_id=upload_id
             )
 
-            # QueueGuard: постановка с дедупликацией
-            enqueue_document(record.document_id)
+            # Обработка НЕ запускается автоматически (кнопка «Обработать»)
+            logger.info(f"[batch] Сохранён, обработка отложена: {record.document_id}")
 
             results.append({
                 "document_id": record.document_id,
@@ -709,8 +708,8 @@ def _process_bulk_file(
             group_ids=group_ids, upload_id=upload_id,
         ))
 
-        # В очередь Celery (QueueGuard — защита от дублей)
-        enqueue_document(record.document_id)
+        # Обработка НЕ запускается автоматически (кнопка «Обработать»)
+        logger.info(f"[bulk] Сохранён, обработка отложена: {record.document_id}")
 
         results.append({
             "document_id": record.document_id,
@@ -1032,6 +1031,35 @@ async def reindex_document(document_id: str):
             "document_id": document_id,
             "chunks_count": record.chunks_count if record else 0
         }
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл документа не найден")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{document_id}/process", summary="Запустить обработку документа (кнопка «Обработать»)")
+async def process_document_now(document_id: str):
+    """Поставить документ в очередь обработки (OCR → чанки → векторы → граф).
+
+    Может быть заблокировано администратором (config_store system/processing
+    blocked=true) на время технического обслуживания/работ с очередью.
+    """
+    from src.api.services.config_store import config_store
+
+    # Блокировка запуска обработки из админки
+    cfg = config_store.get("system", "processing") or {}
+    if isinstance(cfg, dict) and cfg.get("blocked"):
+        msg = str(cfg.get("message", "")) or "обработка временно недоступна (техническое обслуживание)"
+        raise HTTPException(
+            status_code=423,
+            detail=f"Обработка заблокирована администратором: {msg}. Обратитесь к администратору.",
+        )
+
+    try:
+        from src.indexing.queue_guard import enqueue_document
+        enqueue_document(document_id, force=True)
+        return {"status": "queued", "document_id": document_id,
+                "message": "Документ поставлен в очередь обработки"}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Файл документа не найден")
     except Exception as e:
@@ -1533,8 +1561,18 @@ async def reprocess_pending_documents():
     Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
     """
     import asyncio
+    from src.api.services.config_store import config_store
     from src.api.services.document_repository import get_doc_repo
-    
+
+    # Уважаем блокировку обработки из админки (тех. обслуживание)
+    cfg = config_store.get("system", "processing") or {}
+    if isinstance(cfg, dict) and cfg.get("blocked"):
+        msg = str(cfg.get("message", "")) or "обработка временно недоступна (техническое обслуживание)"
+        raise HTTPException(
+            status_code=423,
+            detail=f"Обработка заблокирована администратором: {msg}. Обратитесь к администратору.",
+        )
+
     docs = get_doc_repo().get_all() or {}
     pending = [(did, doc) for did, doc in docs.items() 
                if isinstance(doc, dict) and doc.get('status') == 'pending']
