@@ -81,23 +81,19 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Управление расписанием -->
   <div class="panel" style="border:1px solid var(--accent);background:rgba(94,106,210,0.04)">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-      <div>
-        <h2 style="margin-bottom:4px">⏱ Расписание проверок</h2>
-        <span style="font-size:12px;color:var(--text4)">Автоматическая проверка всех источников по расписанию</span>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <select id="sched-interval" onchange="updateSchedule()" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:13px;outline:none">
-          <option value="0">Выключено</option>
-          <option value="30">Каждые 30 минут</option>
-          <option value="60">Каждый час</option>
-          <option value="360" selected>Каждые 6 часов</option>
-          <option value="720">Каждые 12 часов</option>
-          <option value="1440">Раз в сутки</option>
-        </select>
-        <span id="sched-status" style="font-size:12px;color:var(--text4)"></span>
-        <span id="sched-countdown" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--amber)"></span>
-      </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:nowrap;overflow-x:auto">
+      <h2 style="margin:0;white-space:nowrap">⏱ Расписание проверок</h2>
+      <span style="font-size:12px;color:var(--text4);white-space:nowrap">Автоматическая проверка всех источников по расписанию</span>
+      <select id="sched-interval" onchange="updateSchedule()" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:13px;outline:none;white-space:nowrap">
+        <option value="0">Выключено</option>
+        <option value="30">Каждые 30 минут</option>
+        <option value="60">Каждый час</option>
+        <option value="360" selected>Каждые 6 часов</option>
+        <option value="720">Каждые 12 часов</option>
+        <option value="1440">Раз в сутки</option>
+      </select>
+      <span id="sched-status" style="font-size:12px;color:var(--text4);white-space:nowrap"></span>
+      <span id="sched-countdown" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--amber);white-space:nowrap"></span>
     </div>
   </div>
 
