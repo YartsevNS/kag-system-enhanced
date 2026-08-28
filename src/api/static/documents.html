@@ -314,6 +314,7 @@ let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadProcessingConfig();
+  loadCurrentUser();
   loadAll();
   loadFormatsBar();
   loadAccessOptions();
@@ -774,9 +775,9 @@ function renderCards(docs) {
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${sourceLabel(d)}</div>
         <div class="card-meta" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
-          ${(d.status==='pending'||d.status==='failed')?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0;background:${processingBlocked?'var(--border)':'var(--accent)'};opacity:${processingBlocked?'0.6':'1'}" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку (OCR → чанки → векторы)'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}
           <button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>
         </div>
+        ${canProcess(d)?`<div class="card-meta" style="margin-top:2px"><button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;background:${processingBlocked?'var(--border)':'var(--accent)'};opacity:${processingBlocked?'0.6':'1'};width:100%" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку (OCR → чанки → векторы)'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button></div>`:''}
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
       </div>
     </div>`;
@@ -808,7 +809,7 @@ function renderTable(docs) {
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
       <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button>
-      ${(d.status==='pending'||d.status==='failed')?`<button class="tag" style="background:${processingBlocked?'var(--border)':'rgba(62,207,143,0.15)'};color:${processingBlocked?'var(--text4)':'var(--accent)'};cursor:${processingBlocked?'not-allowed':'pointer'};border:none;font-size:11px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}</td>
+      ${canProcess(d)?`<button class="tag" style="background:${processingBlocked?'var(--border)':'rgba(62,207,143,0.15)'};color:${processingBlocked?'var(--text4)':'var(--accent)'};cursor:${processingBlocked?'not-allowed':'pointer'};border:none;font-size:11px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="${processingBlocked?('Обработка заблокирована администратором: '+processingBlockMsg):'Запустить обработку'}" ${processingBlocked?'disabled':''}>▶️ Обработать</button>`:''}</td>
     </tr>`).join('');
 }
 
@@ -956,6 +957,24 @@ function ocrLink(d) {
 // ── Блокировка обработки (управляется из админки) ─────────────────────
 let processingBlocked = false;
 let processingBlockMsg = 'техническое обслуживание';
+let currentUser = null;
+
+async function loadCurrentUser() {
+  try {
+    const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
+    if (r.ok) currentUser = await r.json();
+  } catch(e) { currentUser = null; }
+  if (typeof renderAll === 'function') renderAll();
+}
+
+// Можно ли пользователю запускать обработку документа
+// (свои документы, системные/общие, или админ — любые)
+function canProcess(d) {
+  if (!d || !(d.status === 'pending' || d.status === 'failed')) return false;
+  if (currentUser && currentUser.is_admin) return true;
+  if (!d.uploaded_by) return true;
+  return !!(currentUser && d.uploaded_by === currentUser.id);
+}
 
 async function loadProcessingConfig() {
   try {

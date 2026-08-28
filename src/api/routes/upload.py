@@ -1038,11 +1038,16 @@ async def reindex_document(document_id: str):
 
 
 @router.post("/{document_id}/process", summary="Запустить обработку документа (кнопка «Обработать»)")
-async def process_document_now(document_id: str):
+async def process_document_now(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Поставить документ в очередь обработки (OCR → чанки → векторы → граф).
 
-    Может быть заблокировано администратором (config_store system/processing
-    blocked=true) на время технического обслуживания/работ с очередью.
+    Многопользовательность: запускать обработку можно ТОЛЬКО своих документов
+    (uploaded_by == текущий пользователь) или админу — чужие документы
+    не обрабатываются с одного нажатия. Плюс блокировка администратором
+    (config_store system/processing blocked=true) на время тех. обслуживания.
     """
     from src.api.services.config_store import config_store
 
@@ -1053,6 +1058,19 @@ async def process_document_now(document_id: str):
         raise HTTPException(
             status_code=423,
             detail=f"Обработка заблокирована администратором: {msg}. Обратитесь к администратору.",
+        )
+
+    # Многопользовательность: только свои документы (или админ)
+    from src.api.services.document_repository import get_doc_repo
+    doc = get_doc_repo().get(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    owner = getattr(doc, "uploaded_by", None)
+    is_admin = bool(current_user and getattr(current_user, "is_admin", False))
+    if owner and (not current_user or str(owner) != str(current_user.id)) and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав: можно запускать обработку только своих документов",
         )
 
     try:
