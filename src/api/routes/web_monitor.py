@@ -47,6 +47,7 @@ async def list_sources():
                     "keywords": s.keywords,
                     "file_types": s.file_types,
                     "css_selector": s.css_selector,
+                    "json_path": s.json_path,
                     "last_check": s.last_check.isoformat() if s.last_check else None,
                     "items_found": s.items_found,
                     "items_uploaded": s.items_uploaded,
@@ -96,6 +97,10 @@ async def add_source(data: dict = Body(...)):
             keywords=data.get("keywords", []),
             file_types=data.get("file_types", [".pdf", ".docx"]),
             css_selector=data.get("css_selector", "a[href$='.pdf'], a[href$='.docx']"),
+            json_path=data.get("json_path", ""),
+            pagination_url=data.get("pagination_url") or None,
+            pagination_max_pages=int(data.get("pagination_max_pages", 5) or 5),
+            pagination_delay=float(data.get("pagination_delay", 3.0) or 3.0),
             batch_size=data.get("batch_size", 5),
             batch_delay=float(data.get("batch_delay", 15.0)),
             item_delay=float(data.get("item_delay", 2.0)),
@@ -105,7 +110,7 @@ async def add_source(data: dict = Body(...)):
 
         if not source.url:
             raise HTTPException(status_code=400, detail="URL обязателен")
-        if source.type not in ("rss", "scrape", "browser", "change"):
+        if source.type not in ("rss", "scrape", "browser", "change", "api"):
             raise HTTPException(status_code=400, detail=f"Неизвестный тип: {source.type}")
 
         web_monitor.save_source(source)
@@ -129,12 +134,20 @@ async def update_source(source_id: str, data: dict = Body(...)):
 
         # Обновляем только переданные поля
         for field in ['name', 'url', 'type', 'enabled', 'check_interval_minutes',
-                       'keywords', 'file_types', 'css_selector', 'sample_limit']:
+                       'keywords', 'file_types', 'css_selector', 'sample_limit',
+                       'json_path', 'pagination_url', 'pagination_max_pages', 'pagination_delay']:
             if field in data:
                 if field == 'sample_limit':
                     setattr(existing, field, int(data[field] or 0))
+                elif field == 'pagination_max_pages':
+                    setattr(existing, field, int(data[field] or 5))
+                elif field == 'pagination_delay':
+                    setattr(existing, field, float(data[field] or 3.0))
                 else:
                     setattr(existing, field, data[field])
+
+        if existing.type not in ("rss", "scrape", "browser", "change", "api"):
+            raise HTTPException(status_code=400, detail=f"Неизвестный тип: {existing.type}")
 
         web_monitor.save_source(existing)
         return {"status": "ok", "message": "Источник обновлён"}

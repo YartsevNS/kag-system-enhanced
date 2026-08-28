@@ -76,6 +76,7 @@ class MonitorSource:
     keywords: List[str] = field(default_factory=list)  # фильтр по словам
     file_types: List[str] = field(default_factory=lambda: [".pdf", ".docx"])  # какие файлы скачивать
     css_selector: str = "a[href]"  # CSS для поиска ссылок (дальше фильтруем программно по href)
+    json_path: str = ""  # API-метод: путь к массиву записей в JSON (напр. "data.items"; пусто = корень/первый массив)
     sample_limit: int = 0  # Тестовый режим: максимум файлов за одну проверку (0 = все)
     last_check: Optional[datetime] = None
     last_etag: Optional[str] = None
@@ -446,6 +447,8 @@ class WebMonitorService:
                     keywords=s.get("keywords", []),
                     file_types=s.get("file_types", [".pdf", ".docx"]),
                     css_selector=s.get("css_selector", "a[href$='.pdf'], a[href$='.docx']"),
+                    json_path=s.get("json_path", ""),
+                    sample_limit=s.get("sample_limit", 0),
                     last_check=datetime.fromisoformat(s["last_check"]) if s.get("last_check") else None,
                     last_etag=s.get("last_etag"),
                     last_modified=s.get("last_modified"),
@@ -506,6 +509,8 @@ class WebMonitorService:
             "keywords": s.keywords,
             "file_types": s.file_types,
             "css_selector": s.css_selector,
+            "json_path": s.json_path,
+            "sample_limit": s.sample_limit,
             "last_check": s.last_check.isoformat() if s.last_check else None,
             "last_etag": s.last_etag,
             "last_modified": s.last_modified,
@@ -571,6 +576,8 @@ class WebMonitorService:
                     result = await self._check_browser(source)
                 elif source.type == "change":
                     result = await self._check_change(source)
+                elif source.type == "api":
+                    result = await self._check_api(source)
                 else:
                     result = MonitorResult(source_id=source.id, status="error", error=f"Неизвестный тип: {source.type}")
 
@@ -926,6 +933,117 @@ class WebMonitorService:
             result.error = str(e)
 
         return result
+
+    # ============================================================
+    # API-парсер (JSON)
+    # ============================================================
+
+    @staticmethod
+    def _extract_json_records(data, json_path: str = "") -> List[dict]:
+        """Извлечь массив записей из JSON-ответа.
+
+        - json_path пуст: если data — список — вернуть его; если dict — первый
+          найденный список в значениях (рекурсивно).
+        - json_path задан (напр. "data.items"): пройти по точкам.
+        """
+        if json_path:
+            cur = data
+            for part in json_path.split("."):
+                if isinstance(cur, dict) and part in cur:
+                    cur = cur[part]
+                else:
+                    return []
+            if isinstance(cur, list):
+                return [r for r in cur if isinstance(r, dict)]
+            return []
+
+        if isinstance(data, list):
+            return [r for r in data if isinstance(r, dict)]
+
+        def first_list(node):
+            if isinstance(node, list):
+                return node
+            if isinstance(node, dict):
+                for v in node.values():
+                    found = first_list(v)
+                    if found is not None:
+                        return found
+            return None
+
+        arr = first_list(data)
+        return [r for r in arr if isinstance(r, dict)] if arr else []
+
+    async def _check_api(self, source: MonitorSource) -> MonitorResult:
+        """Проверить JSON-API источник.
+
+        GET url → JSON → извлечь записи {url, title} (json_path) →
+        скачать/загрузить документы. Пагинация через pagination_url {page}.
+        """
+        import aiohttp
+        from urllib.parse import urljoin
+
+        result = MonitorResult(source_id=source.id)
+        items = []
+        pages = source.pagination_max_pages if source.pagination_url else 1
+
+        try:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0"}
+                for page in range(1, pages + 1):
+                    url = source.url if page == 1 else source.pagination_url.format(page=page)
+                    try:
+                        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                            if resp.status == 304:
+                                break
+                            if resp.status != 200:
+                                result.status = "error"
+                                result.error = f"HTTP {resp.status}"
+                                break
+                            data = await resp.json(content_type=None)
+                    except Exception as e:
+                        result.status = "error"
+                        result.error = f"JSON: {e}"
+                        break
+
+                    records = self._extract_json_records(data, source.json_path)
+                    if not records:
+                        if page > 1:
+                            break  # пагинация закончилась
+                    for rec in records:
+                        u = str(rec.get("download_url") or rec.get("url") or rec.get("href") or rec.get("link") or "").strip()
+                        if not u:
+                            continue
+                        # Для GitHub contents API: папки (type=dir) — пропускаем
+                        if rec.get("type") == "dir":
+                            continue
+                        u = urljoin(source.url, u) if u.startswith(("/", "?")) else u
+                        title = rec.get("title") or rec.get("name") or rec.get("text") or ""
+                        items.append({
+                            "url": u,
+                            "title": str(title),
+                            "metadata": {"source_url": source.url},
+                        })
+
+                    if page < pages and source.pagination_delay:
+                        await _asyncio.sleep(source.pagination_delay)
+
+                result.items = items
+                if not items:
+                    result.status = "no_changes"
+                    return result
+
+                new_count, skip_count = await self._download_and_upload(
+                    session, items, source,
+                    batch_size=source.batch_size, batch_delay=source.batch_delay,
+                    item_delay=source.item_delay, batch_jitter=source.batch_jitter,
+                )
+                result.new_items = new_count
+                result.skipped_items = skip_count
+                return result
+        except Exception as e:
+            result.status = "error"
+            result.error = str(e)
+            return result
 
     # ============================================================
     # Browser (SPA/JS) — Playwright

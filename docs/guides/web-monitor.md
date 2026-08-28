@@ -91,3 +91,22 @@ docker logs kag-worker | grep -E 'Загружен|Дубликат|web_monitor'
 
 Всё полезное из web_collector постепенно переносится обратно в web_monitor
 (retry/backoff, проверка магических байтов и т.д.).
+
+## 5 методов источников (2026-08-28)
+
+Источники разделены по методу получения (секции в /monitor, сворачиваемые):
+
+| Тип | Метод | Описание |
+|---|---|---|
+| rss | 📡 RSS | лента новостей (feedparser, вложения/текст) |
+| scrape | 🕷 Скрапинг | страница со ссылками на файлы (.pdf/.docx), css_selector, file-service |
+| browser | 🌐 Browser | JS/SPA-сайты через Playwright (перехват network) |
+| change | 🔄 Change | отслеживание изменений страницы (сохраняет целиком) |
+| api | ⚙️ API (JSON) | JSON-эндпоинт: GET → JSON → записи {url/title/download_url} |
+
+API-метод: `json_path` (путь к массиву записей, напр. "data.items"; пусто = первый
+массив), пагинация через `pagination_url` с {page}. Приоритет ссылки:
+download_url > url > href > link; для GitHub contents API пропускаются папки (type=dir).
+
+Форма добавления показывает поля под выбранный метод. json_path/sample_limit
+сериализуются в config_store (был баг: терялись при save/load).

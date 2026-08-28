@@ -123,14 +123,19 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="form-row">
       <div class="form-group"><label>Название</label><input type="text" id="add-name" placeholder="Например: ФСТЭК — документы"></div>
       <div class="form-group"><label>URL</label><input type="text" id="add-url" placeholder="https://..."></div>
-      <div class="form-group"><label>Тип</label><select id="add-type">
-        <option value="rss">RSS/Atom — лента новостей</option>
-        <option value="scrape">Scrape — парсинг ссылок со страницы</option>
-        <option value="browser">Browser — JS/SPA-сайт (Playwright)</option>
-        <option value="change">Change — отслеживание изменений страницы</option>
+      <div class="form-group"><label>Тип</label><select id="add-type" onchange="updateAddFields()">
+        <option value="rss">📡 RSS — лента новостей</option>
+        <option value="scrape">🕷 Скрапинг — ссылки на документы со страницы</option>
+        <option value="browser">🌐 Browser — JS/SPA-сайт (Playwright)</option>
+        <option value="change">🔄 Change — отслеживание изменений страницы</option>
+        <option value="api">⚙️ API — JSON-эндпоинт с документами</option>
       </select></div>
       <div class="form-group"><label>Интервал (мин)</label><input type="number" id="add-interval" value="360" min="60" max="10080" style="width:100px"></div>
-      <div class="form-group"><label>Ключевые слова</label><input type="text" id="add-keywords" placeholder="через запятую"></div>
+      <div class="form-group" id="add-fld-keywords"><label>Ключевые слова</label><input type="text" id="add-keywords" placeholder="через запятую"></div>
+      <div class="form-group" id="add-fld-css" style="display:none"><label>CSS-селектор</label><input type="text" id="add-css-selector" placeholder="a[href$='.pdf']" style="width:220px"></div>
+      <div class="form-group" id="add-fld-json" style="display:none"><label>Путь к записям в JSON</label><input type="text" id="add-json-path" placeholder="data.items (пусто = первый массив)" style="width:220px"></div>
+      <div class="form-group" id="add-fld-pag" style="display:none"><label>Пагинация URL ({page})</label><input type="text" id="add-pagination-url" placeholder="https://...&page={page}" style="width:220px"></div>
+      <div class="form-group" id="add-fld-pages" style="display:none"><label>Макс. страниц</label><input type="number" id="add-pagination-pages" value="5" min="1" max="50" style="width:80px"></div>
       <div class="form-group"><label>Партия (файлов)</label><input type="number" id="add-batch-size" value="5" min="1" max="50" style="width:70px" title="Сколько файлов скачивать за раз"></div>
       <div class="form-group"><label>Пауза между партиями (сек)</label><input type="number" id="add-batch-delay" value="15" min="1" max="300" style="width:70px" title="Пауза между партиями, чтобы не блокировал сервер"></div>
       <div class="form-group"><label>Пауза между файлами (сек)</label><input type="number" id="add-item-delay" value="2" min="0" max="30" style="width:70px" title="Пауза между файлами внутри партии"></div>
@@ -184,6 +189,7 @@ function authHeaders() {
 }
 
 async function loadAll() {
+  updateAddFields();
   await loadSources();
   await loadHistory();
 }
@@ -201,32 +207,70 @@ async function loadSources() {
     var lastChecks = sources.filter(function(s){return s.last_check}).map(function(s){return s.last_check}).sort();
     document.getElementById('stat-last').textContent = lastChecks.length ? new Date(lastChecks[lastChecks.length-1]).toLocaleString('ru-RU') : '—';
 
-    // Таблица источников
-    var html = '<table><thead><tr><th>Название</th><th>URL</th><th>Тип</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
+    // Секции источников по методам (rss/scrape/browser/change/api)
+    var TYPE_META = {
+      rss:     { icon: '📡', label: 'RSS — ленты новостей' },
+      scrape:  { icon: '🕷', label: 'Скрапинг — документы со страниц' },
+      browser: { icon: '🌐', label: 'Browser — JS/SPA-сайты (Playwright)' },
+      change:  { icon: '🔄', label: 'Change — отслеживание изменений' },
+      api:     { icon: '⚙️', label: 'API — JSON-эндпоинты' }
+    };
+    var ORDER = ['rss', 'scrape', 'browser', 'change', 'api'];
+    var html = '';
     if (!sources.length) {
-      html += '<tr><td colspan="9" style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</td></tr>';
+      html = '<div style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</div>';
     } else {
-      sources.forEach(function(s) {
-        var typeLabel = s.type === 'rss' ? '📡 RSS' : s.type === 'scrape' ? '🔍 Scrape' : s.type === 'browser' ? '🌐 Browser' : '🔄 Change';
-        var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
-        html += '<tr>' +
-          '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') + '</td>' +
-          '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + s.url + '" target="_blank" title="' + s.url + '" style="color:var(--accent);text-decoration:none">' + s.url.substring(0,50) + '</a></td>' +
-          '<td><span class="badge badge-info">' + typeLabel + '</span></td>' +
-          '<td><label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px" onclick="event.stopPropagation()"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleSource(\'' + s.id + '\',this.checked)" style="accent-color:var(--accent)"> ' + (s.enabled?'<span style="color:var(--green)">Активен</span>':'<span style="color:var(--red)">Отключен</span>') + '</label></td>' +
-          '<td>' + (s.check_interval_minutes >= 1440 ? Math.round(s.check_interval_minutes/1440) + ' д' : s.check_interval_minutes >= 60 ? Math.round(s.check_interval_minutes/60) + ' ч' : s.check_interval_minutes + ' мин') + '</td>' +
-          '<td>' + (s.items_found||0) + '</td>' +
-          '<td>' + (s.items_uploaded||0) + '</td>' +
-          '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
-          '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">🔍 Проверить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
-          '</tr>';
+      ORDER.forEach(function(type) {
+        var group = sources.filter(function(s) { return (s.type || 'rss') === type; });
+        if (!group.length) return;
+        var meta = TYPE_META[type] || { icon: '❔', label: type };
+        html += '<div style="margin-bottom:14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);overflow:hidden">' +
+          '<div class="src-sec" data-sec="' + type + '" onclick="toggleSrcSec(\'' + type + '\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">' +
+          '<span id="sec-arrow-' + type + '" style="color:var(--accent);font-size:15px;line-height:1">▸</span>' +
+          '<strong>' + meta.icon + ' ' + meta.label + '</strong>' +
+          '<span class="badge badge-info">' + group.length + '</span>' +
+          '</div><div id="sec-body-' + type + '" style="display:none">' +
+          '<table><thead><tr><th>Название</th><th>URL</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
+        group.forEach(function(s) {
+          var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
+          html += '<tr>' +
+            '<td><strong>' + s.name + '</strong>' + (s.keywords && s.keywords.length ? '<br><span style="font-size:10px;color:var(--text4)">🔑 ' + s.keywords.join(', ') + '</span>' : '') +
+              (s.json_path ? '<br><span style="font-size:10px;color:var(--text4)">json_path: ' + s.json_path + '</span>' : '') + '</td>' +
+            '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + s.url + '" target="_blank" title="' + s.url + '" style="color:var(--accent);text-decoration:none">' + s.url.substring(0,50) + '</a></td>' +
+            '<td><label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px" onclick="event.stopPropagation()"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleSource(\'' + s.id + '\',this.checked)" style="accent-color:var(--accent)"> ' + (s.enabled?'<span style="color:var(--green)">Активен</span>':'<span style="color:var(--red)">Отключен</span>') + '</label></td>' +
+            '<td>' + (s.check_interval_minutes >= 1440 ? Math.round(s.check_interval_minutes/1440) + ' д' : s.check_interval_minutes >= 60 ? Math.round(s.check_interval_minutes/60) + ' ч' : s.check_interval_minutes + ' мин') + '</td>' +
+            '<td>' + (s.items_found||0) + '</td>' +
+            '<td>' + (s.items_uploaded||0) + '</td>' +
+            '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
+            '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">🔍 Проверить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
+            '</tr>';
+        });
+        html += '</tbody></table></div></div>';
       });
     }
-    html += '</tbody></table>';
     document.getElementById('sources-table').innerHTML = html;
   } catch(e) {
     document.getElementById('sources-table').innerHTML = '<span style="color:var(--red)">Ошибка: ' + e.message + '</span>';
   }
+}
+
+function toggleSrcSec(type) {
+  var body = document.getElementById('sec-body-' + type);
+  var arrow = document.getElementById('sec-arrow-' + type);
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+}
+
+function updateAddFields() {
+  var t = document.getElementById('add-type').value;
+  var show = { rss: ['add-fld-keywords'], scrape: ['add-fld-keywords', 'add-fld-css'],
+               browser: ['add-fld-css', 'add-fld-pag', 'add-fld-pages'],
+               change: [], api: ['add-fld-json', 'add-fld-pag', 'add-fld-pages'] };
+  ['add-fld-keywords','add-fld-css','add-fld-json','add-fld-pag','add-fld-pages'].forEach(function(id) {
+    document.getElementById(id).style.display = (show[t]||[]).indexOf(id) !== -1 ? '' : 'none';
+  });
 }
 
 async function addSource() {
@@ -241,6 +285,10 @@ async function addSource() {
         type: document.getElementById('add-type').value,
         check_interval_minutes: parseInt(document.getElementById('add-interval').value) || 360,
         keywords: document.getElementById('add-keywords').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+        css_selector: document.getElementById('add-css-selector').value.trim() || undefined,
+        json_path: document.getElementById('add-json-path').value.trim() || undefined,
+        pagination_url: document.getElementById('add-pagination-url').value.trim() || undefined,
+        pagination_max_pages: parseInt(document.getElementById('add-pagination-pages').value) || 5,
         batch_size: parseInt(document.getElementById('add-batch-size').value) || 5,
         batch_delay: parseFloat(document.getElementById('add-batch-delay').value) || 15,
         item_delay: parseFloat(document.getElementById('add-item-delay').value) || 2,
