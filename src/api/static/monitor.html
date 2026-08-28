@@ -216,6 +216,8 @@ async function loadSources() {
       api:     { icon: '⚙️', label: 'API — JSON-эндпоинты' }
     };
     var ORDER = ['rss', 'scrape', 'browser', 'change', 'api'];
+    var collapsed = [];
+    try { collapsed = JSON.parse(localStorage.getItem('kag_monitor_collapsed') || '[]'); } catch(e) {}
     var html = '';
     if (!sources.length) {
       html = '<div style="text-align:center;color:var(--text4);padding:20px">Нет источников. Добавьте источник или используйте «📦 Добавить встроенные»</div>';
@@ -224,12 +226,13 @@ async function loadSources() {
         var group = sources.filter(function(s) { return (s.type || 'rss') === type; });
         if (!group.length) return;
         var meta = TYPE_META[type] || { icon: '❔', label: type };
+        var isCol = collapsed.indexOf(type) !== -1;
         html += '<div style="margin-bottom:14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);overflow:hidden">' +
           '<div class="src-sec" data-sec="' + type + '" onclick="toggleSrcSec(\'' + type + '\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">' +
-          '<span id="sec-arrow-' + type + '" style="color:var(--accent);font-size:15px;line-height:1">▸</span>' +
+          '<span id="sec-arrow-' + type + '" style="color:var(--accent);font-size:15px;line-height:1">' + (isCol ? '▸' : '▾') + '</span>' +
           '<strong>' + meta.icon + ' ' + meta.label + '</strong>' +
           '<span class="badge badge-info">' + group.length + '</span>' +
-          '</div><div id="sec-body-' + type + '" style="display:none">' +
+          '</div><div id="sec-body-' + type + '" style="display:' + (isCol ? 'none' : '') + '">' +
           '<table><thead><tr><th>Название</th><th>URL</th><th>Статус</th><th>Интервал</th><th>Найдено</th><th>Загружено</th><th>Последняя проверка</th><th></th></tr></thead><tbody>';
         group.forEach(function(s) {
           var lastCheck = s.last_check ? new Date(s.last_check).toLocaleString('ru-RU') : '—';
@@ -261,6 +264,13 @@ function toggleSrcSec(type) {
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   if (arrow) arrow.textContent = open ? '▸' : '▾';
+  // Запоминаем свёрнутые секции
+  var collapsed = [];
+  try { collapsed = JSON.parse(localStorage.getItem('kag_monitor_collapsed') || '[]'); } catch(e) {}
+  var idx = collapsed.indexOf(type);
+  if (open && idx === -1) collapsed.push(type);
+  if (!open && idx !== -1) collapsed.splice(idx, 1);
+  try { localStorage.setItem('kag_monitor_collapsed', JSON.stringify(collapsed)); } catch(e) {}
 }
 
 function updateAddFields() {
