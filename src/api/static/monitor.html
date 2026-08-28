@@ -108,8 +108,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Быстрая проверка URL (сворачиваемая) -->
   <div class="panel cp">
-    <h2 class="cp-head"><span class="cp-arrow">▸</span>🔍 Быстрая проверка страницы</h2>
-    <div class="cp-body">
+    <h2 id="quick-head" class="cp-head" onclick="toggleQuickPanel()"><span class="cp-arrow">▸</span>🔍 Быстрая проверка страницы</h2>
+    <div class="cp-body" id="quick-body">
     <p style="font-size:12px;color:var(--text4);margin-bottom:10px">Проверить конкретный URL без добавления в список источников. Документ будет обработан и загружен в KAG.</p>
     <div class="form-row">
       <div class="form-group" style="flex:1"><label>URL страницы или документа</label><input type="text" id="quick-url" placeholder="https://..."></div>
@@ -127,7 +127,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Добавление источника (сворачиваемое) -->
   <div class="panel cp">
-    <h2 class="cp-head"><span class="cp-arrow">▸</span>Добавить источник</h2>
+    <h2 id="add-head" class="cp-head" onclick="toggleAddPanel()"><span class="cp-arrow">▸</span>Добавить источник</h2>
     <div class="cp-body" id="add-body">
     <div class="form-row">
       <div class="form-group"><label>Название</label><input type="text" id="add-name" placeholder="Например: ФСТЭК — документы"></div>
@@ -305,19 +305,23 @@ function updateAddFields() {
   });
 }
 
-// Сворачиваемые панели: делегирование кликов по .cp-head (единый обработчик)
-document.addEventListener('click', function(e) {
-  var t = e.target.closest('.cp-head');
-  if (!t) return;
-  var panel = t.closest('.cp');
-  if (!panel) return;
-  var body = panel.querySelector('.cp-body');
-  var arrow = t.querySelector('.cp-arrow');
+// Сворачиваемые панели: прямые функции по id (надёжно)
+function toggleAddPanel() {
+  var body = document.getElementById('add-body');
   if (!body) return;
+  var arrow = document.getElementById('add-head').querySelector('.cp-arrow');
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   if (arrow) arrow.textContent = open ? '▸' : '▾';
-});
+}
+function toggleQuickPanel() {
+  var body = document.getElementById('quick-body');
+  if (!body) return;
+  var arrow = document.getElementById('quick-head').querySelector('.cp-arrow');
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+}
 
 var _editSourceId = null;
 
