@@ -19,7 +19,7 @@ h1{font-size:26px;font-weight:600;margin-bottom:4px}
 .sub{font-size:13px;color:var(--text4);margin-bottom:20px}
 .panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:18px;margin-bottom:16px}
 .panel h2{font-size:16px;font-weight:600;margin-bottom:14px;color:var(--text2)}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .stat-card{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 16px}
 .stat-num{font-size:22px;font-weight:700;color:var(--text)}
 .stat-label{font-size:10px;color:var(--text4);text-transform:uppercase;margin-top:2px}
@@ -73,8 +73,9 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <!-- Статистика -->
   <div class="stats-row" id="stats-row">
     <div class="stat-card"><div class="stat-num" id="stat-sources">—</div><div class="stat-label">Источников</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-kagdocs">—</div><div class="stat-label">Документов в KAG</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-found">—</div><div class="stat-label">Найдено всего</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-uploaded">—</div><div class="stat-label">Загружено в KAG</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-uploaded">—</div><div class="stat-label">Загружено (всего)</div></div>
     <div class="stat-card"><div class="stat-num" id="stat-last">—</div><div class="stat-label">Последняя проверка</div></div>
   </div>
 
@@ -204,6 +205,12 @@ async function loadSources() {
     document.getElementById('stat-sources').textContent = sources.length;
     document.getElementById('stat-found').textContent = sources.reduce(function(s,c){return s+(c.items_found||0)},0);
     document.getElementById('stat-uploaded').textContent = sources.reduce(function(s,c){return s+(c.items_uploaded||0)},0);
+    // Текущее число документов в KAG (не накопительное)
+    try {
+      const kr = await fetch(API + '/upload/list?limit=1', { credentials: 'include' });
+      const kd = await kr.json();
+      if (kd && typeof kd.total === 'number') document.getElementById('stat-kagdocs').textContent = kd.total;
+    } catch(e) {}
     var lastChecks = sources.filter(function(s){return s.last_check}).map(function(s){return s.last_check}).sort();
     document.getElementById('stat-last').textContent = lastChecks.length ? new Date(lastChecks[lastChecks.length-1]).toLocaleString('ru-RU') : '—';
 
