@@ -166,10 +166,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Список источников -->
   <div class="panel">
-    <h2>📋 Источники мониторинга</h2>
-    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn" onclick="runCheck()">🔍 Проверить все источники</button>
-      <button class="btn-outline" onclick="loadSources()">🔄 Обновить</button>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:12px">
+      <h2 style="margin:0;white-space:nowrap">📋 Источники мониторинга</h2>
+      <button class="btn" onclick="runCheck()" style="white-space:nowrap">🔍 Проверить все</button>
+      <button class="btn-outline" onclick="loadSources()" style="white-space:nowrap">🔄 Обновить</button>
     </div>
     <div id="sources-table"></div>
   </div>
