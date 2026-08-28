@@ -99,7 +99,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Быстрая проверка URL (нативное сворачивание) -->
   <div class="panel">
-    <details open>
+    <details>
       <summary style="font-size:16px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none">🔍 Быстрая проверка страницы</summary>
       <div style="margin-top:12px">
       <p style="font-size:12px;color:var(--text4);margin-bottom:10px">Проверить конкретный URL без добавления в список источников. Документ будет обработан и загружен в KAG.</p>
@@ -120,7 +120,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- Добавление источника (нативное сворачивание) -->
   <div class="panel" id="add-panel">
-    <details open>
+    <details>
       <summary style="font-size:16px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none">Добавить источник</summary>
       <div style="margin-top:12px">
     <div class="form-row">
@@ -176,10 +176,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- История проверок -->
   <div class="panel">
-    <h2 style="display:flex;align-items:center;gap:10px">📜 История проверок
-      <button onclick="clearMonitorHistory()" style="font-size:11px;padding:4px 10px;background:var(--surface);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);cursor:pointer;font-weight:500">✕ Очистить</button>
-    </h2>
-    <div id="history-table"></div>
+    <details>
+      <summary style="font-size:16px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px">📜 История проверок
+        <button onclick="event.stopPropagation();clearMonitorHistory()" style="font-size:11px;padding:4px 10px;background:var(--surface);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);cursor:pointer;font-weight:500">✕ Очистить</button>
+      </summary>
+      <div style="margin-top:10px" id="history-table"></div>
+    </details>
   </div>
 </main>
 
@@ -242,7 +244,7 @@ async function loadSources() {
         if (!group.length) return;
         var meta = TYPE_META[type] || { icon: '❔', label: type };
         html += '<div style="margin-bottom:14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);overflow:hidden">' +
-          '<details open>' +
+          '<details>' +
           '<summary style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;font-weight:600;color:var(--text2)">' +
           '<span>' + meta.icon + ' ' + meta.label + '</span>' +
           '<span class="badge badge-info">' + group.length + '</span>' +
