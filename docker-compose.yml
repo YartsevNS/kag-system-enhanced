@@ -458,7 +458,11 @@ services:
       - "7687:7687"  # Bolt
     environment:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
-      - NEO4J_PLUGINS=["apoc","open-gds"]
+      # Плагины apoc/open-gds НЕ подключаем (убраны 2026-08): они качаются
+      # с GitHub при старте (release-assets.githubusercontent.com недоступен
+      # из РФ) → Neo4j зависает unhealthy. В коде gds.* не используется,
+      # apoc.* — только в post_process_entities (опциональный эндпоинт,
+      # дублирует deduplicate_entities_by_name).
       # Память Neo4j — при росте графа (500+ пользователей) увеличить:
       # heap → 2G-4G, pagecache → 1G-2G (зависит от RAM сервера).
       # Менять можно и через админку (раздел «Масштабирование» — заготовка).
