@@ -361,14 +361,23 @@ class ProviderService:
     # ===========================================
 
     def list_function_maps(self) -> List[dict]:
-        """Получить все привязки функций"""
+        """Получить все привязки функций (все из FUNCTION_DEFINITIONS).
+
+        Возвращает каждую функцию, даже если привязка ещё не настроена —
+        с дефолтным промптом из prompts/*.txt (чтобы UI показывал промпты).
+        """
         self._load_cache()
         result = []
-        for f in self._function_cache.values():
-            d = f.to_dict()
-            # Промпт не задан в настройках — показываем дефолт из prompts/*.txt
+        for fname in FUNCTION_DEFINITIONS.keys():
+            fm = self._function_cache.get(fname)
+            if fm:
+                d = fm.to_dict()
+            else:
+                d = {"function": fname, "provider_id": "", "model": "",
+                     "system_prompt": "", "parameters": {}}
+            # Промпт не задан — показываем дефолт из prompts/*.txt
             if not d.get("system_prompt"):
-                d["system_prompt"] = self._load_default_prompt(f.function)
+                d["system_prompt"] = self._load_default_prompt(fname)
             result.append(d)
         return result
 

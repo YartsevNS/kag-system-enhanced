@@ -1452,13 +1452,12 @@ async def get_function_map(function_name: str):
     """Вернуть привязку функции к провайдеру."""
     fm = provider_service.get_function_map(function_name)
     if not fm:
-        # Возвращаем пустой шаблон для функции
-        func_def = FUNCTION_DEFINITIONS.get(function_name, {})
+        # Возвращаем пустой шаблон функции, но с дефолтным промптом из prompts/*.txt
         return {
             "function": function_name,
             "provider_id": provider_service.get_default_provider_id() or "",
             "model": "",
-            "system_prompt": "",
+            "system_prompt": provider_service._load_default_prompt(function_name),
             "parameters": {"temperature": 0.7, "max_tokens": 4096},
             "is_default": True,
         }
