@@ -58,8 +58,6 @@ class DocumentAnalyzer:
             logger.debug(f"Слишком короткий чанк для анализа: {document_id}")
             return {}
 
-        prompt = self._build_prompt(first_chunk_text, filename)
-        
         # Настройки ТОЛЬКО из admin (function_map:doc_analysis)
         cfg = self._get_config()
         if not cfg or not cfg.get("model"):
@@ -70,12 +68,21 @@ class DocumentAnalyzer:
         llm_url = cfg.get("url", "")
         api_key = cfg.get("api_key", "")
         provider = cfg.get("provider", "ollama")
-        
+
+        # Системный промпт из админки (function_map:doc_analysis → doc_analysis.txt):
+        # маркеры типов + {type_labels}. Подставляем актуальный список типов.
+        from src.indexing.auto_tagger import DocumentType
+        type_labels = ", ".join(t.value for t in DocumentType)
+        system_prompt = (cfg.get("system_prompt") or "").replace("{type_labels}", type_labels)
+        if not system_prompt:
+            system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
+        prompt = self._build_prompt(first_chunk_text, filename, type_labels)
+
         try:
             import aiohttp
-            
+
             async with aiohttp.ClientSession() as session:
-                if provider in ("openai", "deepseek", "openrouter"):
+                if provider in ("openai", "deepseek", "openrouter", "gigachat"):
                     # OpenAI-совместимый API (chat/completions)
                     headers = {"Content-Type": "application/json"}
                     if api_key:
@@ -83,7 +90,7 @@ class DocumentAnalyzer:
                     payload = {
                         "model": model,
                         "messages": [
-                            {"role": "system", "content": "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt},
                         ],
                         "temperature": 0.1,
@@ -102,12 +109,13 @@ class DocumentAnalyzer:
                         data = await resp.json()
                         response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 else:
-                    # Ollama API (/api/generate)
+                    # Ollama API (/api/generate) — system-промпт встраиваем в prompt
+                    ollama_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
                     async with session.post(
                         f"{llm_url}/api/generate",
                         json={
                             "model": model,
-                            "prompt": prompt,
+                            "prompt": ollama_prompt,
                             "stream": False,
                             "options": {"temperature": 0.1, "max_tokens": 300},
                         },
@@ -129,11 +137,14 @@ class DocumentAnalyzer:
             logger.warning(f"Ошибка анализа документа {document_id}: {type(e).__name__}: {e}")
             return {}
 
-    def _build_prompt(self, text: str, filename: str) -> str:
+    def _build_prompt(self, text: str, filename: str, type_labels: str = "") -> str:
         """Строит промпт для LLM."""
         # Берём первые ~2000 символов
         sample = text[:2000]
-        
+        if not type_labels:
+            from src.indexing.auto_tagger import DocumentType
+            type_labels = ", ".join(t.value for t in DocumentType)
+
         return f"""Проанализируй начало документа и верни JSON с метаданными.
 
 Имя файла: {filename}
@@ -146,7 +157,7 @@ class DocumentAnalyzer:
 Верни ТОЛЬКО валидный JSON (без markdown, без ```), строго такой формат:
 {{"title": "краткое название документа", "type": "тип", "summary": "одно предложение о чём документ", "topics": ["тема1", "тема2"]}}
 
-Тип выбери из: invoice, contract, report, letter, form, identity, medical, legal, financial, technical, other.
+Тип выбери из: {type_labels}.
 Если непонятно — поставь "other".
 Пиши на русском."""
 
@@ -176,9 +187,9 @@ class DocumentAnalyzer:
             else:
                 return {}
         
-        # Валидируем типы
-        valid_types = {"invoice", "contract", "report", "letter", "form", 
-                       "identity", "medical", "legal", "financial", "technical", "other"}
+        # Валидируем типы — полный список из DocumentType (auto_tagger)
+        from src.indexing.auto_tagger import DocumentType
+        valid_types = {t.value for t in DocumentType}
         
         result = {}
         if "title" in data and data["title"]:

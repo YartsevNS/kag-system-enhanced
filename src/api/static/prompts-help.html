@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Справка: промпты, типы и маркеры</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--accent:#3ecf8e;--accent-h:#00c573;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code',Consolas,monospace;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.55;padding:24px;max-width:960px;margin:0 auto}
+h1{font-size:22px;margin-bottom:4px}
+h2{font-size:17px;margin:28px 0 10px;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:6px}
+h3{font-size:14px;margin:16px 0 6px;color:var(--text2)}
+p,li{font-size:13.5px;color:var(--text2)}
+code{font-family:var(--mono);background:var(--elevated);padding:1px 6px;border-radius:4px;font-size:12.5px;color:var(--accent-h)}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-h)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:10px 0}
+.badge{display:inline-block;background:var(--elevated);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:11.5px;margin:2px 3px 2px 0;color:var(--text2)}
+.badge.key{color:var(--amber);border-color:rgba(245,166,35,.3)}
+.badge.type{color:var(--accent-h);border-color:rgba(62,207,142,.3)}
+.warn{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.3);border-radius:var(--radius);padding:10px 14px;font-size:12.5px;color:var(--amber);margin:10px 0}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12.5px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text2)}
+th{color:var(--text3);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px}
+td code{font-size:11.5px}
+.muted{color:var(--text3);font-size:12px}
+.prompt-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;color:var(--text2);max-height:220px;overflow:auto;margin:6px 0}
+</style>
+</head>
+<body>
+
+<h1>Справка: промпты, типы документов и маркеры</h1>
+<p class="muted">Как устроена настройка LLM-функций в KAG, какие типы документов и домены запросов существуют, и где их править.</p>
+
+<h2>1. Как настраиваются промпты</h2>
+<div class="card">
+<p>Каждая LLM-функция имеет свой <b>системный промпт</b>. Настройка — в админке:
+<b>«Привязка функций к провайдерам»</b> → поле «Системный промпт» для нужной функции.</p>
+<p>Дефолтные промпты хранятся в <code>prompts/*.txt</code> (в git, не теряются при backup):</p>
+<table>
+<tr><th>Функция</th><th>Файл</th><th>Что делает</th></tr>
+<tr><td>Чат</td><td><code>prompts/chat.txt</code></td><td>RAG-ответы: приоритет Qdrant/Neo4j, цитирование источников, стиль</td></tr>
+<tr><td>Граф знаний</td><td><code>prompts/graph.txt</code></td><td>Правила извлечения сущностей и связей (Neo4j)</td></tr>
+<tr><td>Анализ документов</td><td><code>prompts/doc_analysis.txt</code></td><td>Классификация типа + title/summary/topics</td></tr>
+<tr><td>Анализ запросов</td><td><code>prompts/query_analysis.txt</code></td><td>Маршрутизация вопроса по доменам (выбор схемы)</td></tr>
+</table>
+<p>Если промпт в админке не задан — берётся дефолт из <code>prompts/*.txt</code>. Если задан — он переопределяет дефолт.</p>
+</div>
+
+<h2>2. Актуальные системные промпты</h2>
+<p class="muted">Подгружаются автоматически из настроек (с дефолтами из prompts/*.txt).</p>
+<div id="prompts"></div>
+
+<h2>3. Типы документов (классификация)</h2>
+<div class="card">
+<p>Типы задаются в <b>админке → «Типы документов»</b> (<code>GET/POST /admin/models/doc-types</code>).
+В промпт анализа документов подставляется актуальный список через плейсхолдер <code>{type_labels}</code>.</p>
+<h3>Актуальный список (подгружается):</h3>
+<div id="doc-types"><span class="muted">Загрузка…</span></div>
+</div>
+
+<h2>4. Маркеры определения типа</h2>
+<div class="card">
+<p>Классификация идёт двумя путями:</p>
+<ul style="padding-left:18px">
+<li><b>Регекс-эвристика</b> (мгновенно, без LLM) — <code>src/indexing/auto_tagger.py</code>: правила по ключевым словам в имени файла и первых строках.</li>
+<li><b>LLM-анализ</b> (<code>doc_analysis.txt</code>) — маркеры по имени файла и содержанию, если эвристика не определила тип.</li>
+</ul>
+<h3>Маркеры (по имени файла):</h3>
+<table>
+<tr><th>Тип</th><th>Ключевые слова в имени файла</th></tr>
+<tr><td><code>invoice</code></td><td>счёт, invoice, payment</td></tr>
+<tr><td><code>contract</code></td><td>договор, contract, agreement</td></tr>
+<tr><td><code>report</code></td><td>отчёт, report, analytics</td></tr>
+<tr><td><code>letter</code></td><td>письмо, letter</td></tr>
+<tr><td><code>form</code></td><td>форма, анкета, questionnaire</td></tr>
+<tr><td><code>identity</code></td><td>паспорт, passport, удостовер</td></tr>
+<tr><td><code>medical</code></td><td>медицин, больнич, анализ</td></tr>
+<tr><td><code>legal</code></td><td>доверенность, иск, суд</td></tr>
+<tr><td><code>financial</code></td><td>финанс, bank, кредит</td></tr>
+<tr><td><code>certificate</code></td><td>свидетельство, сертификат, certificate</td></tr>
+<tr><td><code>order</code></td><td>приказ, order</td></tr>
+<tr><td><code>policy</code></td><td>регламент, политик, инструкция</td></tr>
+<tr><td><code>standard</code></td><td>стандарт, гост, snip, iso</td></tr>
+<tr><td><code>technical</code></td><td>тех, technical, specification</td></tr>
+<tr><td><code>news</code></td><td>новость, пресс, news</td></tr>
+</table>
+<p class="muted">Полные маркеры по содержанию — в <code>prompts/doc_analysis.txt</code> (секция «ПО СОДЕРЖАНИЮ»).</p>
+</div>
+
+<h2>5. Домены запросов (маршрутизация)</h2>
+<div class="card">
+<p>Функция <b>«Анализ запросов»</b> (<code>query_analysis.txt</code>) определяет домен вопроса
+одним словом, чтобы выбрать доменную схему извлечения графа.</p>
+<p>Домены соответствуют <b>доменным схемам</b> (<code>SCHEMA_PRESETS</code> в entity_extractor):</p>
+<div id="presets"><span class="muted">Загрузка…</span></div>
+<div class="warn">⚠️ Домены <code>query_analysis.txt</code> должны в точности совпадать с ключами доменных схем
+(<code>universal, accounting, legal, medical, infosec</code>). Если модель вернёт домен, которого нет в схемах —
+выбор схемы упадёт. Меняй оба места согласованно.</div>
+</div>
+
+<h2>6. Нужны ли примеры (few-shot)</h2>
+<div class="card">
+<table>
+<tr><th>Функция</th><th>Примеры нужны?</th><th>Почему</th></tr>
+<tr><td>Граф знаний (Neo4j)</td><td>❌ Нет</td><td>JSON-формат задаётся инлайн; system_prompt &gt;2000 симв. заменяется на дефолт</td></tr>
+<tr><td>Анализ документов</td><td>❌ Нет</td><td>Маркеры работают лучше few-shot</td></tr>
+<tr><td>Анализ запросов</td><td>✅ Да</td><td>Маленькая модель (qwen2.5:1.5b), примеры удерживают формат «одно слово»</td></tr>
+<tr><td>Чат</td><td>❌ Нет</td><td>Правила + формат контекста достаточны</td></tr>
+</table>
+</div>
+
+<h2>7. Ограничения</h2>
+<ul style="padding-left:18px">
+<li><b>graph.txt</b>: если системный промпт длиннее 2000 символов — entity_extractor заменяет его на короткий дефолт (<code>entity_extractor.py:_call_llm</code>). Не раздувай промпт графа.</li>
+<li><b>Обрезка эмбеддинга</b>: текст чанка режется до 500 символов перед векторизацией (<code>llm/embeddings.py</code>, лимит GigaChat ~512 токенов).</li>
+<li><b>{type_labels}</b>: плейсхолдер в <code>doc_analysis.txt</code> заменяется актуальным списком типов из админки автоматически.</li>
+</ul>
+
+<script>
+const API = '/api/v1';
+async function j(url){ try { const r = await fetch(url, {credentials:'include'}); if(!r.ok) return null; return await r.json(); } catch(e){ return null; } }
+
+// Промпты
+(async function(){
+  const maps = await j(API + '/admin/models/functions');
+  const el = document.getElementById('prompts');
+  if(!maps || !Array.isArray(maps)){ el.innerHTML = '<span class="muted">Недоступно (нужна авторизация admin)</span>'; return; }
+  const label = {chat:'Чат', graph:'Граф знаний', doc_analysis:'Анализ документов', query_analysis:'Анализ запросов', embedding:'Embedding'};
+  el.innerHTML = maps.map(m => {
+    const p = (m.system_prompt || '').trim();
+    const n = label[m.function] || m.function;
+    if(m.function === 'embedding') return '<div class="card"><h3>'+n+'</h3><p class="muted">Промпт не используется (векторизация — без системного промпта).</p></div>';
+    return '<div class="card"><h3>'+n+'</h3>' +
+      '<span class="badge type">'+(m.model || 'модель не задана')+'</span>' +
+      '<span class="badge key">'+(m.provider_id || 'провайдер не задан')+'</span>' +
+      '<p class="muted" style="margin-top:6px">'+(p ? p.length+' символов' : 'пусто (используется дефолт из prompts/*.txt)')+'</p>' +
+      (p ? '<div class="prompt-box">'+escHtml(p)+'</div>' : '') +
+    '</div>';
+  }).join('');
+})();
+
+// Типы документов
+(async function(){
+  const d = await j(API + '/admin/models/doc-types');
+  const el = document.getElementById('doc-types');
+  if(!d){ el.innerHTML = '<span class="muted">Недоступно</span>'; return; }
+  const types = Array.isArray(d) ? d : (d.types || d.doc_types || []);
+  el.innerHTML = types.map(t => '<span class="badge type">' + escHtml(typeof t === 'string' ? t : (t.name || t.value || t.id || '')) + '</span>').join('');
+})();
+
+// Доменные схемы
+(async function(){
+  const d = await j(API + '/kg/domain-schema');
+  const el = document.getElementById('presets');
+  if(!d || !d.presets){ el.innerHTML = '<span class="muted">Недоступно</span>'; return; }
+  el.innerHTML = d.presets.map(p =>
+    '<div style="margin:6px 0"><span class="badge key">' + escHtml(p.id || '') + '</span> ' +
+    escHtml(p.name || '') + ' <span class="muted">(' + (p.entity_count||0) + ' сущностей, ' + (p.relation_count||0) + ' связей)</span></div>'
+  ).join('');
+})();
+
+function escHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>

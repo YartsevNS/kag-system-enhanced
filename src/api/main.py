@@ -337,6 +337,17 @@ async def kg_page():
     return {"error": "KG page not found"}
 
 
+@app.get("/prompts-help", summary="Справка: промпты, типы и маркеры")
+async def prompts_help_page():
+    """Страница-справка: как настраиваются системные промпты, типы документов,
+    маркеры классификации, домены запросов и доменные схемы. Доступна по ссылке
+    из админки (раздел «Привязка функций к провайдерам»)."""
+    help_path = os.path.join(static_path, "prompts-help.html")
+    if os.path.exists(help_path):
+        return FileResponse(help_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "Prompts help page not found"}
+
+
 @app.get("/monitor", summary="Веб-мониторинг")
 async def monitor_page():
     return _html_response(os.path.join(static_path, "monitor.html"))
