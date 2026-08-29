@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # reading_order кладём через download_reading_order() — она раскладывает в
 # occular/weights/reading_order/ (reading_order_ready() проверяет именно локальный путь).
 RUN python -c "from huggingface_hub import hf_hub_download as d; r='Shivin11/occular-ocr'; \
-[f(d(r,f)) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx']]; \
+[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx']]; \
 from occular import download_reading_order; download_reading_order(); \
 print('Occular weights preloaded')"
 
