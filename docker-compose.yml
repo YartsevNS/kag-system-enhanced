@@ -436,32 +436,10 @@ services:
   # Планировщик задач
   # ===========================================
   
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: kag-scheduler
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    command: python -c "from src.indexing.scheduler import scheduler; scheduler.initialize(); import asyncio; asyncio.get_event_loop().run_forever()"
-    volumes:
-      - ./src:/app/src
-    depends_on:
-      - redis
-    networks:
-      - kag_internal
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 1G
-    healthcheck:
-      test: ["CMD", "python", "-c", "import redis; r = redis.Redis(host='redis'); r.ping()"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
+  # Удалён (2026-08): APScheduler-планировщик был мёртвым (3/5 джоб — TODO,
+  # monitor_check дублировал Celery beat run_monitor_check). Периодические
+  # задачи выполняет Celery beat в worker'е (check-stuck-documents,
+  # monitor-auto-check — см. src/indexing/celery_app.py).
 
   # ===========================================
   # Neo4j — граф знаний для KAG
