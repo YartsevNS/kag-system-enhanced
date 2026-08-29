@@ -24,35 +24,22 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    # Occular-ocr — русский OCR из GitHub (ставим без зависимостей — torch уже есть)
+    # Occular-ocr — русский OCR из GitHub (без зависимостей — torch не нужен)
     pip install --no-cache-dir --no-deps git+https://github.com/Bodhi42/Occular-ocr.git && \
     # pyctcdecode — зависимость Occular (декодирование CTC), не ставится с --no-deps
     pip install --no-cache-dir pyctcdecode && \
     # Playwright — headless Chromium для парсинга SPA-сайтов (тип источника browser)
-    python -m playwright install --with-deps chromium && \
-    # Веса для Occular — 3 retry с verify
-    mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
-    cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
-    for url in \
-      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx" \
-      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth" \
-      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx" \
-      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth"; do \
-      f="${url##*/}"; \
-      for i in 1 2 3; do \
-        echo "Downloading $f (attempt $i)..." && \
-        curl --connect-timeout 30 --max-time 120 -sSLO "$url" && \
-        [ -s "$f" ] && echo "OK $f ($(stat -c%s "$f") bytes)" && break; \
-        echo "Retry $i failed for $f"; \
-        if [ $i -eq 3 ]; then exit 1; fi; \
-        sleep 2; \
-      done; \
-    done && \
-    # Предзагрузка модели reading_order (многоколоночные макеты) — чтобы
-    # не качалась в рантайме при первом документе
-    cd /opt/venv/lib/python3.11/site-packages/ocr_skel && \
-    python -c "from ocr_skel import download_reading_order; download_reading_order()" \
-    || echo "WARNING: reading_order model download failed, will download at runtime"
+    python -m playwright install --with-deps chromium
+
+# Предзагрузка весов Occular с HuggingFace (Shivin11/occular-ocr).
+# raw.githubusercontent.com (Fastly CDN) недоступен из РФ-сети, старый путь
+# ocr_skel/weights/*.onnx устарел — пакет 0.3.0 переименован occular, веса на HF.
+# reading_order кладём через download_reading_order() — она раскладывает в
+# occular/weights/reading_order/ (reading_order_ready() проверяет именно локальный путь).
+RUN python -c "from huggingface_hub import hf_hub_download as d; r='Shivin11/occular-ocr'; \
+[f(d(r,f)) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx']]; \
+from occular import download_reading_order; download_reading_order(); \
+print('Occular weights preloaded')"
 
 # ===========================================
 # Stage 2: Production
