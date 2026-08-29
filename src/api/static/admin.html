@@ -340,8 +340,16 @@
                             <option value="openai">OpenAI API</option>
                             <option value="deepseek">DeepSeek API</option>
                             <option value="openrouter">OpenRouter API</option>
+                            <option value="gigachat">GigaChat (Сбер)</option>
                             <option value="custom">Custom (OpenAI-совместимый)</option>
                         </select>
+                        <div id="pf-gigachat-hint" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px">
+                            GigaChat подключается через встроенный прокси <b>gpt2giga</b> — он принимает стандартные
+                            OpenAI-запросы (<code>/v1/chat/completions</code>, <code>/v1/embeddings</code>,
+                            <code>/v1/models</code>) и перенаправляет их в GigaChat API. Адрес прокси-контейнера
+                            подставлен автоматически — укажите только ключ авторизации GigaChat
+                            (Authorization key из личного кабинета developers.sber.ru).
+                        </div>
                     </div>
                     <div class="form-group" style="grid-column:1/-1">
                         <label>URL API</label>
@@ -1492,14 +1500,17 @@
             var type = document.getElementById('pf-type').value;
             var keyGroup = document.getElementById('pf-key-group');
             var urlField = document.getElementById('pf-url');
+            var gigaHint = document.getElementById('pf-gigachat-hint');
 
             keyGroup.style.display = (type === 'ollama') ? 'none' : '';
+            if (gigaHint) gigaHint.style.display = (type === 'gigachat') ? '' : 'none';
 
             var defaults = {
                 'ollama': 'http://192.168.50.41:11434',
                 'openai': 'https://api.openai.com',
                 'deepseek': 'https://api.deepseek.com',
                 'openrouter': 'https://openrouter.ai/api',
+                'gigachat': 'http://gigachat-proxy:8090/v1',
                 'custom': 'https://'
             };
             if (!document.getElementById('pf-id').value) {

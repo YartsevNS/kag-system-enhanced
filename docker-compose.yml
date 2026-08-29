@@ -486,6 +486,37 @@ services:
       retries: 3
       start_period: 40s
 
+  # ===========================================
+  # GigaChat прокси (gpt2giga) — OpenAI-совместимый API поверх GigaChat
+  # ===========================================
+  # Зачем: GigaChat API не совместим с OpenAI нативно. gpt2giga (ai-forever)
+  # принимает OpenAI-запросы (/v1/chat/completions, /v1/embeddings, /v1/models)
+  # и перенаправляет их в GigaChat. KAG обращается к нему как к обычному
+  # OpenAI-совместимому провайдеру по адресу http://gigachat-proxy:8090/v1.
+  # Авторизация: GigaChat-ключ задаётся в .env (GIGACHAT_CREDENTIALS), либо
+  # передаётся клиентом (KAG) через Authorization (GPT2GIGA_PASS_TOKEN=True).
+  # Порт не публикуется наружу — только внутри сети kag_internal.
+  gigachat-proxy:
+    image: ghcr.io/ai-forever/gpt2giga:latest
+    container_name: kag-gigachat-proxy
+    environment:
+      - GPT2GIGA_HOST=0.0.0.0
+      - GPT2GIGA_PORT=8090
+      - GIGACHAT_CREDENTIALS=${GIGACHAT_CREDENTIALS:-}
+      - GIGACHAT_SCOPE=${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      - GIGACHAT_MODEL=${GIGACHAT_MODEL:-GigaChat-Max}
+      - GPT2GIGA_EMBEDDINGS=EmbeddingsGigaR
+      # Передавать ключ из Authorization (KAG) в GigaChat — если GIGACHAT_CREDENTIALS пуст
+      - GPT2GIGA_PASS_TOKEN=True
+    networks:
+      - kag_internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
 # ===========================================
 # Сети
 # ===========================================

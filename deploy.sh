@@ -74,6 +74,12 @@ EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
 EMBEDDING_MODEL=${EMBEDDING_MODEL}
 EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
 
+# GigaChat (Сбер) — через прокси gpt2giga (контейнер gigachat-proxy:8090).
+# Ключ авторизации GigaChat. Пустой = ключ вводится в админке (pass-token).
+GIGACHAT_CREDENTIALS=${GIGACHAT_CREDENTIALS:-}
+GIGACHAT_SCOPE=${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+GIGACHAT_MODEL=${GIGACHAT_MODEL:-GigaChat-Max}
+
 # Qdrant
 QDRANT_API_KEY=${QDRANT_API_KEY}
 
