@@ -534,6 +534,7 @@ class DocumentService:
                             })
                 parsed_metadata = parsed.metadata
                 parser_name = parsed.parse_method
+                parsed_text = parsed.full_text or ""
                 if not segments:
                     raise ValueError("Парсер вернул пустой результат")
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
@@ -557,11 +558,13 @@ class DocumentService:
                 segments = parsed_doc.get("segments", [])
                 parsed_metadata = parsed_doc.get("metadata", {})
                 parser_name = "DocumentParser"
+                parsed_text = "\n\n".join(s.get("content", "") for s in segments if isinstance(s, dict))
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
 
             # Шаг 1.5: Суммаризация (опционально, 40%)
             summarization_enabled = False
             try:
+                from src.api.services.config_store import config_store
                 ocr_cfg = config_store.get("ocr", "settings") or {}
                 summarization_enabled = ocr_cfg.get("enable_summarization", False)
             except Exception:

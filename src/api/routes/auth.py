@@ -268,7 +268,7 @@ def login(body: UserLogin, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
+def refresh(body: RefreshRequest, request: Request, db: Session = Depends(get_db)):
     """
     Обновить токены по refresh_token (ротация).
 
@@ -326,7 +326,7 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
         key="kag_token",
         value=access_token,
         httponly=True,
-        secure=False,
+        secure=_is_secure(request),
         samesite="lax",
         path="/",
         max_age=_get_token_expiry(),

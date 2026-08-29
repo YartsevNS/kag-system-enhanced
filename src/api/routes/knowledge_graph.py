@@ -248,8 +248,8 @@ async def stop_rebuild(current_user: User = Depends(get_current_admin)):
 
 
 @router.get("/validate/{document_id}", summary="Валидация сущностей документа")
-async def validate_document_entities(document_id: str):
-    """Проверить качество извлечённых сущностей."""
+async def validate_document_entities(document_id: str, current_user: User = Depends(get_current_admin)):
+    """Проверить качество извлечённых сущностей (admin-only)."""
     try:
         from src.indexing.knowledge_graph import kg_service
         result = kg_service.validate_entities(document_id)

@@ -54,7 +54,6 @@ celery_app.conf.update(
     task_routes={
         "src.indexing.tasks.process_document": {"queue": "documents"},
         "src.indexing.tasks.transcribe_audio": {"queue": "audio"},
-        "src.indexing.tasks.vectorize_document": {"queue": "vectorization"},
         "src.indexing.tasks.clear_cache_task": {"queue": "maintenance"},
     },
     

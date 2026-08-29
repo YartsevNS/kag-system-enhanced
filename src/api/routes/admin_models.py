@@ -2107,13 +2107,13 @@ class SystemConfigRequest(BaseModel):
     sso_enabled: Optional[bool] = None
 
 
-@router.put("/system-config", summary="Сохранить внешний адрес и применить к Keycloak")
+@router.put("/system-config", summary="Сохранить внешний адрес и флаг SSO")
 async def save_system_config(req: SystemConfigRequest):
-    """Сохранить внешний адрес; переключить Keycloak в prod mode.
+    """Сохраняет внешний адрес и флаг SSO в config_store.
 
-    Если base_url задан (https://host): патчим docker-compose.yml
-    (KC_HOSTNAME=<base_url>, command start --import-realm) и пересоздаём
-    keycloak. Если пустой — остаётся dev mode (start-dev, localhost).
+    ПРИМЕНЕНИЕ Keycloak в prod mode (KC_HOSTNAME, command start) — только
+    через деплой (.env / docker-compose.yml), НЕ через API. На живом
+    сервере compose-файл и контейнер keycloak не трогаются.
     """
     from src.api.services.config_store import config_store
     cfg = config_store.get("system", "config", {})
@@ -2121,14 +2121,10 @@ async def save_system_config(req: SystemConfigRequest):
         cfg = {}
 
     base_url = cfg.get("base_url", "")
-    # Обновляем адрес ТОЛЬКО если передан (иначе не затираем сохранённый)
     if req.base_url is not None:
         base_url = (req.base_url or "").strip().rstrip("/")
         cfg["base_url"] = base_url
 
-    # Переключение SSO (кнопки «Включить/Выключить SSO» в админке).
-    # НЕ требует перезапуска Keycloak: SSO — это логика api (auth/status,
-    # login), Keycloak уже работает. Просто сохраняем флаг.
     sso_changed = False
     if req.sso_enabled is not None:
         cfg["sso_enabled"] = bool(req.sso_enabled)
@@ -2137,101 +2133,21 @@ async def save_system_config(req: SystemConfigRequest):
     config_store.set("system", "config", cfg)
 
     if sso_changed and req.base_url is None:
-        # Только переключение SSO — Keycloak не трогаем
         return {"status": "ok", "sso_enabled": bool(cfg["sso_enabled"]),
                 "message": "SSO " + ("включён" if cfg["sso_enabled"] else "выключен")}
 
     if not base_url:
         return {"status": "ok", "base_url": "", "sso_enabled": bool(cfg.get("sso_enabled", False)),
-                "message": "Внешний адрес сброшен — Keycloak в dev mode"}
+                "message": "Внешний адрес сброшен"}
 
-    # ── Применяем к Keycloak: патч docker-compose.yml + пересоздание ──
-    try:
-        import re
-        import docker
-        client = docker.from_env()
-        # api НЕ монтирует /home/yartsevn/kag-system (compose-файл там).
-        # Патчим через одноразовый контейнер с volume (как в worker-resources).
-        _PATCH = '''import re
-
-path = "/opt/kag-system/docker-compose.yml"
-text = open(path, "r", encoding="utf-8").read()
-
-# KC_HOSTNAME в секции keycloak → внешний адрес
-new_text = re.sub(r"(- KC_HOSTNAME=).*", f"\\\\g<1>{BASE_URL}", text, count=1)
-# command: start-dev → start (prod mode), realm импортируется
-new_text = re.sub(r"command: start-dev --import-realm", "command: start --import-realm", new_text, count=1)
-
-open(path, "w", encoding="utf-8").write(new_text)
-print("compose patched")
-'''
-        script = _PATCH.replace("{BASE_URL}", base_url)
-        script_path = "/app/data/patch_keycloak.py"
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script)
-        try:
-            client.containers.run(
-                image="kag-system_api:latest",
-                command=["/opt/kag-system/data/patch_keycloak.py"],
-                entrypoint="python3",
-                volumes={"/home/yartsevn/kag-system": {"bind": "/opt/kag-system", "mode": "rw"}},
-                detach=False,
-                remove=True,
-                mem_limit="256m",
-            )
-        finally:
-            try:
-                os.remove(script_path)
-            except OSError:
-                pass
-
-        # ── Пересоздаём keycloak с новым hostname и prod mode ──────────
-        # docker-compose CLI в api нет; воспроизводим контейнер через docker SDK.
-        # Сначала УДАЛЯЕМ старый (иначе имя занято → 409), потом создаём новый.
-        kc = client.containers.get("kag-keycloak")
-        attrs = kc.attrs
-        host_cfg = attrs.get("HostConfig", {})
-        config = attrs.get("Config", {})
-
-        # Env: обновляем KC_HOSTNAME
-        env = list(config.get("Env", []))
-        env = [e for e in env if not e.startswith("KC_HOSTNAME=")]
-        env.append(f"KC_HOSTNAME={base_url}")
-
-        # Command: start (prod) вместо start-dev
-        cmd = ["start", "--import-realm"]
-
-        # Сетевые связи: kag_internal
-        networks = {}
-        for net_name in (attrs.get("NetworkSettings", {}).get("Networks", {}) or {}).keys():
-            networks[net_name] = {}
-
-        volumes = {}
-        for b in (host_cfg.get("Binds") or []):
-            parts = b.split(":")
-            if len(parts) >= 2 and not parts[1].startswith("/opt"):
-                volumes[parts[0]] = {"bind": parts[1], "mode": parts[2] if len(parts) > 2 else "rw"}
-
-        # Удаляем старый контейнер, затем создаём новый с тем же именем
-        kc.remove(force=True)
-        client.containers.run(
-            image=config.get("Image"),
-            name="kag-keycloak",
-            environment=env,
-            command=cmd,
-            detach=True,
-            remove=False,
-            network=next(iter(networks), None) or "kag_internal",
-            volumes=volumes,
-            restart_policy=host_cfg.get("RestartPolicy") or {"Name": "unless-stopped"},
-        )
-
-        return {"status": "ok", "base_url": base_url,
-                "message": "Внешний адрес сохранён, Keycloak переключён в production mode"}
-    except Exception as e:
-        logger.error(f"Не удалось применить внешний адрес к Keycloak: {e}")
-        return {"status": "error", "base_url": base_url,
-                "message": f"Адрес сохранён, но Keycloak не переключён: {e}"}
+    # Адрес только сохраняем. Prod mode Keycloak включается при деплое:
+    # KC_HOSTNAME=<base_url> и command: start --import-realm в compose/.env.
+    return {
+        "status": "ok", "base_url": base_url,
+        "sso_enabled": bool(cfg.get("sso_enabled", False)),
+        "message": "Внешний адрес сохранён. Keycloak переключится в prod mode "
+                   "при деплое (KC_HOSTNAME=" + base_url + ", command: start --import-realm).",
+    }
 
 
 # ═══════════════════════════════════════
@@ -2361,129 +2277,46 @@ async def get_worker_resources():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/worker-resources", summary="Изменить ресурсы worker")
+@router.put("/worker-resources", summary="Задать целевые ресурсы worker")
 async def update_worker_resources(req: dict):
-    """
-    Обновляет cpus/memory worker и перезапускает его.
+    """Сохраняет целевые cpus/memory worker в config_store.
 
-    Два уровня применения:
-    1. docker update — мгновенно меняет лимиты ЖИВОГО контейнера.
-    2. Патч docker-compose.yml (через общий volume /app/data + exec в worker) —
-       чтобы лимиты ПЕРЕЖИЛИ редеплой (docker-compose up --force-recreate).
-       Без этого шага после редеплоя worker вернётся к старым 4G/2CPU.
-
-    Worker перезапускается в конце — новый код + новые лимиты.
+    ПРИМЕНЕНИЕ — только через деплой (docker-compose.yml, env
+    WORKER_CPUS/WORKER_MEMORY). На живом сервере docker-compose.yml
+    и контейнеры не трогаются — это правило проекта (правка compose
+    через API ранее убивала сервер).
     """
-    import docker, os
     cpus = str(req.get("cpus", "4.0")).strip()
     memory = str(req.get("memory", "8G")).strip().upper()
 
-    # ── Валидация: не даём выставить мусор/опасные значения ─────────────
+    # ── Валидация ──
     try:
         cpus_f = float(cpus)
         if not (0.5 <= cpus_f <= 32):
             return {"status": "error", "message": "CPU должен быть в диапазоне 0.5–32"}
     except ValueError:
         return {"status": "error", "message": "CPU — число (напр. 4.0)"}
-    mem_match = __import__("re").fullmatch(r"(\d+(?:\.\d+)?)([MG])", memory)
+    import re as _re
+    mem_match = _re.fullmatch(r"(\d+(?:\.\d+)?)([MG])", memory)
     if not mem_match:
         return {"status": "error", "message": "Память — число с суффиксом M или G (напр. 12G)"}
     mem_val = float(mem_match.group(1))
     if mem_val < 1:
         return {"status": "error", "message": "Память не может быть меньше 1 (G)"}
 
+    # Сохраняем целевые значения (применятся при следующем deploy).
     try:
-        client = docker.from_env()
-        w = _find_worker_container(client)
-
-        # ── Шаг 1: мгновенное применение к живому контейнеру ─────────────
-        # ВНИМАНИЕ: docker SDK Container.update() НЕ принимает cpus/memory,
-        # а update_container() не умеет NanoCpus. Используем прямой вызов
-        # Docker API /containers/{id}/update. Обязательно указываем MemorySwap
-        # вместе с Memory — иначе Docker отвечает 409 («Memory limit should be
-        # smaller than already set memoryswap limit»).
-        mem_bytes = int(mem_val * (1024**3))
-        url = client.api._url('/containers/{0}/update', w.id)
-        upd_resp = client.api._post_json(url, data={
-            'NanoCpus': int(cpus_f * 1e9),
-            'Memory': mem_bytes,
-            'MemorySwap': mem_bytes,
-        })
-        if upd_resp.status_code != 200:
-            return {"status": "error", "message": f"docker update: {upd_resp.text[:200]}"}
-
-        # ── Шаг 2: персистентность — патч docker-compose.yml ─────────────
-        # api не монтирует compose-файл, а у worker он смонтирован READ-ONLY
-        # (rw=false), поэтому exec в worker не может его записать.
-        # Обходной путь: запускаем одноразовый контейнер с volume
-        # /home/yartsevn/kag-system (хостовый путь), который патчит файл
-        # через PyYAML/regex. docker.sock у api есть — этого достаточно.
-        # ВАЖНО: скрипт — обычная строка с плейсхолдерами {CPUS}/{MEMORY},
-        # а не f-string, чтобы не путаться в экранировании.
-        _PATCH_TEMPLATE = '''import re
-
-path = "/opt/kag-system/docker-compose.yml"
-with open(path, "r", encoding="utf-8") as f:
-    text = f.read()
-
-# 1) Находим блок worker: "  worker:" до следующего сервиса на том же уровне.
-m = re.search(r"^(  worker:.*?)(?=^  [a-zA-Z0-9_-]+:|\\Z)", text, re.M | re.S)
-if not m:
-    raise RuntimeError("Секция worker не найдена в docker-compose.yml")
-block = m.group(1)
-
-# 2) Внутри блока worker правим memory и cpus (только deploy.resources.limits).
-#    Значение может быть жёстким ("4G", 4G, "2.0") ИЛИ переменной окружения
-#    ("${WORKER_CPUS:-4.0}") — заменяем целиком всё, что после "memory:"/"cpus:".
-new_block = re.sub(
-    r"(memory:\\s*)\\S+",
-    f"\\\\g<1>{MEMORY}",
-    block, count=1,
-)
-new_block = re.sub(
-    r"(cpus:\\s*)\\S+",
-    f"\\\\g<1>\\"{CPUS}\\"",
-    new_block, count=1,
-)
-text = text[:m.start()] + new_block + text[m.end():]
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write(text)
-print("compose patched")
-'''
-        script = _PATCH_TEMPLATE.replace("{MEMORY}", memory).replace("{CPUS}", cpus)
-        script_path = "/app/data/patch_compose.py"
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script)
-        try:
-            # Одноразовый контейнер на базе существующего образа api (python3
-            # гарантирован) с RW-volume на хостовый каталог проекта.
-            # У worker volume read-only — поэтому патчим снаружи.
-            # Скрипт лежит в /app/data = хостовый /home/yartsevn/kag-system/data,
-            # внутри контейнера доступен как /opt/kag-system/data/patch_compose.py.
-            client.containers.run(
-                image="kag-system_api:latest",
-                command=["/opt/kag-system/data/patch_compose.py"],
-                entrypoint="python3",  # образ api имеет entrypoint uvicorn — переопределяем
-                volumes={"/home/yartsevn/kag-system": {"bind": "/opt/kag-system", "mode": "rw"}},
-                detach=False,
-                remove=True,
-                mem_limit="256m",
-            )
-            logger.info(f"docker-compose.yml пропатчен: cpus={cpus}, memory={memory}")
-        except Exception as e:
-            logger.warning(f"Патч compose не удался (не критично, docker update применён): {e}")
-        finally:
-            try:
-                os.remove(script_path)
-            except OSError:
-                pass
-
-        # ── Шаг 3: перезапуск worker (новые лимиты + свежий код) ─────────
-        w.restart()
-        return {"status": "ok", "cpus": cpus, "memory": memory, "message": "Worker обновлён и перезапущен"}
+        from src.api.services.config_store import config_store
+        config_store.set("worker", "resources", {"cpus": cpus, "memory": memory})
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"Не удалось сохранить: {e}"}
+
+    return {
+        "status": "ok", "cpus": cpus, "memory": memory,
+        "message": f"Сохранено (worker: {cpus} CPU / {memory}). "
+                   f"Применится при deploy: docker-compose up -d --no-deps --force-recreate worker "
+                   f"(WORKER_CPUS={cpus} WORKER_MEMORY={memory}).",
+    }
 
 
 # ===========================================

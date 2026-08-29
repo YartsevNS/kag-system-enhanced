@@ -634,7 +634,7 @@ async def upload_bulk(
                         continue
 
                     # Загружаем каждый файл
-                    _process_bulk_file(
+                    await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
                         upload_id, results
                     )
@@ -655,7 +655,7 @@ async def upload_bulk(
                     if not extracted_path.is_file():
                         continue
 
-                    _process_bulk_file(
+                    await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
                         upload_id, results
                     )
@@ -675,13 +675,12 @@ async def upload_bulk(
     return {"upload_id": upload_id, "total": len(results), "documents": results}
 
 
-def _process_bulk_file(
+async def _process_bulk_file(
     file_path: Path,
     file_ext: str,
     uploaded_by, group_ids, upload_id, results: list
 ):
     """Загрузить один файл из архива в document_service."""
-    import uuid as _uuid
     try:
         with open(file_path, "rb") as f:
             content = f.read()
@@ -699,14 +698,11 @@ def _process_bulk_file(
             file_size=len(content), mime_type=file_ext,
         )
 
-        doc_id = str(_uuid.uuid4())
-        # Используем document_service напрямую
-        import asyncio
-        record = asyncio.run(document_service.upload_document(
+        record = await document_service.upload_document(
             filename=file_path.name, file_content=content,
             file_type=file_ext, uploaded_by=uploaded_by,
             group_ids=group_ids, upload_id=upload_id,
-        ))
+        )
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать»)
         logger.info(f"[bulk] Сохранён, обработка отложена: {record.document_id}")

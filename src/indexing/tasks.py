@@ -160,47 +160,6 @@ def process_document(
 
 @celery_app.task(
     bind=True,
-    queue="vectorization",
-    max_retries=3
-)
-def vectorize_document(
-    self,
-    document_id: str,
-    chunks: list,
-    metadata: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Векторизовать чанки и сохранить в Qdrant.
-    
-    Args:
-        document_id: Идентификатор документа
-        chunks: Список чанков текста
-        metadata: Метаданные документа
-        
-    Returns:
-        Результат векторизации
-    """
-    logger.info(f"Векторизация документа: {document_id}")
-    
-    try:
-        vectorizer = Vectorizer()
-        result = vectorizer.vectorize(document_id, chunks, metadata)
-        
-        logger.info(f"Документ векторизован: {document_id}, добавлено: {result.get('added', 0)}")
-        
-        return {
-            "document_id": document_id,
-            "status": "completed",
-            "vectors_added": result.get("added", 0)
-        }
-        
-    except Exception as exc:
-        logger.error(f"Ошибка векторизации {document_id}: {exc}")
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
-
-
-@celery_app.task(
-    bind=True,
     queue="audio",
     max_retries=3
 )
