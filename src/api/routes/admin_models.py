@@ -1305,19 +1305,23 @@ async def save_provider(req: ProviderSaveRequest):
     if not success:
         raise HTTPException(status_code=500, detail="Ошибка сохранения провайдера")
 
-    # Автоматически загружаем модели если провайдер Ollama
-    if config.type == "ollama" and config.enabled and not config.api_key:
+    # Автоматически подтягиваем модели провайдера (для всех типов, не только Ollama).
+    # Раньше было только ollama — остальные (deepseek/openai/custom) оставались
+    # с пустым списком моделей до ручного «Обновить модели».
+    fetched_models = []
+    if config.enabled:
         try:
-            from src.api.services.model_manager import model_manager
-            await model_manager.get_ollama_models_detailed(base_url=config.url)
-            logger.info(f"Модели Ollama обновлены для провайдера {config.name}")
+            fetched_models = await provider_service.fetch_provider_models(config.id)
+            logger.info(f"Модели провайдера {config.name}: {len(fetched_models)} шт")
         except Exception as e:
-            logger.warning(f"Не удалось загрузить модели Ollama: {e}")
+            logger.warning(f"Не удалось загрузить модели {config.name}: {e}")
 
     return {
         "status": "success",
         "message": f"Провайдер {config.name} сохранён",
         "provider": config.to_dict(include_secret=False),
+        "models": fetched_models,
+        "models_count": len(fetched_models),
     }
 
 

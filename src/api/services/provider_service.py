@@ -286,7 +286,7 @@ class ProviderService:
             return False
 
     async def fetch_provider_models(self, provider_id: str) -> List[str]:
-        """Получить список моделей провайдера через его API"""
+        """Получить список моделей провайдера через его API."""
         self._load_cache()
         provider = self._provider_cache.get(provider_id)
         if not provider:
@@ -294,28 +294,40 @@ class ProviderService:
 
         import httpx
         try:
+            base = provider.url.rstrip("/")
+            headers = {}
+            if provider.api_key:
+                headers["Authorization"] = f"Bearer {provider.api_key}"
+
+            # Эндпоинт списка моделей зависит от типа провайдера. Пробуем
+            # несколько вариантов (разные провайдеры ставят /v1/models, /models,
+            # /api/v1/models) и берём первый успешный.
             if provider.type == "ollama":
-                url = f"{provider.url}/api/tags"
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(url)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        models = [m.get("name", "") for m in data.get("models", [])]
-                    else:
-                        models = []
+                candidates = [(f"{base}/api/tags", "name", "models")]
+            elif provider.type == "openrouter":
+                candidates = [(f"{base}/api/v1/models", "id", "data"),
+                              (f"{base}/api/v1/model", "id", "data")]
+            elif provider.type == "deepseek":
+                candidates = [(f"{base}/models", "id", "data"),
+                              (f"{base}/v1/models", "id", "data")]
             else:
-                # OpenAI-совместимый: /v1/models
-                url = f"{provider.url.rstrip('/')}/v1/models"
-                headers = {}
-                if provider.api_key:
-                    headers["Authorization"] = f"Bearer {provider.api_key}"
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    resp = await client.get(url, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        models = [m.get("id", "") for m in data.get("data", [])]
-                    else:
-                        models = []
+                # openai / custom / openai-совместимые
+                candidates = [(f"{base}/v1/models", "id", "data"),
+                              (f"{base}/models", "id", "data")]
+
+            models = []
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for url, key_field, list_field in candidates:
+                    try:
+                        resp = await client.get(url, headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            models = [m.get(key_field, "") for m in data.get(list_field, [])]
+                            models = [m for m in models if m]
+                            if models:
+                                break
+                    except Exception:
+                        continue
 
             # Обновляем кэш в БД
             if models:
