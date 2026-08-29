@@ -65,7 +65,7 @@ pdf2image>=1.17.0
 reportlab>=4.0.0
 
 # Occular-ocr — быстрый русский OCR (20x быстрее EasyOCR, 93.7% точность)
-# Ставится через Dockerfile с --no-deps (torch тянется отдельно для Docling)
+# Ставится через Dockerfile с --no-deps (torch НЕ нужен — OCR на onnxruntime)
 onnxruntime>=1.16.0
 opencv-python-headless>=4.8.0
 pyclipper>=1.3.0
@@ -81,9 +81,8 @@ playwright>=1.49.0
 # FastEmbed — sparse векторы BM25 для гибридного поиска
 fastembed>=0.3.0
 
-# Docling — layout analysis + таблицы (требует torch)
-torch>=2.0.0
-docling>=2.0.0
+# Docling удалён (2026-08): ветка Docling в hybrid_parser мёртвая — основной
+# путь PyMuPDF → Occular. torch (~3.5GB) не нужен ни api, ни worker (OCR — onnxruntime).
 
 # Улучшенный чанкинг для русского языка
 langchain-text-splitters>=0.3.0

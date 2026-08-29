@@ -27,15 +27,30 @@ COPY requirements.txt .
 
 # Установка Python зависимостей
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir git+https://github.com/Bodhi42/Occular-ocr.git && \
+    # Occular-ocr — БЕЗ зависимостей (--no-deps): setup.py тянет torch+CUDA (3.5GB),
+    # а torch/api-образу не нужен. Зависимости Occular (onnxruntime, opencv,
+    # pyclipper, shapely, pymupdf) уже в requirements.txt.
+    pip install --no-cache-dir --no-deps git+https://github.com/Bodhi42/Occular-ocr.git && \
+    # pyctcdecode — зависимость Occular (CTC-декодирование), не ставится с --no-deps
+    pip install --no-cache-dir pyctcdecode && \
     mkdir -p /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
     cd /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
-    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx && \
-    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth && \
-    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx && \
-    curl --connect-timeout 30 --max-time 120 -sLO https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth || echo "WARNING: weight downloads failed, will download at runtime"
+    for url in \
+      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet.onnx" \
+      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/dbnet_weights.pth" \
+      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_encoder.onnx" \
+      "https://raw.githubusercontent.com/Bodhi42/Occular-ocr/main/ocr_skel/weights/crnn_mobilenet_large.pth"; do \
+      f="${url##*/}"; \
+      for i in 1 2 3; do \
+        echo "Downloading $f (attempt $i)..." && \
+        curl --connect-timeout 30 --max-time 120 -sSLO "$url" && \
+        [ -s "$f" ] && echo "OK $f ($(stat -c%s "$f") bytes)" && break; \
+        echo "Retry $i failed for $f"; \
+        if [ $i -eq 3 ]; then exit 1; fi; \
+        sleep 2; \
+      done; \
+    done
 
 # Предзагрузка модели reading_order (многоколоночные макеты) — чтобы
 # не качалась в рантайме при первом документе. Если упала — докачается
