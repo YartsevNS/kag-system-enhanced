@@ -25,6 +25,17 @@ KAG_DB_PASSWORD=$(generate_password)
 ADMIN_PASSWORD=$(generate_password)
 QDRANT_API_KEY=$(generate_password)
 
+# ── Нейросети: переопределяются при запуске (иначе дефолты) ──────────────
+# Подключение после развёртывания:
+#   OLLAMA_BASE_URL=http://ollama-host:11434 \
+#   EMBEDDING_BASE_URL=http://emb-host:8090/v1 \
+#   bash deploy.sh
+OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.50.41:11434}
+OLLAMA_MODEL=${OLLAMA_MODEL:-phi4-mini:latest}
+EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.50.42:8090/v1}
+EMBEDDING_MODEL=${EMBEDDING_MODEL:-Embeddings}
+EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1024}
+
 # ============================================
 # 2. Создание .env
 # ============================================
@@ -53,14 +64,15 @@ KEYCLOAK_REALM=kag
 # Admin (веб-интерфейс KAG)
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
-# Ollama
-OLLAMA_BASE_URL=http://192.168.50.41:11434
-OLLAMA_MODEL=phi4-mini:latest
+# Ollama (LLM)
+OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+OLLAMA_MODEL=${OLLAMA_MODEL}
 LLM_OLLAMA_ENABLED=true
 
 # Embedding
-EMBEDDING_BASE_URL=http://192.168.50.41:11434
-EMBEDDING_MODEL=nomic-embed-text:latest
+EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
+EMBEDDING_MODEL=${EMBEDDING_MODEL}
+EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
 
 # Qdrant
 QDRANT_API_KEY=${QDRANT_API_KEY}
@@ -117,6 +129,12 @@ fi
 echo ""
 echo "=== Starting containers ==="
 docker network create kag_internal 2>/dev/null || true
+
+# Права на bind-mount ./data: api теперь запускается от непривилегированного
+# пользователя kag (USER kag в Dockerfile). Docker создаёт ./data от root —
+# без этого шага kag не сможет писать (uploads/thumbnails/ocr).
+mkdir -p data/uploads data/thumbnails data/ocr_results
+chmod -R 777 data 2>/dev/null || true
 
 if [ ! -f .env.before_deploy ]; then
     # Первый деплой — собираем образы

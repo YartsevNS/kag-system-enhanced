@@ -76,9 +76,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # .env — для записи сгенерированных паролей из setup
       - ./.env:/app/kag.env:rw
-    # Исправление прав на /app/data (Docker создаёт от root)
-    command: >
-      sh -c "chmod -R 777 /app/data 2>/dev/null; chmod 666 /var/run/docker.sock 2>/dev/null; mkdir -p /app/data/thumbnails; uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+    # Доступ к docker.sock (docker_monitor в админке) — через группу docker
+    # хоста, не через chmod 666 (безопаснее). DOCKER_GID можно переопределить.
+    group_add:
+      - "${DOCKER_GID:-999}"
+    # Запуск от непривилегированного kag (USER kag в Dockerfile).
+    # Права на /app/data (bind-mount) обеспечивает deploy.sh.
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     depends_on:
       qdrant:
         condition: service_started
@@ -264,8 +268,8 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: kag-keycloak
     # Keycloak НЕ публикуется наружу — SSO идёт через nginx (/realms/*).
-    # Внешний адрес настраивается в админке KAG («Внешний адрес»), которая
-    # переключает Keycloak в prod mode (KC_HOSTNAME + start).
+    # Prod mode включается при деплое: KC_HOSTNAME=<внешний адрес> и
+    # KC_COMMAND="start --import-realm" в .env (dev mode по умолчанию).
     ports:
       - "127.0.0.1:8080:8080"  # только localhost для отладки
     environment:
@@ -275,13 +279,13 @@ services:
       - KC_DB_URL=jdbc:postgresql://kag-db:5432/keycloak
       - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}
       - KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
-      - KC_HOSTNAME=localhost
+      - KC_HOSTNAME=${KC_HOSTNAME:-localhost}
       # prod mode: KC_PROXY=edge — Keycloak за реверс-прокси (nginx),
       # HTTPS терминирует nginx; включается при настройке внешнего адреса
       - KC_PROXY=${KC_PROXY:-edge}
     volumes:
       - ./docker/keycloak:/opt/keycloak/data/import
-    command: start-dev --import-realm
+    command: ${KC_COMMAND:-start-dev --import-realm}
     depends_on:
       kag-db:
         condition: service_healthy
@@ -362,6 +366,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.49.0
     container_name: kag-prometheus
+    profiles: ["monitoring"]
     ports:
       - "9090:9090"
     volumes:
@@ -380,6 +385,7 @@ services:
   grafana:
     image: grafana/grafana:10.2.0
     container_name: kag-grafana
+    profiles: ["monitoring"]
     ports:
       - "3000:3000"
     environment:
@@ -398,6 +404,7 @@ services:
   loki:
     image: grafana/loki:2.9.0
     container_name: kag-loki
+    profiles: ["monitoring"]
     ports:
       - "3100:3100"
     volumes:
@@ -411,6 +418,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.91.0
     container_name: kag-otel-collector
+    profiles: ["monitoring"]
     ports:
       - "4317:4317"
       - "4318:4318"

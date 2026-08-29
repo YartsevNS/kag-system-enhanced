@@ -5,7 +5,6 @@ FROM python:3.11-slim as builder
 
 # Установка системных зависимостей для сборки
 RUN apt-get update && apt-get install -y \
-    build-essential \
     curl \
     git \
     openssh-client \
@@ -89,9 +88,6 @@ WORKDIR /app
 # Копирование исходного кода
 COPY --chown=kag:kag src/ /app/src/
 
-# Добавление пользователя kag в группу docker для доступа к сокету
-RUN groupadd -f docker && usermod -aG docker kag
-
 # Создание директорий для данных
 RUN mkdir -p /app/data/audit /app/data/annotations /app/data/quality_tracking /app/data/ab_tests /app/.ssh && \
     chmod -R 750 /app/data && \
@@ -112,10 +108,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
 
-# entrypoint запускается от root (chmod docker.sock → su kag → uvicorn),
-# поэтому COPY и chmod должны выполняться ДО переключения на kag.
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Непривилегированный пользователь. Доступ к docker.sock — через group_add
+# в docker-compose.yml (gid хостовой docker-группы), не через chmod 666.
+# Права на /app/data (bind-mount) обеспечивает deploy.sh (chmod data).
+USER kag
 
-# Команда запуска через entrypoint (root → chmod docker.sock → su kag → uvicorn)
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
