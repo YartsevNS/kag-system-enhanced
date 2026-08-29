@@ -363,13 +363,25 @@ class ProviderService:
     def list_function_maps(self) -> List[dict]:
         """Получить все привязки функций"""
         self._load_cache()
-        return [f.to_dict() for f in self._function_cache.values()]
+        result = []
+        for f in self._function_cache.values():
+            d = f.to_dict()
+            # Промпт не задан в настройках — показываем дефолт из prompts/*.txt
+            if not d.get("system_prompt"):
+                d["system_prompt"] = self._load_default_prompt(f.function)
+            result.append(d)
+        return result
 
     def get_function_map(self, function_name: str) -> Optional[dict]:
         """Получить привязку функции"""
         self._load_cache()
         fm = self._function_cache.get(function_name)
-        return fm.to_dict() if fm else None
+        if not fm:
+            return None
+        d = fm.to_dict()
+        if not d.get("system_prompt"):
+            d["system_prompt"] = self._load_default_prompt(function_name)
+        return d
 
     def save_function_map(self, fm: FunctionMap) -> bool:
         """Сохранить привязку функции"""
@@ -505,12 +517,13 @@ class ProviderService:
         if not self.save_provider(default_provider):
             return False
 
-        # Создаём дефолтные привязки для всех функций
+        # Создаём дефолтные привязки для всех функций.
+        # system_prompt берём из prompts/*.txt (версионируются в git, не теряются).
         default_maps = {
-            "chat":         FunctionMap("chat", "ollama-main", "phi4-mini:latest", system_prompt=""),
+            "chat":         FunctionMap("chat", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("chat")),
             "embedding":    FunctionMap("embedding", "ollama-main", "nomic-embed-text"),
-            "graph":        FunctionMap("graph", "ollama-main", "phi4-mini:latest", system_prompt="Извлеки сущности и связи из текста"),
-            "doc_analysis": FunctionMap("doc_analysis", "ollama-main", "phi4-mini:latest"),
+            "graph":        FunctionMap("graph", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("graph")),
+            "doc_analysis": FunctionMap("doc_analysis", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("doc_analysis")),
         }
 
         for fm in default_maps.values():
