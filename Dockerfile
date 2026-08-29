@@ -3,6 +3,10 @@
 # ===========================================
 FROM python:3.11-slim as builder
 
+# Зеркало Debian (mirror.yandex.ru): deb.debian.org (Fastly CDN) недоступен из
+# РФ-сети — apt-get update падает с "Unable to connect". Заменяем до первого update.
+RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
+
 # Установка системных зависимостей для сборки
 RUN apt-get update && apt-get install -y \
     curl \
@@ -63,6 +67,9 @@ RUN cd /opt/venv/lib/python3.11/site-packages/ocr_skel && \
 # Stage 2: Production - финальный образ
 # ===========================================
 FROM python:3.11-slim as production
+
+# Зеркало Debian (mirror.yandex.ru) — deb.debian.org недоступен из РФ-сети.
+RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
 
 # Метки для Docker Hub
 LABEL maintainer="KAG Team"

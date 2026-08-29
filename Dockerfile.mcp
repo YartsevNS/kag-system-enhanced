@@ -3,6 +3,9 @@
 # ===========================================
 FROM python:3.11-slim as builder
 
+# Зеркало Debian (mirror.yandex.ru) — deb.debian.org недоступен из РФ-сети.
+RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -19,6 +22,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Stage 2: Production
 # ===========================================
 FROM python:3.11-slim as production
+
+# Зеркало Debian (mirror.yandex.ru) — deb.debian.org недоступен из РФ-сети.
+RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
 
 LABEL maintainer="KAG Team"
 LABEL description="KAG MCP Server"
