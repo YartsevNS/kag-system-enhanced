@@ -124,13 +124,17 @@
 - ✅ Фаза 3 — инфраструктура (Dockerfile USER kag без entrypoint, group_add вместо chmod 666,
   monitoring → profiles, KC_HOSTNAME/COMMAND из env, deploy.sh реальный пароль + адреса из env,
   .env.example рассинхрон). Коммит 2aac365.
-- ✅ Фаза 4 (частично) — удалён мёртвый код ~2300 строк: agents/, evaluation/, middleware auth/auth_gate,
-  scheduler.py + сервис scheduler, test_agents.py. Коммиты 328eae8, e578916.
-  ВАЖНО: llm/router + клиенты НЕ удалены — используются model_manager/provider_service (аудит ошибался).
-  Дубли (затенённые роуты admin_models, 2 генератора миниатюр, rebuild_watchdog) — отложены (не блокируют прод).
-- ⏳ Фаза 5 — тесты: 105 passed / 33 failed. Все падения — УСТАРЕВШИЕ тесты (python-jose, старый JSON на /,
-  /chat и watchers без auth), не отражают текущее поведение. Не блокируют fresh deploy.
-- ⏳ Фаза 6 — приёмка fresh deploy + push на GitHub (ещё не сделано).
+- ✅ Фаза 4 — мёртвый код + дубли:
+  - удалены agents/, evaluation/, middleware auth/auth_gate, scheduler.py + сервис scheduler, test_agents.py (коммиты 328eae8, e578916)
+  - устранены 3 затенённых дубля роутов admin_models (42331c9)
+  - удалён мёртвый JPEG-генератор миниатюр _create_thumbnail (42331c9)
+  - api-образ без torch/docling (~3.5GB), Occular с --no-deps + retry весов (a2d4f2e)
+  - llm/router + клиенты НЕ удалены — используются model_manager/provider_service (аудит ошибался)
+  - ОТЛОЖЕНО (риск для графа): rebuild_watchdog vs rebuild_graph_task, чистка docling-ветки из hybrid_parser
+- ⏳ Фаза 5 — тесты: 105 passed / ~33 failed. Все падения — УСТАРЕВШИЕ (python-jose, старый JSON на /,
+  /chat и watchers без auth). Не блокируют fresh deploy.
+- ⏳ Фаза 6 — приёмка fresh deploy на сервере (ещё не сделано — деплой последним).
 
-Ничего не запушено на GitHub, сервер 18 не тронут (прод на stable_PyMuPDF, be12616).
+Запушено на GitHub: PREPROD = 65807ff (7 коммитов) + a2d4f2e и 42331c9 (после push — нужно допушнуть).
+Прод не тронут (stable_PyMuPDF, be12616).
 
