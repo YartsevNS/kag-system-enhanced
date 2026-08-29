@@ -42,7 +42,7 @@ PROVIDER_TYPES = {
     "openai":     {"label": "OpenAI API",              "needs_key": True,  "url_placeholder": "https://api.openai.com"},
     "deepseek":   {"label": "DeepSeek API",            "needs_key": True,  "url_placeholder": "https://api.deepseek.com"},
     "openrouter": {"label": "OpenRouter API",          "needs_key": True,  "url_placeholder": "https://openrouter.ai/api"},
-    "gigachat":   {"label": "GigaChat (Сбер)",         "needs_key": True,  "url_placeholder": "http://gigachat-proxy:8090/v1"},
+    "gigachat":   {"label": "GigaChat (Сбер)",         "needs_key": False, "url_placeholder": "http://gigachat-proxy:8090/v1"},
     "custom":     {"label": "Custom OpenAI-совместимый","needs_key": True,  "url_placeholder": "https://your-server.com"},
 }
 
@@ -312,9 +312,9 @@ class ProviderService:
                 candidates = [(f"{base}/models", "id", "data"),
                               (f"{base}/v1/models", "id", "data")]
             elif provider.type == "gigachat":
-                # Через gpt2giga-прокси — OpenAI-совместимый /models
-                candidates = [(f"{base}/models", "id", "data"),
-                              (f"{base}/v1/models", "id", "data")]
+                # Через gpt2giga-прокси. base уже содержит /v1 (url_placeholder
+                # http://gigachat-proxy:8090/v1), поэтому только /models.
+                candidates = [(f"{base}/models", "id", "data")]
             else:
                 # openai / custom / openai-совместимые
                 candidates = [(f"{base}/v1/models", "id", "data"),

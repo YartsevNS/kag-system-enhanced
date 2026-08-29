@@ -506,8 +506,9 @@ services:
       - GIGACHAT_SCOPE=${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
       - GIGACHAT_MODEL=${GIGACHAT_MODEL:-GigaChat-Max}
       - GPT2GIGA_EMBEDDINGS=EmbeddingsGigaR
-      # Передавать ключ из Authorization (KAG) в GigaChat — если GIGACHAT_CREDENTIALS пуст
-      - GPT2GIGA_PASS_TOKEN=True
+      # Сбер использует сертификат Минцифры РФ, которого нет в контейнере —
+      # без этого флага прокси падает с CERTIFICATE_VERIFY_FAILED.
+      - GIGACHAT_VERIFY_SSL_CERTS=False
     networks:
       - kag_internal
     restart: unless-stopped
