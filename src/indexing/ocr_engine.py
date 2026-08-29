@@ -25,6 +25,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+from src.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +43,7 @@ class OCREngine:
         self,
         tesseract_lang: str = "rus+eng",
         llm_model: str = "deepseek-ocr:latest",
-        llm_base_url: str = "http://192.168.50.41:11434",
+        llm_base_url: str = None,
         enable_llm_fallback: bool = True
     ):
         """
@@ -50,9 +52,11 @@ class OCREngine:
         Args:
             tesseract_lang: Языки для Tesseract (rus+eng)
             llm_model: Модель для LLM OCR
-            llm_base_url: URL Ollama сервера
+            llm_base_url: URL Ollama сервера (по умолчанию из .env)
             enable_llm_fallback: Использовать LLM как fallback
         """
+        if llm_base_url is None:
+            llm_base_url = get_settings().OLLAMA_BASE_URL
         self._tesseract_lang = tesseract_lang
         self._llm_model = llm_model
         self._llm_base_url = llm_base_url

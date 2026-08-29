@@ -462,12 +462,13 @@ class ProviderService:
         if self._provider_cache:
             return True  # Уже есть провайдеры — не трогаем
 
-        # Создаём провайдера по умолчанию (Ollama)
+        # Создаём провайдера по умолчанию (Ollama). Адрес — из .env.
+        from src.config import get_settings
         default_provider = ProviderConfig(
             id="ollama-main",
             name="Локальная Ollama",
             type="ollama",
-            url="http://192.168.50.41:11434",
+            url=get_settings().OLLAMA_BASE_URL,
             enabled=True,
         )
 

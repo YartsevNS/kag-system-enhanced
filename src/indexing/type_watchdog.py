@@ -201,7 +201,8 @@ class TypeWatchdog:
 
         cfg = self._get_config()
         model = cfg.get("model", "phi4-mini:latest")
-        llm_url = cfg.get("url", "http://192.168.50.41:11434")
+        from src.config import get_settings
+        llm_url = cfg.get("url", get_settings().OLLAMA_BASE_URL)
         provider = cfg.get("provider", "ollama")
         api_key = cfg.get("api_key", "")
 

@@ -17,6 +17,8 @@ import asyncio
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from src.config import get_settings
+
 
 class EmbeddingResponse(BaseModel):
     """Ответ от embedding API"""
@@ -35,8 +37,8 @@ class EmbeddingClient:
 
     def __init__(
         self,
-        base_url: str = "http://192.168.50.41:11434",
-        model: str = "nomic-embed-text:latest",
+        base_url: str = None,
+        model: str = None,
         timeout: float = 60.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
@@ -55,6 +57,14 @@ class EmbeddingClient:
             provider_type: "ollama" или OpenAI-совместимый (openai/deepseek/openrouter/custom)
             api_key: API-ключ для OpenAI-совместимых провайдеров
         """
+        # Дефолты из единого источника (.env → config.py), не хардкод.
+        if base_url is None or model is None:
+            _s = get_settings()
+        if base_url is None:
+            base_url = _s.EMBEDDING_BASE_URL
+        if model is None:
+            model = _s.EMBEDDING_MODEL
+
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.timeout = timeout

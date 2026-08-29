@@ -25,6 +25,8 @@ import requests
 from loguru import logger
 from pathlib import Path
 
+from src.config import get_settings
+
 
 class OCRLLMEngine:
     """
@@ -39,7 +41,7 @@ class OCRLLMEngine:
 
     def __init__(
         self,
-        base_url: str = "http://192.168.50.41:11434",
+        base_url: str = None,
         model: str = "deepseek-ocr:latest",
         language: str = "russian",
         timeout: int = 120
@@ -48,11 +50,13 @@ class OCRLLMEngine:
         Инициализация LLM OCR движка.
         
         Args:
-            base_url: URL Ollama сервера
+            base_url: URL Ollama сервера (по умолчанию из .env)
             model: Модель для OCR (deepseek-ocr, qwen3-vl, granite3.2-vision)
             language: Язык распознавания (russian, english)
             timeout: Таймаут в секундах
         """
+        if base_url is None:
+            base_url = get_settings().OLLAMA_BASE_URL
         self._base_url = base_url
         self._model = model
         self._language = language
@@ -276,7 +280,7 @@ _llm_ocr_engine: Optional[OCRLLMEngine] = None
 
 
 def get_llm_ocr_engine(
-    base_url: str = "http://192.168.50.41:11434",
+    base_url: str = None,
     model: str = "deepseek-ocr:latest",
     language: str = "russian"
 ) -> OCRLLMEngine:

@@ -580,7 +580,7 @@ async def get_llm_config():
     return {
         "backend_type": cfg.get("backend_type", "ollama"),
         "model_name": cfg.get("model_name", "phi4-mini:latest"),
-        "url": cfg.get("url", "http://192.168.50.41:11434"),
+        "url": cfg.get("url", get_settings().OLLAMA_BASE_URL),
         "api_key": cfg.get("api_key", ""),
         "provider": cfg.get("provider", "ollama"),
     }
@@ -705,12 +705,12 @@ from pydantic import BaseModel
 from typing import Optional as Opt
 
 class ExtLLMConfig(BaseModel):
-    url: str = "http://192.168.50.41:11434"
+    url: str = ""
     model: str = "phi4-mini"
     api_key: Opt[str] = None
     provider: str = "ollama"
 
-_ext_llm_config: ExtLLMConfig = ExtLLMConfig()
+_ext_llm_config: ExtLLMConfig = ExtLLMConfig(url=get_settings().OLLAMA_BASE_URL)
 
 # Инициализация из БД при старте модуля
 try:

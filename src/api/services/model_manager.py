@@ -456,7 +456,7 @@ class ModelManager:
             import os
             import httpx
             
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://192.168.50.41:11434")
+            base_url = get_settings().OLLAMA_BASE_URL or os.getenv("OLLAMA_BASE_URL", "")
             if not base_url or "host.docker.internal" in base_url:
                 base_url = "http://192.168.50.41:11434"
             
