@@ -87,7 +87,7 @@ RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag && \
     mkdir -p /opt/venv/lib/python3.11/site-packages/rapidocr/models && \
     mkdir -p /app/.cache/huggingface && \
     chown -R kag:kag /opt/venv/lib/python3.11/site-packages/rapidocr && \
-    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/ocr_skel/weights && \
+    chown -R kag:kag /opt/venv/lib/python3.11/site-packages/occular && \
     chown -R kag:kag /app/.cache
 
 # Установка рабочей директории
