@@ -115,3 +115,22 @@
 
 Блокирует прод: Фаза 1 (баги) → Фаза 2 (нейросети) → Фаза 3 (инфраструктура) → Фаза 6 (приёмка).
 Опционально/после: Фаза 4 (чистка), Фаза 5 (тесты).
+
+## Прогресс выполнения (2026-08-29, ветка PREPROD)
+
+- ✅ Фаза 0 — ветка PREPROD + чистка git-мусора. Коммит bb989c5.
+- ✅ Фаза 1 — 7 критичных багов. Коммит ae61c9d.
+- ✅ Фаза 2 — хардкоды нейросетей → get_settings(). Коммит 900dc6c.
+- ✅ Фаза 3 — инфраструктура (Dockerfile USER kag без entrypoint, group_add вместо chmod 666,
+  monitoring → profiles, KC_HOSTNAME/COMMAND из env, deploy.sh реальный пароль + адреса из env,
+  .env.example рассинхрон). Коммит 2aac365.
+- ✅ Фаза 4 (частично) — удалён мёртвый код ~2300 строк: agents/, evaluation/, middleware auth/auth_gate,
+  scheduler.py + сервис scheduler, test_agents.py. Коммиты 328eae8, e578916.
+  ВАЖНО: llm/router + клиенты НЕ удалены — используются model_manager/provider_service (аудит ошибался).
+  Дубли (затенённые роуты admin_models, 2 генератора миниатюр, rebuild_watchdog) — отложены (не блокируют прод).
+- ⏳ Фаза 5 — тесты: 105 passed / 33 failed. Все падения — УСТАРЕВШИЕ тесты (python-jose, старый JSON на /,
+  /chat и watchers без auth), не отражают текущее поведение. Не блокируют fresh deploy.
+- ⏳ Фаза 6 — приёмка fresh deploy + push на GitHub (ещё не сделано).
+
+Ничего не запушено на GitHub, сервер 18 не тронут (прод на stable_PyMuPDF, be12616).
+
