@@ -276,9 +276,6 @@ class DocumentService:
             f"[{upload_id}] 💾 Файл сохранён: {target_path.name} ({file_size} байт)"
         )
 
-        # ========== Этап 5.5: создаём миниатюру (первая страница для PDF, ресайз для изображений) ==========
-        self._create_thumbnail(str(target_path), doc_id, filename)
-
         # ========== Этап 6: создаём запись о документе в памяти ==========
         record = DocumentRecord(
             document_id=doc_id,
@@ -1241,33 +1238,6 @@ class DocumentService:
             )
         except Exception as e:
             logger.warning(f"Ошибка построения графа для {document_id}: {e}")
-
-    def _create_thumbnail(self, file_path: Path, doc_id: str, filename: str):
-        """Создать миниатюру документа (первая страница/ресайз)."""
-        try:
-            from PIL import Image
-            suffix = file_path.suffix.lower()
-
-            if suffix == '.pdf':
-                from pdf2image import convert_from_path
-                images = convert_from_path(str(file_path), first_page=1, last_page=1, dpi=72)
-                if images:
-                    img = images[0]
-                else:
-                    return
-            elif suffix in ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'):
-                img = Image.open(file_path)
-            else:
-                return  # Не поддерживаемый формат
-
-            # Ресайз до 300px по ширине
-            img.thumbnail((300, 400), Image.LANCZOS)
-            thumb_path = self._thumb_dir / f"{doc_id}_{filename}.thumb.jpg"
-            img.convert("RGB").save(str(thumb_path), "JPEG", quality=75)
-            logger.info(f"Миниатюра создана: {thumb_path}")
-
-        except Exception as e:
-            logger.warning(f"Миниатюра не создана для {filename}: {e}")
 
     # ============================================================
     # Cleanup — удаление старых temp-файлов
