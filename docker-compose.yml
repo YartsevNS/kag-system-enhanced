@@ -509,6 +509,8 @@ services:
       # Сбер использует сертификат Минцифры РФ, которого нет в контейнере —
       # без этого флага прокси падает с CERTIFICATE_VERIFY_FAILED.
       - GIGACHAT_VERIFY_SSL_CERTS=False
+      # Ключ передаётся клиентом (KAG) в формате giga-cred-<key>:<scope>
+      - GPT2GIGA_PASS_TOKEN=True
     networks:
       - kag_internal
     restart: unless-stopped

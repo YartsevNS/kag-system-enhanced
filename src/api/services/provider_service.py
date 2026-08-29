@@ -42,7 +42,7 @@ PROVIDER_TYPES = {
     "openai":     {"label": "OpenAI API",              "needs_key": True,  "url_placeholder": "https://api.openai.com"},
     "deepseek":   {"label": "DeepSeek API",            "needs_key": True,  "url_placeholder": "https://api.deepseek.com"},
     "openrouter": {"label": "OpenRouter API",          "needs_key": True,  "url_placeholder": "https://openrouter.ai/api"},
-    "gigachat":   {"label": "GigaChat (Сбер)",         "needs_key": False, "url_placeholder": "http://gigachat-proxy:8090/v1"},
+    "gigachat":   {"label": "GigaChat (Сбер)",         "needs_key": True,  "url_placeholder": "http://gigachat-proxy:8090/v1"},
     "custom":     {"label": "Custom OpenAI-совместимый","needs_key": True,  "url_placeholder": "https://your-server.com"},
 }
 
@@ -298,7 +298,8 @@ class ProviderService:
             base = provider.url.rstrip("/")
             headers = {}
             if provider.api_key:
-                headers["Authorization"] = f"Bearer {provider.api_key}"
+                # Для gigachat ключ — в формате giga-cred-<key>:<scope> (pass-token прокси)
+                headers["Authorization"] = f"Bearer {self._format_api_key(provider.type, provider.api_key)}"
 
             # Эндпоинт списка моделей зависит от типа провайдера. Пробуем
             # несколько вариантов (разные провайдеры ставят /v1/models, /models,
@@ -415,6 +416,18 @@ class ProviderService:
 
         return (provider, fm)
 
+    @staticmethod
+    def _format_api_key(provider_type: str, api_key: str) -> str:
+        """Ключ для передачи провайдеру.
+
+        GigaChat работает через прокси gpt2giga с pass-token: прокси ожидает
+        в Authorization формат `giga-cred-<credentials>:<scope>` (иначе
+        «Failed to pass token»). Для остальных — как есть (Bearer).
+        """
+        if provider_type == "gigachat" and api_key:
+            return f"giga-cred-{api_key}:GIGACHAT_API_PERS"
+        return api_key or ""
+
     def get_function_llm_config(self, function_name: str) -> Optional[dict]:
         """
         Единый источник LLM-конфигурации для любой функции.
@@ -436,7 +449,7 @@ class ProviderService:
         return {
             "provider": provider.type,
             "url": (provider.url or "").rstrip("/"),
-            "api_key": provider.api_key or "",
+            "api_key": self._format_api_key(provider.type, provider.api_key),
             "model": fm.model or "",
             "system_prompt": system_prompt,
             "parameters": fm.parameters or {},
@@ -513,9 +526,9 @@ class ProviderService:
         Используется существующими сервисами (model_manager, entity_extractor и т.д.).
         """
         return (
-            provider_config.type,  # backend_type (ollama, openai, deepseek, openrouter)
+            provider_config.type,  # backend_type (ollama, openai, deepseek, openrouter, gigachat)
             provider_config.url,   # url
-            provider_config.api_key,  # api_key
+            self._format_api_key(provider_config.type, provider_config.api_key),  # api_key
             function_map.model,    # model
             function_map.system_prompt,  # system_prompt
             function_map.parameters,  # parameters

@@ -347,10 +347,8 @@
                             GigaChat подключается через встроенный прокси <b>gpt2giga</b> — он принимает стандартные
                             OpenAI-запросы (<code>/v1/chat/completions</code>, <code>/v1/embeddings</code>,
                             <code>/v1/models</code>) и перенаправляет их в GigaChat API. Адрес прокси-контейнера
-                            подставлен автоматически.<br>
-                            Ключ авторизации GigaChat задаётся в <code>.env</code> на сервере
-                            (<code>GIGACHAT_CREDENTIALS=...</code> из личного кабинета developers.sber.ru).
-                            Поле «API ключ» здесь не требуется.
+                            подставлен автоматически — вставьте только ключ авторизации GigaChat
+                            (Authorization key из личного кабинета developers.sber.ru).
                         </div>
                     </div>
                     <div class="form-group" style="grid-column:1/-1">
@@ -1504,7 +1502,7 @@
             var urlField = document.getElementById('pf-url');
             var gigaHint = document.getElementById('pf-gigachat-hint');
 
-            keyGroup.style.display = (type === 'ollama' || type === 'gigachat') ? 'none' : '';
+            keyGroup.style.display = (type === 'ollama') ? 'none' : '';
             if (gigaHint) gigaHint.style.display = (type === 'gigachat') ? '' : 'none';
 
             var defaults = {
