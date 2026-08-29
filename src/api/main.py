@@ -67,23 +67,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"EmbeddingsService не инициализирован: {e}")
     
-    # Запуск сторожа перестроения графа (если есть необработанные документы)
-    try:
-        from src.api.services.document_repository import get_doc_repo
-        docs = get_doc_repo().get_all() or {}
-        completed = sum(1 for d in docs.values() if isinstance(d, dict) and d.get("status") == "completed")
-        from src.indexing.knowledge_graph import kg_service
-        kg_stats = kg_service.get_stats()
-        kg_docs = kg_stats.get("documents", 0)
-        if completed > 0 and (kg_docs < completed * 0.8 or kg_stats.get("entities", 0) < 10):
-            logger.info(f"Запуск Watchdog: {kg_docs}/{completed} документов в графе")
-            from src.indexing.rebuild_watchdog import rebuild_watchdog
-            rebuild_watchdog.start()
-        else:
-            logger.info(f"Watchdog не нужен: {kg_docs}/{completed} доков в графе")
-    except Exception as e:
-        logger.warning(f"Watchdog не запущен: {e}")
-    
     # Запуск Hot Folder Watcher
     try:
         from src.indexing.hot_folder_watcher import hot_folder_watcher

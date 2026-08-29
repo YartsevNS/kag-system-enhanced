@@ -315,26 +315,6 @@ async def update_domain_schema(
 # Watchdog — сторож перестроения графа
 # ============================================================
 
-@router.post("/watchdog/start", summary="Запустить сторожа перестроения")
-async def start_watchdog(current_user: User = Depends(get_current_admin)):
-    try:
-        from src.indexing.rebuild_watchdog import rebuild_watchdog
-        rebuild_watchdog.start()
-        return {"status": "ok", "message": "Watchdog запущен"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.post("/watchdog/stop", summary="Остановить сторожа")
-async def stop_watchdog(current_user: User = Depends(get_current_admin)):
-    try:
-        from src.indexing.rebuild_watchdog import rebuild_watchdog
-        await rebuild_watchdog.stop()
-        return {"status": "ok", "message": "Watchdog остановлен"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 @router.get("/watchdog/status", summary="Статус сторожа")
 async def watchdog_status():
     try:
