@@ -41,6 +41,12 @@ api_key.txt
 *.secret
 credentials.json
 user_data/api_token.json
+user_data/uploads/
+*.key
+*.crt
+
+# Служебные файлы агента (аудит-отчёты — локальные, не часть проекта)
+.hermes/
 
 # Docker
 docker-compose.override.yml
