@@ -84,7 +84,6 @@ FASTAPI_DEBUG=false
 ENVFILE
 
     echo "Created .env with generated passwords"
-    touch .env.before_deploy
 else
     echo ".env exists — не перегенерация, используем существующий. Удали .env для новых паролей"
 fi
@@ -140,6 +139,7 @@ if [ ! -f .env.before_deploy ]; then
     # Первый деплой — собираем образы
     echo "First deploy: building images..."
     docker-compose build --pull 2>&1
+    touch .env.before_deploy
 else
     # Повторный деплой — только запуск, без пересборки
     echo "Re-deploy: using existing images, no build"
