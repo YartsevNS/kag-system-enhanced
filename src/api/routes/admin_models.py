@@ -382,7 +382,7 @@ class ChunkingConfigRequest(BaseModel):
 
 @router.get("/chunking-config", summary="Получить настройки чанкинга")
 async def get_chunking_config():
-    """Получить текущие настройки чанкинга из Redis"""
+    """Получить текущие настройки чанкинга (хранятся в PostgreSQL, config_store)"""
     from src.api.services.config_store import config_store
     from src.config import get_settings
     _cfg = get_settings()
@@ -397,7 +397,7 @@ async def get_chunking_config():
 
 @router.post("/chunking-config", summary="Сохранить настройки чанкинга")
 async def save_chunking_config(request: ChunkingConfigRequest):
-    """Сохранить настройки чанкинга в Redis"""
+    """Сохранить настройки чанкинга (PostgreSQL, config_store)"""
     from src.api.services.config_store import config_store
     
     config = {

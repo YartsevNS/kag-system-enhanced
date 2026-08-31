@@ -604,7 +604,8 @@ class DocumentService:
             record.progress = 50
             self._save_document_to_db(document_id)
             
-            # Загружаем настройки чанкинга из Redis (или дефолт из config.py)
+            # Загружаем настройки чанкинга из БД (config_store → PostgreSQL)
+            # или дефолт из config.py. Redis тут ни при чём: он только брокер Celery.
             from src.api.services.config_store import config_store
             from src.config import get_settings
             _cfg = get_settings()
@@ -620,7 +621,7 @@ class DocumentService:
                 chunk_overlap=chunking_config.get("chunk_overlap", _cfg.CHUNK_OVERLAP)
             )
             
-            logger.info(f"Чанкинг (из Redis): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
+            logger.info(f"Чанкинг (config_store): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
             
             chunks = chunker.chunk_document(segments)
             plog.log("chunking", {
