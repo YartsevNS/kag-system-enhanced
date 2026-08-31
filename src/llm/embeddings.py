@@ -43,7 +43,8 @@ class EmbeddingClient:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         provider_type: str = "ollama",
-        api_key: str = ""
+        api_key: str = "",
+        max_input_chars: int = None
     ):
         """
         Инициализация embedding клиента.
@@ -54,8 +55,10 @@ class EmbeddingClient:
             timeout: Таймаут запросов
             max_retries: Максимум повторных попыток
             retry_delay: Задержка между попытками
-            provider_type: "ollama" или OpenAI-совместимый (openai/deepseek/openrouter/custom)
+            provider_type: "ollama" или OpenAI-совместимый (openai/deepseek/openrouter/gigachat/custom)
             api_key: API-ключ для OpenAI-совместимых провайдеров
+            max_input_chars: Лимит входного текста в символах. None = автоподбор:
+                gigachat → 500 (лимит ~514 токенов), остальные → 8192 (Ollama/OpenAI).
         """
         # Дефолты из единого источника (.env → config.py), не хардкод.
         if base_url is None or model is None:
@@ -64,21 +67,27 @@ class EmbeddingClient:
             base_url = _s.EMBEDDING_BASE_URL
         if model is None:
             model = _s.EMBEDDING_MODEL
+        if max_input_chars is None:
+            # 500 символов ≈ ~350 токенов — гарантированный запас для GigaChat (~514 ток.).
+            # Ollama/OpenAI-совместимые держат 8192 токена → 8192 символов с запасом.
+            max_input_chars = 500 if provider_type == "gigachat" else 8192
 
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.provider_type = provider_type  # "ollama" | "openai"-совместимый
+        self.provider_type = provider_type  # "ollama" | "openai"-совместимый | "gigachat"
         self.api_key = api_key
+        self.max_input_chars = max_input_chars
 
         self._client: Optional[httpx.AsyncClient] = None
         self._dimensions: Optional[int] = None
 
         logger.info(
             f"EmbeddingClient инициализирован: "
-            f"base_url={self.base_url}, model={self.model}, type={self.provider_type}"
+            f"base_url={self.base_url}, model={self.model}, type={self.provider_type}, "
+            f"max_input_chars={self.max_input_chars}"
         )
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -167,16 +176,15 @@ class EmbeddingClient:
     async def _embed_request(self, client: httpx.AsyncClient, texts: List[str]) -> List[List[float]]:
         """Один HTTP-запрос для списка текстов. Возвращает список векторов.
 
-        ВАЖНО: OpenAI-совместимые провайдеры лимитируют вход (у текущей условной
-        модели max ~514 токенов на текст, иначе 413 Tokens limit exceeded —
-        батч отклоняется ЦЕЛИКОМ, и все чанки батча получали пустые векторы).
-        Поэтому текст обрезается до безопасного размера: 1000 символов кириллицы
-        ≈ ~570 токенов (всё ещё > 514), 700 ≈ ~500 токенов (на грани), поэтому
-        берём 500 символов ≈ ~350 токенов — гарантированно укладывается в лимит.
-        Для Ollama обрезка безвредна.
+        Лимит входного текста (max_input_chars) зависит от провайдера:
+        GigaChat ≈ 514 токенов (~500 символов), Ollama/OpenAI-совместимые — 8192.
+        Если текст длиннее лимита — обрезаем (иначе батч отклоняется целиком).
         """
-        MAX_INPUT_CHARS = 500
-        texts = [t[:MAX_INPUT_CHARS] for t in texts]
+        limit = self.max_input_chars or 8192
+        truncated = sum(1 for t in texts if len(t) > limit)
+        if truncated:
+            logger.debug(f"Embedding: обрезано {truncated}/{len(texts)} текстов до {limit} символов")
+        texts = [t[:limit] for t in texts]
 
         endpoint = self._embed_endpoint(batch=(len(texts) > 1))
         payload = self._embed_payload(texts)

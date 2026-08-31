@@ -107,7 +107,9 @@ class EmbeddingsService:
                     if provider:
                         base_url = (provider.url or "").rstrip("/")
                         model = fm["model"]
-                        provider_type = "ollama" if provider.type == "ollama" else "openai"
+                        # Реальный тип провайдера (ollama/openai/deepseek/gigachat/...) —
+                        # EmbeddingClient сам выберет лимит входного текста (gigachat → 500).
+                        provider_type = provider.type
                         api_key = provider.api_key or ""
                         logger.info(f"Embedding из админки: provider={provider.id}, model={model}, url={base_url}, type={provider_type}")
             except Exception as e:
@@ -157,7 +159,7 @@ class EmbeddingsService:
                 if provider:
                     new_base_url = (provider.url or "").rstrip("/")
                     new_model = fm["model"]
-                    new_provider_type = "ollama" if provider.type == "ollama" else "openai"
+                    new_provider_type = provider.type
                     new_api_key = provider.api_key or ""
         except Exception:
             pass
