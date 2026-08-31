@@ -83,7 +83,8 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <div class="panel" id="kg-viz-panel">
     <h2>🌐 Визуализация графа</h2>
     <div class="search-row">
-      <input type="text" id="kg-node" placeholder="Имя сущности (например: Банк России)" onkeydown="if(event.key==='Enter')loadGraphFromInput()">
+      <input type="text" id="kg-node" list="kg-entities" placeholder="Имя сущности (например: Банк России)" onkeydown="if(event.key==='Enter')loadGraphFromInput()" oninput="onKgInput()">
+      <datalist id="kg-entities"></datalist>
       <select id="kg-depth" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text2)">
         <option value="1">1 уровень</option>
         <option value="2" selected>2 уровня</option>
@@ -682,13 +683,43 @@ async function loadGraphFromInput(){
   await loadGraph(name, document.getElementById('kg-depth').value || '2');
 }
 
+let kgInputTimer = null;
+async function onKgInput(){
+  clearTimeout(kgInputTimer);
+  kgInputTimer = setTimeout(async function(){
+    const q = (document.getElementById('kg-node').value||'').trim();
+    const dl = document.getElementById('kg-entities');
+    if (!q || q.length < 2){ dl.innerHTML=''; return; }
+    try {
+      const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + '&limit=10', { headers: authHeaders() });
+      const d = await r.json();
+      dl.innerHTML = (d.results||[]).map(function(e){ return '<option value="' + String(e.name).replace(/"/g,'&quot;') + '">' + (e.type||'') + '</option>'; }).join('');
+    } catch(e){}
+  }, 300);
+}
+
 async function loadGraph(name, depth){
   document.getElementById('kg-msg').textContent = '⏳ Загрузка...';
   try {
     const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=' + depth, { headers: authHeaders() });
     const d = await r.json();
     const g = (d.graph && d.graph[0]) || { nodes: [], edges: [] };
-    if (!g.nodes.length){ document.getElementById('kg-msg').textContent = 'Сущность «' + name + '» не найдена или связей нет'; return; }
+    if (!g.nodes.length){
+      // Точного совпадения нет — ищем частичное и берём лучший кандидат
+      try {
+        const sr = await fetch(API + '/entities/search?q=' + encodeURIComponent(name) + '&limit=5', { headers: authHeaders() });
+        const sd = await sr.json();
+        const found = (sd.results||[]).filter(function(e){ return e && e.name; });
+        if (found.length){
+          const best = found[0].name;
+          document.getElementById('kg-msg').textContent = 'Точное «' + name + '» не найдено — показан граф для «' + best + '»';
+          document.getElementById('kg-node').value = best;
+          return loadGraph(best, depth);
+        }
+      } catch(e){}
+      document.getElementById('kg-msg').textContent = 'Сущность «' + name + '» не найдена. Попробуйте частичное имя (например: ГОСТ, Банк)';
+      return;
+    }
     const c = ensureCy();
     c.elements().remove();
     Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
