@@ -1107,8 +1107,14 @@ class KnowledgeGraphService:
                     # ≈ 200-300 токенов. 800 хватало с запасом; больше не нужно.
                     "max_tokens": 1000,
                 }
-                # deepseek reasoning-модель: отключаем размышления (см. скилл kag-graph-precision)
-                if provider in ("deepseek", "openai", "openrouter"):
+                # deepseek reasoning-модель: отключаем размышления.
+                # no_think — параметр привязки функции graph (админка), по умолчанию True.
+                _no_think = True
+                try:
+                    _no_think = bool((cfg.get("parameters") or {}).get("no_think", True))
+                except Exception:
+                    pass
+                if provider in ("deepseek", "openai", "openrouter") and _no_think:
                     payload["thinking"] = {"type": "disabled"}
 
                 if provider in ("openai", "deepseek", "openrouter"):

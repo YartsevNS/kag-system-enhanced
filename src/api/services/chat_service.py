@@ -293,10 +293,11 @@ class ChatService:
 
         params = cfg.get("parameters") or {}
         # MiniCPM5 думает вслух (<think>...) — для классификации это лишнее:
-        # через llama.cpp отключаем think (chat_template_kwargs). Для других
-        # провайдеров (Ollama/OpenAI) параметр не передаём.
+        # через llama.cpp отключаем think (chat_template_kwargs). Управляется
+        # параметром no_think привязки функции (админка), по умолчанию True.
+        # Для других провайдеров (Ollama/OpenAI) параметр не передаём.
         extra_payload = None
-        if cfg.get("provider") == "llamacpp":
+        if cfg.get("provider") == "llamacpp" and params.get("no_think", True):
             extra_payload = {"chat_template_kwargs": {"enable_thinking": False}}
         try:
             result = await self._call_llm(

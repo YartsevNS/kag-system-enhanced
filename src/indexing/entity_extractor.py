@@ -488,7 +488,16 @@ JSON:
                 # max_tokens=800: ответ с сущностями обычно 500-1500 символов;
                 # пробовали 400 — JSON обрезался на середине (невалидный),
                 # поэтому 800 с запасом.
-                if provider in ("deepseek", "openai", "openrouter"):
+                # Отключаем размышления (thinking) для reasoning-моделей
+                # (deepseek/openai/openrouter). Настройка no_think — в параметрах
+                # привязки функции graph (админка); по умолчанию True.
+                _no_think = True
+                try:
+                    _cfgx = self._get_graph_config() or {}
+                    _no_think = bool((_cfgx.get("parameters") or {}).get("no_think", True))
+                except Exception:
+                    pass
+                if provider in ("deepseek", "openai", "openrouter") and _no_think:
                     payload["thinking"] = {"type": "disabled"}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
