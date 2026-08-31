@@ -116,12 +116,23 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
     <div class="section-title">🔐 Keycloak — доменные пользователи</div>
     <div class="card">
       <div class="form">
-        <input type="text" id="kc-url" placeholder="Keycloak URL" value="http://keycloak:8080">
-        <input type="text" id="kc-realm" placeholder="Realm" value="kag">
-        <input type="text" id="kc-client" placeholder="Client ID" value="kag-api">
         <button class="btn" onclick="testKeycloak()">🔍 Проверить подключение</button>
       </div>
       <div class="status" id="kc-status"></div>
+      <div style="margin-top:16px">
+        <div class="section-title" style="font-size:14px">➕ Создать пользователя в Keycloak</div>
+        <div class="form">
+          <input type="text" id="kc-new-username" placeholder="Логин" autocomplete="off">
+          <input type="email" id="kc-new-email" placeholder="Email" autocomplete="off">
+          <input type="text" id="kc-new-first" placeholder="Имя" autocomplete="off">
+          <input type="text" id="kc-new-last" placeholder="Фамилия" autocomplete="off">
+          <input type="password" id="kc-new-password" placeholder="Пароль (мин 6)" autocomplete="off">
+          <select id="kc-new-role"><option value="user">User</option><option value="admin">Admin</option></select>
+          <button class="btn" onclick="createKeycloakUser()">➕ Создать</button>
+        </div>
+        <div class="status" id="kc-create-status"></div>
+        <div style="font-size:12px;color:var(--text4);margin-bottom:12px">Имя и фамилия обязательны — без них Keycloak не пустит пользователя (Account is not fully set up).</div>
+      </div>
       <div style="margin-top:16px">
         <div class="section-title" style="font-size:14px">Пользователи Keycloak</div>
         <div id="kc-users-list"><div class="empty" style="padding:20px">Нажмите «Проверить подключение»</div></div>
@@ -301,6 +312,42 @@ async function loadKeycloakUsers() {
         <td>${u.enabled ? '✅' : '❌'}</td>
       </tr>`).join('')}</table>`;
   } catch(e) { c.innerHTML = '<div class="empty">Ошибка: ' + e.message + '</div>'; }
+}
+
+async function createKeycloakUser() {
+  const st = document.getElementById('kc-create-status');
+  const username = document.getElementById('kc-new-username').value.trim();
+  const email = document.getElementById('kc-new-email').value.trim();
+  const firstName = document.getElementById('kc-new-first').value.trim();
+  const lastName = document.getElementById('kc-new-last').value.trim();
+  const password = document.getElementById('kc-new-password').value;
+  const role = document.getElementById('kc-new-role').value;
+
+  if (!username || !password) { st.className='status err'; st.textContent = 'Заполните логин и пароль'; return; }
+  if (password.length < 6) { st.className='status err'; st.textContent = 'Пароль минимум 6 символов'; return; }
+  if (!firstName || !lastName) { st.className='status err'; st.textContent = 'Имя и фамилия обязательны'; return; }
+
+  st.className='status'; st.textContent = 'Создаю...';
+  try {
+    const res = await fetch(`${API}/admin/keycloak/users`, {
+      method:'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({username, email: email||null, firstName, lastName, password, role})
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      st.className='status ok';
+      st.textContent = '✅ Пользователь создан в Keycloak: ' + username + (d.message ? ' (' + d.message + ')' : '');
+      ['kc-new-username','kc-new-email','kc-new-first','kc-new-last','kc-new-password'].forEach(id => document.getElementById(id).value = '');
+      loadKeycloakUsers();
+    } else {
+      st.className='status err';
+      st.textContent = '❌ ' + (d.detail || d.message || ('Ошибка (status: '+res.status+')'));
+    }
+  } catch(e) {
+    st.className='status err';
+    st.textContent = 'Ошибка: ' + e.message;
+  }
 }
 
 loadUsers(); loadGroups();

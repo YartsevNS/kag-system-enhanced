@@ -268,6 +268,96 @@ async def keycloak_users():
     }
 
 
+@router.post("/keycloak/users", summary="Создать пользователя Keycloak (realm)")
+async def keycloak_create_user(data: dict):
+    """Создать пользователя в realm kag через admin API Keycloak.
+
+    Body: {username, email?, firstName, lastName, password, role?}
+    role: 'user' (default) | 'admin'. Имя/фамилия обязательны — иначе
+    Keycloak 24+ блокирует password grant ("Account is not fully set up").
+    Пароль задаётся как НЕ временный (reset-password).
+    """
+    import urllib.request, urllib.parse, json as _json
+    settings = get_settings()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    firstName = (data.get("firstName") or "").strip()
+    lastName = (data.get("lastName") or "").strip()
+    role = data.get("role") or "user"
+
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Логин минимум 3 символа")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
+    if not firstName or not lastName:
+        raise HTTPException(status_code=400, detail="Имя и фамилия обязательны")
+
+    token = _keycloak_admin_token()
+    base = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+
+    def _req(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+        url = f"{base}{path}"
+        data_bytes = _json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data_bytes, method=method,
+                                     headers={"Authorization": f"Bearer {token}",
+                                              "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("utf-8")
+                return resp.status, (_json.loads(raw) if raw else {})
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", errors="replace")
+            try:
+                detail = _json.loads(raw).get("errorMessage") or raw[:300]
+            except Exception:
+                detail = raw[:300]
+            raise HTTPException(status_code=e.code, detail=f"Keycloak {method} {path}: {detail}")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Keycloak {method} {path}: {e}")
+
+    # 1. Создать пользователя
+    user_body = {
+        "username": username,
+        "email": (data.get("email") or "").strip() or None,
+        "enabled": True,
+        "emailVerified": True,
+        "firstName": firstName,
+        "lastName": lastName,
+        "requiredActions": [],
+    }
+    status, _ = _req("POST", "/users", user_body)
+    if status not in (200, 201, 204):
+        raise HTTPException(status_code=400, detail=f"Не удалось создать пользователя (status {status})")
+
+    # 2. Найти id созданного пользователя
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/users?username={urllib.parse.quote(username)}",
+                headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
+            found = _json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Keycloak find user failed: {e}")
+    if not found:
+        raise HTTPException(status_code=502, detail="Пользователь создан, но не найден для установки пароля")
+    user_id = found[0]["id"]
+
+    # 3. Установить пароль (не временный)
+    _req("PUT", f"/users/{user_id}/reset-password",
+         {"type": "password", "value": password, "temporary": False})
+
+    # 4. Назначить роль (realm role: user | admin)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/roles/{urllib.parse.quote(role)}",
+                headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
+            role_obj = _json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Keycloak role '{role}' not found: {e}")
+    _req("POST", f"/users/{user_id}/role-mappings/realm", [{"id": role_obj["id"], "name": role_obj["name"]}])
+
+    return {"status": "ok", "username": username, "id": user_id, "role": role}
+
+
 @router.get("/ad-config", summary="Конфигурация Active Directory")
 async def get_ad_config():
     """Получить настройки AD/LDAP."""
