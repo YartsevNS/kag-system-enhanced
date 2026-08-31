@@ -42,16 +42,29 @@ import json as _json
 
 
 def _parse_id_list(raw: str) -> list:
-    """Распарсить JSON-строку списка id (allow/deny) в list[str]."""
+    """Распарсить JSON-строку списка id (allow/deny) в list[str].
+
+    Поддерживает JSON "[\"id1\",\"id2\"]" и PostgreSQL array-литерал
+    "{id1,id2}" (старые записи, когда ACL-поля не сериализовались в JSON).
+    """
     if not raw:
         return []
+    if isinstance(raw, list):
+        return [str(x) for x in raw if x]
     try:
         v = _json.loads(raw)
         if isinstance(v, list):
             return [str(x) for x in v if x]
     except Exception:
-        return [x.strip() for x in raw.split(",") if x.strip()]
-    return []
+        pass
+    # PostgreSQL array literal: {id1,id2}
+    if isinstance(raw, str) and raw.startswith("{") and raw.endswith("}"):
+        inner = raw[1:-1].strip()
+        if inner:
+            return [x.strip().strip('"') for x in inner.split(",") if x.strip()]
+        return []
+    # fallback: CSV
+    return [x.strip() for x in raw.split(",") if x.strip()]
 
 
 def _json_parse_source(raw) -> str:
