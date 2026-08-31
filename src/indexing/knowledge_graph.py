@@ -1640,10 +1640,19 @@ class KnowledgeGraphService:
             return []
         try:
             with self.driver.session() as session:
-                result = session.run("""
-                    MATCH path = (e:Entity {name: $name})-[*1..$depth]-(related)
-                    RETURN path LIMIT 50
-                """, name=entity_name, depth=depth)
+                # ВАЖНО: Neo4j запрещает параметр в переменной длине пути
+                # ([*1..$depth] → «Parameter maps cannot be used in MATCH patterns»).
+                # Поэтому depth подставляем литералом, предварительно валидируя int.
+                try:
+                    depth_i = int(depth) if depth else 2
+                except (TypeError, ValueError):
+                    depth_i = 2
+                depth_i = max(1, min(depth_i, 4))
+                query = (
+                    "MATCH path = (e:Entity {name: $name})"
+                    f"-[*1..{depth_i}]-(related) RETURN path LIMIT 50"
+                )
+                result = session.run(query, name=entity_name)
                 nodes = set()
                 edges = []
                 for record in result:
