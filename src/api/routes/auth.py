@@ -26,7 +26,7 @@ import jwt
 from src.config import get_settings
 from src.database.session import get_db
 from src.database.user_models import User
-from src.api.middleware.auth_v2 import get_current_user
+from src.api.middleware.auth_v2 import get_current_user, get_current_admin
 
 router = APIRouter()
 
@@ -178,15 +178,21 @@ def _user_roles(user: User) -> list:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(body: UserRegister, db: Session = Depends(get_db)):
+def register(
+    body: UserRegister,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
     """
-    Register a new user.
+    Register a new user (только администратор).
 
     - **username**: unique, min 3 characters
     - **password**: min 6 characters
     - **email**: optional
+    - **is_admin**: создать пользователя с правами администратора
 
     Returns user info without password. 409 if username already exists.
+    401 без токена, 403 если не администратор.
     """
     existing = db.query(User).filter(User.username == body.username).first()
     if existing:

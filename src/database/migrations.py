@@ -43,6 +43,14 @@ _COLUMN_MIGRATIONS = [
     ("entity_aliases", "reviewed", "BOOLEAN DEFAULT FALSE"),
     ("entity_aliases", "verdict", "VARCHAR DEFAULT ''"),
     ("entity_aliases", "domain", "VARCHAR DEFAULT 'universal'"),
+    # users — источник пользователя (SSO Keycloak: hashed_password NULL)
+    ("users", "source", "VARCHAR DEFAULT 'local'"),
+]
+
+# ALTER-миграции, которые НЕ являются ADD COLUMN (идемпотентны).
+_ALTER_MIGRATIONS = [
+    # Keycloak-пользователи (SSO) не имеют локального пароля
+    ("users", "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"),
 ]
 
 
@@ -57,6 +65,13 @@ def _ensure_columns(engine: Engine) -> None:
             # Таблица может ещё не существовать (первый запуск) — не критично,
             # create_all выше её создаст с полной схемой.
             logger.debug(f"Миграция {table}.{column} пропущена: {e}")
+
+    for table, stmt in _ALTER_MIGRATIONS:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception as e:
+            logger.debug(f"ALTER-миграция {table} пропущена: {e}")
 
 
 def ensure_schema(engine: Engine) -> None:

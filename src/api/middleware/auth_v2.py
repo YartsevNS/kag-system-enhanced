@@ -58,18 +58,24 @@ def _sync_keycloak_user(db: Session, payload: dict) -> User:
     realm_access = payload.get("realm_access") or {}
     roles.update(realm_access.get("roles", []) or [])
     is_admin = "admin" in roles
+    email = payload.get("email")
 
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         user = User(
             username=username,
+            email=email,
+            source="keycloak",
             is_admin=is_admin,
             is_active=True,
         )
         db.add(user)
     else:
-        # Обновляем админ-права из keycloak-ролей (синхронизация)
+        # Обновляем админ-права и источник из keycloak-токена (синхронизация)
         user.is_admin = is_admin
+        user.source = "keycloak"
+        if email:
+            user.email = email
     db.commit()
     db.refresh(user)
     return user

@@ -188,7 +188,7 @@ async function register() {
   const st = document.getElementById('reg-status');
   if (!u || !p) { st.textContent = 'Заполните логин и пароль'; st.className='status err'; return; }
   try {
-    const res = await fetch(`${API}/auth/register`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, email:e||null, is_admin: role === 'admin'})});
+    const res = await fetch(`${API}/auth/register`, {method:'POST', headers:authHeaders(), body: JSON.stringify({username:u, password:p, email:e||null, is_admin: role === 'admin'})});
     const data = await res.json();
     if (res.ok) {
       st.className='status ok'; st.textContent = '✅ Пользователь создан: ' + data.username;
@@ -270,17 +270,16 @@ async function toggleActive(userId) {
 }
 
 async function testKeycloak() {
-  const url = document.getElementById('kc-url').value.trim();
-  const realm = document.getElementById('kc-realm').value.trim();
   const st = document.getElementById('kc-status');
   st.textContent = 'Проверка...';
   try {
-    const res = await fetch(`${url}/realms/${realm}`, {headers:authHeaders()});
-    if (res.ok) {
-      st.className='status ok'; st.textContent = '✅ Keycloak доступен (realm: '+realm+')';
+    const res = await fetch(`${API}/admin/keycloak/status`, {headers:authHeaders()});
+    const d = await res.json();
+    if (res.ok && d.ok) {
+      st.className='status ok'; st.textContent = '✅ Keycloak доступен (realm: '+d.realm+')';
       loadKeycloakUsers();
     } else {
-      st.className='status err'; st.textContent = '❌ Keycloak недоступен (status: '+res.status+')';
+      st.className='status err'; st.textContent = '❌ ' + (d.message || ('Keycloak недоступен (status: '+res.status+')'));
     }
   } catch(e) { st.className='status err'; st.textContent = '❌ Ошибка подключения: ' + e.message; }
 }
@@ -288,12 +287,11 @@ async function testKeycloak() {
 async function loadKeycloakUsers() {
   const c = document.getElementById('kc-users-list');
   c.innerHTML = '<div class="empty">Загрузка...</div>';
-  const url = document.getElementById('kc-url').value.trim();
-  const realm = document.getElementById('kc-realm').value.trim();
   try {
-    const res = await fetch(`${url}/admin/realms/${realm}/users`, {headers:authHeaders()});
+    const res = await fetch(`${API}/admin/keycloak/users`, {headers:authHeaders()});
     if (!res.ok) { c.innerHTML = '<div class="empty">Нет доступа к API Keycloak</div>'; return; }
-    const users = await res.json();
+    const data = await res.json();
+    const users = data.users || [];
     if (!users.length) { c.innerHTML = '<div class="empty">Нет доменных пользователей</div>'; return; }
     c.innerHTML = `<table><tr><th>Логин</th><th>Email</th><th>Имя</th><th>Активен</th></tr>
       ${users.map(u => `<tr>
@@ -380,14 +378,8 @@ async function loadSsoStatus() {
 
     let html = '';
     if (d.sso_enabled) {
-      html += '<div style="color:var(--accent-l);font-weight:600;margin-bottom:6px">✅ SSO включён — авторизацию проводит Keycloak</div>';
-      html += '<div style="color:var(--text3);margin-bottom:8px">Локальная регистрация отключена: пользователи создаются в консоли Keycloak (роли admin/user).</div>';
-      // Блокируем локальную регистрацию
-      const card = document.getElementById('local-reg-card');
-      if (card) {
-        card.style.opacity = '0.45';
-        card.style.pointerEvents = 'none';
-      }
+      html += '<div style="color:var(--accent-l);font-weight:600;margin-bottom:6px">✅ SSO включён — вход пользователей через Keycloak</div>';
+      html += '<div style="color:var(--text3);margin-bottom:8px">Админ может создавать пользователей локально (форма ниже) или в консоли Keycloak (роли admin/user). Локальный вход — ссылка «🔑 Локальный вход» на странице входа.</div>';
     } else {
       html += '<div style="color:var(--amber);font-weight:600;margin-bottom:6px">⚠️ SSO выключен (AUTH_ENABLED=false)</div>';
       html += '<div style="color:var(--text3);margin-bottom:8px">Сейчас авторизацию проводит <b>локальная система</b> (users). Для SSO — включи AUTH_ENABLED и настрой внешний адрес в админке.</div>';

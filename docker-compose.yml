@@ -31,6 +31,8 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-kag}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-kag-api}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-change_me}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
       # Keycloak DB (PostgreSQL для конфигов)
       - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}

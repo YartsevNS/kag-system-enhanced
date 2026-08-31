@@ -133,6 +133,7 @@ async def list_users():
                     "email": u.email,
                     "is_admin": u.is_admin,
                     "is_active": u.is_active,
+                    "source": u.source or "local",
                     "created_at": u.created_at.isoformat() if u.created_at else None
                 }
                 for u in users
@@ -184,6 +185,87 @@ async def create_group(data: dict):
         return {"id": group.id, "name": group.name, "description": group.description}
     finally:
         db.close()
+
+
+# ── Keycloak (просмотр пользователей realm) ─────────────────────────────
+
+def _keycloak_admin_token() -> str:
+    """Получить admin-токен Keycloak (realm master, client admin-cli).
+
+    Креды — из env (KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD).
+    """
+    import urllib.request, urllib.parse, json as _json
+    settings = get_settings()
+    url = f"{settings.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
+    data = urllib.parse.urlencode({
+        "grant_type": "password",
+        "client_id": "admin-cli",
+        "username": settings.KEYCLOAK_ADMIN,
+        "password": settings.KEYCLOAK_ADMIN_PASSWORD,
+    }).encode()
+    req = urllib.request.Request(url, data=data, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            body = _json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Keycloak admin token failed: {e}")
+    token = body.get("access_token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Keycloak admin token empty")
+    return token
+
+
+@router.get("/keycloak/status", summary="Статус Keycloak (admin API)")
+async def keycloak_status():
+    """Проверить доступность admin API Keycloak и realm."""
+    import urllib.request, json as _json
+    settings = get_settings()
+    try:
+        token = _keycloak_admin_token()
+        url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            realm = _json.loads(resp.read().decode("utf-8"))
+        return {
+            "ok": True,
+            "realm": settings.KEYCLOAK_REALM,
+            "realm_enabled": realm.get("enabled", True),
+            "message": "Keycloak доступен",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "realm": settings.KEYCLOAK_REALM, "message": str(e)}
+
+
+@router.get("/keycloak/users", summary="Пользователи Keycloak (realm)")
+async def keycloak_users():
+    """Список пользователей realm kag через admin API Keycloak."""
+    import urllib.request, json as _json
+    settings = get_settings()
+    token = _keycloak_admin_token()
+    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users?max=200"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            users = _json.loads(resp.read().decode("utf-8"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Keycloak users failed: {e}")
+    return {
+        "users": [
+            {
+                "id": u.get("id"),
+                "username": u.get("username"),
+                "email": u.get("email"),
+                "firstName": u.get("firstName"),
+                "lastName": u.get("lastName"),
+                "enabled": u.get("enabled", True),
+            }
+            for u in users
+        ]
+    }
 
 
 @router.get("/ad-config", summary="Конфигурация Active Directory")

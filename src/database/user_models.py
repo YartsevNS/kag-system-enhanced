@@ -32,7 +32,10 @@ class User(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     username = Column(String, unique=True, nullable=False)
     email = Column(String, nullable=True)
-    hashed_password = Column(String, nullable=False)
+    # Пароль только у локальных пользователей; у Keycloak (SSO) — NULL.
+    hashed_password = Column(String, nullable=True)
+    # Источник: local (создан в админке) | keycloak (синхронизирован при SSO)
+    source = Column(String, default="local", nullable=False)
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(

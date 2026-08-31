@@ -24,6 +24,9 @@ def _override_settings(monkeypatch):
     # Reset cached settings
     from src.config import get_settings
     get_settings.cache_clear()
+    # Rate limiter живёт в памяти — сбрасываем между тестами, иначе 429
+    from src.api.routes.auth import _rate_store
+    _rate_store.clear()
 
 
 # ── DB session fixture ────────────────────────────────────────────────────
@@ -68,13 +71,57 @@ def client(db_session):
 
 # ── Tests ─────────────────────────────────────────────────────────────────
 
+def _make_admin(db_session, username="root", password="admin123"):
+    """Создать админа прямо в БД (register теперь admin-only)."""
+    from pwdlib import PasswordHash
+    from pwdlib.hashers.argon2 import Argon2Hasher
+    from pwdlib.hashers.bcrypt import BcryptHasher
+    ph = PasswordHash([Argon2Hasher(), BcryptHasher()])
+    gen = db_session()
+    db = next(gen)
+    existing = db.query(User).filter(User.username == username).first()
+    if existing is None:
+        admin = User(
+            username=username,
+            email=f"{username}@example.com",
+            is_admin=True,
+            hashed_password=ph.hash(password),
+        )
+        db.add(admin)
+        db.commit()
+    db.close()
+    return username, password
+
+
+def _admin_token(client, db_session, username="root", password="admin123") -> str:
+    """Создать админа и вернуть его JWT (для регистрации пользователей)."""
+    _make_admin(db_session, username, password)
+    resp = client.post("/api/v1/auth/login", json={
+        "username": username,
+        "password": password,
+    })
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+def _register(client, db_session, username, password="secret123", is_admin=False):
+    """Зарегистрировать пользователя через API от имени админа."""
+    token = _admin_token(client, db_session)
+    resp = client.post("/api/v1/auth/register",
+                       headers={"Authorization": f"Bearer {token}"},
+                       json={"username": username, "password": password, "is_admin": is_admin})
+    assert resp.status_code == 201, resp.text
+
 
 class TestRegister:
     """Tests for POST /api/v1/auth/register"""
 
-    def test_register_success(self, client):
+    def test_register_success(self, client, db_session):
         """Register a new user returns 201 and user info."""
-        resp = client.post("/api/v1/auth/register", json={
+        token = _admin_token(client, db_session)
+        resp = client.post("/api/v1/auth/register",
+                           headers={"Authorization": f"Bearer {token}"},
+                           json={
             "username": "alice",
             "password": "secret123",
             "email": "alice@example.com",
@@ -88,30 +135,44 @@ class TestRegister:
         assert data["is_active"] is True
         assert "id" in data
 
-    def test_register_duplicate_username(self, client):
-        """Registering the same username twice returns 409."""
-        client.post("/api/v1/auth/register", json={
-            "username": "bob",
+    def test_register_requires_admin(self, client):
+        """Register без токена — 401 (публичная регистрация закрыта)."""
+        resp = client.post("/api/v1/auth/register", json={
+            "username": "anon",
             "password": "secret123",
         })
-        resp = client.post("/api/v1/auth/register", json={
+        assert resp.status_code == 401
+
+    def test_register_duplicate_username(self, client, db_session):
+        """Registering the same username twice returns 409."""
+        _register(client, db_session, "bob")
+        token = _admin_token(client, db_session)
+        resp = client.post("/api/v1/auth/register",
+                           headers={"Authorization": f"Bearer {token}"},
+                           json={
             "username": "bob",
             "password": "other456",
         })
         assert resp.status_code == 409
         assert "already taken" in resp.json()["detail"].lower()
 
-    def test_register_short_username(self, client):
+    def test_register_short_username(self, client, db_session):
         """Username shorter than 3 chars returns 422."""
-        resp = client.post("/api/v1/auth/register", json={
+        token = _admin_token(client, db_session)
+        resp = client.post("/api/v1/auth/register",
+                           headers={"Authorization": f"Bearer {token}"},
+                           json={
             "username": "ab",
             "password": "secret123",
         })
         assert resp.status_code == 422
 
-    def test_register_short_password(self, client):
+    def test_register_short_password(self, client, db_session):
         """Password shorter than 6 chars returns 422."""
-        resp = client.post("/api/v1/auth/register", json={
+        token = _admin_token(client, db_session)
+        resp = client.post("/api/v1/auth/register",
+                           headers={"Authorization": f"Bearer {token}"},
+                           json={
             "username": "charlie",
             "password": "12345",
         })
@@ -121,15 +182,12 @@ class TestRegister:
 class TestLogin:
     """Tests for POST /api/v1/auth/login"""
 
-    def _register_user(self, client, username="dave", password="secret123"):
-        client.post("/api/v1/auth/register", json={
-            "username": username,
-            "password": password,
-        })
+    def _register_user(self, client, db_session, username="dave", password="secret123"):
+        _register(client, db_session, username, password)
 
-    def test_login_success(self, client):
+    def test_login_success(self, client, db_session):
         """Valid credentials return JWT token."""
-        self._register_user(client)
+        self._register_user(client, db_session)
         resp = client.post("/api/v1/auth/login", json={
             "username": "dave",
             "password": "secret123",
@@ -139,9 +197,9 @@ class TestLogin:
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
-    def test_login_wrong_password(self, client):
+    def test_login_wrong_password(self, client, db_session):
         """Wrong password returns 401."""
-        self._register_user(client)
+        self._register_user(client, db_session)
         resp = client.post("/api/v1/auth/login", json={
             "username": "dave",
             "password": "wrong",
@@ -159,10 +217,9 @@ class TestLogin:
     def test_login_inactive_user(self, client, db_session):
         """Inactive user cannot log in."""
         # Register and then deactivate
-        self._register_user(client, username="eve", password="secret123")
+        self._register_user(client, db_session, username="eve", password="secret123")
         # Use the raw DB to deactivate
         from src.api.main import app
-        # register first, then deactivate via override
         gen = db_session()
         db = next(gen)
         user = db.query(User).filter(User.username == "eve").first()
@@ -180,20 +237,17 @@ class TestLogin:
 class TestMe:
     """Tests for GET /api/v1/auth/me"""
 
-    def _register_and_login(self, client, username="frank", password="secret123") -> str:
-        client.post("/api/v1/auth/register", json={
-            "username": username,
-            "password": password,
-        })
+    def _register_and_login(self, client, db_session, username="frank", password="secret123") -> str:
+        _register(client, db_session, username, password)
         resp = client.post("/api/v1/auth/login", json={
             "username": username,
             "password": password,
         })
         return resp.json()["access_token"]
 
-    def test_me_authenticated(self, client):
+    def test_me_authenticated(self, client, db_session):
         """Authenticated user gets their info."""
-        token = self._register_and_login(client)
+        token = self._register_and_login(client, db_session)
         resp = client.get("/api/v1/auth/me", headers={
             "Authorization": f"Bearer {token}",
         })

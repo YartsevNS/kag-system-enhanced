@@ -26,6 +26,9 @@ def _override_settings(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     from src.config import get_settings
     get_settings.cache_clear()
+    # Rate limiter живёт в памяти — сбрасываем между тестами, иначе 429
+    from src.api.routes.auth import _rate_store
+    _rate_store.clear()
 
 
 @pytest.fixture
@@ -67,8 +70,39 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _register(client, username, password="secret123", is_admin=False):
-    resp = client.post("/api/v1/auth/register", json={
+def _make_admin(db_session, username="root", password="admin123"):
+    """Создать админа прямо в БД (register теперь admin-only)."""
+    from pwdlib import PasswordHash
+    from pwdlib.hashers.argon2 import Argon2Hasher
+    from pwdlib.hashers.bcrypt import BcryptHasher
+    ph = PasswordHash([Argon2Hasher(), BcryptHasher()])
+    gen = db_session()
+    db = next(gen)
+    existing = db.query(User).filter(User.username == username).first()
+    if existing is None:
+        admin = User(
+            username=username,
+            email=f"{username}@example.com",
+            is_admin=True,
+            hashed_password=ph.hash(password),
+        )
+        db.add(admin)
+        db.commit()
+    db.close()
+
+
+def _register(client, db_session, username, password="secret123", is_admin=False):
+    # Регистрация доступна только админу — создаём админа и шлём с его токеном
+    _make_admin(db_session)
+    admin_login = client.post("/api/v1/auth/login", json={
+        "username": "root",
+        "password": "admin123",
+    })
+    assert admin_login.status_code == 200, admin_login.text
+    admin_token = admin_login.json()["access_token"]
+    resp = client.post("/api/v1/auth/register",
+                       headers={"Authorization": f"Bearer {admin_token}"},
+                       json={
         "username": username,
         "password": password,
         "is_admin": is_admin,
@@ -99,7 +133,7 @@ ADMIN_OPS = [
 class TestKgAdminGuard:
     """Защита админ-операций графа знаний."""
 
-    def test_open_read_endpoints_require_auth(self, client):
+    def test_open_read_endpoints_require_auth(self, client, db_session):
         """Read-эндпоинты /kg доступны любому авторизованному, но не анониму."""
         # Без токена — 401 (SecurityMiddleware требует вход на /api/v1/kg)
         for path in ["/api/v1/kg/stats",
@@ -109,7 +143,7 @@ class TestKgAdminGuard:
             assert resp.status_code == 401, f"{path}: {resp.status_code}"
 
         # Обычный пользователь — доступ открыт
-        _register(client, "reader")
+        _register(client, db_session, "reader")
         token = _login(client, "reader")
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -128,9 +162,9 @@ class TestKgAdminGuard:
             resp = client.post(path)
             assert resp.status_code == 401, f"{path}: {resp.status_code}"
 
-    def test_admin_ops_forbidden_for_regular_user(self, client):
+    def test_admin_ops_forbidden_for_regular_user(self, client, db_session):
         """Обычный пользователь получает 403."""
-        _register(client, "regular")
+        _register(client, db_session, "regular")
         token = _login(client, "regular")
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -138,9 +172,9 @@ class TestKgAdminGuard:
             resp = client.post(path, headers=headers)
             assert resp.status_code == 403, f"{path}: {resp.status_code} {resp.text}"
 
-    def test_admin_ops_allowed_for_admin(self, client):
+    def test_admin_ops_allowed_for_admin(self, client, db_session):
         """Админ проходит проверку (дальше может быть ошибка сервиса)."""
-        _register(client, "boss", is_admin=True)
+        _register(client, db_session, "boss", is_admin=True)
         token = _login(client, "boss")
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -152,9 +186,9 @@ class TestKgAdminGuard:
             assert resp.status_code != 401, f"{path}: 401"
             assert resp.status_code != 403, f"{path}: 403"
 
-    def test_regular_user_can_read_stats(self, client):
+    def test_regular_user_can_read_stats(self, client, db_session):
         """Обычный пользователь видит статистику графа."""
-        _register(client, "viewer")
+        _register(client, db_session, "viewer")
         token = _login(client, "viewer")
         headers = {"Authorization": f"Bearer {token}"}
 

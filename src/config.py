@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     KEYCLOAK_REALM: str = "kag"
     KEYCLOAK_CLIENT_ID: str = "kag-api"
     KEYCLOAK_CLIENT_SECRET: str = "change_me"
+    # Admin-креды Keycloak (для просмотра/управления пользователями realm)
+    KEYCLOAK_ADMIN: str = "admin"
+    KEYCLOAK_ADMIN_PASSWORD: str = "admin"
 
     # Keycloak DB (PostgreSQL)
     KC_DB_USERNAME: str = "keycloak"
