@@ -1567,18 +1567,18 @@ class KnowledgeGraphService:
                     safe_type = entity_type.replace('"', '\\"').replace("'", "\\'")
                     cypher = f"""
                         MATCH (e:Entity)
-                        WHERE e.name CONTAINS "{safe_query}" AND e.type = "{safe_type}"
+                        WHERE toLower(e.name) CONTAINS toLower("{safe_query}") AND e.type = "{safe_type}"
                         RETURN e.name as name, e.type as type, e.confidence as confidence,
-                               size(coalesce(e.source_docs, [])) as doc_count
+                        size(coalesce(e.source_docs, [])) as doc_count
                         ORDER BY e.confidence DESC
                         LIMIT {limit}
                     """
                 else:
                     cypher = f"""
                         MATCH (e:Entity)
-                        WHERE e.name CONTAINS "{safe_query}"
+                        WHERE toLower(e.name) CONTAINS toLower("{safe_query}")
                         RETURN e.name as name, e.type as type, e.confidence as confidence,
-                               size(coalesce(e.source_docs, [])) as doc_count
+                        size(coalesce(e.source_docs, [])) as doc_count
                         ORDER BY e.confidence DESC
                         LIMIT {limit}
                     """
