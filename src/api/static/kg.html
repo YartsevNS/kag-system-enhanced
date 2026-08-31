@@ -79,6 +79,25 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     <div class="stat-card" style="border:1px solid var(--accent);background:rgba(94,106,210,0.06)"><div class="stat-num" id="stat-cross" style="color:var(--accent-h)">—</div><div class="stat-label">Общих сущностей</div></div>
   </div>
 
+  <!-- Визуализация графа -->
+  <div class="panel" id="kg-viz-panel">
+    <h2>🌐 Визуализация графа</h2>
+    <div class="search-row">
+      <input type="text" id="kg-node" placeholder="Имя сущности (например: Банк России)" onkeydown="if(event.key==='Enter')loadGraphFromInput()">
+      <select id="kg-depth" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text2)">
+        <option value="1">1 уровень</option>
+        <option value="2" selected>2 уровня</option>
+        <option value="3">3 уровня</option>
+      </select>
+      <button class="btn" onclick="loadGraphFromInput()">Показать граф</button>
+      <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
+    </div>
+    <div id="kg-msg" style="font-size:12px;color:var(--text4);margin-bottom:8px"></div>
+    <div id="cy" style="width:100%;height:560px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+    <div id="kg-info" style="font-size:13px;margin-top:8px;min-height:22px"></div>
+    <div style="font-size:11px;color:var(--text4);margin-top:6px">Клик по узлу — информация; кнопка «+ соседи» — развернуть связи; колесо — зум; перетаскивание — перемещение.</div>
+  </div>
+
   <!-- Перестроение графа -->
   <div class="panel" id="rebuild-panel" style="border:1px solid var(--amber);background:rgba(245,158,11,0.04);display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
@@ -169,6 +188,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   </div>
 </main>
 
+<script src="/static/vendor/cytoscape.min.js"></script>
 <script>
 const API = '/api/v1/kg';
 
@@ -594,6 +614,104 @@ function logout() {
   fetch('/api/v1/auth/logout', {method:'POST',headers:{'Content-Type':'application/json'}})
     .catch(function(){})
     .finally(function(){ window.location.replace('/login'); });
+}
+
+// ===== Визуализация графа (Cytoscape.js, локально /static/vendor) =====
+let cy = null;
+const nodeMap = {}; // имя сущности -> cytoscape id
+const TYPE_COLORS = {person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',legal_term:'#a78bfa',document_ref:'#f87171'};
+function typeColor(t){ return TYPE_COLORS[t] || '#64748b'; }
+
+function ensureCy(){
+  if (cy) return cy;
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: [],
+    style: [
+      { selector:'node', style:{
+          'background-color':'data(color)', 'label':'data(label)',
+          'color':'#e5e5e5', 'font-size':10, 'text-valign':'bottom', 'text-margin-y':5,
+          'width':'mapData(weight,1,10,18,52)', 'height':'mapData(weight,1,10,18,52)',
+          'border-width':1, 'border-color':'#333' } },
+      { selector:'edge', style:{
+          'width':1.5, 'line-color':'#555', 'curve-style':'bezier',
+          'target-arrow-shape':'triangle', 'target-arrow-color':'#777',
+          'label':'data(label)', 'font-size':8, 'color':'#888', 'text-rotation':'autorotate',
+          'text-background-color':'#171717', 'text-background-opacity':0.7, 'text-background-padding':'2px' } },
+      { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } }
+    ],
+    layout:{ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 },
+    wheelSensitivity:0.2, minZoom:0.2, maxZoom:3
+  });
+  cy.on('tap','node',function(evt){
+    const n = evt.target;
+    const nm = String(n.data('name')||'').replace(/'/g,"\\'");
+    document.getElementById('kg-info').innerHTML = '<b style="color:#fff">' + (n.data('label')||'') + '</b> <span style="color:var(--text4)">' + (n.data('type')||'') + '</span> <button class="btn-sm" onclick="expandNode(\'' + nm + '\')" style="margin-left:8px">+ соседи</button>';
+  });
+  cy.on('tap',function(evt){ if (evt.target === cy) document.getElementById('kg-info').innerHTML=''; });
+  return cy;
+}
+
+function nodeId(name){
+  if (nodeMap[name] === undefined) nodeMap[name] = 'n' + Object.keys(nodeMap).length;
+  return nodeMap[name];
+}
+
+function addGraphData(g){
+  const c = ensureCy();
+  (g.nodes||[]).forEach(function(n){
+    const id = nodeId(n.name);
+    if (!c.getElementById(id).length){
+      c.add({ data:{ id:id, name:n.name, label:String(n.name||'').length>30 ? n.name.slice(0,29)+'…' : n.name, type:n.type, color:typeColor(n.type), weight:1 } });
+    }
+  });
+  (g.edges||[]).forEach(function(e){
+    const sid = nodeId(e.source), tid = nodeId(e.target);
+    if (!c.getElementById(sid).length) c.add({ data:{ id:sid, name:e.source, label:String(e.source||'').slice(0,30), type:'', color:typeColor(''), weight:1 } });
+    if (!c.getElementById(tid).length) c.add({ data:{ id:tid, name:e.target, label:String(e.target||'').slice(0,30), type:'', color:typeColor(''), weight:1 } });
+    const eid = sid + '__' + tid + '__' + (e.type||'');
+    if (!c.getElementById(eid).length) c.add({ data:{ id:eid, source:sid, target:tid, label:e.type } });
+  });
+  c.nodes().forEach(function(nd){ nd.data('weight', Math.min((nd.degree()||0)+1, 10)); });
+  return c;
+}
+
+async function loadGraphFromInput(){
+  const name = (document.getElementById('kg-node').value||'').trim();
+  if (!name){ document.getElementById('kg-msg').textContent = 'Введите имя сущности'; return; }
+  await loadGraph(name, document.getElementById('kg-depth').value || '2');
+}
+
+async function loadGraph(name, depth){
+  document.getElementById('kg-msg').textContent = '⏳ Загрузка...';
+  try {
+    const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=' + depth, { headers: authHeaders() });
+    const d = await r.json();
+    const g = (d.graph && d.graph[0]) || { nodes: [], edges: [] };
+    if (!g.nodes.length){ document.getElementById('kg-msg').textContent = 'Сущность «' + name + '» не найдена или связей нет'; return; }
+    const c = ensureCy();
+    c.elements().remove();
+    Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
+    addGraphData(g);
+    c.elements().filter(function(el){ return el.isNode() && el.data('name') === name; }).addClass('center');
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 }).run();
+    c.fit(undefined, 40);
+    document.getElementById('kg-msg').textContent = c.nodes().length + ' узлов, ' + c.edges().length + ' связей';
+  } catch(e){
+    document.getElementById('kg-msg').textContent = 'Ошибка: ' + e;
+  }
+}
+
+async function expandNode(name){
+  try {
+    const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=1', { headers: authHeaders() });
+    const d = await r.json();
+    const g = (d.graph && d.graph[0]) || { nodes: [], edges: [] };
+    const c = ensureCy();
+    addGraphData(g);
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 }).run();
+    document.getElementById('kg-msg').textContent = c.nodes().length + ' узлов, ' + c.edges().length + ' связей';
+  } catch(e){}
 }
 
 </script>
