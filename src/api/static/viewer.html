@@ -381,7 +381,11 @@ async function initPdfViewer() {
   document.getElementById('page-num').max = pdfDoc.numPages;
   document.getElementById('btn-prev').disabled = false;
   document.getElementById('btn-next').disabled = pdfDoc.numPages <= 1;
-  renderPage(1);
+  // Параметр ?page=N из URL — открыть сразу нужную страницу (переход из поиска)
+  let initPage = parseInt(params.get('page') || '1', 10);
+  if (!(initPage >= 1)) initPage = 1;
+  if (initPage > pdfDoc.numPages) initPage = pdfDoc.numPages;
+  renderPage(initPage);
 }
 
 async function initTextViewer() {

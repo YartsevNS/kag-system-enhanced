@@ -142,6 +142,9 @@ async def hybrid_search(
                         # Была ошибка: point.get("file_type") — подставлялся MIME-тип
                         # (application/pdf, .txt) вместо имени файла → кракозябры.
                         "filename": point.get("filename") or point.get("file_name") or "",
+                        # Страницы, где взят чанк (из metadata сегментного чанкинга)
+                        "pages": (point.get("metadata") or {}).get("pages", [])
+                            if isinstance(point.get("metadata"), dict) else [],
                         "score": round(score, 4),
                         "entity_count": 0,
                         "source": "qdrant"

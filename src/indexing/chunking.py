@@ -140,6 +140,14 @@ class DocumentChunker:
             if not content:
                 continue
             meta = seg.get("metadata") or {}
+            # Страница может лежать на верхнем уровне сегмента (document_service
+            # кладёт "page": page_num, а metadata оставляет пустым) ИЛИ в metadata
+            # ("page_number"/"page"). Собираем в общий meta, чтобы pages попали
+            # в metadata чанка (для перехода к странице из поиска).
+            page = seg.get("page") or meta.get("page") or meta.get("page_number")
+            meta_merged = dict(meta)
+            if page is not None:
+                meta_merged["page"] = page
 
             # Очередной сегмент не влезает в буфер → закрываем текущий чанк
             if buffer and buffer_len + 2 + len(content) > self.chunk_size:
@@ -156,12 +164,12 @@ class DocumentChunker:
                 else:
                     pieces = [content]
                 for piece in pieces:
-                    chunk = _finalize(piece, [meta], tail)
+                    chunk = _finalize(piece, [meta_merged], tail)
                     tail = chunk["content"][-overlap:] if overlap else ""
                     chunks.append(chunk)
                 continue
 
-            buffer.append({"content": content, "meta": meta})
+            buffer.append({"content": content, "meta": meta_merged})
             buffer_len += len(content) + (2 if buffer_len else 0)
 
         if buffer:

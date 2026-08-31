@@ -301,11 +301,16 @@ async function hybridSearch() {
       return;
     }
     div.innerHTML = '<table class="entities-table"><thead><tr><th>Чанк</th><th>Документ</th><th>Сущностей</th></tr></thead><tbody>' +
-      d.results.map(r => `<tr>
-        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.text||''}">${(r.text||'').substring(0,80)}</td>
-        <td><a href="/viewer?id=${r.doc_id}" style="color:var(--accent-h);text-decoration:none">${r.filename||r.doc_id?.substring(0,8)}</a></td>
+    d.results.map(r => {
+      const pages = (Array.isArray(r.pages) && r.pages.length) ? r.pages : null;
+      const pageHref = '/viewer?id=' + r.doc_id + (pages ? '&page=' + pages[0] : '');
+      const pageLabel = r.filename + (pages ? ' (стр. ' + pages[0] + ')' : '');
+      return `<tr>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.text||''}">${(r.text||'').substring(0,120)}</td>
+        <td><a href="${pageHref}" style="color:var(--accent-h);text-decoration:none">${pageLabel}</a></td>
         <td><span class="badge badge-person">${r.entity_count||0}</span></td>
-      </tr>`).join('') + '</tbody></table>';
+      </tr>`;
+    }).join('') + '</tbody></table>';
   } catch(e) {
     div.innerHTML = '<div class="empty">❌ Ошибка: ' + e.message + '</div>';
   }
