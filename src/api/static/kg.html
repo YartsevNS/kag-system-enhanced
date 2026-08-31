@@ -92,9 +92,11 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
       </select>
       <button class="btn" onclick="loadGraphFromInput()">Показать граф</button>
       <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
+      <button class="btn-outline" onclick="toggleFullscreenViz()">⛶ На весь экран</button>
     </div>
     <div id="kg-msg" style="font-size:12px;color:var(--text4);margin-bottom:8px"></div>
     <div id="cy" style="width:100%;height:560px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+    <style>#cy:fullscreen{width:100vw;height:100vh;border-radius:0}</style>
     <div id="kg-info" style="font-size:13px;margin-top:8px;min-height:22px"></div>
     <div style="font-size:11px;color:var(--text4);margin-top:6px">Клик по узлу — информация; кнопка «+ соседи» — развернуть связи; колесо — зум; перетаскивание — перемещение.</div>
   </div>
@@ -647,9 +649,17 @@ function ensureCy(){
           'text-background-color':'#171717', 'text-background-opacity':0.7, 'text-background-padding':'2px' } },
       { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } }
     ],
-    layout:{ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 },
-    wheelSensitivity:0.2, minZoom:0.2, maxZoom:3
+    layout:{ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 },
+    wheelSensitivity:0.2, minZoom:0.05, maxZoom:3
   });
+  // Подписи показываем только при достаточном зуме — иначе они накладываются
+  function applyLabelVisibility(){
+    if (!cy) return;
+    const show = cy.zoom() >= 0.5;
+    cy.nodes().style('label', show ? 'data(label)' : '');
+  }
+  cy.on('zoom', applyLabelVisibility);
+  cy.on('layoutstop', applyLabelVisibility);
   cy.on('tap','node',function(evt){
     const n = evt.target;
     const nm = String(n.data('name')||'').replace(/'/g,"\\'");
@@ -731,7 +741,7 @@ async function loadGraph(name, depth){
     Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
     addGraphData(g);
     c.elements().filter(function(el){ return el.isNode() && el.data('name') === name; }).addClass('center');
-    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 }).run();
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 }).run();
     c.fit(undefined, 40);
     document.getElementById('kg-msg').textContent = c.nodes().length + ' узлов, ' + c.edges().length + ' связей';
   } catch(e){
@@ -746,10 +756,22 @@ async function expandNode(name){
     const g = (d.graph && d.graph[0]) || { nodes: [], edges: [] };
     const c = ensureCy();
     addGraphData(g);
-    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:8000, idealEdgeLength:90, gravity:0.8 }).run();
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 }).run();
     document.getElementById('kg-msg').textContent = c.nodes().length + ' узлов, ' + c.edges().length + ' связей';
   } catch(e){}
 }
+
+// Полноэкранный режим визуализации (браузерный fullscreen на контейнере #cy)
+function toggleFullscreenViz(){
+  const el = document.getElementById('cy');
+  if (!document.fullscreenElement){
+    (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+  }
+}
+document.addEventListener('fullscreenchange', function(){ if (cy) setTimeout(function(){ cy.resize(); }, 50); });
+document.addEventListener('webkitfullscreenchange', function(){ if (cy) setTimeout(function(){ cy.resize(); }, 50); });
 
 </script>
 <script src="/static/branding.js"></script>
