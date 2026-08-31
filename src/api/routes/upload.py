@@ -964,16 +964,17 @@ async def update_document_access(document_id: str, data: dict, current_user: Opt
         if not doc:
             raise HTTPException(status_code=404, detail="Документ не найден")
 
-        # Проверка владельца
+        # Проверка владельца: свои документы — владельцу, системные без
+        # владельца — только админу (как в /upload/{id}/process)
         owner = getattr(doc, "uploaded_by", None)
         is_admin = bool(current_user and getattr(current_user, "is_admin", False))
-        if owner and (not current_user or str(owner) != str(current_user.id)) and not is_admin:
+        if current_user is None:
+            raise HTTPException(status_code=401, detail="Требуется аутентификация")
+        if not is_admin and str(owner or "") != str(current_user.id):
             raise HTTPException(
                 status_code=403,
                 detail="Недостаточно прав: можно менять права только своих документов",
             )
-        if current_user is None:
-            raise HTTPException(status_code=401, detail="Требуется аутентификация")
 
         access = {
             "visibility": data.get("visibility", doc.visibility or "public"),

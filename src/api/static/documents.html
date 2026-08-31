@@ -1036,12 +1036,11 @@ function canProcess(d) {
 }
 
 // Можно ли пользователю редактировать права документа
-// (свои документы, системные/общие, или админ — любые)
+// (свои документы — владельцу; системные без владельца — только админу)
 function canEditAccess(d) {
   if (!d || !currentUser) return false;
   if (currentUser.is_admin) return true;
-  if (!d.uploaded_by) return true;
-  return d.uploaded_by === currentUser.id;
+  return !!(d.uploaded_by && d.uploaded_by === currentUser.id);
 }
 
 async function loadProcessingConfig() {
