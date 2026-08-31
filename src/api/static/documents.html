@@ -200,6 +200,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div style="font-size:11px;color:var(--text4);margin-top:6px">
         «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
       </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <label style="font-size:11px;color:var(--text4)">Применить к существующему документу:</label>
+        <select id="upload-apply-doc" style="flex:1;min-width:180px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"></select>
+        <button class="btn" onclick="applyAccessToDoc()" style="padding:6px 14px">💾 Сохранить</button>
+        <span id="upload-apply-status" style="font-size:11px;color:var(--text4)"></span>
+      </div>
     </div>
   </div>
 
@@ -527,7 +533,43 @@ async function loadAccessOptions() {
     _accessOptions = {groups: d.groups || [], users: d.users || []};
     renderAccess('upload');
     renderAccess('edit');
+    populateApplyDocSelect();
   } catch(e) { console.error('access-options:', e); }
+}
+
+// Заполнить select «Применить к существующему документу» в блоке прав
+function populateApplyDocSelect() {
+  const sel = document.getElementById('upload-apply-doc');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— выберите документ —</option>';
+  (allDocs || []).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.document_id;
+    opt.textContent = (d.filename || d.document_id) + (d.status ? ' [' + d.status + ']' : '');
+    sel.appendChild(opt);
+  });
+}
+
+// Применить права из блока «Права доступа к документам» к выбранному документу
+async function applyAccessToDoc() {
+  const sel = document.getElementById('upload-apply-doc');
+  const st = document.getElementById('upload-apply-status');
+  const docId = sel && sel.value;
+  if (!docId) { if (st) st.textContent = 'Выберите документ'; return; }
+  const acc = collectAccess('upload');
+  acc.visibility = document.getElementById('upload-visibility').value;
+  if (st) { st.textContent = '⏳...'; st.style.color = 'var(--text4)'; }
+  try {
+    const r = await fetch(`${API}/upload/${docId}/access`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(acc)
+    });
+    const d = await r.json();
+    if (st) {
+      st.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message || d.detail || 'ошибка');
+      st.style.color = d.status === 'ok' ? 'var(--green)' : 'var(--red)';
+    }
+  } catch(e) { if (st) { st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)'; } }
 }
 
 let _accessDocId = null;
@@ -580,6 +622,7 @@ async function loadAll() {
     // 145 документов = 145 HTTP + ~290 Qdrant scroll + 145 SQL (N+1).
     updateStats();
     renderAll();
+    populateApplyDocSelect();
     updateProcAllButton();
     checkTypeWatchdog();
     // Автообновление если есть документы в обработке
