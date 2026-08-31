@@ -326,6 +326,7 @@ async function createKeycloakUser() {
   if (!username || !password) { st.className='status err'; st.textContent = 'Заполните логин и пароль'; return; }
   if (password.length < 6) { st.className='status err'; st.textContent = 'Пароль минимум 6 символов'; return; }
   if (!firstName || !lastName) { st.className='status err'; st.textContent = 'Имя и фамилия обязательны'; return; }
+  if (!email) { st.className='status err'; st.textContent = 'Email обязателен'; return; }
 
   st.className='status'; st.textContent = 'Создаю...';
   try {

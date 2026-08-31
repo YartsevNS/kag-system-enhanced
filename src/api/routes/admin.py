@@ -291,6 +291,9 @@ async def keycloak_create_user(data: dict):
         raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
     if not firstName or not lastName:
         raise HTTPException(status_code=400, detail="Имя и фамилия обязательны")
+    email = (data.get("email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email обязателен (профиль realm требует его)")
 
     token = _keycloak_admin_token()
     base = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
