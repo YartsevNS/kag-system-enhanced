@@ -309,6 +309,16 @@ class EntityExtractor:
         api_key = cfg.get("api_key", "")
         provider = cfg.get("provider", "ollama")
 
+        # Температура из параметров привязки функции graph (админка).
+        # Ограничение сверху 0.5: извлечение графа требует стабильности,
+        # высокая температура → галлюцинации/битый JSON.
+        _params = cfg.get("parameters") or {}
+        try:
+            _temp = float(_params.get("temperature", 0.05))
+        except (TypeError, ValueError):
+            _temp = 0.05
+        _temp = min(max(_temp, 0.0), 0.5)
+
         # Все типы сущностей (core + extended) в одном списке
         core_types = self._domain_config.get("core", {})
         extended_types = self._domain_config.get("extended", {})
@@ -350,7 +360,7 @@ JSON:
 - source/target связей — ТОЛЬКО из списка entities этого же ответа, точные имена
 - ничего не найдено → {{"entities":[],"relations":[]}}"""
 
-            single_result = await self._call_llm(prompt_single, model, llm_url, chunk_id, "extract_all", api_key, provider)
+            single_result = await self._call_llm(prompt_single, model, llm_url, chunk_id, "extract_all", api_key, provider, temperature=_temp)
             entities = single_result.get("entities", [])
             relations = single_result.get("relations", [])
         else:
@@ -375,7 +385,7 @@ JSON:
 - description: кратко чем является сущность (для дедупликации)
 - ничего не найдено → {{"entities":[]}}"""
 
-            entities_result = await self._call_llm(prompt_entities, model, llm_url, chunk_id, "extract_entities", api_key, provider)
+            entities_result = await self._call_llm(prompt_entities, model, llm_url, chunk_id, "extract_entities", api_key, provider, temperature=_temp)
             entities = entities_result.get("entities", [])
 
             # ── ЭТАП 2: связи между найденными сущностями ─────────────────
@@ -403,7 +413,7 @@ JSON:
 - source и target: точные имена из списка известных сущностей
 - связи нет → {{"relations":[]}}"""
 
-                relations_result = await self._call_llm(prompt_relations, model, llm_url, chunk_id, "extract_relations", api_key, provider)
+                relations_result = await self._call_llm(prompt_relations, model, llm_url, chunk_id, "extract_relations", api_key, provider, temperature=_temp)
                 relations = relations_result.get("relations", [])
 
         result = {"entities": entities, "relations": relations, "facts": [], "warnings": []}
@@ -433,7 +443,7 @@ JSON:
         self, prompt: str, model: str, llm_url: str,
         chunk_id: str = "", pass_name: str = "",
         api_key: str = "", provider: str = "ollama",
-        system_prompt: str = ""
+        system_prompt: str = "", temperature: float = None
     ) -> Dict[str, Any]:
         """Вызвать LLM и распарсить JSON-ответ.
         
@@ -474,7 +484,8 @@ JSON:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ],
-                    "temperature": 0.05,
+                    # Температура из параметров привязки (админка), дефолт 0.05.
+                    "temperature": temperature if temperature is not None else 0.05,
                     "max_tokens": 800
                 }
                 # ВАЖНО (почему так сделано): deepseek-v4-flash — reasoning-модель.

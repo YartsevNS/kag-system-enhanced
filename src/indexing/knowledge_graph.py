@@ -1096,13 +1096,20 @@ class KnowledgeGraphService:
                     "Пары:\n" + pairs_desc
                 )
 
+                # Температура из параметров привязки graph (админка), дефолт 0.0.
+                # Ограничение 0.5: верификация пар требует стабильности.
+                try:
+                    _temp = float((cfg.get("parameters") or {}).get("temperature", 0.0))
+                except (TypeError, ValueError):
+                    _temp = 0.0
+                _temp = min(max(_temp, 0.0), 0.5)
                 payload = {
                     "model": model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
-                    "temperature": 0.0,
+                    "temperature": _temp,
                     # max_tokens достаточно: 10 пар × ~50 символов ≈ 500 символов
                     # ≈ 200-300 токенов. 800 хватало с запасом; больше не нужно.
                     "max_tokens": 1000,
