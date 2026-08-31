@@ -6,7 +6,10 @@
 - Метаданных
 - Ссылок между чанками
 
-Использует RecursiveCharacterTextSplitter для русского языка с правильными разделителями.
+Стратегия (с 2026-08-31): сегментный чанкинг — склеиваем ЦЕЛЫЕ сегменты
+парсера (абзацы, таблицы, страницы) в чанки до chunk_size, не разрезая
+границы сегментов. Ранее текст склеивался целиком и резался заново —
+заголовки отрывались от тел, таблицы резались пополам.
 """
 
 from typing import Dict, Any, List
@@ -26,9 +29,11 @@ class DocumentChunker:
     """
     Единый чанкер документов для векторизации.
 
-    Стратегии:
-    - RecursiveCharacterTextSplitter с разделителями для русского языка (приоритет)
-    - Fallback: посимвольное разбиение с учетом структуры
+    Сегментный чанкинг: буфер накапливает сегменты (абзац/таблица/страница)
+    до chunk_size (символы), затем закрывается. Сегмент-гигант (длиннее
+    chunk_size) режется RecursiveCharacterTextSplitter по внутренним
+    разделителям (абзацы → строки → предложения → слова).
+    Overlap: хвост предыдущего чанка подставляется в начало следующего.
     """
 
     def __init__(
@@ -40,9 +45,8 @@ class DocumentChunker:
         self.chunk_size = chunk_size or settings.CHUNK_SIZE
         self.chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
 
-        # Инициализируем RecursiveCharacterTextSplitter для русского языка
+        # RecursiveCharacterTextSplitter — только для сегментов-гигантов
         if LANGCHAIN_AVAILABLE:
-            # Разделители по приоритету: абзацы, строки, предложения, слова, символы
             self.text_splitter = RecursiveCharacterTextSplitter(
                 separators=["\n\n", "\n", ". ", " ", ""],
                 chunk_size=self.chunk_size,
@@ -64,69 +68,9 @@ class DocumentChunker:
         file_type: str,
         document_id: str = None
     ) -> List[Dict[str, Any]]:
-        """
-        Разбить документ на чанки.
-
-        Args:
-            document: Распарсенный документ со списком segments
-            file_type: Тип файла
-            document_id: ID документа (для уникальности chunk_id)
-
-        Returns:
-            Список чанков с метаданными
-        """
+        """Разбить документ на чанки (делегирует сегментному чанкингу)."""
         segments = document.get("segments", [])
-        chunks = []
-        chunk_seq = 0
-
-        # Объединяем весь текст из сегментов для правильного чанкинга
-        full_text = "\n\n".join(seg.get("content", "") for seg in segments)
-
-        if LANGCHAIN_AVAILABLE and self.text_splitter:
-            # Используем RecursiveCharacterTextSplitter для качественного разбиения
-            split_texts = self.text_splitter.split_text(full_text)
-
-            for i, text in enumerate(split_texts):
-                chunk_seq += 1
-                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
-                chunks.append({
-                    "chunk_id": cid,
-                    "content": text,
-                    "metadata": {
-                        "segment_index": i,
-                        "chunk_index": i,
-                        "total_chunks": len(split_texts),
-                        "chunk_seq": chunk_seq,
-                        "splitter": "recursive_character"
-                    }
-                })
-            logger.info(f"Документ разбит на {len(chunks)} чанков (RecursiveCharacterTextSplitter)")
-        else:
-            # Fallback: старый метод посимвольного разбиения
-            for i, segment in enumerate(segments):
-                content = segment.get("content", "")
-
-                if len(content) <= self.chunk_size:
-                    chunk_seq += 1
-                    cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
-                    chunks.append({
-                        "chunk_id": cid,
-                        "content": content,
-                        "metadata": {
-                            **segment.get("metadata", {}),
-                            "segment_index": i,
-                            "chunk_index": 0,
-                            "total_chunks": 1,
-                            "chunk_seq": chunk_seq
-                        }
-                    })
-                else:
-                    segment_chunks = self._split_content(content, i, segment.get("metadata", {}), chunk_seq, document_id)
-                    chunks.extend(segment_chunks)
-                    chunk_seq += len(segment_chunks)
-            logger.info(f"Документ разбит на {len(chunks)} чанков (fallback)")
-
-        return chunks
+        return self.chunk_segments(segments, document_id)
 
     def chunk_segments(
         self,
@@ -134,137 +78,104 @@ class DocumentChunker:
         document_id: str = None
     ) -> List[Dict[str, Any]]:
         """
-        Разбить список сегментов на чанки.
+        Сегментный чанкинг: склеивает ЦЕЛЫЕ сегменты парсера в чанки до
+        chunk_size, НЕ разрезая границы сегментов.
 
-        Args:
-            segments: Список сегментов из парсера
-            document_id: ID документа (для уникальности chunk_id)
+        Почему так (вместо склейки всего текста и резки заново):
+        - заголовок не отрывается от своего абзаца;
+        - таблица не режется пополам;
+        - страница сохраняет целостность (page_number в метаданных чанка).
 
-        Returns:
-            Список чанков для векторизации
+        Исключение — сегмент-гигант (абзац/таблица/страница длиннее
+        chunk_size): его режем RecursiveCharacterTextSplitter'ом по внутренним
+        разделителям. Служебный текст (пустые сегменты) пропускается.
+
+        Overlap: хвост предыдущего чанка (последние chunk_overlap символов)
+        подставляется в начало следующего — RecursiveCharacterTextSplitter сам
+        этого не делает при разбиении по разделителям.
         """
-        chunks = []
+        chunks: List[Dict[str, Any]] = []
         chunk_seq = 0
+        overlap = self.chunk_overlap or 0
 
-        # Объединяем весь текст для правильного чанкинга
-        full_text = "\n\n".join(seg.get("content", "") for seg in segments)
+        def _finalize(text: str, metas: List[Dict[str, Any]], tail_in: str) -> dict:
+            """Собрать чанк: приклеить хвост, обрезать страховочно, собрать metadata."""
+            nonlocal chunk_seq
+            if tail_in:
+                text = tail_in + text
+            # Страховка от аномально длинных кусков (сегмент-гигант без
+            # разделителей): эмбеддинг всё равно обрежет до своего лимита.
+            if len(text) > self.chunk_size + overlap:
+                text = text[:self.chunk_size + overlap]
+            chunk_seq += 1
+            pages = sorted({
+                (m.get("page_number") or m.get("page") or 1)
+                for m in metas if m
+            })
+            types = sorted({
+                (m.get("segment_type") or "text")
+                for m in metas if m
+            })
+            return {
+                "chunk_id": f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}",
+                "content": text,
+                "metadata": {
+                    "chunk_index": chunk_seq - 1,
+                    "chunk_seq": chunk_seq,
+                    "total_chunks": 0,  # заполняется после сборки
+                    "splitter": "segment_based",
+                    "is_partial": False,
+                    "overlap_applied": bool(tail_in),
+                    "pages": pages,
+                    "segment_types": types,
+                }
+            }
 
-        if LANGCHAIN_AVAILABLE and self.text_splitter:
-            # Используем RecursiveCharacterTextSplitter
-            split_texts = self.text_splitter.split_text(full_text)
+        buffer: List[Dict[str, Any]] = []  # [{content, meta}]
+        buffer_len = 0
+        tail = ""
 
-            # ВАЖНО (зачем так сделано): RecursiveCharacterTextSplitter применяет
-            # chunk_overlap ТОЛЬКО при посимвольной резке (separator="") — когда кусок
-            # текста больше chunk_size и его приходится резать принудительно.
-            # При разбиении по разделителям (\n\n, \n, ". ", " ") он склеивает
-            # фрагменты встык БЕЗ перекрытия — известное поведение langchain,
-            # из-за которого настройка overlap из админки фактически не работала.
-            # Поэтому добавляем перекрытие вручную: хвост предыдущего СФОРМИРОВАННОГО
-            # чанка (последние chunk_overlap символов) подставляем в начало следующего.
-            # Хвост берём из prev_text (уже с добавленным overlap), а не из
-            # split_texts[i-1] — иначе граница «съезжает» и появляются дыры.
-            # Верхняя граница chunk_size + overlap: если сплиттер дал чанк больше
-            # chunk_size (сплошной текст без разделителей), эмбеддинг всё равно
-            # обрежет до лимита — но для нормальных документов чанк ≈ chunk_size,
-            # а overlap гарантирует попадание границы в оба соседних вектора.
-            overlap = self.chunk_overlap or 0
-            prev_text = ""
+        for seg in segments:
+            content = (seg.get("content") or "").strip()
+            if not content:
+                continue
+            meta = seg.get("metadata") or {}
 
-            for i, text in enumerate(split_texts):
-                chunk_seq += 1
-                if prev_text and overlap > 0:
-                    prev_tail = prev_text[-overlap:]
-                    text = prev_tail + text
-                # Не режем до chunk_size (иначе теряем конец и создаём дыры) —
-                # только страхуемся от аномально длинных чанков сплиттера.
-                if len(text) > self.chunk_size + overlap:
-                    text = text[:self.chunk_size + overlap]
-                prev_text = text
-                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
-                chunks.append({
-                    "chunk_id": cid,
-                    "content": text,
-                    "metadata": {
-                        "chunk_index": i,
-                        "chunk_seq": chunk_seq,
-                        "total_chunks": len(split_texts),
-                        "splitter": "recursive_character",
-                        "is_partial": False,
-                        "overlap_applied": bool(overlap and i > 0),
-                    }
-                })
-            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (RecursiveCharacterTextSplitter, overlap={overlap})")
-        else:
-            # Fallback: старый метод
-            for i, segment in enumerate(segments):
-                content = segment.get("content", "")
-                metadata = segment.get("metadata", {})
+            # Очередной сегмент не влезает в буфер → закрываем текущий чанк
+            if buffer and buffer_len + 2 + len(content) > self.chunk_size:
+                text = "\n\n".join(s["content"] for s in buffer)
+                chunk = _finalize(text, [s["meta"] for s in buffer], tail)
+                tail = chunk["content"][-overlap:] if overlap else ""
+                chunks.append(chunk)
+                buffer, buffer_len = [], 0
 
-                if len(content) <= self.chunk_size:
-                    chunk_seq += 1
-                    cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
-                    chunks.append({
-                        "chunk_id": cid,
-                        "content": content,
-                        "metadata": {
-                            **metadata,
-                            "chunk_index": chunk_seq,
-                            "chunk_seq": chunk_seq,
-                            "is_partial": False
-                        }
-                    })
+            if not buffer and len(content) > self.chunk_size:
+                # Сегмент-гигант: режем по внутренним разделителям
+                if LANGCHAIN_AVAILABLE and self.text_splitter:
+                    pieces = [p.strip() for p in self.text_splitter.split_text(content) if p.strip()]
                 else:
-                    segment_chunks = self._split_content(content, i, metadata, chunk_seq, document_id)
-                    chunks.extend(segment_chunks)
-                    chunk_seq += len(segment_chunks)
-            logger.info(f"Сегменты разбиты на {len(chunks)} чанков (fallback)")
+                    pieces = [content]
+                for piece in pieces:
+                    chunk = _finalize(piece, [meta], tail)
+                    tail = chunk["content"][-overlap:] if overlap else ""
+                    chunks.append(chunk)
+                continue
 
-        return chunks
+            buffer.append({"content": content, "meta": meta})
+            buffer_len += len(content) + (2 if buffer_len else 0)
 
-    def _split_content(
-        self,
-        content: str,
-        segment_index: int,
-        metadata: Dict[str, Any],
-        start_seq: int = 0,
-        document_id: str = None
-    ) -> List[Dict[str, Any]]:
-        """Разбить длинный контент на чанки с перекрытием"""
+        if buffer:
+            text = "\n\n".join(s["content"] for s in buffer)
+            chunk = _finalize(text, [s["meta"] for s in buffer], tail)
+            chunks.append(chunk)
 
-        chunks = []
-        start = 0
-        chunk_index = 0
-        chunk_seq = start_seq
+        # total_chunks известен только после сборки
+        total = len(chunks)
+        for c in chunks:
+            c["metadata"]["total_chunks"] = total
 
-        while start < len(content):
-            end = start + self.chunk_size
-
-            if end < len(content):
-                space_pos = content.rfind(" ", start + self.chunk_size // 2, end)
-                if space_pos > start:
-                    end = space_pos + 1
-
-            chunk_text = content[start:end].strip()
-
-            if chunk_text:
-                chunk_seq += 1
-                cid = f"{document_id}_chunk_{chunk_seq:05d}" if document_id else f"chunk_{chunk_seq:05d}"
-                chunks.append({
-                    "chunk_id": cid,
-                    "content": chunk_text,
-                    "metadata": {
-                        **metadata,
-                        "segment_index": segment_index,
-                        "chunk_index": chunk_index,
-                        "chunk_seq": chunk_seq,
-                        "total_chunks": (len(content) + self.chunk_size - 1) // self.chunk_size,
-                        "start_pos": start,
-                        "end_pos": end,
-                        "is_partial": True
-                    }
-                })
-                chunk_index += 1
-
-            start = end - self.chunk_overlap
-
+        logger.info(
+            f"Сегментный чанкинг: {len(chunks)} чанков из {len(segments)} сегментов "
+            f"(chunk_size={self.chunk_size}, overlap={overlap})"
+        )
         return chunks

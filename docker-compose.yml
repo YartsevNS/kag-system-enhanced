@@ -58,9 +58,9 @@ services:
       - LLM_VLLM_PRIORITY=1
       # Embedding модели (fallback; реальная — из админки function_map/embedding)
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.50.42:8090/v1}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Embeddings}
-      - EMBEDDING_TIMEOUT=60.0
-      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1024}  # gigachat = 1024
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-EmbeddingsGigaR}
+      - EMBEDDING_TIMEOUT=300.0
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-2560}  # EmbeddingsGigaR = 2560
 
       # Общие настройки
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-mistral:7b}
@@ -123,8 +123,8 @@ services:
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1024}  # gigachat = 1024
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Embeddings}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-2560}  # EmbeddingsGigaR = 2560
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-EmbeddingsGigaR}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.50.42:8090/v1}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
