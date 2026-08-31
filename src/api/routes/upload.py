@@ -952,13 +952,28 @@ async def get_document_access(document_id: str):
 
 
 @router.put("/{document_id}/access", summary="Сохранить права доступа документа")
-async def update_document_access(document_id: str, data: dict):
-    """Обновить права документа и payload чанков в Qdrant (без переиндексации текста)."""
+async def update_document_access(document_id: str, data: dict, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Обновить права документа и payload чанков в Qdrant (без переиндексации текста).
+
+    Многопользовательность: права может менять владелец документа (uploaded_by)
+    или админ. Системные документы без владельца — любой авторизованный.
+    """
     try:
         from src.api.services.document_repository import get_doc_repo
         doc = get_doc_repo().get(document_id)
         if not doc:
             raise HTTPException(status_code=404, detail="Документ не найден")
+
+        # Проверка владельца
+        owner = getattr(doc, "uploaded_by", None)
+        is_admin = bool(current_user and getattr(current_user, "is_admin", False))
+        if owner and (not current_user or str(owner) != str(current_user.id)) and not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Недостаточно прав: можно менять права только своих документов",
+            )
+        if current_user is None:
+            raise HTTPException(status_code=401, detail="Требуется аутентификация")
 
         access = {
             "visibility": data.get("visibility", doc.visibility or "public"),
