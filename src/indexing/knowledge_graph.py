@@ -1660,7 +1660,10 @@ class KnowledgeGraphService:
                     for node in path.nodes:
                         nodes.add((
                             node.get("name", node.get("id", "")),
-                            list(node.labels)[0] if node.labels else "Unknown"
+                            # ВАЖНО: тип для раскраски — свойство e.type
+                            # (person/organization/legal_term/...), а НЕ label
+                            # узла (у всех Entity он одинаковый).
+                            node.get("type") or (list(node.labels)[0] if node.labels else "Unknown")
                         ))
                     for rel in path.relationships:
                         edges.append({

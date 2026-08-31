@@ -621,7 +621,13 @@ function logout() {
 let cy = null;
 const nodeMap = {}; // имя сущности -> cytoscape id
 const TYPE_COLORS = {person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',legal_term:'#a78bfa',document_ref:'#f87171'};
-function typeColor(t){ return TYPE_COLORS[t] || '#64748b'; }
+const KG_PALETTE = ['#94a3f8','#f472b6','#fbbf24','#34d399','#22d3ee','#a78bfa','#f87171','#fb923c','#4ade80','#e879f9','#38bdf8','#facc15','#2dd4bf','#c084fc'];
+function typeColor(t){
+  if (TYPE_COLORS[t]) return TYPE_COLORS[t];
+  let h = 0; const s = String(t || 'other');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return KG_PALETTE[h % KG_PALETTE.length];
+}
 
 function ensureCy(){
   if (cy) return cy;
