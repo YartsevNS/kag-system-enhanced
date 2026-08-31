@@ -376,18 +376,20 @@ async def get_collection_chunks(
 
 class ChunkingConfigRequest(BaseModel):
     """Запрос на сохранение настроек чанкинга"""
-    chunk_size: int = Field(default=1000, ge=100, le=5000)
-    chunk_overlap: int = Field(default=200, ge=0, le=1000)
+    chunk_size: int = Field(default=1500, ge=100, le=5000)
+    chunk_overlap: int = Field(default=225, ge=0, le=1000)
 
 
 @router.get("/chunking-config", summary="Получить настройки чанкинга")
 async def get_chunking_config():
     """Получить текущие настройки чанкинга из Redis"""
     from src.api.services.config_store import config_store
-    
+    from src.config import get_settings
+    _cfg = get_settings()
+
     config = config_store.get("chunking", "default", {
-        "chunk_size": 1000,
-        "chunk_overlap": 200
+        "chunk_size": _cfg.CHUNK_SIZE,
+        "chunk_overlap": _cfg.CHUNK_OVERLAP
     })
     
     return config

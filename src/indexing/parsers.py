@@ -372,8 +372,8 @@ class TextChunker:
 
     def __init__(
         self,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200
+        chunk_size: int = None,
+        chunk_overlap: int = None
     ):
         from src.indexing.chunking import DocumentChunker
         self._chunker = DocumentChunker(
@@ -396,4 +396,4 @@ class TextChunker:
 
 # Глобальные экземпляры
 document_parser = DocumentParser()
-text_chunker = TextChunker(chunk_size=1000, chunk_overlap=200)
+text_chunker = TextChunker()  # параметры берутся из config.py (CHUNK_SIZE/CHUNK_OVERLAP)

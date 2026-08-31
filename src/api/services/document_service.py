@@ -23,7 +23,7 @@ from datetime import datetime
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.indexing.parsers import document_parser, text_chunker
+from src.indexing.parsers import document_parser
 from src.indexing.embeddings_service import embeddings_service
 from src.config import get_settings
 
@@ -604,26 +604,28 @@ class DocumentService:
             record.progress = 50
             self._save_document_to_db(document_id)
             
-            # Загружаем настройки чанкинга из Redis (или используем default)
+            # Загружаем настройки чанкинга из Redis (или дефолт из config.py)
             from src.api.services.config_store import config_store
+            from src.config import get_settings
+            _cfg = get_settings()
             chunking_config = config_store.get("chunking", "default", {
-                "chunk_size": 1000,
-                "chunk_overlap": 200
+                "chunk_size": _cfg.CHUNK_SIZE,
+                "chunk_overlap": _cfg.CHUNK_OVERLAP
             })
             
             # Создаём чанкер с настройками из Redis
             from src.indexing.parsers import TextChunker
             chunker = TextChunker(
-                chunk_size=chunking_config.get("chunk_size", 1000),
-                chunk_overlap=chunking_config.get("chunk_overlap", 200)
+                chunk_size=chunking_config.get("chunk_size", _cfg.CHUNK_SIZE),
+                chunk_overlap=chunking_config.get("chunk_overlap", _cfg.CHUNK_OVERLAP)
             )
             
             logger.info(f"Чанкинг (из Redis): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
             
             chunks = chunker.chunk_document(segments)
             plog.log("chunking", {
-                "chunk_size": chunking_config.get("chunk_size", 1000),
-                "chunk_overlap": chunking_config.get("chunk_overlap", 200),
+                "chunk_size": chunking_config.get("chunk_size", _cfg.CHUNK_SIZE),
+                "chunk_overlap": chunking_config.get("chunk_overlap", _cfg.CHUNK_OVERLAP),
                 "chunks_count": len(chunks),
                 "total_chars": sum(len(c.get("content", "")) for c in chunks)
             })
