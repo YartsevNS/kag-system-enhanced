@@ -145,7 +145,13 @@ class EmbeddingClient:
         """Заголовки для OpenAI-совместимых провайдеров."""
         h = {"Content-Type": "application/json"}
         if self.api_key:
-            h["Authorization"] = f"Bearer {self.api_key}"
+            if self.provider_type == "gigachat":
+                # Прокси gpt2giga ждёт pass-token `giga-cred-<key>:<scope>`
+                # (иначе «Invalid GigaChat pass-through token»). То же, что
+                # provider_service._format_api_key — для чат-вызовов.
+                h["Authorization"] = f"Bearer giga-cred-{self.api_key}:GIGACHAT_API_PERS"
+            else:
+                h["Authorization"] = f"Bearer {self.api_key}"
         return h
 
     def _embed_endpoint(self, batch: bool) -> str:
