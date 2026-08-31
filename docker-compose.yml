@@ -272,8 +272,11 @@ services:
     # Keycloak НЕ публикуется наружу — SSO идёт через nginx (/realms/*).
     # Prod mode включается при деплое: KC_HOSTNAME=<внешний адрес> и
     # KC_COMMAND="start --import-realm" в .env (dev mode по умолчанию).
+    # Keycloak доступен из локальной подсети: 192.168.50.18:8080
+    # (консоль админа + realm). Наружу (интернет) НЕ публикуется — nginx
+    # слушает 80/443, Keycloak на 8080 доступен только в локальной сети.
     ports:
-      - "127.0.0.1:8080:8080"  # только localhost для отладки
+      - "8080:8080"
     environment:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
