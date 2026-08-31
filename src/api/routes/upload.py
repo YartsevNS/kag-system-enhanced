@@ -819,16 +819,47 @@ async def list_documents(
             "tags": [],
             # Источник (web_monitor): из source_metadata JSON
             "source_name": _json_parse_source(meta.get("source_metadata")),
+            # ACL (для фильтрации списка у не-admin)
+            "visibility": meta.get("visibility") or "public",
+            "allow_user_ids": _parse_id_list(meta.get("allow_user_ids")),
+            "deny_user_ids": _parse_id_list(meta.get("deny_user_ids")),
+            "allow_group_ids": _parse_id_list(meta.get("allow_group_ids")),
+            "deny_group_ids": _parse_id_list(meta.get("deny_group_ids")),
         }
         enriched.append(item)
 
-    # Фильтрация по группам для не-admin
-    if current_user and not current_user.is_admin:
+    # ── ACL-фильтрация списка (visibility + allow/deny) для не-admin ────
+    # Логика та же, что в search/_access_guard: deny имеет приоритет;
+    # restricted доступен только если пользователь/группа в allow.
+    # Без user_id (аноним) — только public.
+    if current_user is None:
+        enriched = [d for d in enriched if (d.get("visibility") or "public") == "public"]
+    elif not current_user.is_admin:
+        uid = str(current_user.id)
         user_group_ids = [g.id for g in current_user.groups] if current_user.groups else []
-        enriched = [
-            d for d in enriched
-            if not d.get("group_ids") or any(g in d.get("group_ids", []) for g in user_group_ids)
-        ]
+        gset = set(user_group_ids)
+        acl_filtered = []
+        for d in enriched:
+            v = d.get("visibility") or "public"
+            deny_u = d.get("deny_user_ids") or []
+            deny_g = d.get("deny_group_ids") or []
+            # deny имеет приоритет над всем
+            if uid in deny_u or (gset and gset & set(deny_g)):
+                continue
+            # legacy group_ids (payload-группы документа): если документ
+            # привязан к группам, не-admin без этих групп его не видит
+            doc_groups = d.get("group_ids") or []
+            if doc_groups and not (gset & set(doc_groups)):
+                continue
+            if v == "public":
+                acl_filtered.append(d)
+                continue
+            # restricted: доступен только если в allow
+            allow_u = d.get("allow_user_ids") or []
+            allow_g = d.get("allow_group_ids") or []
+            if uid in allow_u or (gset and gset & set(allow_g)):
+                acl_filtered.append(d)
+        enriched = acl_filtered
 
     return {
         "total": total,
