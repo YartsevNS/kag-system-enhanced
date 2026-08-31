@@ -620,7 +620,7 @@ function logout() {
 // ===== Визуализация графа (Cytoscape.js, локально /static/vendor) =====
 let cy = null;
 const nodeMap = {}; // имя сущности -> cytoscape id
-const TYPE_COLORS = {person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',legal_term:'#a78bfa',document_ref:'#f87171'};
+const TYPE_COLORS = {person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',legal_term:'#a78bfa',document_ref:'#f87171',Chunk:'#475569',Document:'#475569'};
 const KG_PALETTE = ['#94a3f8','#f472b6','#fbbf24','#34d399','#22d3ee','#a78bfa','#f87171','#fb923c','#4ade80','#e879f9','#38bdf8','#facc15','#2dd4bf','#c084fc'];
 function typeColor(t){
   if (TYPE_COLORS[t]) return TYPE_COLORS[t];
