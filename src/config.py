@@ -98,21 +98,22 @@ class Settings(BaseSettings):
     DASHSCOPE_MODEL: str = "qwen-max"
 
     # Embedding модели
-    # ВАЖНО (2026-08-24): реальная embedding-модель берётся из АДМИНКИ
+    # ВАЖНО (2026-08-31): реальная embedding-модель берётся из АДМИНКИ
     # (function_map/embedding → провайдер gigachat, http://192.168.50.42:8090/v1,
-    # модель "Embeddings", 1024 dim, обрезка текста 500 символов).
+    # модель EmbeddingsGigaR, 2560 dim, лимит 4096 токенов).
     # Дефолты ниже — только FALLBACK, если function_map не настроен.
     # НЕ возвращать к nomic-embed-text/bge-m3 (768) — их нет на сервере.
     EMBEDDING_BASE_URL: str = "http://192.168.50.42:8090/v1"
-    EMBEDDING_MODEL: str = "Embeddings"
+    EMBEDDING_MODEL: str = "EmbeddingsGigaR"
     EMBEDDING_TIMEOUT: float = 300.0
-    EMBEDDING_DIMENSIONS: int = 1024
+    EMBEDDING_DIMENSIONS: int = 2560
 
     # Настройки чанкинга для документов
-    # Оптимально для русского языка: 512 токенов ≈ 2000-2500 символов
-    # Перекрытие 15% для сохранения контекста между чанками
-    CHUNK_SIZE: int = 512  # Размер чанка в токенах (не символах!)
-    CHUNK_OVERLAP: int = 77  # 15% перекрытие (512 * 0.15 ≈ 77)
+    # ВНИМАНИЕ: chunk_size считается в СИМВОЛАХ (chunking.py использует len(text)),
+    # комментарий «в токенах» ниже — историческое заблуждение, исправлено 2026-08-31.
+    # 1024 символа ≈ ~700 токенов — в пределах лимита GigaR (4096 токенов), без обрезки.
+    CHUNK_SIZE: int = 1024
+    CHUNK_OVERLAP: int = 154  # 15% перекрытие (1024 * 0.15 ≈ 154)
 
     # Общие настройки LLM
     LLM_MODEL_NAME: str = "mistralai/Mistral-7B-Instruct-v0.2"

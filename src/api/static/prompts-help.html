@@ -114,17 +114,17 @@ td code{font-size:11.5px}
 <h2>7. Ограничения</h2>
 <ul style="padding-left:18px">
 <li><b>graph.txt</b>: если системный промпт длиннее 2000 символов — entity_extractor заменяет его на короткий дефолт (<code>entity_extractor.py:_call_llm</code>). Не раздувай промпт графа.</li>
-<li><b>Эмбеддинг — лимит входного текста</b>: автоподбор по типу провайдера (<code>llm/embeddings.py</code>):
-  GigaChat → 500 символов, Ollama/OpenAI-совместимые → 8192. Текст длиннее лимита обрезается (иначе батч отклоняется целиком); обрезка логируется.
-  Лимит 500 подобран под модель «Embeddings» (512 токенов контекста; 500 кириллических символов ≈ ~350 токенов — запас).</li>
+<li><b>Эмбеддинг — лимит входного текста</b>: автоподбор по модели (<code>llm/embeddings.py</code>):
+  GigaChat EmbeddingsGigaR → 5800 символов (~4096 токенов), GigaChat Embeddings/Embeddings-2 → 500, Ollama/OpenAI-совместимые → 8192.
+  Текст длиннее лимита обрезается (иначе батч отклоняется целиком); обрезка логируется.</li>
 <li><b>Модели GigaChat для эмбеддинга</b>:
 <table>
 <tr><th>Модель</th><th>Контекст (макс. токенов)</th><th>Размерность</th><th>Где работает</th></tr>
-<tr><td>Embeddings / Embeddings-2</td><td>512</td><td>1024</td><td>Облако (API) — используется в системе</td></tr>
-<tr><td>EmbeddingsGigaR</td><td>4 096</td><td>2560</td><td>Облако (API)</td></tr>
+<tr><td>EmbeddingsGigaR</td><td>4 096</td><td>2560</td><td>Облако (API) — используется в системе</td></tr>
+<tr><td>Embeddings / Embeddings-2</td><td>512</td><td>1024</td><td>Облако (API)</td></tr>
 <tr><td>Giga-Embeddings-instruct</td><td>4 096</td><td>2048</td><td>Локально (Hugging Face)</td></tr>
 </table>
-Важно: размерность должна совпадать с <code>EMBEDDING_DIMENSIONS</code> (сейчас 1024). При смене модели на 2560/2048 — пересоздать коллекцию Qdrant и переиндексировать документы.</li>
+Важно: размерность должна совпадать с <code>EMBEDDING_DIMENSIONS</code> (сейчас 2560). При смене модели на 1024/2048 — пересоздать коллекцию Qdrant и переиндексировать документы.</li>
 <li><b>{type_labels}</b>: плейсхолдер в <code>doc_analysis.txt</code> заменяется актуальным списком типов из админки автоматически.</li>
 </ul>
 

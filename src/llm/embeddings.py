@@ -57,8 +57,10 @@ class EmbeddingClient:
             retry_delay: Задержка между попытками
             provider_type: "ollama" или OpenAI-совместимый (openai/deepseek/openrouter/gigachat/custom)
             api_key: API-ключ для OpenAI-совместимых провайдеров
-            max_input_chars: Лимит входного текста в символах. None = автоподбор:
-                gigachat → 500 (лимит ~514 токенов), остальные → 8192 (Ollama/OpenAI).
+            max_input_chars: Лимит входного текста в символах. None = автоподбор по модели:
+                gigachat + EmbeddingsGigaR → 5800 (лимит 4096 токенов),
+                gigachat (Embeddings/Embeddings-2) → 500 (~514 токенов),
+                остальные → 8192 (Ollama/OpenAI-совместимые).
         """
         # Дефолты из единого источника (.env → config.py), не хардкод.
         if base_url is None or model is None:
@@ -68,9 +70,16 @@ class EmbeddingClient:
         if model is None:
             model = _s.EMBEDDING_MODEL
         if max_input_chars is None:
-            # 500 символов ≈ ~350 токенов — гарантированный запас для GigaChat (~514 ток.).
-            # Ollama/OpenAI-совместимые держат 8192 токена → 8192 символов с запасом.
-            max_input_chars = 500 if provider_type == "gigachat" else 8192
+            # Автоподбор по модели (а не только по типу провайдера):
+            #  - GigaR: 4096 токенов ≈ 5800 символов кириллицы (0.7 ток/симв) — запас.
+            #  - Embeddings/Embeddings-2: 500 символов ≈ ~350 токенов при лимите ~514.
+            #  - Ollama/OpenAI-совместимые: 8192 токена → 8192 символов с запасом.
+            if provider_type == "gigachat" and "gigar" in (model or "").lower():
+                max_input_chars = 5800
+            elif provider_type == "gigachat":
+                max_input_chars = 500
+            else:
+                max_input_chars = 8192
 
         self.base_url = base_url.rstrip('/')
         self.model = model
@@ -176,8 +185,10 @@ class EmbeddingClient:
     async def _embed_request(self, client: httpx.AsyncClient, texts: List[str]) -> List[List[float]]:
         """Один HTTP-запрос для списка текстов. Возвращает список векторов.
 
-        Лимит входного текста (max_input_chars) зависит от провайдера:
-        GigaChat ≈ 514 токенов (~500 символов), Ollama/OpenAI-совместимые — 8192.
+        Лимит входного текста (max_input_chars) автоподбирается по модели:
+        GigaChat EmbeddingsGigaR ≈ 4096 токенов (~5800 символов),
+        GigaChat Embeddings/Embeddings-2 ≈ 514 токенов (~500 символов),
+        Ollama/OpenAI-совместимые — 8192.
         Если текст длиннее лимита — обрезаем (иначе батч отклоняется целиком).
         """
         limit = self.max_input_chars or 8192
