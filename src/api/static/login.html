@@ -40,7 +40,7 @@ input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.
   </div>
   <button class="btn" onclick="login()">Войти</button>
   <div style="text-align:center;margin-top:12px">
-    <a href="#" id="local-link" onclick="useLocalLogin();return false" style="font-size:12px;color:var(--accent-l);display:none">🔑 Локальный вход (admin)</a>
+    <a href="#" id="local-link" onclick="useLocalLogin();return false" style="font-size:12px;color:var(--accent-l);display:none">🔑 Локальный вход (для пользователей KAG)</a>
   </div>
 </div>
 <script>
@@ -61,7 +61,7 @@ function updateModeBadge() {
   const badge = document.getElementById('auth-mode');
   const localLink = document.getElementById('local-link');
   if (useLocal) {
-    badge.textContent = 'Локальный вход (admin)';
+    badge.textContent = 'Локальный вход (пользователи KAG)';
     badge.style.color = 'var(--text3)';
     if (localLink) localLink.style.display = 'none';
   } else if (ssoConfig && ssoConfig.sso_enabled) {
@@ -137,15 +137,15 @@ async function login() {
             return;
           }
         } else {
-          // Неверные креды в Keycloak — предлагаем локальный вход (admin)
-          err.textContent = (tokenData.error_description || tokenData.error || 'SSO: неверный логин или пароль') + '. Попробуйте локальный вход для admin.';
+          // Неверные креды в Keycloak — предлагаем локальный вход (пользователи KAG)
+          err.textContent = (tokenData.error_description || tokenData.error || 'SSO: неверный логин или пароль') + '. Попробуйте локальный вход.';
           err.classList.add('show');
           document.getElementById('local-link').style.display = '';
           return;
         }
       } catch (netErr) {
-        // Keycloak недоступен — автоматически локальный вход (admin fallback)
-        err.textContent = 'SSO недоступен — пробую локальный вход (admin)...';
+        // Keycloak недоступен — автоматически локальный вход
+        err.textContent = 'SSO недоступен — пробую локальный вход...';
         err.classList.add('show');
         ok = await tryLocal();
       }
