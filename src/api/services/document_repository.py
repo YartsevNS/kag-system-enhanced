@@ -51,7 +51,9 @@ def _deserialize_value(key: str, val: Any) -> Any:
             try:
                 return json.loads(val)
             except Exception:
-                return None
+                # Старые записи: PG array-литерал {id1,id2} — оставляем строку,
+                # _parse_id_list в upload.py умеет её парсить.
+                return val
         return val
     if key in _DATETIME_FIELDS:
         if isinstance(val, datetime):
