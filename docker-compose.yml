@@ -284,7 +284,12 @@ services:
       - KC_DB_URL=jdbc:postgresql://kag-db:5432/keycloak
       - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}
       - KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
-      - KC_HOSTNAME=${KC_HOSTNAME:-localhost}
+      # Hostname не фиксируем: Keycloak берёт Host из запроса (IP:8080 из
+      # подсети) или X-Forwarded-Host от nginx (внешний адрес). Иначе при
+      # обращении по 192.168.50.18:8080 консоль получала issuer=localhost
+      # и зависала на «Loading the Admin UI».
+      - KC_HOSTNAME=${KC_HOSTNAME:-}
+      - KC_HOSTNAME_STRICT=${KC_HOSTNAME_STRICT:-false}
       # prod mode: KC_PROXY=edge — Keycloak за реверс-прокси (nginx),
       # HTTPS терминирует nginx; включается при настройке внешнего адреса
       - KC_PROXY=${KC_PROXY:-edge}
