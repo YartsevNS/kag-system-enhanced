@@ -10,6 +10,8 @@ from datetime import datetime
 from src.models import SystemStatus
 from src.config import get_settings
 from src.api.services.config_store import config_store
+from src.api.middleware.auth_v2 import get_current_admin
+from src.database.user_models import User
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pwdlib.hashers.bcrypt import BcryptHasher
@@ -648,3 +650,53 @@ async def toggle_user_active(user_id: str):
         return {"status": "ok", "is_active": user.is_active, "message": f"Пользователь {'активирован' if user.is_active else 'отключён'}"}
     finally:
         db.close()
+
+
+@router.delete("/users/{user_id}", summary="Удалить локального пользователя")
+async def delete_local_user(user_id: str, current_user: Optional[User] = Depends(get_current_admin)):
+    """Удалить локального пользователя (только admin).
+
+    Нельзя удалить самого себя и нельзя удалить пользователя admin
+    (последний админ системы). Keycloak-пользователь удаляется отдельно
+    в Keycloak (DELETE /keycloak/users/{id}) — локальная запись останется
+    до следующего входа, затем пересоздастся.
+    """
+    from src.database.session import get_db as _get_db
+    from src.database.user_models import User
+    db_gen = _get_db()
+    db = next(db_gen)
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        if user.username == "admin":
+            raise HTTPException(status_code=400, detail="Нельзя удалить системного администратора")
+        if current_user and str(current_user.id) == str(user.id):
+            raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+        db.delete(user)
+        db.commit()
+        return {"status": "ok", "username": user.username, "message": "Пользователь удалён"}
+    finally:
+        db.close()
+
+
+@router.delete("/keycloak/users/{user_id}", summary="Удалить пользователя Keycloak")
+async def delete_keycloak_user(user_id: str):
+    """Удалить пользователя в Keycloak realm kag (только admin)."""
+    import urllib.request
+    settings = get_settings()
+    token = _keycloak_admin_token()
+    url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_id}"
+    req = urllib.request.Request(url, method="DELETE",
+                                 headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            pass
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise HTTPException(status_code=404, detail="Пользователь Keycloak не найден")
+        raw = e.read().decode("utf-8", errors="replace")[:300]
+        raise HTTPException(status_code=e.code, detail=f"Keycloak delete failed: {raw}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Keycloak delete failed: {e}")
+    return {"status": "ok", "message": "Пользователь Keycloak удалён"}
