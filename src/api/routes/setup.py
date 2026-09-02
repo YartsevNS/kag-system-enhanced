@@ -33,6 +33,79 @@ def _gen_password(length: int = 12) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _sync_keycloak_admin_password(new_password: str) -> bool:
+    """Синхронизировать пароль admin Keycloak (realm master) с локальным admin.
+
+    Зачем: после развёртывания консоль Keycloak должна открываться с тем же
+    паролем, что у локального admin KAG (ADMIN_PASSWORD из .env). Keycloak
+    стартует со своим KEYCLOAK_ADMIN_PASSWORD и НЕ меняет его сам при
+    перезаписи .env — меняем через admin API (reset-password).
+
+    Текущий пароль берём из env KEYCLOAK_ADMIN_PASSWORD (тот, с которым
+    стартовал контейнер). Retry: Keycloak может ещё стартовать.
+    """
+    import time as _time
+    import urllib.request, urllib.parse, json as _json
+
+    kc_url = os.environ.get("KEYCLOAK_URL", "http://keycloak:8080")
+    kc_admin = os.environ.get("KEYCLOAK_ADMIN", "admin")
+    old_pass = os.environ.get("KEYCLOAK_ADMIN_PASSWORD", "")
+    if not old_pass or old_pass == new_password:
+        return True
+
+    token = ""
+    for attempt in range(6):
+        try:
+            data = urllib.parse.urlencode({
+                "grant_type": "password",
+                "client_id": "admin-cli",
+                "username": kc_admin,
+                "password": old_pass,
+            }).encode()
+            req = urllib.request.Request(
+                f"{kc_url}/realms/master/protocol/openid-connect/token",
+                data=data, method="POST")
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                body = _json.loads(resp.read().decode("utf-8"))
+            token = body.get("access_token", "")
+            if token:
+                break
+        except Exception as e:
+            logger.warning(f"SETUP: Keycloak token attempt {attempt + 1}/6 failed: {e}")
+            _time.sleep(10)
+    if not token:
+        logger.error("SETUP: Keycloak admin token не получен — пароль НЕ синхронизирован")
+        return False
+
+    try:
+        # Найти admin в realm master
+        req = urllib.request.Request(
+            f"{kc_url}/admin/realms/master/users?username={urllib.parse.quote(kc_admin)}",
+            headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            users = _json.loads(resp.read().decode("utf-8"))
+        if not users:
+            logger.error("SETUP: Keycloak admin user не найден — пароль НЕ синхронизирован")
+            return False
+        uid = users[0]["id"]
+
+        # Сменить пароль (НЕ временный)
+        body = _json.dumps(
+            {"type": "password", "value": new_password, "temporary": False}
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{kc_url}/admin/realms/master/users/{uid}/reset-password",
+            data=body, method="PUT",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            pass
+        logger.info("SETUP: Keycloak admin password синхронизирован с локальным admin")
+        return True
+    except Exception as e:
+        logger.error(f"SETUP: Keycloak password sync failed: {e}")
+        return False
+
+
 def _extract_qdrant_dim(info: dict):
     """Извлечь размерность вектора из ответа Qdrant.
 
@@ -318,6 +391,16 @@ async def initialize_all():
     except Exception as e:
         logger.error(f"SETUP: Admin failed: {e}")
         credentials["admin"] = {"login": "admin", "password": ad_password, "error": str(e)[:100]}
+
+    # ── 4b. Синхронизация пароля admin Keycloak с локальным admin ────────
+    # Консоль Keycloak (http://<host>:8080/admin/) должна открываться с тем
+    # же паролем admin, что показывает init-all. Без этого пароль Keycloak
+    # остаётся от deploy.sh (KEYCLOAK_ADMIN_PASSWORD), а .env уже переписан.
+    try:
+        if credentials.get("admin", {}).get("password"):
+            _sync_keycloak_admin_password(ad_password)
+    except Exception as e:
+        logger.error(f"SETUP: Keycloak sync (wrapper) failed: {e}")
 
     # ── 5. Обновляем .env на сервере ────────────────────────────────────────
     try:
