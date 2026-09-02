@@ -428,6 +428,47 @@ class WebMonitorService:
             logger.warning(f"Не удалось сохранить состояние монитора: {e}")
 
     # ============================================================
+    # Пауза загрузки документов (кнопка на /monitor)
+    # ============================================================
+    # Флаг живёт в config_store отдельным ключом ("web_monitor",
+    # "loading_pause"), чтобы его не затёр _save_state() (он пишет только
+    # "state"). Пауза останавливает СКАЧИВАНИЕ/ЗАГРУЗКУ новых документов из
+    # источников, но не трогает обработку уже загруженных (worker продолжает).
+    # Найденные, но не скачанные ссылки не помечаются seen_urls — после
+    # возобновления следующая проверка подхватит их заново.
+
+    def get_loading_pause(self) -> dict:
+        """Вернуть состояние паузы загрузки: {paused, message, updated_at}."""
+        try:
+            from src.api.services.config_store import config_store
+            cfg = config_store.get("web_monitor", "loading_pause") or {}
+            if not isinstance(cfg, dict):
+                cfg = {}
+            return {
+                "paused": bool(cfg.get("paused", False)),
+                "message": str(cfg.get("message", "")),
+                "updated_at": str(cfg.get("updated_at", "")),
+            }
+        except Exception as e:
+            logger.warning(f"Не удалось прочитать паузу загрузки: {e}")
+            return {"paused": False, "message": "", "updated_at": ""}
+
+    def set_loading_pause(self, paused: bool, message: str = "") -> dict:
+        """Установить/снять паузу загрузки документов. Вернуть новое состояние."""
+        try:
+            from src.api.services.config_store import config_store
+            config_store.set("web_monitor", "loading_pause", {
+                "paused": bool(paused),
+                "message": str(message).strip()[:200],
+                "updated_at": datetime.utcnow().isoformat(),
+            })
+            logger.warning(f"⏸ Загрузка документов: {'ПАУЗА' if paused else 'возобновлена'}")
+            return self.get_loading_pause()
+        except Exception as e:
+            logger.error(f"Ошибка сохранения паузы загрузки: {e}")
+            return {"status": "error", "message": str(e)}
+
+    # ============================================================
     # Управление источниками
     # ============================================================
 
@@ -588,6 +629,14 @@ class WebMonitorService:
                 source.items_found = total_found
                 source.items_uploaded += result.new_items
                 self.save_source(source)
+
+                # Пауза загрузки: новые ссылки НАЙДЕНЫ, но ничего не загружено,
+                # потому что стоит пауза → помечаем результат как paused, чтобы
+                # в истории было видно «⏸ Пауза», а не «✅ OK / 0 новых».
+                if result.status == "ok" and result.new_items == 0 and (result.items or []):
+                    if self.get_loading_pause().get("paused"):
+                        result.status = "paused"
+
                 results.append(result)
 
                 # Сохраняем в историю
@@ -1178,10 +1227,17 @@ class WebMonitorService:
                         result.status = "no_changes"
                         return result
 
-                    # Страница изменилась — сохраняем как документ
-                    source.last_hash = page_hash
+                    # Страница изменилась. Если загрузка приостановлена — документ
+                    # не создаём и НОВЫЙ hash НЕ запоминаем (иначе после
+                    # возобновления изменение потеряется). Результат — paused.
+                    if self.get_loading_pause().get("paused"):
+                        logger.info(f"⏸ Загрузка приостановлена: {source.name} — изменение страницы не загружено")
+                        result.status = "paused"
+                        result.items = [{'url': source.url, 'title': source.name, 'source': source.name}]
+                        return result
 
                     # Сохраняем HTML как текстовый документ
+                    source.last_hash = page_hash
                     from pathlib import Path as P
                     filename = f"{source.name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
                     # Загружаем через document_service
@@ -1310,6 +1366,18 @@ class WebMonitorService:
         skip_count = 0
         total = len(items)
 
+        # ── Админ-пауза: загрузка документов приостановлена ──
+        # Пауза с /monitor («⏸ Пауза загрузки») останавливает скачивание и
+        # загрузку новых документов, НЕ трогая обработку уже загруженных.
+        # Ссылки не помечаются seen_urls → после возобновления следующая
+        # проверка скачает их заново (продолжение с того же места).
+        try:
+            if self.get_loading_pause().get("paused"):
+                logger.info(f"⏸ Загрузка приостановлена: {total} файлов из {source.name} не скачиваются")
+                return 0, 0
+        except Exception:
+            pass
+
         # ── Тестовый режим (sample): скачать максимум N файлов за проверку ──
         # Позволяет проверить источник («ссылки находятся, файлы качаются,
         # обрабатываются») без полной загрузки всех документов (дорого/долго).
@@ -1339,7 +1407,17 @@ class WebMonitorService:
             start = batch_num * batch_size
             end = min(start + batch_size, total)
             batch_items = items[start:end]
-            
+
+            # Проверяем паузу МЕЖДУ партиями: если нажали «⏸» во время загрузки —
+            # останавливаемся в течение одной партии (уже скачанное остаётся
+            # загруженным, остальное дозагрузится после возобновления).
+            try:
+                if self.get_loading_pause().get("paused"):
+                    logger.info(f"⏸ Загрузка приостановлена: {source.name} — загружено {new_count}/{total}, остальное после возобновления")
+                    break
+            except Exception:
+                pass
+
             logger.info(f"📦 Партия {batch_num + 1}/{batches}: файлы {start + 1}–{end} из {total}")
 
             for idx, item in enumerate(batch_items):
@@ -1895,6 +1973,12 @@ class WebMonitorService:
         source = next((s for s in sources if s.id == source_id), None)
         if not source:
             return {"status": "error", "message": "Источник не найден"}
+
+        # Пауза загрузки: перезагрузка СНАЧАЛА удаляет существующие файлы, а
+        # новые при паузе не скачаются → источник опустеет. Блокируем.
+        if self.get_loading_pause().get("paused"):
+            return {"status": "error",
+                    "message": "Загрузка приостановлена — сначала нажмите «▶ Возобновить загрузку» на странице Веб-мониторинга"}
 
         downloads = cs.get("web_monitor", "downloads") or []
         source_downloads = [d for d in downloads if d.get("source_id") == source_id]

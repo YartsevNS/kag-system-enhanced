@@ -94,6 +94,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       </select>
       <span id="sched-status" style="font-size:12px;color:var(--text4);white-space:nowrap"></span>
       <span id="sched-countdown" style="font-family:'Cascadia Code', 'Fira Code', 'Consolas', monospace;font-size:12px;color:var(--amber);white-space:nowrap"></span>
+      <span style="width:1px;height:22px;background:var(--border-s);flex:0 0 auto"></span>
+      <button id="loading-pause-btn" onclick="toggleLoadingPause()" title="Остановить скачивание НОВЫХ документов из источников. Уже загруженные продолжают обрабатываться."
+        style="padding:7px 14px;border-radius:var(--radius-pill);cursor:pointer;font-size:13px;font-weight:500;border:none;color:#fff;background:var(--amber);white-space:nowrap">⏸ Пауза загрузки</button>
+      <span id="loading-pause-status" style="font-size:12px;color:var(--text4);white-space:nowrap"></span>
     </div>
   </div>
 
@@ -168,7 +172,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="panel">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:12px">
       <h2 style="margin:0;white-space:nowrap">📋 Источники мониторинга</h2>
-      <button class="btn" onclick="runCheck()" style="white-space:nowrap">🔍 Проверить все</button>
+      <button class="btn" id="run-all-btn" onclick="runCheck()" style="white-space:nowrap">🔍 Проверить все</button>
       <button class="btn-outline" onclick="loadSources()" style="white-space:nowrap">🔄 Обновить</button>
     </div>
     <div id="sources-table"></div>
@@ -477,6 +481,7 @@ async function resetSampleLimits() {
 }
 
 async function runCheck(sourceId) {
+  if (_loadingPaused) { toast('⏸ Загрузка приостановлена — сначала нажмите «▶ Возобновить загрузку»', true); return; }
   var btn = event.target;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
@@ -520,7 +525,7 @@ async function loadHistory() {
         html += '<tr>' +
           '<td style="font-size:11px;color:var(--text4)">' + new Date(h.time||h.checked_at||'').toLocaleString('ru-RU') + '</td>' +
           '<td>' + (h.source_name||h.source_id||'?') + '</td>' +
-          '<td>' + (h.status==='ok'?'<span class="badge" style="background:rgba(39,166,68,0.15);color:var(--green)">✅ OK</span>':h.status==='no_changes'?'<span class="badge" style="background:rgba(108,114,120,0.15);color:var(--text4)">— Нет изменений</span>':'<span class="badge" style="background:rgba(220,38,38,0.15);color:var(--red)">❌ '+ (h.status||'?')+'</span>') + '</td>' +
+          '<td>' + (h.status==='ok'?'<span class="badge" style="background:rgba(39,166,68,0.15);color:var(--green)">✅ OK</span>':h.status==='no_changes'?'<span class="badge" style="background:rgba(108,114,120,0.15);color:var(--text4)">— Нет изменений</span>':h.status==='paused'?'<span class="badge" style="background:rgba(245,158,11,0.15);color:var(--amber)">⏸ Пауза</span>':'<span class="badge" style="background:rgba(220,38,38,0.15);color:var(--red)">❌ '+ (h.status||'?')+'</span>') + '</td>' +
           '<td style="font-size:12px"><span style="color:var(--emerald)">📥 '+(h.new_items||0)+' новых</span>' + (h.total_found ? ' · <span style="color:var(--text4)">🔗 '+(h.total_found)+' ссылок</span>' : '') + (h.skipped ? ' · <span style="color:var(--amber)">⏭ '+(h.skipped)+'</span>' : '') + (h.deleted ? ' · <span style="color:var(--red)">🗑 '+(h.deleted)+' удалено</span>' : '') + (h.error ? ' · <span style="color:var(--red)">❌ '+h.error.substring(0,60)+'</span>' : '') + '</td>' +
           '<td><button class="btn-sm" onclick="reloadSource(\''+h.source_id+'\')">♻️</button></td>' +
           '</tr>';
@@ -586,8 +591,8 @@ function updateSchedule() {
   // Обновляем обратный отсчёт каждую секунду
   schedTimer = setInterval(function() {
     updateCountdown();
-    // Если время пришло — запускаем проверку
-    if (schedNextRun && Date.now() >= schedNextRun.getTime() && !schedRunning) {
+    // Если время пришло — запускаем проверку (но не во время паузы загрузки)
+    if (schedNextRun && Date.now() >= schedNextRun.getTime() && !schedRunning && !_loadingPaused) {
       runAutoCheck();
       schedNextRun = new Date(Date.now() + schedIntervalMs);
     }
@@ -600,6 +605,10 @@ function updateSchedule() {
 
 function updateCountdown() {
   if (!schedNextRun) return;
+  if (_loadingPaused) {
+    document.getElementById('sched-countdown').textContent = '⏸ автозапуск на паузе';
+    return;
+  }
   var remaining = Math.max(0, schedNextRun.getTime() - Date.now());
   var h = Math.floor(remaining / 3600000);
   var m = Math.floor((remaining % 3600000) / 60000);
@@ -609,6 +618,7 @@ function updateCountdown() {
 }
 
 async function runAutoCheck() {
+  if (_loadingPaused) return;  // страховка: автопроверку не запускаем во время паузы
   schedRunning = true;
   document.getElementById('sched-status').innerHTML = '<span style=\"color:var(--amber)\">🔄 Проверка...</span>';
   try {
@@ -632,9 +642,67 @@ function restoreSchedule() {
 }
 
 // ============================================================
+// Пауза загрузки документов (⏸ на панели расписания)
+// ============================================================
+var _loadingPaused = false;  // Приостановлена ли загрузка НОВЫХ документов (обработка идёт)
+
+async function loadLoadingPause() {
+  try {
+    var r = await fetch(API + '/pause', { credentials: 'include' });
+    var d = await r.json();
+    _loadingPaused = !!(d && d.paused);
+    renderLoadingPause();
+  } catch(e) {}
+}
+
+function renderLoadingPause() {
+  var btn = document.getElementById('loading-pause-btn');
+  var st = document.getElementById('loading-pause-status');
+  if (!btn || !st) return;
+  if (_loadingPaused) {
+    btn.innerHTML = '▶ Возобновить загрузку';
+    btn.style.background = 'var(--accent)';
+    st.innerHTML = '<span style="color:var(--amber)">⏸ Приостановлено — новые документы не скачиваются (обработка идёт)</span>';
+    var b1 = document.getElementById('run-all-btn');
+    if (b1) b1.disabled = true;
+  } else {
+    btn.innerHTML = '⏸ Пауза загрузки';
+    btn.style.background = 'var(--amber)';
+    st.innerHTML = '<span style="color:var(--text4)">Загрузка активна</span>';
+    var b2 = document.getElementById('run-all-btn');
+    if (b2) b2.disabled = false;
+  }
+  updateCountdown();
+}
+
+async function toggleLoadingPause() {
+  var target = !_loadingPaused;
+  var btn = document.getElementById('loading-pause-btn');
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(API + '/pause', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ paused: target })
+    });
+    var d = await r.json();
+    if (d && typeof d.paused === 'boolean') {
+      _loadingPaused = d.paused;
+      renderLoadingPause();
+      toast(_loadingPaused ? '⏸ Загрузка документов приостановлена' : '▶ Загрузка документов возобновлена');
+    } else {
+      toast('❌ ' + ((d && d.message) || 'Ошибка'), true);
+    }
+  } catch(e) {
+    toast('❌ ' + e.message, true);
+  }
+  if (btn) btn.disabled = false;
+}
+
+// ============================================================
 // Быстрая проверка конкретного URL (ad-hoc)
 // ============================================================
 async function quickCheck() {
+  if (_loadingPaused) { toast('⏸ Загрузка приостановлена — сначала нажмите «▶ Возобновить загрузку»', true); return; }
   var url = document.getElementById('quick-url').value.trim();
   if (!url) { toast('Введите URL', true); return; }
   
@@ -701,6 +769,7 @@ async function quickCheck() {
 // Инициализация
 restoreSchedule();
 loadAll();
+loadLoadingPause();
 
 async function toggleSource(id, enabled) {
   try {

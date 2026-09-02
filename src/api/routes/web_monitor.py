@@ -228,6 +228,33 @@ async def run_check(
 
 
 # ============================================================
+# Пауза загрузки документов
+# ============================================================
+
+@router.get("/pause", summary="Состояние паузы загрузки документов")
+async def get_loading_pause():
+    """Вернуть {paused, message, updated_at} — приостановлено ли скачивание
+    новых документов из источников (обработка уже загруженных НЕ останавливается)."""
+    try:
+        from src.api.services.web_monitor import web_monitor
+        return web_monitor.get_loading_pause()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/pause", summary="Пауза/возобновление загрузки документов")
+async def set_loading_pause(data: dict = Body(default={})):
+    """Body: {paused: bool, message?: str}."""
+    try:
+        from src.api.services.web_monitor import web_monitor
+        paused = bool(data.get("paused", False))
+        message = str(data.get("message", ""))
+        return web_monitor.set_loading_pause(paused, message)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ============================================================
 # История и встроенные источники
 # ============================================================
 
