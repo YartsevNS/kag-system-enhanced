@@ -7,9 +7,12 @@ services:
   # ===========================================
   
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Готовый образ с Docker Hub (код ЗАШИТ в образ: COPY src в Dockerfile).
+    # Сборка: docker build -t kre44et/kag-api:<tag> -f Dockerfile .
+    #          docker push kre44et/kag-api:<tag>
+    # DEV-режим (живой код без пересборки): docker-compose.dev.yml
+    # (docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d).
+    image: kre44et/kag-api:2026.09.07
     container_name: kag-api
     ports:
       # НЕ публикуем api наружу — единственная точка входа nginx (80/443).
@@ -71,7 +74,7 @@ services:
       # Базы данных
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     volumes:
-      - ./src:/app/src
+      # ./src НЕ монтируем — код зашит в образ (prod). Для dev см. override.
       - ./data:/app/data
       - ./prompts:/app/prompts
       - ./user_data:/app/user_data
@@ -111,9 +114,8 @@ services:
       start_period: 120s
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.worker).
+    image: kre44et/kag-worker:2026.09.07
     # МАСШТАБИРОВАНИЕ (500+ пользователей): для запуска нескольких worker'ов
     # выполнить: docker compose up -d --scale worker=N
     # (N — количество, см. админку → «Масштабирование»). QueueGuard
@@ -135,8 +137,8 @@ services:
       - HF_HOME=/app/data/hf_cache
       - PLAYWRIGHT_BROWSERS_PATH=/app/data/ms-playwright
     volumes:
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
-      - ./src:/app/src
+      # ./src НЕ монтируем — код зашит в образ. docker-compose.yml:ro убран —
+      # worker его не читает (admin_models работает через docker.sock в api).
       - ./data:/app/data
       - ./prompts:/app/prompts
     depends_on:
@@ -176,9 +178,8 @@ services:
   # ===========================================
   
   mcp-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
+    # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.mcp).
+    image: kre44et/kag-mcp:2026.09.07
     container_name: kag-mcp
     ports:
       - "8001:8001"

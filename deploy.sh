@@ -141,16 +141,14 @@ docker network create kag_internal 2>/dev/null || true
 mkdir -p data/uploads data/thumbnails data/ocr_results
 chmod -R 777 data 2>/dev/null || true
 
-if [ ! -f .env.before_deploy ]; then
-    # Первый деплой — собираем образы
-    echo "First deploy: building images..."
-    docker-compose build --pull 2>&1
-    touch .env.before_deploy
-else
-    # Повторный деплой — только запуск, без пересборки
-    echo "Re-deploy: using existing images, no build"
-fi
-docker-compose up -d --no-build 2>&1
+# Все образы (api/worker/mcp + инфраструктура) — ГОТОВЫЕ с Docker Hub
+# (kre44et/kag-*, kre44et/dozerdb и др.), сборка на сервере не нужна.
+# Для обновления: пересобрать и запушить образы локально/CI, затем здесь
+# docker-compose pull. ВНИМАНИЕ: v1-синтаксис (docker-compose с дефисом) —
+# на сервере может не быть compose v2.
+echo "Pulling images..."
+docker-compose pull 2>&1
+docker-compose up -d 2>&1
 
 echo ""
 echo "=== Waiting for API (через nginx) ==="

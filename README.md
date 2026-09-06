@@ -84,19 +84,26 @@ cd kag-system-enhanced
 # 1. Создать .env (пароли генерируются при развёртывании)
 cp .env.example .env   # заполнить
 
-# 2. Запуск всех сервисов
+# 2. Запуск всех сервисов (образы ГОТОВЫЕ с Docker Hub, сборка не нужна)
+docker-compose pull
 docker-compose up -d
 
 # 3. Первоначальная настройка
 #    http://<host>:8000/setup — Setup Wizard (БД, LLM, embedding, SSH)
 ```
 
+### DEV-режим (живой код, без пересборки образа)
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+(сборка из локальных Dockerfile + монтирование ./src; правки видны после `docker compose restart api`)
+
 ### Важно (из опыта)
 - На сервере используется **docker-compose v1** (`docker-compose`, не `docker compose`)
+- api/worker/mcp-server — образы `kre44et/kag-*` (код ЗАШИТ, ./src не монтируется в проде). Обновление кода = пересборка + push образа, затем на сервере `docker-compose pull`
 - После пересоздания контейнеров (`up -d`) перезапускать nginx (кэш IP upstream → 502)
 - Масштабирование worker: `docker-compose up -d --scale worker=2`
-- Neo4j — образ `graphstack/dozerdb` (DozerDB); данные в volume `neo4j_data`
-- Свежий код: scp по одному файлу + `docker restart kag-api` (и worker'ов)
+- Neo4j — свой образ `kre44et/dozerdb` (DozerDB + вшитый APOC); данные в volume `neo4j_data`
 
 ---
 

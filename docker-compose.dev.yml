@@ -1,0 +1,35 @@
+# DEV-композ — запускать ЯВНО, он НЕ подхватывается автоматически
+# (имя не docker-compose.override.yml!).
+#
+#   Локальная разработка (build + живой ./src):
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+#   Прод (готовые образы с Docker Hub, код зашит):
+#     docker compose up -d          # только docker-compose.yml
+#
+# Базовый docker-compose.yml использует ГОТОВЫЕ образы kre44et/kag-* (код
+# зашит). Этот файл возвращает dev-режим: сборка из локальных Dockerfile'ов
+# + монтирование живого ./src — правки кода видны без пересборки образа
+# (docker compose restart api).
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app/src
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    volumes:
+      - ./src:/app/src
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    volumes:
+      - ./src:/app/src

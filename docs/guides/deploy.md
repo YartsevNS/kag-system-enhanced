@@ -3,6 +3,24 @@
 > Сервер: 192.168.50.18 (внутренний), SSH `yartsevn@` по ключу.
 > Внешний: qd.gostsecret.ru (nginx :80/:443).
 
+## Деплой из готовых образов (новая схема, 2026-09)
+
+api/worker/mcp-server больше НЕ собираются на сервере — код зашит в образы
+на Docker Hub (kre44et/kag-*:2026.09.07, сборка локально/CI). Развёртывание:
+
+```bash
+# 1. На сервере: подтянуть новый compose + .env
+git pull origin PREPROD
+docker-compose pull      # тянет kre44et/kag-api, kag-worker, kag-mcp и инфраструктуру
+docker-compose up -d
+```
+
+- Данные (./data, ./user_data, volumes PG/Qdrant/Neo4j) не трогаются.
+- Обновление кода = пересобрать образ (docker build -t kre44et/kag-api:<tag>)
+  и запушить, затем на сервере pull.
+- DEV-режим с живым ./src: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
+  (сборка из локальных Dockerfile + монтирование кода).
+
 ## Бэкап документов (2026-08-24)
 
 - Админка → кнопка «💾 Скачать документы (backup)» рядом с «Переиндексировать».

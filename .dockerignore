@@ -7,3 +7,4 @@ docker/nginx/ssl/
 *.pyc
 __pycache__/
 .pytest_cache/
+docker-compose.dev.yml

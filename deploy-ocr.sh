@@ -33,8 +33,8 @@ else
     echo ".env exists, using existing"
 fi
 
-echo "=== Building ==="
-docker-compose build 2>&1
+echo "=== Pulling images (готовые образы с Docker Hub) ==="
+docker-compose pull 2>&1
 
 echo "=== Starting ==="
 docker network create kag_internal 2>/dev/null || true

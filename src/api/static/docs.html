@@ -131,7 +131,7 @@ strong{color:var(--text);font-weight:600}
 <p>    73|| <code>prod</code> | всё из dev + nginx |</p>
 <p>    74|| <code>monitoring</code> | prometheus, grafana, loki, otel-collector |</p>
 <p>    75|</p>
-<p>    76|Запуск: <code>docker-compose --profile dev up -d</code></p>
+<p>    76|Запуск: <code>docker-compose pull && docker-compose up -d</code> (прод, готовые образы)</p>
 <p>    77|</p>
 <p>    78|### 3.2. Контейнеры</p>
 <p>    79|</p>
@@ -638,7 +638,8 @@ strong{color:var(--text);font-weight:600}
 <p>   558|```bash</p>
 <p>   559|cd /home/yartsevn/kag-system</p>
 <p>   560|git pull</p>
-<p>   561|docker-compose --profile dev up -d --no-deps --build api</p>
+<p>   561|docker-compose pull
+docker-compose up -d</p>
 <p>   562|```</p>
 <p>   563|</p>
 <p>   564|### 12.2. Проверка</p>
