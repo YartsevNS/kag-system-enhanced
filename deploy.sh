@@ -143,6 +143,8 @@ chmod -R 777 data 2>/dev/null || true
 
 # Все образы (api/worker/mcp + инфраструктура) — ГОТОВЫЕ с Docker Hub
 # (kre44et/kag-*, kre44et/dozerdb и др.), сборка на сервере не нужна.
+# ВНИМАНИЕ: репозитории kre44et ПРИВАТНЫЕ — перед pull нужен docker login:
+#   docker login -u kre44et   (введёшь access token/пароль один раз)
 # Для обновления: пересобрать и запушить образы локально/CI, затем здесь
 # docker-compose pull. ВНИМАНИЕ: v1-синтаксис (docker-compose с дефисом) —
 # на сервере может не быть compose v2.
