@@ -55,10 +55,11 @@
 - При смене размерности модели коллекция **пересоздаётся автоматически** (`_ensure_collection`)
 - Индексы: document_id, chunk_id, file_type, filename, group_ids (KEYWORD)
 
-### Neo4j (kag-neo4j, Community)
+### Neo4j (kag-neo4j, DozerDB 5.26.27 + APOC)
+- Образ: `kre44et/dozerdb:5.26.27.0` (сборка из `docker/neo4j/Dockerfile`) — DozerDB = Neo4j CE + GPL-патчи (multi-db, NODE KEY constraints) + вшитый APOC core. APOC не качается при старте (GitHub из РФ недоступен).
 - Узлы: Document {id, filename}, Chunk {id, chunk_seq, text_preview}, Entity {name, type, source_docs}
 - Связи: `(:Document)-[:HAS_CHUNK]->(:Chunk)`, `(:Chunk)-[:MENTIONS]->(:Entity)`, `(:Entity)-[:RELATED_TO]->(:Entity)`
-- Community: NODE KEY / composite constraints НЕ доступны → MERGE + отдельные индексы
+- NODE KEY / composite constraints формально доступны (DozerDB), но код их НЕ создаёт — MERGE + отдельные индексы (осознанное решение)
 - Векторов в графе НЕТ — только текст-превью (первые ~500 символов)
 
 ### Redis (kag-redis)

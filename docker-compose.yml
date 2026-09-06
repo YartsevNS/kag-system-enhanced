@@ -456,23 +456,22 @@ services:
   # ===========================================
   
   neo4j:
-    # DozerDB — бесплатный GPL-плагин/дистрибутив для Neo4j Community:
-    # multi-database, schema constraints (NODE KEY), telemetry off, hardened,
-    # OpenGDS (Graph Data Science без Enterprise-лицензии — community detection).
-    # Версия 5.26.27.0 → Neo4j CE 5.26.27 LTS (минор совпадает с 5.26-community).
+    # Собственный образ на базе DozerDB (GPL-дистрибутив Neo4j CE 5.26.27:
+    # multi-database, NODE KEY constraints, OpenGDS) + вшитый APOC core.
+    # Собирается из docker/neo4j/Dockerfile (kre44et/dozerdb:5.26.27.0).
+    # APOC уже внутри /plugins — при старте НИЧЕГО не качается с GitHub
+    # (раньше NEO4J_PLUGINS тянул apoc с release-assets.githubusercontent.com,
+    # недоступного из РФ, и контейнер зависал unhealthy).
     # Данные хранятся в volume neo4j_data — смена образа их не трогает.
-    image: graphstack/dozerdb:5.26.27.0
+    image: kre44et/dozerdb:5.26.27.0
     container_name: kag-neo4j
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
     environment:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
-      # Плагины apoc/open-gds НЕ подключаем (убраны 2026-08): они качаются
-      # с GitHub при старте (release-assets.githubusercontent.com недоступен
-      # из РФ) → Neo4j зависает unhealthy. В коде gds.* не используется,
-      # apoc.* — только в post_process_entities (опциональный эндпоинт,
-      # дублирует deduplicate_entities_by_name).
+      # apoc.* разрешён в самом образе (ENV в Dockerfile). gds.* в коде
+      # не используется, open-gds не ставим.
       # Память Neo4j — при росте графа (500+ пользователей) увеличить:
       # heap → 2G-4G, pagecache → 1G-2G (зависит от RAM сервера).
       # Менять можно и через админку (раздел «Масштабирование» — заготовка).
