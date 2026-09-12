@@ -8,6 +8,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
+import traceback
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -631,25 +632,46 @@ class EmbeddingsService:
                     query_filter = QFilter(must=must, must_not=acl_must_not if acl_must_not else None)
 
             if self._sparse_enabled():
-                # Hybrid Search: dense + sparse (BM25) через RRF-фьюжн
+                # Hybrid Search: dense + sparse (BM25) через RRF-фьюжн.
+                # ВАЖНО: prefetch и FusionQuery передаются АРГУМЕНТАМИ query_points.
+                # Обёрнутые в QueryRequest и отданные как query=... они дают
+                # ValueError «Unsupported query type: QueryRequest», исключение
+                # проглатывалось ниже и поиск МОЛЧА возвращал пусто (проверено
+                # 2026-09-12: включили sparse — 0 результатов на все вопросы).
+                # Плюс страховка: падение hybrid не роняет весь поиск, а уходит
+                # на dense-ветку.
                 from qdrant_client.models import (
-                    QueryRequest, Prefetch, FusionQuery, Fusion,
+                    Prefetch, FusionQuery, Fusion,
                     SparseVector as QSparseVector,
                 )
-                query_sparse = self._sparse_vec(query)
-                resp = self._qdrant_client.query_points(
-                    collection_name=self.collection_name,
-                    query=QueryRequest(
+                try:
+                    query_sparse = self._sparse_vec(query)
+                    resp = self._qdrant_client.query_points(
+                        collection_name=self.collection_name,
                         prefetch=[
-                            Prefetch(query=query_embedding, using="dense", filter=query_filter, limit=limit * 3),
-                            Prefetch(query=QSparseVector(**query_sparse), using="sparse", filter=query_filter, limit=limit * 3),
+                            Prefetch(query=query_embedding, using="dense",
+                                     filter=query_filter, limit=limit * 3),
+                            Prefetch(query=QSparseVector(**query_sparse), using="sparse",
+                                     filter=query_filter, limit=limit * 3),
                         ],
                         query=FusionQuery(fusion=Fusion.RRF),
                         limit=limit,
                         with_payload=True,
-                    ),
-                )
-                hits = resp.points
+                    )
+                    hits = resp.points
+                except Exception as e:
+                    logger.error(
+                        f"Hybrid-поиск (dense+sparse) не выполнен "
+                        f"({type(e).__name__}): {e} — возвращаюсь к dense-поиску"
+                    )
+                    logger.debug(traceback.format_exc())
+                    hits = self._qdrant_client.search(
+                        collection_name=self.collection_name,
+                        query_vector=("dense", query_embedding),
+                        limit=limit,
+                        query_filter=query_filter,
+                        with_payload=True,
+                    )
             else:
                 hits = self._qdrant_client.search(
                     collection_name=self.collection_name,
@@ -677,7 +699,8 @@ class EmbeddingsService:
                     "deny_user_ids": payload.get("deny_user_ids", []),
                 })
         except Exception as e:
-            logger.warning(f"Поиск не выполнен: {e}")
+            logger.error(f"Поиск не выполнен ({type(e).__name__}): {e}")
+            logger.debug(traceback.format_exc())
 
         # Reranking: если результатов много и запрос осмысленный (>3 слов)
         if len(formatted_results) > 3 and len(query.split()) >= 3:
