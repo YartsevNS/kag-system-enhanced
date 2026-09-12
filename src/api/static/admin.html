@@ -604,23 +604,30 @@
             </div>
         </div>
 
-        <!-- Настройки поиска (Hybrid Search) -->
+        <!-- Настройки поиска -->
         <div class="section">
-            <h2 class="section-title">🔍 Настройки поиска (Hybrid Search)</h2>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                <input type="checkbox" id="search-sparse" onchange="saveSearchConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
-                <label for="search-sparse" style="font-size:14px;font-weight:600;cursor:pointer">Гибридный поиск (dense + BM25)</label>
+            <h2 class="section-title">🔍 Настройки поиска</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+                <label for="search-mode" style="font-size:14px;font-weight:600">Режим поиска:</label>
+                <select id="search-mode" onchange="saveSearchConfig()" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:13px">
+                    <option value="dense">Плотный (эмбеддинги)</option>
+                    <option value="hybrid_auto">Гибрид: авто (точные термины)</option>
+                    <option value="hybrid_always">Гибрид: всегда (dense + BM25)</option>
+                </select>
                 <span id="search-config-status" style="font-size:12px;color:var(--text4)"></span>
             </div>
             <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px">
-                <strong>Зачем.</strong> Семантический (dense) поиск находит «по смыслу», но плохо ловит точные термины, номера ГОСТов, аббревиатуры
+                <strong>Зачем.</strong> Плотный (dense) поиск находит «по смыслу», но хуже ловит точные термины, номера ГОСТов, аббревиатуры
                 («ГОСТ Р 57580», «ИСПДн», «п. 5.3»). Классический (sparse/BM25) — наоборот, ловит точные слова, но не синонимы.
-                Гибрид объединяет оба и повышает точность поиска по нормативным документам.<br><br>
-                <strong>Как работает.</strong> У каждого чанка хранится два вектора: dense (эмбеддинг, 1024) и sparse (частоты слов BM25).
-                При запросе Qdrant ищет по обоим и объединяет результаты через RRF (Reciprocal Rank Fusion).<br><br>
-                <strong>На что влияет.</strong> Включает sparse-векторы при ИНДЕКСАЦИИ новых документов и гибридный запрос при ПОИСКЕ.
-                Важно: уже проиндексированные чанки не имеют sparse-векторов — они продолжат находиться по dense, а новые получат оба.
-                Для полного эффекта нужна переиндексация. Отключение вернёт прежний (только dense) поиск.
+                <br><br>
+                <strong>Как работает.</strong> У каждого чанка хранится два вектора: dense (эмбеддинг GigaChat, 2560) и sparse (частоты слов BM25).
+                При запросе Qdrant ищет по обоим и объединяет результаты через RRF. Sparse-векторы считаются локально, без обращения к модели
+                эмбеддингов, и у всех проиндексированных документов уже есть.
+                <br><br>
+                <strong>Что выбрать (по замерам 2026-09-12 на 7 контрольных вопросах).</strong>
+                Плотный — MRR 0.821. Гибрид «всегда» — MRR 0.774: на обычных формулировках лексическая ветка тянет рейтинг вниз.
+                Гибрид «авто» — плотный поиск для обычных запросов плюс BM25 там, где он силён (запросы с номерами стандартов,
+                приказов, пунктов, кавычками). Рекомендуется «авто».
             </div>
         </div>
 
@@ -1109,29 +1116,36 @@
         });
         restoreCollapsedState();
 
-        // ── Hybrid Search: настройки поиска ──────────────────────────────
+        // ── Поиск: режим (dense / hybrid_auto / hybrid_always) ───────────
+        const SEARCH_MODE_HINTS = {
+            dense: 'плотный поиск (эмбеддинги)',
+            hybrid_auto: 'гибрид для запросов с номерами ГОСТ/приказов/пунктов, остальные — плотным',
+            hybrid_always: 'гибрид на каждый запрос (замер: MRR ниже плотного)'
+        };
         async function loadSearchConfig() {
             try {
                 const r = await apiFetch(`${API_URL}/search-config`);
                 const d = await r.json();
-                const cb = document.getElementById('search-sparse');
-                if (cb && d && typeof d.sparse_enabled === 'boolean') cb.checked = d.sparse_enabled;
+                const sel = document.getElementById('search-mode');
+                if (sel && d && d.mode) sel.value = d.mode;
+                const st = document.getElementById('search-config-status');
+                if (st && d && d.mode) st.textContent = SEARCH_MODE_HINTS[d.mode] || d.mode;
             } catch (e) { console.error('search-config load:', e); }
         }
         async function saveSearchConfig() {
-            const cb = document.getElementById('search-sparse');
+            const sel = document.getElementById('search-mode');
             const status = document.getElementById('search-config-status');
-            if (!cb) return;
+            if (!sel) return;
             status.textContent = '⏳...';
             try {
                 const r = await apiFetch(`${API_URL}/search-config`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({sparse_enabled: cb.checked})
+                    body: JSON.stringify({mode: sel.value})
                 });
                 const d = await r.json();
                 if (d.status === 'ok') {
-                    status.textContent = cb.checked ? '✅ гибридный поиск включён (новые чанки получат sparse; для полного эффекта — переиндексация)' : '✅ выключен (только dense)';
+                    status.textContent = '✅ ' + (SEARCH_MODE_HINTS[d.mode] || d.mode);
                 } else {
                     status.textContent = '❌ ' + (d.message || 'ошибка');
                 }

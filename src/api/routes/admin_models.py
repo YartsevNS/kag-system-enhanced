@@ -1728,28 +1728,55 @@ async def save_processing_config(data: dict):
 # Настройки поиска (Hybrid Search)
 # ═══════════════════════════════════════
 
-@router.get("/search-config", summary="Настройки поиска (Hybrid Search)")
+@router.get("/search-config", summary="Настройки поиска (режим: dense / hybrid_auto / hybrid_always)")
 async def get_search_config():
-    """Вернуть настройки поиска: sparse_enabled (BM25)."""
+    """Вернуть режим поиска и сырые настройки.
+
+    mode: dense | hybrid_auto | hybrid_always (см. EmbeddingsService.SEARCH_MODES)
+    """
     try:
         from src.api.services.config_store import config_store
+        from src.indexing.embeddings_service import EmbeddingsService
+
         cfg = config_store.get("search", "config") or {}
-        return {"sparse_enabled": bool(cfg.get("sparse_enabled"))}
+        return {
+            "sparse_enabled": bool(cfg.get("sparse_enabled")),
+            "sparse_mode": str(cfg.get("sparse_mode") or "lexical_only"),
+            "mode": EmbeddingsService.search_mode(),
+            "modes": list(EmbeddingsService.SEARCH_MODES),
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
 @router.post("/search-config", summary="Сохранить настройки поиска")
 async def save_search_config(data: dict):
-    """Включить/выключить Hybrid Search (sparse BM25)."""
+    """Сменить режим поиска одним значением mode (или старым способом).
+
+    Новый способ: {"mode": "dense" | "hybrid_auto" | "hybrid_always"}.
+    Старый (совместимость): {"sparse_enabled": bool[, "sparse_mode": "lexical_only"|"always"]}.
+    """
     try:
         from src.api.services.config_store import config_store
+        from src.indexing.embeddings_service import EmbeddingsService
+
         cfg = config_store.get("search", "config") or {}
         if not isinstance(cfg, dict):
             cfg = {}
-        cfg["sparse_enabled"] = bool(data.get("sparse_enabled", False))
+
+        mode = str(data.get("mode") or "").strip().lower()
+        if mode:
+            patch = EmbeddingsService.config_for_search_mode(mode)
+        else:
+            patch = {"sparse_enabled": bool(data.get("sparse_enabled", False))}
+            if data.get("sparse_mode"):
+                patch["sparse_mode"] = str(data["sparse_mode"]).strip().lower()
+
+        cfg.update(patch)
         config_store.set("search", "config", cfg)
-        return {"status": "ok", "sparse_enabled": cfg["sparse_enabled"]}
+        return {"status": "ok", "mode": EmbeddingsService.search_mode(), **patch}
+    except ValueError as ve:
+        return {"status": "error", "message": str(ve)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

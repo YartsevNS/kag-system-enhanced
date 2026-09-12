@@ -43,3 +43,28 @@ def test_empty_query_is_not_lexical():
 def test_quotes_trigger_lexical():
     assert ES._query_prefers_lexical('найти "бартерные сделки"')
     assert ES._query_prefers_lexical("что такое «ключевая ставка»")
+
+
+# ── режимы поиска для админки ──────────────────────────────────────────────
+
+def test_search_modes_declared():
+    assert ES.SEARCH_MODES == ("dense", "hybrid_auto", "hybrid_always")
+
+
+def test_mode_mapping_to_config():
+    assert ES.config_for_search_mode("dense") == {"sparse_enabled": False}
+    assert ES.config_for_search_mode("hybrid_auto") == {
+        "sparse_enabled": True, "sparse_mode": "lexical_only"}
+    assert ES.config_for_search_mode("hybrid_always") == {
+        "sparse_enabled": True, "sparse_mode": "always"}
+
+
+def test_mode_mapping_is_case_insensitive():
+    assert ES.config_for_search_mode(" HYBRID_AUTO ")["sparse_mode"] == "lexical_only"
+
+
+def test_unknown_mode_rejected():
+    import pytest
+    for bad in ("", "bm25", None, "always"):
+        with pytest.raises(ValueError):
+            ES.config_for_search_mode(bad)

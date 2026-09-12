@@ -453,7 +453,8 @@ class EmbeddingsService:
     # Без переиндексации работает для новых точек; старые чанки без sparse
     # просто не участвуют в sparse-ветке (RRF всё равно учтёт dense).
 
-    def _sparse_enabled(self) -> bool:
+    @staticmethod
+    def _sparse_enabled() -> bool:
         try:
             from src.api.services.config_store import config_store
             cfg = config_store.get("search", "config") or {}
@@ -500,6 +501,38 @@ class EmbeddingsService:
             r"[«\"]",                                            # цитата
         )
         return any(re.search(p, q) for p in patterns)
+
+    # Режимы поиска, доступные из админки.
+    SEARCH_MODES = ("dense", "hybrid_auto", "hybrid_always")
+
+    @staticmethod
+    def config_for_search_mode(mode: str) -> Dict[str, Any]:
+        """Выбор режима в админке → настройки search:config.
+
+        dense          — только плотные векторы (эмбеддинги);
+        hybrid_auto    — гибрид (dense + BM25) для запросов с точными терминами
+                         (номера ГОСТ/приказов/пунктов), остальные — плотным поиском;
+        hybrid_always  — гибрид на каждый запрос (поведение до 2026-09-12; замер
+                         показал просадку MRR на семантических вопросах).
+        """
+        m = (mode or "").strip().lower()
+        if m == "dense":
+            return {"sparse_enabled": False}
+        if m == "hybrid_always":
+            return {"sparse_enabled": True, "sparse_mode": "always"}
+        if m == "hybrid_auto":
+            return {"sparse_enabled": True, "sparse_mode": "lexical_only"}
+        raise ValueError(
+            f"неизвестный режим поиска: {mode!r}; ожидается один из: "
+            f"{', '.join(EmbeddingsService.SEARCH_MODES)}"
+        )
+
+    @staticmethod
+    def search_mode() -> str:
+        """Текущий режим поиска — для админки и логов."""
+        if not EmbeddingsService._sparse_enabled():
+            return "dense"
+        return "hybrid_always" if EmbeddingsService._sparse_mode() == "always" else "hybrid_auto"
 
     @staticmethod
     def _tokenize_sparse(text: str) -> Dict[str, int]:
