@@ -1090,7 +1090,10 @@ async def reindex_document(document_id: str):
     await embeddings_service.initialize()
     
     try:
-        await document_service.process_document(document_id)
+        # force=True обязателен: иначе старые чанки остаются в Qdrant/Neo4j,
+        # а новые добавляются рядом — в поиске появляются дубли (баг найден
+        # 2026-09-12: два point_id на один chunk_id).
+        await document_service.process_document(document_id, force=True)
         record = document_service.get_document_status(document_id)
         return {
             "status": "ok",
