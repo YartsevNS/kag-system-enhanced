@@ -87,6 +87,29 @@ async def entity_graph(
         return {"entity": entity_name, "graph": [], "error": str(e)}
 
 
+def _page_of(payload: dict):
+    """Номер страницы чанка из payload Qdrant.
+
+    Форматы в базе разные: верхний уровень "page", metadata.page_number и
+    metadata.pages (СПИСОК — так пишет текущий код индексации). Для диапазона
+    возвращаем "первая-последняя", чтобы просмотрщик открылся на нужной странице.
+    """
+    if not payload:
+        return None
+    meta = payload.get("metadata") or {}
+    one = payload.get("page") or meta.get("page_number") or meta.get("page")
+    if one:
+        return one
+    pages = meta.get("pages") or payload.get("pages")
+    if isinstance(pages, (list, tuple)) and pages:
+        try:
+            first, last = pages[0], pages[-1]
+            return first if str(first) == str(last) else f"{first}-{last}"
+        except Exception:
+            return pages[0]
+    return None
+
+
 @router.get("/entity/{entity_name}/chunks",
             summary="Чанки, где упоминается сущность (текст и страница из Qdrant)")
 async def entity_chunks(
@@ -109,8 +132,7 @@ async def entity_chunks(
         payloads = await embeddings_service.get_points_payload(point_ids) if point_ids else {}
         for r in rows:
             pl = payloads.get(str(r.get("point_id") or ""), {}) or {}
-            meta = pl.get("metadata") or {}
-            r["page"] = pl.get("page") or meta.get("page_number") or meta.get("page")
+            r["page"] = _page_of(pl)
             if pl.get("content"):
                 r["content"] = pl["content"]
             if pl.get("filename"):
@@ -139,8 +161,7 @@ async def chunk_details(
         point_id = info.get("point_id")
         payloads = await embeddings_service.get_points_payload([point_id]) if point_id else {}
         pl = payloads.get(str(point_id), {}) or {}
-        meta = pl.get("metadata") or {}
-        info["page"] = pl.get("page") or meta.get("page_number") or meta.get("page")
+        info["page"] = _page_of(pl)
         if pl.get("content"):
             info["content"] = pl["content"]
         if pl.get("filename"):
