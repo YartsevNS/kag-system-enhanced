@@ -462,6 +462,46 @@ class EmbeddingsService:
             return False
 
     @staticmethod
+    def _sparse_mode() -> str:
+        """always | lexical_only (по умолчанию).
+
+        lexical_only: гибрид включается только для запросов с точными терминами
+        (номера стандартов, документов, пунктов, кавычки) — там BM25 силён.
+        Для обычных формулировок используется плотный поиск, потому что замер
+        2026-09-12 показал: на семантических вопросах лексическая ветка и любой
+        фьюжн (RRF, DBSF) опускают MRR ниже плотного поиска.
+        """
+        try:
+            from src.api.services.config_store import config_store
+            cfg = config_store.get("search", "config") or {}
+            mode = str(cfg.get("sparse_mode") or "lexical_only").lower()
+            return mode if mode in ("always", "lexical_only") else "lexical_only"
+        except Exception:
+            return "lexical_only"
+
+    @staticmethod
+    def _query_prefers_lexical(query: str) -> bool:
+        """Похож ли запрос на «точный» (номер стандарта/документа/пункта).
+
+        Триггеры: обозначения стандартов (ГОСТ/ISO/СТО/ТУ), ссылки на документы
+        (приказ/положение/указание/инструкция), знак №, номера с дефисом или
+        точками (7403-У, 5.2.1, 56545-2015), длинные числа, кавычки.
+        """
+        import re
+        q = (query or "").lower()
+        if not q:
+            return False
+        patterns = (
+            r"\b(гост|iso|iec|сто|ту|снип|санпин)\b",           # обозначения стандартов
+            r"\b(приказ|положени|указани|инструкци|регламент)\w*\b",  # ссылки на документы
+            r"№|#|\bп\.?\s*\d",                                  # номер / пункт
+            r"\d+[-.]\d+",                                       # 7403-У, 5.2.1, 56545-2015
+            r"\b\d{4,}\b",                                       # длинные числа
+            r"[«\"]",                                            # цитата
+        )
+        return any(re.search(p, q) for p in patterns)
+
+    @staticmethod
     def _tokenize_sparse(text: str) -> Dict[str, int]:
         """Токены sparse-вектора: нормализация → стоп-слова → стемминг.
 
@@ -648,7 +688,8 @@ class EmbeddingsService:
                 if must:
                     query_filter = QFilter(must=must, must_not=acl_must_not if acl_must_not else None)
 
-            if self._sparse_enabled():
+            if self._sparse_enabled() and (self._sparse_mode() == "always"
+                                           or self._query_prefers_lexical(query)):
                 # Hybrid Search: dense + sparse (BM25) через RRF-фьюжн.
                 # ВАЖНО: prefetch и FusionQuery передаются АРГУМЕНТАМИ query_points.
                 # Обёрнутые в QueryRequest и отданные как query=... они дают

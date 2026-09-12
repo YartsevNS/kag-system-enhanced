@@ -7,12 +7,14 @@
 не нужно: sparse считается на хосте из payload.content, а dense-вектор остаётся
 нетронутым. Запись — через Qdrant update_vectors по id точки.
 
-Запуск (на сервере, из каталога репозитория):
-    python3 scripts/reindex_sparse.py                 # показать, что будет сделано
-    python3 scripts/reindex_sparse.py --apply         # пересчитать и записать
-    python3 scripts/reindex_sparse.py --apply --document-id <id>   # только документ
+Запуск (внутри контейнера api/worker — там есть зависимости пакета; код src в образе):
+    docker cp scripts/reindex_sparse.py kag-api:/app/reindex_sparse.py
+    docker exec -e QDRANT_URL=http://qdrant:6333 kag-api python /app/reindex_sparse.py           # dry-run
+    docker exec -e QDRANT_URL=http://qdrant:6333 kag-api python /app/reindex_sparse.py --apply
 
 Только stdlib. Секреты — из env (QDRANT_API_KEY), как в других скриптах.
+Почему не на хосте: импорт src.indexing.lexical поднимает src/indexing/__init__.py,
+а тот тянет parsers/chunking с зависимостями (loguru и т.д.), которых на хосте нет.
 """
 
 from __future__ import annotations
@@ -80,7 +82,9 @@ def main() -> int:
     ap.add_argument("--report", default="/tmp/reindex_sparse.json")
     args = ap.parse_args()
 
-    url = args.qdrant_url or os.environ.get("QDRANT_URL") or "http://localhost:6333"
+    url = (args.qdrant_url or os.environ.get("QDRANT_URL")
+           or f"http://{os.environ.get('QDRANT_HOST', 'localhost')}:"
+              f"{os.environ.get('QDRANT_PORT', '6333')}")
     print(f"Qdrant: {url} | коллекция: {args.collection} | режим: "
           f"{'ЗАПИСЬ' if args.apply else 'dry-run'}")
 
