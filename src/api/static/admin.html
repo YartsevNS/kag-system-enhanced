@@ -1780,13 +1780,15 @@
                         var provName = prov ? prov.name : (f && f.provider_id ? f.provider_id : '—');
                         var modelName = f ? (f.model || '—') : '—';
                         var promptPreview = f && f.system_prompt ? f.system_prompt.substring(0, 40) + (f.system_prompt.length > 40 ? '...' : '') : '—';
+                        // Источник промпта: настройки (правил админ) или файл репозитория
+                        var promptSrc = !f ? '—' : (f.prompt_from_settings ? '<span style="color:var(--green)">настройки</span>' : '<span style="color:var(--text4)">файл репозитория</span>');
                         var badge = f ? '<span class="badge badge-success">' + escHtml(provName) + '</span>' : '<span class="badge badge-warning" style="color:var(--text4)">не настроена</span>';
                         var rowStyle = f ? '' : ' style="opacity:0.6"';
                         return '<tr' + rowStyle + '>' +
                             '<td><strong>' + d.icon + ' ' + d.label + '</strong><br><span style="font-size:11px;color:var(--text4)">' + escHtml(d.desc) + '</span></td>' +
                             '<td>' + badge + '</td>' +
                             '<td><code>' + escHtml(modelName) + '</code></td>' +
-                            '<td style="font-size:12px;color:var(--text4);max-width:150px;overflow:hidden;text-overflow:ellipsis">' + escHtml(promptPreview) + '</td>' +
+                            '<td style="font-size:12px;color:var(--text4);max-width:180px;overflow:hidden;text-overflow:ellipsis">' + escHtml(promptPreview) + '<br><span style="font-size:10px">источник: ' + promptSrc + '</span></td>' +
                             '<td><button class="btn btn-secondary btn-sm" onclick="editFunctionMap(\'' + escHtml(fn) + '\')">⚙️ Настроить</button></td>' +
                             '</tr>';
                     }).join('') +
@@ -1842,8 +1844,16 @@
                 '<select id="fm-model" style="width:100%"><option value="">⏳ Загрузка моделей...</option></select></div>';
 
             if (def.prompt) {
+                var srcNote = fm.prompt_from_settings
+                    ? '<span style="color:var(--green)">Источник: настройки</span> — используется этот текст.'
+                    : '<span style="color:var(--text4)">Источник: файл репозитория</span> — пока промпт не сохранён здесь, используется файл.';
                 html += '<div class="form-group" id="fm-prompt-group"><label>Системный промпт</label>' +
-                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea></div>';
+                    '<div class="muted" id="fm-prompt-src" style="font-size:11px;margin-bottom:4px">' + srcNote + '</div>' +
+                    '<textarea id="fm-prompt" style="width:100%;min-height:120px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);font-size:12px;font-family:JetBrains Mono,monospace;resize:vertical" placeholder="Введите промпт...">' + escHtml(fm.system_prompt || '') + '</textarea>' +
+                    '<div style="margin-top:6px;display:flex;align-items:center;gap:8px">' +
+                    '<button class="btn btn-secondary btn-sm" onclick="reloadPromptFromFile()">↻ Взять из файла репозитория</button>' +
+                    '<span id="fm-prompt-file" style="font-size:11px;color:var(--text4)"></span>' +
+                    '</div></div>';
             }
 
             var tempVal = (fm.parameters && fm.parameters.temperature !== undefined) ? fm.parameters.temperature : 0.7;
@@ -1934,6 +1944,33 @@
         function closeFmModal() {
             var el = document.getElementById('fm-modal-container');
             if (el) el.remove();
+        }
+
+        // Подставить в редактор промпт из файла репозитория (без сохранения:
+        // применяет кнопка «Сохранить», как и для любого другого текста).
+        async function reloadPromptFromFile() {
+            var fn = document.getElementById('fm-name').value;
+            var st = document.getElementById('fm-status');
+            var note = document.getElementById('fm-prompt-file');
+            st.textContent = '⏳ читаю файл...';
+            try {
+                var r = await apiFetch('/api/v1/admin/models/functions/' + encodeURIComponent(fn) + '/prompt-from-file');
+                var d = await r.json();
+                if (!r.ok) {
+                    st.innerHTML = '<span style="color:var(--red2)">❌ ' + escHtml(d.detail || 'Ошибка') + '</span>';
+                    return;
+                }
+                if (!d.exists) {
+                    st.innerHTML = '<span style="color:var(--red2)">❌ файла нет</span>';
+                    if (note) note.textContent = '';
+                    return;
+                }
+                document.getElementById('fm-prompt').value = d.system_prompt || '';
+                if (note) note.textContent = d.file || '';
+                st.innerHTML = '<span style="color:var(--green)">✅ взято из файла — нажмите «Сохранить»</span>';
+            } catch (e) {
+                st.innerHTML = '<span style="color:var(--red2)">❌ ' + escHtml(String(e)) + '</span>';
+            }
         }
 
         async function saveFunctionMap() {

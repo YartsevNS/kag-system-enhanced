@@ -375,8 +375,9 @@ class ProviderService:
             else:
                 d = {"function": fname, "provider_id": "", "model": "",
                      "system_prompt": "", "parameters": {}}
-            # Промпт не задан — показываем дефолт из prompts/*.txt
-            if not d.get("system_prompt"):
+            # Промпт не задан в настройках — показываем дефолт из prompts/*.txt
+            d["prompt_from_settings"] = bool((d.get("system_prompt") or "").strip())
+            if not d["prompt_from_settings"]:
                 d["system_prompt"] = self._load_default_prompt(fname)
             result.append(d)
         return result
@@ -388,8 +389,13 @@ class ProviderService:
         if not fm:
             return None
         d = fm.to_dict()
-        if not d.get("system_prompt"):
+        # Источник промпта: настройки (правил админ) или файл репозитория.
+        d["prompt_from_settings"] = bool((d.get("system_prompt") or "").strip())
+        if not d["prompt_from_settings"]:
             d["system_prompt"] = self._load_default_prompt(function_name)
+            d["prompt_file"] = self._prompt_file_path(function_name)
+        else:
+            d["prompt_file"] = self._prompt_file_path(function_name)
         return d
 
     def save_function_map(self, fm: FunctionMap) -> bool:
@@ -477,20 +483,84 @@ class ProviderService:
         }
 
     @staticmethod
-    def _load_default_prompt(function_name: str) -> str:
-        """Загрузить дефолтный системный промпт из prompts/{function}.txt."""
+    def _prompt_file_path(function_name: str) -> Optional[str]:
+        """Путь к файлу промпта prompts/{function}.txt (в контейнере — /app/prompts)."""
+        from pathlib import Path
         for path in (
             f"/app/prompts/{function_name}.txt",
             f"prompts/{function_name}.txt",
         ):
             try:
-                from pathlib import Path
                 p = Path(path)
                 if p.exists():
-                    return p.read_text(encoding="utf-8")
+                    return str(p)
             except Exception:
                 pass
-        return ""
+        return None
+
+    @staticmethod
+    def _load_default_prompt(function_name: str) -> str:
+        """Загрузить дефолтный системный промпт из prompts/{function}.txt."""
+        path = ProviderService._prompt_file_path(function_name)
+        if not path:
+            return ""
+        try:
+            from pathlib import Path
+            return Path(path).read_text(encoding="utf-8")
+        except Exception:
+            return ""
+
+    def prompt_from_file(self, function_name: str) -> dict:
+        """Прочитать промпт из файла, НЕ записывая в настройки.
+
+        Нужно кнопке «Взять из файла репозитория» в админке: подставить текст в
+        редактор, дальше админ сам решает, сохранять ли.
+        """
+        path = self._prompt_file_path(function_name)
+        if not path:
+            return {"system_prompt": "", "file": None, "exists": False}
+        try:
+            from pathlib import Path
+            return {"system_prompt": Path(path).read_text(encoding="utf-8"),
+                    "file": path, "exists": True}
+        except Exception as e:
+            logger.warning(f"Не удалось прочитать промпт {function_name} из файла: {e}")
+            return {"system_prompt": "", "file": path, "exists": False}
+
+    def seed_prompts_from_files(self) -> dict:
+        """Засеять промпты из prompts/*.txt в настройки, если там пусто.
+
+        Зачем: на развёрнутом стенде промпты должны ЖИТЬ в его настройках и
+        правиться из админки, а файл — оставаться версионируемым дефолтом.
+        Перезаписываем только пустые значения: если админ уже правил промпт,
+        его версия не затирается. Провайдер/модель/параметры не трогаем.
+        """
+        result = {"seeded": [], "already_set": [], "no_file": [], "no_entry": []}
+        try:
+            self._load_cache()
+            for fname in FUNCTION_DEFINITIONS.keys():
+                fm = self._function_cache.get(fname)
+                if fm is None:
+                    result["no_entry"].append(fname)
+                    continue
+                data = fm.to_dict()
+                if (data.get("system_prompt") or "").strip():
+                    result["already_set"].append(fname)
+                    continue
+                content = self._load_default_prompt(fname)
+                if not content.strip():
+                    result["no_file"].append(fname)
+                    continue
+                data["system_prompt"] = content
+                if self.config_store.set("function_map", fname, data):
+                    result["seeded"].append(fname)
+                else:
+                    logger.warning(f"Не удалось засеять промпт функции {fname}")
+            if result["seeded"]:
+                self._invalidate_cache()
+        except Exception as e:
+            logger.warning(f"Засев промптов из файлов не выполнен: {e}")
+        return result
 
     # ===========================================
     # Вспомогательные методы

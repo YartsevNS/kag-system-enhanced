@@ -1449,6 +1449,20 @@ async def list_function_maps():
     return provider_service.list_function_maps()
 
 
+@router.get("/functions/{function_name}/prompt-from-file",
+            summary="Прочитать промпт функции из файла репозитория (без записи)")
+async def get_prompt_from_file(function_name: str):
+    """Вернуть содержимое prompts/<функция>.txt.
+
+    Нужно кнопке «Взять из файла репозитория» в админке: подставить текст в
+    редактор. Запись в настройки не выполняется — применяет администратор
+    кнопкой «Сохранить».
+    """
+    if function_name not in FUNCTION_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Неизвестная функция: {function_name}")
+    return provider_service.prompt_from_file(function_name)
+
+
 @router.get("/functions/{function_name}", summary="Получить привязку функции")
 async def get_function_map(function_name: str):
     """Вернуть привязку функции к провайдеру."""

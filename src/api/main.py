@@ -58,6 +58,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Ошибка инициализации: {e}")
 
+    # Промпты: засеять настройки из prompts/*.txt, если там пусто.
+    # Нужно, чтобы на развёрнутом стенде промпты ЖИЛИ в настройках и правились
+    # из админки, а файл оставался версионируемым дефолтом (см. provider_service).
+    try:
+        from src.api.services.provider_service import provider_service
+        seed = provider_service.seed_prompts_from_files()
+        if seed.get("seeded"):
+            logger.info(f"Промпты засеяны из файлов в настройки: {', '.join(seed['seeded'])}")
+        if seed.get("no_file"):
+            logger.info(f"Файлов промптов нет (остаются как есть): {', '.join(seed['no_file'])}")
+    except Exception as e:
+        logger.warning(f"Засев промптов не выполнен: {e}")
+
     # Инициализация EmbeddingsService
     try:
         from src.indexing.embeddings_service import embeddings_service
