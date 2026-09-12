@@ -331,7 +331,7 @@ class EmbeddingsService:
             # Единый идентификатор: point_id — детерминированная функция от
             # chunk_id (тот же chunk_id у узла Chunk в Neo4j → точечная связь).
             chunk_id = chunk.get("chunk_id") or f"{document_id}_chunk_{i:05d}"
-            point_id = point_id_for_chunk(chunk_id)
+            point_id = point_id_for_chunk(chunk_id, document_id)
 
             # Формируем вектор: dense (основной) + sparse (BM25)
             vectors = {"dense": embedding}

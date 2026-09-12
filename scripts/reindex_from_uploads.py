@@ -37,12 +37,16 @@ UUID_RE = re.compile(r"^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 
 def _http(url: str, payload: Optional[dict] = None, token: Optional[str] = None,
-          method: Optional[str] = None, timeout: float = 180.0) -> dict:
+          method: Optional[str] = None, timeout: float = 180.0,
+          api_key: Optional[str] = None) -> dict:
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data, method=method or ("POST" if data else "GET"))
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
+    if api_key:
+        # Qdrant использует собственный заголовок api-key (не Bearer)
+        req.add_header("api-key", api_key)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode()
@@ -98,8 +102,18 @@ def wait_completed(base: str, doc_id: str, token: str, max_wait: float = 3600.0)
 def delete_qdrant(qdrant: str, api_key: str, document_id: str) -> bool:
     try:
         payload = {"filter": {"must": [{"key": "document_id", "match": {"value": document_id}}]}}
-        _http(f"{qdrant}/collections/kag_documents/points/delete",
-              payload, token=None, method="POST")
+        resp = _http(f"{qdrant}/collections/kag_documents/points/delete",
+                     payload, method="POST", api_key=api_key)
+        if "__http_error__" in resp:
+            print(f"      Qdrant delete HTTP ошибка: {resp['__http_error__']} {resp.get('__body__','')}")
+            return False
+        # Проверяем, что точки действительно удалены
+        cnt = _http(f"{qdrant}/collections/kag_documents/points/count", payload={"exact": True, "filter": payload["filter"]},
+                    method="POST", api_key=api_key)
+        left = (cnt.get("result") or {}).get("count")
+        if left:
+            print(f"      Qdrant: осталось {left} точек после удаления — не удалено")
+            return False
         return True
     except Exception as e:
         print(f"      Qdrant delete ошибка: {e}")

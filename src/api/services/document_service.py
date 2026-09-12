@@ -623,7 +623,7 @@ class DocumentService:
             
             logger.info(f"Чанкинг (config_store): размер={chunking_config.get('chunk_size')}, перекрытие={chunking_config.get('chunk_overlap')}")
             
-            chunks = chunker.chunk_document(segments)
+            chunks = chunker.chunk_document(segments, document_id)
             plog.log("chunking", {
                 "chunk_size": chunking_config.get("chunk_size", _cfg.CHUNK_SIZE),
                 "chunk_overlap": chunking_config.get("chunk_overlap", _cfg.CHUNK_OVERLAP),

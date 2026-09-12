@@ -249,7 +249,7 @@ class KnowledgeGraphService:
                     doc_id=document_id,
                     text_preview=text[:500],
                     chunk_seq=chunk_seq,
-                    qdrant_point_id=point_id_for_chunk(chunk_id)
+                    qdrant_point_id=point_id_for_chunk(chunk_id, document_id)
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания узла чанка: {e}")

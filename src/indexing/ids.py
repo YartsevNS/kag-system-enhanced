@@ -20,11 +20,17 @@ import uuid
 _CHUNK_NAMESPACE_PREFIX = "kag-chunk:"
 
 
-def point_id_for_chunk(chunk_id: str) -> str:
-    """Детерминированный UUID точки Qdrant по chunk_id."""
+def point_id_for_chunk(chunk_id: str, document_id: str | None = None) -> str:
+    """Детерминированный UUID точки Qdrant по chunk_id.
+
+    document_id участвует в ключе: chunk_id вида «chunk_00001» (без префикса
+    документа) НЕ уникален между документами, и без этого разные документы
+    писали бы точки с одинаковым id (перезапись/потеря данных).
+    """
     if not chunk_id:
         raise ValueError("chunk_id обязателен")
-    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{_CHUNK_NAMESPACE_PREFIX}{chunk_id}"))
+    key = f"{document_id}:{chunk_id}" if document_id else chunk_id
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{_CHUNK_NAMESPACE_PREFIX}{key}"))
 
 
 def build_embedding_text(content: str, metadata: dict | None = None) -> str:

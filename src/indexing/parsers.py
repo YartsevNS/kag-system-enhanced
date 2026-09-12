@@ -381,17 +381,21 @@ class TextChunker:
             chunk_overlap=chunk_overlap
         )
 
-    def chunk_document(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def chunk_document(self, segments: List[Dict[str, Any]],
+                       document_id: str = None) -> List[Dict[str, Any]]:
         """
         Разбить сегменты документа на чанки.
 
         Args:
             segments: Список сегментов из парсера
+            document_id: id документа — нужен для уникальных chunk_id
+                ({document_id}_chunk_00001). Без него chunk_id = chunk_00001,
+                что даёт коллизии point_id между документами в Qdrant.
 
         Returns:
             Список чанков для векторизации
         """
-        return self._chunker.chunk_segments(segments)
+        return self._chunker.chunk_segments(segments, document_id)
 
 
 # Глобальные экземпляры

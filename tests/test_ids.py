@@ -34,6 +34,23 @@ def test_point_id_requires_chunk_id():
         point_id_for_chunk("")
 
 
+def test_point_id_no_collision_between_documents():
+    """Одинаковый chunk_id у разных документов НЕ должен давать один point_id.
+
+    Регрессия 2026-09-12: chunk_id вида «chunk_00001» (без префикса документа)
+    встречается во всех документах — без document_id в ключе точки Qdrant
+    перезаписывали друг друга (документы терялись).
+    """
+    a = point_id_for_chunk("chunk_00001", "doc-A")
+    b = point_id_for_chunk("chunk_00001", "doc-B")
+    assert a != b
+
+
+def test_point_id_document_id_included():
+    """С document_id и без него — разные id (обратная совместимость не ломается)."""
+    assert point_id_for_chunk("chunk_1", "doc-1") != point_id_for_chunk("chunk_1")
+
+
 @pytest.mark.parametrize("meta,prefix", [
     ({"standard_number": "ГОСТ Р 56545-2015"}, "ГОСТ Р 56545-2015: "),
     ({"clause": "5.2.1"}, "п. 5.2.1: "),
