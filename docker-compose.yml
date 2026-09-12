@@ -12,7 +12,7 @@ services:
     #          docker push kre44et/kag-api:<tag>
     # DEV-режим (живой код без пересборки): docker-compose.dev.yml
     # (docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d).
-    image: kre44et/kag-api:2026.09.07
+    image: kre44et/kag-api:2026.09.12
     container_name: kag-api
     ports:
       # НЕ публикуем api наружу — единственная точка входа nginx (80/443).
@@ -115,7 +115,7 @@ services:
 
   worker:
     # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.worker).
-    image: kre44et/kag-worker:2026.09.07
+    image: kre44et/kag-worker:2026.09.12
     # МАСШТАБИРОВАНИЕ (500+ пользователей): для запуска нескольких worker'ов
     # выполнить: docker compose up -d --scale worker=N
     # (N — количество, см. админку → «Масштабирование»). QueueGuard
@@ -184,7 +184,7 @@ services:
   # НЕ блокировал очередь documents: у worker solo-пул — одна задача за раз.
   # Без -B (beat запускается только в основном worker).
   worker-maintenance:
-    image: kre44et/kag-worker:2026.09.07
+    image: kre44et/kag-worker:2026.09.12
     command: ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--pool=solo", "-Q", "maintenance"]
     environment:
       - QDRANT_HOST=qdrant
@@ -223,7 +223,7 @@ services:
   
   mcp-server:
     # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.mcp).
-    image: kre44et/kag-mcp:2026.09.07
+    image: kre44et/kag-mcp:2026.09.12
     container_name: kag-mcp
     ports:
       - "8001:8001"
