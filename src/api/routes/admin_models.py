@@ -448,85 +448,100 @@ class PullModelRequest(BaseModel):
 # ===========================================
 
 
+def _ssh_argv_and_env(config, remote_cmd: str):
+    """Собрать argv/env для ssh, НЕ кладя пароль в командную строку.
+
+    Раньше пароль подставлялся аргументом sshpass (флаг -p) и был виден в ps на
+    хосте. Теперь пароль передаётся через переменную окружения SSHPASS
+    (`sshpass -e`), а sudo-пароль уходит на удалённую сторону по stdin
+    (`sudo -S` без аргумента), поэтому в ps его тоже нет.
+    Возвращает (argv, env, stdin_text).
+    """
+    import os as _os
+    argv = ["ssh",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ConnectTimeout=10",
+            "-p", str(config.port),
+            f"{config.username}@{config.host}",
+            remote_cmd]
+    env = dict(_os.environ)
+    stdin_text = None
+    if getattr(config, "password", None):
+        argv = ["sshpass", "-e"] + argv
+        env["SSHPASS"] = config.password
+    if getattr(config, "sudo_password", None):
+        stdin_text = config.sudo_password + "\n"
+    return argv, env, stdin_text
+
+
+def _safe_service_name(name: str) -> str:
+    """Имя systemd-сервиса — только безопасные символы (защита от инъекции)."""
+    import re as _re
+    name = (name or "ollama").strip()
+    return name if _re.fullmatch(r"[A-Za-z0-9_.@\-]{1,64}", name) else "ollama"
+
+
 @router.post("/restart-ollama", summary="Перезапустить Ollama сервер")
 async def restart_ollama(connection_id: str = "default"):
-    """
-    Перезапустить Ollama сервер через SSH с сохранёнными настройками.
+    """Перезапустить Ollama на удалённом хосте по сохранённым SSH-настройкам.
+
+    Пароли (SSH и sudo) не попадают в командную строку: SSH-пароль идёт через
+    SSHPASS, sudo-пароль — по stdin (см. _ssh_argv_and_env).
     """
     import asyncio
     import subprocess
     import httpx
-    
+
     try:
         config = ssh_manager.get_config(connection_id)
-        logger.info(f"Перезапуск Ollama на {config.host}...")
-        
-        # Формируем команду
-        if config.password:
-            ssh_cmd = f"sshpass -p '{config.password}' ssh -o StrictHostKeyChecking=no -p {config.port} {config.username}@{config.host}"
-        else:
-            ssh_cmd = f"ssh -o StrictHostKeyChecking=no -p {config.port} {config.username}@{config.host}"
-        
-        # Выполняем перезапуск
-        sudo_pass_part = f"echo '{config.sudo_password}' | " if config.sudo_password else ""
-        restart_cmd = f"{ssh_cmd} '{sudo_pass_part}sudo -S systemctl restart {config.ollama_service_name}'"
-        logger.debug(f"Выполняю: {restart_cmd}")
-        
+        service = _safe_service_name(config.ollama_service_name)
+        logger.info(f"Перезапуск Ollama на {config.host} (сервис {service})...")
+
+        restart_cmd = f"sudo -S -p '' systemctl restart {service}"
+        argv, env, stdin_text = _ssh_argv_and_env(config, restart_cmd)
         result = await asyncio.to_thread(
             subprocess.run,
-            restart_cmd,
-            shell=True,
+            argv,
+            env=env,
+            input=stdin_text,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=40,
         )
-        
         logger.info(f"Результат перезапуска: returncode={result.returncode}")
-        
-        # Ждём запуска
+
         await asyncio.sleep(8)
-        
-        # Проверяем статус
-        status_cmd = f"{ssh_cmd} 'sudo systemctl is-active {config.ollama_service_name}'"
+
+        status_cmd = f"sudo -n systemctl is-active {service}"
+        status_argv, status_env, _ = _ssh_argv_and_env(config, status_cmd)
         status_result = await asyncio.to_thread(
             subprocess.run,
-            status_cmd,
-            shell=True,
+            status_argv,
+            env=status_env,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=20,
         )
-        
         is_active = status_result.stdout.strip() == "active"
-        
-        # Проверяем что Ollama отвечает
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(f"http://{config.host}:{config.ollama_port}/")
-                ollama_responding = response.status_code == 200
-        except:
-            ollama_responding = False
-        
+                api_ok = response.status_code == 200
+        except Exception:
+            api_ok = False
+
         return {
-            "status": "success" if (is_active or ollama_responding) else "warning",
-            "message": f"Ollama {'перезапущен успешно' if (is_active or ollama_responding) else 'перезапущен, но статус неизвестен'}",
-            "service_active": is_active or ollama_responding,
-            "systemctl_active": is_active,
-            "http_responding": ollama_responding
-        }
-        
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error",
-            "message": "Таймаут при перезапуске Ollama"
+            "success": bool(is_active or api_ok),
+            "service_active": is_active,
+            "api_responding": api_ok,
+            "message": ("Ollama перезапущен" if is_active or api_ok
+                        else f"Перезапуск не подтверждён: {result.stderr.strip()[:200]}"),
         }
     except Exception as e:
         logger.error(f"Ошибка перезапуска Ollama: {e}")
-        import traceback
-        return {
-            "status": "error",
-            "message": f"Ошибка: {str(e)}"
-        }
+        raise HTTPException(status_code=500, detail=f"Ошибка перезапуска: {e}")
 
 @router.get("/status", summary="Получить статус системы моделей")
 async def get_models_status():
@@ -872,154 +887,122 @@ async def list_ext_llm_models(provider: str = "ollama"):
         return {"models": [], "error": str(e)}
 
 
-@router.get("/ext-llm/balance", summary="Проверить баланс провайдера")
-async def check_ext_llm_balance():
-    """Проверить состояние баланса/кредитов внешнего провайдера.
-    
-    Поддерживает:
-    - OpenAI: GET /v1/dashboard/billing/subscription (остаток кредитов)
-    - DeepSeek: GET /v1/user/balance (баланс в токенах)
-    - OpenRouter: GET /api/v1/credits (оставшиеся кредиты)
-    - Ollama: всегда возвращает ok (локальный — безлимитный)
+def _balance_http_error(provider: str, code: int) -> Dict[str, Any]:
+    """Единый ответ на неуспешный HTTP от провайдера."""
+    msg = "API ключ недействителен" if code in (401, 403) else f"HTTP {code}"
+    return {"ok": False, "provider": provider, "balance_ok": False,
+            "balance_known": False, "message": msg}
+
+
+async def _provider_balance(provider_type: str, base_url: str, api_key: str) -> Dict[str, Any]:
+    """Единая проверка баланса провайдера (OpenAI / DeepSeek / OpenRouter / Ollama).
+
+    Раньше эта логика была скопирована в трёх эндпоинтах (/ext-llm/balance,
+    /graph/balance, /providers/{id}/balance) и в двух из трёх мест DeepSeek
+    разбирался неверно: ответ приходит как {is_available, balance_infos:
+    [{currency, total_balance, ...}]}, а код искал поле balance → в интерфейсе
+    было «0.0 токенов» при живом ключе. Если провайдер вообще не отдаёт баланс
+    (gigachat, openai), честно возвращаем balance_ok=None и «неизвестно» вместо
+    нулей (balance_known=False).
     """
-    import aiohttp
-    prov = _ext_llm_config.provider
-    api_key = _ext_llm_config.api_key
-    
+    prov = (provider_type or "").lower()
+    base = (base_url or "").rstrip("/")
+    if prov in ("", "ollama", "local"):
+        return {"ok": True, "provider": prov or "ollama", "balance_ok": True,
+                "balance_known": True, "display": "∞",
+                "message": "Локальный сервер — без ограничений"}
+    if not api_key:
+        return {"ok": False, "provider": prov, "balance_ok": False,
+                "balance_known": False, "message": "API ключ не указан"}
+    import httpx
+    headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        if prov == "ollama":
-            return {"provider": "ollama", "balance_ok": True, "message": "Локальный сервер — без ограничений"}
-        
-        if not api_key:
-            return {"provider": prov, "balance_ok": False, "message": "API ключ не указан", "balance": 0}
-        
-        headers = {"Authorization": f"Bearer {api_key}"}
-        
-        if prov == "openrouter":
-            # OpenRouter: GET /api/v1/credits
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{_ext_llm_config.url}/api/v1/credits",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        credits = data.get("data", {}).get("total_credits", 0)
-                        used = data.get("data", {}).get("total_usage", 0)
-                        remaining = credits - used
-                        return {
-                            "provider": prov,
-                            "balance_ok": remaining > 0,
-                            "balance": round(remaining, 4),
-                            "total_credits": credits,
-                            "total_usage": round(used, 4),
-                            "message": f"Остаток: ${remaining:.4f} из ${credits:.2f}"
-                        }
-                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
-        
-        elif prov == "openai":
-            # OpenAI: пробуем usage endpoint
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    "https://api.openai.com/v1/usage?date=" + __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d'),
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status == 200:
-                        return {"provider": prov, "balance_ok": True, "message": "API доступен"}
-                    # Fallback: проверяем просто доступность
-                    if resp.status in (401, 403):
-                        return {"provider": prov, "balance_ok": False, "message": "API ключ недействителен", "balance": 0}
-                # Простой тест — список моделей
-                async with session.get(
-                    f"{_ext_llm_config.url}/v1/models",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status == 200:
-                        return {"provider": prov, "balance_ok": True, "message": "API доступен (проверьте баланс в панели OpenAI)"}
-                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
-        
-        elif prov == "deepseek":
-            # DeepSeek: GET /v1/user/balance
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{_ext_llm_config.url}/v1/user/balance",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        balance = data.get("balance", data.get("data", {}).get("balance", 0))
-                        return {
-                            "provider": prov,
-                            "balance_ok": float(balance) > 0 if balance else True,
-                            "balance": balance,
-                            "message": f"Баланс: {balance} токенов"
-                        }
-                    return {"provider": prov, "balance_ok": False, "message": f"HTTP {resp.status}"}
-        
-        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка баланса не реализована"}
-    
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if prov == "openrouter":
+                resp = await client.get(f"{base}/api/v1/credits", headers=headers)
+                if resp.status_code != 200:
+                    return _balance_http_error(prov, resp.status_code)
+                d = (resp.json() or {}).get("data", {}) or {}
+                credits = float(d.get("total_credits") or 0)
+                used = float(d.get("total_usage") or 0)
+                remaining = credits - used
+                return {"ok": True, "provider": prov, "balance_ok": remaining > 0,
+                        "balance_known": True, "balance": round(remaining, 4),
+                        "balance_usd": round(remaining, 4),
+                        "display": f"${remaining:.2f} (из ${credits:.2f})",
+                        "message": f"Остаток: ${remaining:.2f} из ${credits:.2f}"}
+
+            if prov == "deepseek":
+                resp = await client.get(f"{base}/v1/user/balance", headers=headers)
+                if resp.status_code != 200:
+                    return _balance_http_error(prov, resp.status_code)
+                d = resp.json() or {}
+                infos = d.get("balance_infos") or []
+                amount, currency = 0.0, "USD"
+                if isinstance(infos, list) and infos and isinstance(infos[0], dict):
+                    currency = infos[0].get("currency") or "USD"
+                    try:
+                        amount = float(infos[0].get("total_balance") or 0)
+                    except (TypeError, ValueError):
+                        amount = 0.0
+                else:  # запас на старый формат ответа
+                    raw = d.get("balance") or (d.get("data") or {}).get("balance") or 0
+                    try:
+                        amount = float(raw)
+                    except (TypeError, ValueError):
+                        amount = 0.0
+                available = d.get("is_available")
+                ok_status = bool(available) if available is not None else amount > 0
+                note = "" if available in (None, True) else " (аккаунт недоступен)"
+                return {"ok": True, "provider": prov, "balance_ok": ok_status,
+                        "balance_known": True, "balance": amount,
+                        "balance_usd": amount if currency == "USD" else None,
+                        "display": f"{amount:.2f} {currency}",
+                        "message": f"Баланс DeepSeek: {amount:.2f} {currency}{note}"}
+
+            if prov == "openai":
+                resp = await client.get(f"{base}/v1/models", headers=headers)
+                if resp.status_code == 200:
+                    return {"ok": True, "provider": prov, "balance_ok": True,
+                            "balance_known": False, "display": "✅ ключ активен",
+                            "message": "OpenAI не отдаёт баланс через API — смотрите панель OpenAI"}
+                return _balance_http_error(prov, resp.status_code)
+
+            return {"ok": True, "provider": prov, "balance_ok": None,
+                    "balance_known": False, "display": "—",
+                    "message": f"Провайдер {prov} — проверка баланса не реализована"}
     except Exception as e:
-        return {"provider": prov, "balance_ok": False, "message": str(e), "balance": 0}
+        return {"ok": False, "provider": prov, "balance_ok": False,
+                "balance_known": False, "message": f"Ошибка проверки: {e}"}
 
 
+@router.get("/ext-llm/balance", summary="Проверить баланс провайдера (устаревшая система)")
+async def check_ext_llm_balance():
+    """Баланс внешнего провайдера из СТАРОЙ конфигурации (_ext_llm_config).
 
+    Логика одна на три эндпоинта — _provider_balance(); этот остаётся для
+    совместимости со старыми страницами.
+    """
+    res = await _provider_balance(_ext_llm_config.provider, _ext_llm_config.url,
+                                  _ext_llm_config.api_key)
+    return {"provider": res.get("provider"), "balance_ok": res.get("balance_ok"),
+            "message": res.get("message"), "balance": res.get("balance", 0),
+            "display": res.get("display")}
 
 
 @router.get("/graph/balance", summary="Проверить баланс провайдера граф-модели")
 async def check_graph_balance():
-    """Проверить баланс провайдера граф-модели (OpenAI/DeepSeek/OpenRouter).
-    Возвращает баланс в долларах или юанях."""
-    import aiohttp
-    prov = _graph_model_config.get("provider", "ollama")
-    api_key = _graph_model_config.get("api_key", "")
-    
-    if prov == "ollama":
-        return {"provider": "ollama", "balance_ok": True, "message": "Локальный — безлимитный", "display": "∞"}
-    
-    if not api_key:
-        return {"provider": prov, "balance_ok": False, "message": "API ключ не указан"}
-    
-    try:
-        if prov == "openrouter":
-            url = "https://openrouter.ai/api/v1/credits"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        credits = data.get("data", {}).get("total_credits", 0)
-                        used = data.get("data", {}).get("total_usage", 0)
-                        remaining = credits - used
-                        return {"provider": "openrouter", "balance_ok": True, "balance_usd": remaining, "display": f"${remaining:.2f} (из ${credits:.2f})"}
-        
-        elif prov == "deepseek":
-            url = f"{_graph_model_config.get('url', 'https://api.deepseek.com')}/v1/user/balance"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        bal = data.get("balance_infos", data.get("data", []))
-                        if isinstance(bal, list) and bal:
-                            b = bal[0]
-                            currency = b.get("currency", "USD")
-                            amount = float(b.get("total_balance", b.get("balance", 0)))
-                            return {"provider": "deepseek", "balance_ok": True, "balance_usd": amount, "display": f"{currency} {amount:.2f}"}
-        
-        elif prov == "openai":
-            # OpenAI не отдаёт баланс напрямую — просто проверяем доступность ключа
-            url = f"{_graph_model_config.get('url', 'https://api.openai.com')}/v1/models"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        return {"provider": "openai", "balance_ok": True, "display": "✅ API ключ активен", "message": "OpenAI не предоставляет баланс через API"}
-                    return {"provider": "openai", "balance_ok": False, "message": f"HTTP {resp.status}"}
-        
-        return {"provider": prov, "balance_ok": None, "message": f"Провайдер {prov} — проверка не реализована"}
-    except Exception as e:
-        return {"provider": prov, "balance_ok": False, "message": str(e)}
+    """Баланс провайдера граф-модели (старая конфигурация _graph_model_config).
+
+    Логика — общая _provider_balance(); поле display отдаём как раньше.
+    """
+    res = await _provider_balance(_graph_model_config.get("provider", "ollama"),
+                                  _graph_model_config.get("url", "https://api.deepseek.com"),
+                                  _graph_model_config.get("api_key", ""))
+    return {"provider": res.get("provider"), "balance_ok": res.get("balance_ok"),
+            "balance_usd": res.get("balance_usd"), "display": res.get("display", "—"),
+            "message": res.get("message")}
+
 
 _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
@@ -1393,55 +1376,27 @@ async def test_provider_connection(provider_id: str):
 
 @router.post("/providers/{provider_id}/balance", summary="Проверить баланс провайдера")
 async def check_provider_balance(provider_id: str):
-    """Проверить баланс API провайдера (OpenAI, DeepSeek, OpenRouter)."""
+    """Баланс API провайдера (OpenAI, DeepSeek, OpenRouter, Ollama, GigaChat).
+
+    Единая реализация — _provider_balance(); баланс неизвестен для провайдеров,
+    которые его не отдают (тогда balance_ok=None, а не «0 токенов»).
+    """
     provider = provider_service.get_provider_with_key(provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Провайдер не найден")
 
-    if provider.type == "ollama":
-        return {"ok": True, "message": "Локальный сервер — без ограничений", "balance_ok": True, "display": "∞"}
-
-    if not provider.api_key:
-        return {"ok": False, "message": "API ключ не указан", "balance_ok": False}
-
-    import httpx
-    try:
-        base_url = provider.url.rstrip("/")
-        headers = {"Authorization": f"Bearer {provider.api_key}"}
-
-        if provider.type == "openrouter":
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{base_url}/api/v1/auth/key", headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    credits = float(data.get("data", {}).get("credits", 0))
-                    return {"ok": True, "balance_ok": True, "balance_usd": credits, "display": f"${credits:.2f}", "message": f"Баланс OpenRouter: ${credits:.2f}"}
-                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
-
-        elif provider.type == "deepseek":
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{base_url}/v1/user/balance", headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    bal = float(data.get("balance", data.get("data", {}).get("balance", 0)))
-                    return {"ok": True, "balance_ok": bal > 0, "balance": bal, "display": f"{bal} токенов", "message": f"Баланс DeepSeek: {bal} токенов"}
-                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
-
-        elif provider.type == "openai":
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{base_url}/v1/models", headers=headers)
-                if resp.status_code == 200:
-                    return {"ok": True, "balance_ok": True, "display": "✅ Ключ активен", "message": "API ключ работает"}
-                return {"ok": False, "balance_ok": False, "message": f"HTTP {resp.status_code}"}
-
-        return {"ok": True, "balance_ok": None, "message": f"Тип {provider.type} — проверка не реализована"}
-    except Exception as e:
-        return {"ok": False, "balance_ok": False, "message": str(e)}
-
-
-# ===========================================
-# Привязка функций к провайдерам
-# ===========================================
+    res = await _provider_balance(provider.type, provider.url or "", provider.api_key or "")
+    return {
+        "provider_id": provider_id,
+        "provider": res.get("provider"),
+        "ok": res.get("ok", True),
+        "balance_ok": res.get("balance_ok"),
+        "balance_known": res.get("balance_known", False),
+        "balance": res.get("balance"),
+        "balance_usd": res.get("balance_usd"),
+        "display": res.get("display"),
+        "message": res.get("message"),
+    }
 
 @router.get("/functions", summary="Список привязок функций")
 async def list_function_maps():
@@ -1991,6 +1946,15 @@ async def save_ocr_settings(body: OcrSettingsRequest):
 from fastapi.responses import JSONResponse
 from datetime import datetime
 
+# Категории-кэши: в бэкап по умолчанию не идут (регенерируются), но их можно
+# включить параметром ?include_caches=true (entity_cache — эмбеддинги сущностей).
+BACKUP_CACHE_CATEGORIES = {"entity_cache"}
+
+# Базовый список — только ФОЛБЭК, если не удалось прочитать категории из БД.
+# Раньше он был единственным источником и отстал: в бэкап не попадали providers,
+# search, system (блокировки!), setup, upload_config — при переносе на другой
+# сервер терялась конфигурация провайдеров LLM. /backup-documents уже собирает
+# категории динамически; теперь так же делает и /backup.
 BACKUP_NAMESPACES = [
     "web_monitor", "ocr", "chunking", "embedding", "function_map",
     "llm_config", "ext_llm", "kg_config", "ui", "documents",
@@ -1998,11 +1962,40 @@ BACKUP_NAMESPACES = [
     "ssh_config", "model_manager",
 ]
 
+def _all_config_categories() -> List[str]:
+    """Все категории настроек из system_configs (источник — сама БД)."""
+    try:
+        from src.database.session import get_session_local
+        from sqlalchemy import text as _text
+        maker = get_session_local()
+        session = maker()
+        try:
+            rows = session.execute(
+                _text("SELECT DISTINCT category FROM system_configs")
+            ).fetchall()
+            return sorted({r[0] for r in rows if r[0]})
+        finally:
+            session.close()
+    except Exception as e:
+        logger.warning(f"[backup] категории из БД не прочитаны ({e}) — беру базовый список")
+        return list(BACKUP_NAMESPACES)
+
+
 @router.get("/backup", summary="Backup всех настроек системы")
-async def get_backup():
+async def get_backup(include_caches: bool = False):
+    """Скачать все настройки: категории берутся из system_configs динамически.
+
+    include_caches=true добавляет и кэши (entity_cache) — по умолчанию они
+    пропускаются: восстанавливать кэш бессмысленно, он пересчитается.
+    """
     from src.api.services.config_store import config_store
-    backup = {"created_at": datetime.utcnow().isoformat(), "version": "1.0", "data": {}}
-    for ns in BACKUP_NAMESPACES:
+    categories = _all_config_categories()
+    skipped = [c for c in categories if c in BACKUP_CACHE_CATEGORIES]
+    if not include_caches:
+        categories = [c for c in categories if c not in BACKUP_CACHE_CATEGORIES]
+    backup = {"created_at": datetime.utcnow().isoformat(), "version": "1.1",
+              "categories": categories, "skipped_caches": skipped, "data": {}}
+    for ns in categories:
         try:
             data = config_store.get_all(ns)
             if data:

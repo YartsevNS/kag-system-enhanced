@@ -1712,9 +1712,15 @@
             try {
                 var r = await apiFetch('/api/v1/admin/models/providers/' + encodeURIComponent(providerId) + '/balance', {method: 'POST'});
                 var d = await r.json();
-                el.innerHTML = d.balance_ok
-                    ? '<span style="color:#10b981">💰 ' + (d.display || d.message) + '</span>'
-                    : '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                // Три состояния: баланс известен и положительный / ошибка /
+                // провайдер баланс не отдаёт (не показываем это как «ошибку»)
+                if (d.balance_ok === true) {
+                    el.innerHTML = '<span style="color:#10b981">💰 ' + (d.display || d.message) + '</span>';
+                } else if (d.balance_ok === false) {
+                    el.innerHTML = '<span style="color:#ef4444">❌ ' + (d.message || 'Ошибка') + '</span>';
+                } else {
+                    el.innerHTML = '<span style="color:#9ca3af">— ' + (d.message || 'провайдер не отдаёт баланс') + '</span>';
+                }
             } catch(e) {
                 el.innerHTML = '<span style="color:#ef4444">❌ ' + e + '</span>';
             }

@@ -5,6 +5,7 @@ SSH Connection Manager для KAG
 Использует GOST шифрование для защиты конфиденциальных данных.
 """
 
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 import json
@@ -159,14 +160,20 @@ class SSHConnectionManager:
                 f"{config.username}@{config.host}",
             ]
 
+            # Пароли не кладём в командную строку: SSH-пароль — через SSHPASS
+            # (sshpass -e), sudo-пароль — по stdin на удалённую сторону.
             if config.sudo_password:
-                remote_cmd = f"echo {config.sudo_password} | sudo -S echo OK"
+                remote_cmd = "sudo -S -p '' echo OK"
+                stdin_text = config.sudo_password + "\n"
             else:
                 remote_cmd = "echo OK"
+                stdin_text = None
             ssh_args.append(remote_cmd)
 
+            env = dict(os.environ)
             if config.password:
-                cmd = ["sshpass", "-p", config.password, "ssh"] + ssh_args
+                cmd = ["sshpass", "-e", "ssh"] + ssh_args
+                env["SSHPASS"] = config.password
             else:
                 cmd = ["ssh"] + ssh_args
 
@@ -174,6 +181,8 @@ class SSHConnectionManager:
 
             result = subprocess.run(
                 cmd,
+                env=env,
+                input=stdin_text,
                 capture_output=True,
                 text=True,
                 timeout=20
