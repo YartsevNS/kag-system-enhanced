@@ -15,6 +15,8 @@
 from typing import Dict, Any, List
 from loguru import logger
 
+from src.indexing.standard_parser import extract_structure
+
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     LANGCHAIN_AVAILABLE = True
@@ -128,6 +130,9 @@ class DocumentChunker:
                     "overlap_applied": bool(tail_in),
                     "pages": pages,
                     "segment_types": types,
+                    # Структурные поля (стандарт/пункт/раздел) — для payload-фильтров
+                    # поиска («ГОСТ 57580.1-2017, п. 5.2.1»). Пусто, если не найдено.
+                    **extract_structure(text),
                 }
             }
 

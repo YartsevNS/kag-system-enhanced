@@ -306,7 +306,13 @@ async def search_chunks(
 ):
     """
     Векторный поиск по чанкам через Qdrant.
-    Принимает {"query": "...", "limit": 10}
+
+    Принимает {"query": "...", "limit": 10} и опционально:
+      - "standard_number": "ГОСТ 57580.1-2017" (строка или список) — фильтр по стандарту;
+      - "clause": "5.2.1" — фильтр по номеру пункта;
+      - "section": "5" — фильтр по разделу;
+      - "document_id", "file_type" — как раньше.
+    Права доступа (ACL) применяются по текущему пользователю.
     """
     try:
         from src.indexing.embeddings_service import embeddings_service
@@ -320,8 +326,22 @@ async def search_chunks(
         if embeddings_service._qdrant_client is None:
             await embeddings_service.initialize()
 
-        chunks = await embeddings_service.search(query, limit=limit)
-        return {"chunks": chunks, "total": len(chunks)}
+        # ACL: группы и админ-статус текущего пользователя
+        group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+        is_admin = bool(getattr(current_user, "is_admin", False))
+        user_id = str(current_user.id) if current_user else None
+
+        # Фильтры: структурные поля можно передать и на верхнем уровне запроса
+        filters = dict(request.get("filters") or {})
+        for key in ("standard_number", "clause", "section", "document_id", "file_type"):
+            if request.get(key):
+                filters.setdefault(key, request[key])
+
+        chunks = await embeddings_service.search(
+            query, limit=limit, filters=filters or None,
+            group_ids=group_ids, is_admin=is_admin, user_id=user_id,
+        )
+        return {"chunks": chunks, "total": len(chunks), "filters": filters or None}
     except Exception as e:
         logger.error(f"Search error: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}

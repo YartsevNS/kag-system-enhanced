@@ -77,9 +77,12 @@ def _request(url: str, payload: Optional[dict], token: Optional[str],
 
 
 def search(base_url: str, query: str, limit: int, token: Optional[str],
-           insecure: bool) -> List[Dict[str, Any]]:
+           insecure: bool, filters: Optional[dict] = None) -> List[Dict[str, Any]]:
+    payload: Dict[str, Any] = {"query": query, "limit": limit}
+    if filters:
+        payload["filters"] = filters
     data = _request(f"{base_url.rstrip('/')}/api/v1/chat/search",
-                    {"query": query, "limit": limit}, token, insecure)
+                    payload, token, insecure)
     return data.get("chunks", []) or []
 
 
@@ -113,14 +116,15 @@ def _ranks(hits: List[Dict[str, Any]], relevant_docs: set, relevant_chunks: set)
 
 def evaluate_question(base_url: str, q: Dict[str, Any], k_values: List[int],
                       token: Optional[str], insecure: bool,
-                      search_limit: int) -> Dict[str, Any]:
+                      search_limit: int,
+                      filters: Optional[dict] = None) -> Dict[str, Any]:
     query = q["query"]
     rel_docs = {str(x) for x in (q.get("relevant_document_ids") or [])}
     rel_chunks = {str(x) for x in (q.get("relevant_chunk_ids") or [])}
     if not rel_docs and not rel_chunks:
         raise SystemExit(f"Вопрос без разметки релевантности: {query!r}")
 
-    hits = search(base_url, query, search_limit, token, insecure)
+    hits = search(base_url, query, search_limit, token, insecure, filters)
     ranks = _ranks(hits, rel_docs, rel_chunks)
 
     result: Dict[str, Any] = {
@@ -194,6 +198,8 @@ def main() -> int:
     ap.add_argument("--questions", default=DEFAULT_QUESTIONS, help="файл с эталонным набором")
     ap.add_argument("--top-k", type=int, default=10, help="сколько результатов запрашивать у поиска")
     ap.add_argument("--output", default=None, help="сохранить отчёт в JSON (для сравнения версий)")
+    ap.add_argument("--filters", default=None,
+                    help='JSON-фильтры поиска, напр. \'{"standard_number":"ГОСТ 57580.1-2017"}\'')
     ap.add_argument("--list-documents", action="store_true", help="вывести документы (для разметки набора)")
     ap.add_argument("--init-sample", action="store_true", help="создать шаблон файла набора")
     args = ap.parse_args()
@@ -230,7 +236,11 @@ def main() -> int:
         return 1
 
     print(f"Оценка retrieval: {len(questions)} вопросов, top-K={args.top_k}, API={args.url}\n")
-    results = [evaluate_question(args.url, q, k_values, args.token, args.insecure, args.top_k)
+    search_filters = json.loads(args.filters) if args.filters else None
+    if search_filters:
+        print(f"Фильтры поиска: {search_filters}\n")
+    results = [evaluate_question(args.url, q, k_values, args.token, args.insecure, args.top_k,
+                                 filters=search_filters)
                for q in questions]
 
     for r in results:

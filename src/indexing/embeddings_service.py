@@ -335,6 +335,15 @@ class EmbeddingsService:
             if metadata:
                 filename = metadata.get("filename", "")
             
+            # Структурные поля чанка (standard_number/clause/section) — на верхний
+            # уровень payload, чтобы по ним работали фильтры Qdrant.
+            chunk_meta = chunk.get("metadata", {}) or {}
+            structure = {
+                key: chunk_meta[key]
+                for key in ("standard_number", "clause", "section")
+                if chunk_meta.get(key)
+            }
+
             payload = {
                 "document_id": document_id,
                 "chunk_id": chunk.get("chunk_id", f"{document_id}_chunk_{i}"),
@@ -343,6 +352,8 @@ class EmbeddingsService:
                 "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
                 "document_type": metadata.get("document_type", "") if metadata else "",
                 "domain": metadata.get("domain", "") if metadata else "",
+                # Структура документа: номер стандарта, пункт, раздел
+                **structure,
                 # Права доступа (ACL)
                 "visibility": metadata.get("visibility", "public") if metadata else "public",
                 "allow_group_ids": (metadata.get("allow_group_ids") or []) if metadata else [],
@@ -530,6 +541,21 @@ class EmbeddingsService:
                         match=MatchValue(value=filters["file_type"])
                     )
                 )
+
+            # Структурные фильтры: номер стандарта, пункт, раздел.
+            # Значение-строка → точное совпадение; список → любое из (MatchAny).
+            for key in ("standard_number", "clause", "section"):
+                if filters.get(key):
+                    value = filters[key]
+                    if isinstance(value, (list, tuple, set)):
+                        from qdrant_client.models import MatchAny as _MatchAny
+                        conditions.append(
+                            FieldCondition(key=key, match=_MatchAny(any=list(value)))
+                        )
+                    else:
+                        conditions.append(
+                            FieldCondition(key=key, match=MatchValue(value=value))
+                        )
 
             if domain:
                 conditions.append(
