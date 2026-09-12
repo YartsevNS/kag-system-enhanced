@@ -685,7 +685,11 @@ function ensureCy(){
     elements: [],
     style: [
       { selector:'node', style:{
-          'background-color':'data(color)', 'label':'data(label)',
+          // Подпись по умолчанию выключена: включаем классом .with-label, когда
+          // масштаб достаточный (на плотных графах подписи сливаются в кашу).
+          // Через style('label','') это не работает — значение откатывается
+          // к таблице стилей (проверено в браузере).
+          'background-color':'data(color)', 'label':'',
           'color':'#e5e5e5', 'font-size':10, 'text-valign':'bottom', 'text-margin-y':5,
           'width':'mapData(weight,1,10,18,52)', 'height':'mapData(weight,1,10,18,52)',
           'border-width':1, 'border-color':'#333' } },
@@ -694,6 +698,7 @@ function ensureCy(){
           'target-arrow-shape':'triangle', 'target-arrow-color':'#777',
           'label':'data(label)', 'font-size':8, 'color':'#888', 'text-rotation':'autorotate',
           'text-background-color':'#171717', 'text-background-opacity':0.7, 'text-background-padding':'2px' } },
+      { selector:'node.with-label', style:{ 'label':'data(label)' } },
       { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } },
       // Найденные по тексту фрагменты — яркая обводка (соседи по уровню обычные)
       { selector:'.matched', style:{ 'border-width':4, 'border-color':'#f5a524' } }
@@ -709,8 +714,8 @@ function ensureCy(){
     // только при близком приближении. Найденные фрагменты подписаны всегда.
     const big = cy.nodes().length > 120;
     const show = cy.zoom() >= (big ? 1.1 : 0.5);
-    cy.nodes().style('label', show ? 'data(label)' : '');
-    cy.nodes('.matched').style('label', 'data(label)');
+    cy.nodes().toggleClass('with-label', show);
+    cy.nodes('.matched').addClass('with-label');
   }
   cy.on('zoom', applyLabelVisibility);
   cy.on('layoutstop', applyLabelVisibility);
@@ -1004,6 +1009,7 @@ async function searchChunksFromInput(){
     c.fit(undefined, 40);
     const chunks = g.nodes.filter(function(n){ return n.kind === 'chunk'; }).length;
     const matched = g.nodes.filter(function(n){ return n.kind === 'chunk' && n.matched; }).length;
+    applyLabelVisibility();
     document.getElementById('kg-msg').textContent = '«' + q + '»: совпадений ' + (d.hits || matched) +
       ', показано ' + chunks + ' фрагментов (совпадения + соседи по ' + level +
       ' ур.), сущностей ' + g.nodes.filter(function(n){ return n.kind === 'entity'; }).length +
@@ -1036,6 +1042,7 @@ async function loadDocGraph(docId, docName){
     const kinds = {};
     (g.nodes||[]).forEach(function(n){ kinds[n.kind] = (kinds[n.kind]||0)+1; });
     const docNode = (g.nodes||[]).filter(function(n){ return n.kind === 'document'; }).length;
+    applyLabelVisibility();
     document.getElementById('kg-msg').textContent = 'Документ «' + (docName || '') + '»: ' +
       (docNode ? 'узел документа, ' : '') + (kinds.chunk||0) + ' фрагментов, ' + (kinds.entity||0) +
       ' сущностей · клик по сущности покажет её фрагменты ТОЛЬКО из этого файла';
@@ -1083,6 +1090,7 @@ async function loadGraph(name, depth){
     c.elements().filter(function(el){ return el.isNode() && el.data('name') === name; }).addClass('center');
     c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 }).run();
     c.fit(undefined, 40);
+    applyLabelVisibility();
     document.getElementById('kg-msg').textContent = c.nodes().length + ' узлов, ' + c.edges().length + ' связей';
   } catch(e){
     document.getElementById('kg-msg').textContent = 'Ошибка: ' + e;
