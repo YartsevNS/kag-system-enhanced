@@ -34,6 +34,7 @@ import json
 import re
 
 from src.indexing.ids import point_id_for_chunk
+from src.indexing.indexing_guards import run_with_transient_retry
 
 # Сколько символов текста чанка отдавать потребителям (обозреватель /kg, API).
 # В графе хранится ПОЛНЫЙ текст (Chunk.text) — усечение делается на чтении,
@@ -394,7 +395,9 @@ class KnowledgeGraphService:
         try:
             with self.driver.session() as session:
                 for i in range(0, len(batch), _bs):
-                    session.run(
+                    # Дедлоки Neo4j при параллельной записи транзиентны:
+                    # повторяем, а не глотаем (иначе сущности теряются молча).
+                    run_with_transient_retry(lambda _b=batch[i:i + _bs]: session.run(
                         """
                         UNWIND $batch AS e
                         MERGE (n:Entity {name: e.name, type: e.type})
@@ -414,8 +417,8 @@ class KnowledgeGraphService:
                         MATCH (c:Chunk {id: e.chunk_id})
                         MERGE (c)-[:MENTIONS]->(n)
                         """,
-                        batch=batch[i:i + _bs],
-                    )
+                        batch=_b,
+                    ))
             return len(batch)
         except Exception as e:
             logger.warning(f"Ошибка batch_create_entities ({len(batch)}): {e}")
@@ -451,15 +454,16 @@ class KnowledgeGraphService:
             with self.driver.session() as session:
                 for safe_type, batch in by_type.items():
                     for i in range(0, len(batch), _bs):
-                        session.run(
+                        # Дедлоки при параллельной записи документов — повторяем.
+                        run_with_transient_retry(lambda _b=batch[i:i + _bs]: session.run(
                             f"""
                             UNWIND $batch AS r
                             MATCH (a:Entity {{name: r.source}})
                             MATCH (b:Entity {{name: r.target}})
                             MERGE (a)-[:`{safe_type}`]->(b)
                             """,
-                            batch=batch[i:i + _bs],
-                        )
+                            batch=_b,
+                        ))
                         total += len(batch[i:i + _bs])
             return total
         except Exception as e:
