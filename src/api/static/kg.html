@@ -704,8 +704,13 @@ function ensureCy(){
   // Подписи показываем только при достаточном зуме — иначе они накладываются
   function applyLabelVisibility(){
     if (!cy) return;
-    const show = cy.zoom() >= 0.5;
+    // На плотных графах (сотни узлов) подписи при обычном масштабе сливаются в
+    // кашу, поэтому порог зависит от размера: маленький граф — с 0.5, большой —
+    // только при близком приближении. Найденные фрагменты подписаны всегда.
+    const big = cy.nodes().length > 120;
+    const show = cy.zoom() >= (big ? 1.1 : 0.5);
     cy.nodes().style('label', show ? 'data(label)' : '');
+    cy.nodes('.matched').style('label', 'data(label)');
   }
   cy.on('zoom', applyLabelVisibility);
   cy.on('layoutstop', applyLabelVisibility);
