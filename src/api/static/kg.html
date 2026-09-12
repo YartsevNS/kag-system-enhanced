@@ -52,6 +52,8 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .kg-tools.mode-document #kg-node{display:none}
 .kg-tools.mode-text #kg-text{display:block}
 .kg-tools.mode-text #kg-node{display:none}
+/* В режиме документа уровень не нужен — не показываем, чтобы не путал */
+.kg-tools.mode-document .kg-level{display:none}
 .btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
 .btn:hover{opacity:0.85}
 .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all 0.15s}
