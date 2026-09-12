@@ -161,6 +161,50 @@ body {
   margin: 12px auto;
 }
 
+/* Страница = канвас + текстовый слой поверх него.
+   Текстовый слой делает текст документа выделяемым, копируемым и находимым
+   (Ctrl+F). Без него pdf.js рисует только картинку, и PDF выглядит как
+   «без текстового слоя», хотя она в файле есть. */
+.pdf-page {
+  position: relative;
+  margin: 12px auto;
+}
+.pdf-page canvas {
+  margin: 0;
+  position: absolute;
+  inset: 0;
+}
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  z-index: 1;
+  /* ниже — настройки pdf.js 3.x: масштаб текста привязан к --scale-factor */
+  transform-origin: 0 0;
+}
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.textLayer span::selection,
+.textLayer br::selection {
+  background: rgba(62, 207, 142, 0.35);
+}
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+
 /* States */
 .state-overlay {
   position: absolute; inset: 0;
@@ -438,17 +482,56 @@ async function renderPage(num) {
   const viewport = page.getViewport({ scale });
 
   const viewer = document.getElementById('viewer');
-  // Remove old canvas
-  const old = viewer.querySelector('canvas');
+  // Убираем предыдущую страницу целиком: канвас + текстовый слой
+  const old = viewer.querySelector('.pdf-page');
   if (old) old.remove();
+
+  const pageWrap = document.createElement('div');
+  pageWrap.className = 'pdf-page';
+  pageWrap.style.width = viewport.width + 'px';
+  pageWrap.style.height = viewport.height + 'px';
+  viewer.appendChild(pageWrap);
 
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
+  pageWrap.appendChild(canvas);
   const ctx = canvas.getContext('2d');
-  viewer.appendChild(canvas);
 
   await page.render({ canvasContext: ctx, viewport }).promise;
+
+  // ── Текстовый слой ────────────────────────────────────────────────────
+  // Без него pdf.js рисует только картинку: текст нельзя выделить, скопировать
+  // и не находит браузерный поиск (Ctrl+F) — документ выглядит как PDF без
+  // текстового слоя, хотя слой в файле есть. Слой прозрачный, лежит поверх
+  // канваса и повторяет расположение текста.
+  try {
+    const textContent = await page.getTextContent();
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    textLayerDiv.style.setProperty('--scale-factor', String(scale));
+    pageWrap.appendChild(textLayerDiv);
+
+    if (pdfjsLib.TextLayer) {
+      // pdf.js 3.11+
+      const layer = new pdfjsLib.TextLayer({
+        textContentSource: textContent,
+        container: textLayerDiv,
+        viewport: viewport,
+      });
+      await layer.render();
+    } else if (pdfjsLib.renderTextLayer) {
+      // pdf.js 2.x
+      pdfjsLib.renderTextLayer({
+        textContent: textContent,
+        container: textLayerDiv,
+        viewport: viewport,
+        textDivs: [],
+      });
+    }
+  } catch (e) {
+    console.warn('Текстовый слой не отрисован:', e);
+  }
 
   document.getElementById('page-num').value = num;
   document.getElementById('btn-prev').disabled = num <= 1;
