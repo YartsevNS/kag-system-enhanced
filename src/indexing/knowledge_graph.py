@@ -1790,26 +1790,35 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка получения графа: {e}")
             return []
 
-    def entity_chunks(self, entity_name: str, limit: int = 8) -> List[Dict]:
+    def entity_chunks(self, entity_name: str, limit: int = 8,
+                      doc_id: str = "") -> List[Dict]:
         """Чанки, которые упоминают сущность: документ, номер фрагмента, превью.
 
         Схема графа: Document-[:HAS_CHUNK]->Chunk-[:MENTIONS]->Entity.
+        doc_id — ограничить одним документом (фильтр графа по документу в /kg).
         """
         if not self.driver:
             return []
         try:
             limit_i = max(1, min(int(limit or 8), 50))
+            # При фильтре по документу связь Document-[:HAS_CHUNK]->Chunk
+            # обязательна (иначе OPTIONAL MATCH оставил бы чужие чанки).
+            doc_match = (
+                "MATCH (d:Document)-[:HAS_CHUNK]->(c) WHERE d.id = $doc_id "
+                if doc_id else
+                "OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(c) "
+            )
             with self.driver.session() as session:
                 res = session.run(
                     "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity {name: $name}) "
-                    "OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(c) "
+                    + doc_match +
                     "RETURN c.id AS chunk_id, c.chunk_seq AS chunk_seq, "
                     "coalesce(c.qdrant_point_id, '') AS point_id, "
                     "coalesce(d.id, '') AS document_id, "
                     "coalesce(d.filename, '') AS filename, "
                     f"left(coalesce(c.text, ''), {CHUNK_TEXT_PREVIEW_CHARS}) AS preview "
                     "ORDER BY chunk_seq LIMIT $limit",
-                    name=entity_name, limit=limit_i,
+                    name=entity_name, limit=limit_i, doc_id=doc_id,
                 )
                 out = []
                 for r in res:
@@ -1820,6 +1829,130 @@ class KnowledgeGraphService:
                 return out
         except Exception as e:
             logger.warning(f"Ошибка выборки чанков сущности «{entity_name}»: {e}")
+            return []
+
+    def get_document_graph(self, document_id: str, with_chunks: bool = True,
+                           limit_chunks: int = 150, limit_entities: int = 120) -> List[Dict]:
+        """Подграф одного документа: документ → чанки → сущности.
+
+        Нужен фильтру по документу в /kg: видно, какие сущности пришли из одного
+        файла и в каких фрагментах они упоминаются. Схема графа:
+        Document-[:HAS_CHUNK]->Chunk-[:MENTIONS]->Entity и связи Entity-Entity.
+        with_chunks=False — только документ и сущности (для очень крупных файлов),
+        связь документа с сущностью помечается числом упоминаний.
+        """
+        if not self.driver:
+            return []
+        try:
+            limit_chunks = max(1, min(int(limit_chunks or 150), 400))
+            limit_entities = max(1, min(int(limit_entities or 120), 400))
+            with self.driver.session() as session:
+                doc = session.run(
+                    "MATCH (d:Document {id: $doc}) "
+                    "RETURN d.id AS id, d.filename AS filename LIMIT 1",
+                    doc=document_id,
+                ).single()
+                if not doc:
+                    return []
+
+                doc_key, doc_name, _, doc_extra = self._describe_node(
+                    {"id": doc["id"], "filename": doc["filename"]}, "Document", {})
+                nodes: Dict[str, dict] = {
+                    doc_key: {"key": doc_key, "name": doc_name, "kind": "document",
+                              "type": "Document", **doc_extra}
+                }
+                edges: List[Dict] = []
+
+                # сущности документа (по числу фрагментов, где встречаются)
+                ents = list(session.run(
+                    "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)"
+                    "-[:MENTIONS]->(e:Entity) "
+                    "RETURN e.name AS name, e.type AS type, "
+                    "count(DISTINCT c) AS mentions "
+                    "ORDER BY mentions DESC, name LIMIT $le",
+                    doc=document_id, le=limit_entities,
+                ))
+
+                if with_chunks:
+                    chunks = list(session.run(
+                        "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk) "
+                        "RETURN c.id AS cid, c.chunk_seq AS seq "
+                        "ORDER BY seq LIMIT $lc",
+                        doc=document_id, lc=limit_chunks,
+                    ))
+                    chunk_nodes = {}
+                    for c in chunks:
+                        cid = c["cid"]
+                        seq = c["seq"]
+                        ckey = f"c:{cid}"
+                        chunk_nodes[ckey] = cid
+                        nodes[ckey] = {
+                            "key": ckey,
+                            "name": f"{doc_name} · фрагмент {seq}" if seq is not None else doc_name,
+                            "kind": "chunk", "type": "Chunk",
+                            "chunk_id": cid, "chunk_seq": seq,
+                            "document_id": doc["id"], "filename": doc_name,
+                        }
+                        edges.append({"source": doc_key, "target": ckey,
+                                      "source_name": doc_name,
+                                      "target_name": nodes[ckey]["name"],
+                                      "type": "HAS_CHUNK"})
+                    for e in ents:
+                        ekey = f"e:{e['name']}"
+                        nodes.setdefault(ekey, {
+                            "key": ekey, "name": e["name"], "kind": "entity",
+                            "type": e["type"] or "Entity",
+                            "entity_type": e["type"], "mentions": e["mentions"],
+                        })
+
+                    # кто из сущностей в каких фрагментах встречается
+                    pairs = list(session.run(
+                        "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)"
+                        "-[:MENTIONS]->(e:Entity) "
+                        "WHERE c.id IN $ids "
+                        "RETURN c.id AS cid, e.name AS ename LIMIT 3000",
+                        doc=document_id, ids=list(chunk_nodes.values()),
+                    ))
+                    seen_pairs = set()
+                    for p in pairs:
+                        pair = (p["cid"], p["ename"])
+                        if pair in seen_pairs:
+                            continue
+                        seen_pairs.add(pair)
+                        ckey, ekey = f"c:{p['cid']}", f"e:{p['ename']}"
+                        nm = nodes.get(ekey, {}).get("name", p["ename"])
+                        edges.append({"source": ckey, "target": ekey,
+                                      "source_name": nodes.get(ckey, {}).get("name", ""),
+                                      "target_name": nm, "type": "MENTIONS"})
+                else:
+                    for e in ents:
+                        ekey = f"e:{e['name']}"
+                        nodes.setdefault(ekey, {
+                            "key": ekey, "name": e["name"], "kind": "entity",
+                            "type": e["type"] or "Entity",
+                            "entity_type": e["type"], "mentions": e["mentions"],
+                        })
+                        edges.append({"source": doc_key, "target": ekey,
+                                      "source_name": doc_name, "target_name": e["name"],
+                                      "type": f"MENTIONS ×{e['mentions']}"})
+
+                # связи сущность-сущность внутри отобранного набора
+                names = [e["name"] for e in ents]
+                if names:
+                    rels = list(session.run(
+                        "MATCH (a:Entity)-[r]->(b:Entity) "
+                        "WHERE a.name IN $names AND b.name IN $names "
+                        "AND type(r) <> 'MENTIONS' "
+                        "RETURN a.name AS a, type(r) AS t, b.name AS b LIMIT 400",
+                        names=names,
+                    ))
+                    for r in rels:
+                        edges.append({"source": f"e:{r['a']}", "target": f"e:{r['b']}",
+                                      "source_name": r["a"], "target_name": r["b"],
+                                      "type": r["t"]})
+                return [{"nodes": list(nodes.values()), "edges": edges}]
+        except Exception as e:
+            logger.warning(f"Ошибка подграфа документа {document_id}: {e}")
             return []
 
     def chunk_info(self, chunk_id: str) -> Optional[Dict]:

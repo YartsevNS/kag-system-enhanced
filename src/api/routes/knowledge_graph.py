@@ -116,6 +116,7 @@ def _page_of(payload: dict):
 async def entity_chunks(
     entity_name: str,
     limit: int = 8,
+    doc_id: str = "",
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Чанки сущности: номер фрагмента, документ, превью и полный текст.
@@ -128,7 +129,7 @@ async def entity_chunks(
         from src.indexing.knowledge_graph import kg_service
         from src.indexing.embeddings_service import embeddings_service
 
-        rows = kg_service.entity_chunks(entity_name, limit)
+        rows = kg_service.entity_chunks(entity_name, limit, doc_id or "")
         point_ids = [r.get("point_id") for r in rows if r.get("point_id")]
         payloads = await embeddings_service.get_points_payload(point_ids) if point_ids else {}
         for r in rows:
@@ -144,6 +145,32 @@ async def entity_chunks(
     except Exception as e:
         logger.warning(f"Ошибка чанков сущности «{entity_name}»: {e}")
         return {"entity": entity_name, "chunks": [], "error": str(e)}
+
+
+@router.get("/document/{document_id}/graph",
+            summary="Подграф документа: фрагменты и сущности (фильтр по документу)")
+async def document_graph(
+    document_id: str,
+    with_chunks: bool = True,
+    limit_chunks: int = 150,
+    limit_entities: int = 120,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Граф одного документа: какие сущности пришли из этого файла.
+
+    with_chunks=false — без узлов-фрагментов (для очень крупных документов).
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        graph = kg_service.get_document_graph(document_id, with_chunks,
+                                              limit_chunks, limit_entities)
+        if not graph:
+            return {"document_id": document_id, "graph": [],
+                    "error": "документ не найден в графе знаний"}
+        return {"document_id": document_id, "graph": graph}
+    except Exception as e:
+        logger.warning(f"Ошибка подграфа документа {document_id}: {e}")
+        return {"document_id": document_id, "graph": [], "error": str(e)}
 
 
 @router.get("/chunk/{chunk_id}", summary="Чанк: текст, документ, страница")

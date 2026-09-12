@@ -91,6 +91,10 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
         <option value="3">3 уровня</option>
       </select>
       <button class="btn" onclick="loadGraphFromInput()">Показать граф</button>
+      <input type="text" id="kg-doc" list="kg-docs" placeholder="Фильтр по документу (имя файла)" style="min-width:260px" onfocus="loadDocList()" onkeydown="if(event.key==='Enter')loadDocGraphFromInput()">
+      <datalist id="kg-docs"></datalist>
+      <button class="btn" onclick="loadDocGraphFromInput()">Граф по документу</button>
+      <button class="btn-outline" onclick="clearDocFilter()">Снять фильтр</button>
       <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
       <button class="btn-outline" onclick="toggleFullscreenViz()">⛶ На весь экран</button>
     </div>
@@ -721,14 +725,17 @@ async function loadEntityChunks(name){
   const body = document.getElementById('kg-info-body');
   if (!body) return;
   try {
-    const r = await fetch(API + '/entity/' + encodeURIComponent(name) + '/chunks?limit=6', { headers: authHeaders() });
+    const url = API + '/entity/' + encodeURIComponent(name) + '/chunks?limit=6' +
+                (docFilterId ? '&doc_id=' + encodeURIComponent(docFilterId) : '');
+    const r = await fetch(url, { headers: authHeaders() });
     const d = await r.json();
     const rows = d.chunks || [];
     if (!rows.length) {
       body.innerHTML = 'фрагменты не найдены (сущность есть только в связях с другими сущностями)';
       return;
     }
-    body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность (' + rows.length + '):</div>' +
+    const scope = docFilterName ? ' в документе «' + esc(docFilterName) + '»' : '';
+    body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность' + scope + ' (' + rows.length + '):</div>' +
       rows.map(function(c){
         const fname = esc(c.filename || String(c.document_id || '').slice(0, 8));
         const sub = 'фрагмент ' + esc(c.chunk_seq != null ? c.chunk_seq : '?') + (c.page ? ', стр. ' + esc(c.page) : '');
@@ -819,7 +826,93 @@ async function onKgInput(){
   }, 300);
 }
 
+// Документ, по которому построен граф: используется как фильтр фрагментов в
+// панели по клику на сущность (видно, в каких фрагментах ЭТОГО файла она есть).
+let docFilterId = '';
+let docFilterName = '';
+let docListCache = null;
+
+async function loadDocList(){
+  if (docListCache) return;
+  try {
+    const r = await fetch('/api/v1/upload/list?limit=300', { headers: authHeaders(), credentials: 'include' });
+    const d = await r.json();
+    const docs = d.documents || d.items || (Array.isArray(d) ? d : []);
+    docListCache = docs;
+    const dl = document.getElementById('kg-docs');
+    if (dl) {
+      dl.innerHTML = docs.map(function(x){
+        const name = x.filename || x.recognized_title || x.id;
+        const id = x.id || x.document_id || '';
+        return '<option value="' + String(name).replace(/"/g,'&quot;') + '">' + (x.status || '') + '</option>';
+      }).join('');
+    }
+  } catch(e) { /* список не критичен */ }
+}
+
+function findDoc(q){
+  const docs = docListCache || [];
+  const s = String(q || '').trim().toLowerCase();
+  if (!s) return null;
+  return docs.find(function(x){
+    const fn = String(x.filename || '').toLowerCase();
+    const rt = String(x.recognized_title || '').toLowerCase();
+    return String(x.id || '') === q || String(x.document_id || '') === q || fn === s || fn.includes(s) || rt.includes(s);
+  }) || null;
+}
+
+async function loadDocGraphFromInput(){
+  await loadDocList();
+  const q = (document.getElementById('kg-doc').value || '').trim();
+  const doc = findDoc(q);
+  if (!doc){
+    document.getElementById('kg-msg').textContent = 'Документ не найден — начните вводить имя файла (список подгрузится при фокусе)';
+    return;
+  }
+  await loadDocGraph(doc.id || doc.document_id, doc.filename || doc.recognized_title || '');
+}
+
+async function loadDocGraph(docId, docName){
+  document.getElementById('kg-msg').textContent = '⏳ Строю граф по документу...';
+  try {
+    const r = await fetch(API + '/document/' + encodeURIComponent(docId) + '/graph', { headers: authHeaders() });
+    const d = await r.json();
+    const g = (d.graph && d.graph[0]) || null;
+    if (!g || !g.nodes || !g.nodes.length){
+      document.getElementById('kg-msg').textContent = 'По этому документу нет данных в графе знаний' + (d.error ? ' (' + d.error + ')' : '');
+      return;
+    }
+    const c = ensureCy();
+    c.elements().remove();
+    Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
+    addGraphData(g);
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:9000, idealEdgeLength:110, gravity:0.85 }).run();
+    c.fit(undefined, 40);
+    docFilterId = docId;
+    docFilterName = docName || '';
+    document.getElementById('kg-doc').value = docName || '';
+    const kinds = {};
+    (g.nodes||[]).forEach(function(n){ kinds[n.kind] = (kinds[n.kind]||0)+1; });
+    const docNode = (g.nodes||[]).filter(function(n){ return n.kind === 'document'; }).length;
+    document.getElementById('kg-msg').textContent = 'Документ «' + (docName || '') + '»: ' +
+      (docNode ? 'узел документа, ' : '') + (kinds.chunk||0) + ' фрагментов, ' + (kinds.entity||0) +
+      ' сущностей · клик по сущности покажет её фрагменты ТОЛЬКО из этого файла';
+  } catch(e){
+    document.getElementById('kg-msg').textContent = 'Ошибка: ' + (e.message || e);
+  }
+}
+
+function clearDocFilter(){
+  docFilterId = '';
+  docFilterName = '';
+  const el = document.getElementById('kg-doc');
+  if (el) el.value = '';
+  document.getElementById('kg-msg').textContent = 'Фильтр по документу снят';
+}
+
 async function loadGraph(name, depth){
+  docFilterId = '';
+  docFilterName = '';
   document.getElementById('kg-msg').textContent = '⏳ Загрузка...';
   try {
     const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=' + depth, { headers: authHeaders() });
