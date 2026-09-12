@@ -41,6 +41,8 @@ from src.indexing.indexing_guards import run_with_transient_retry
 # чтобы потребитель сам решал, сколько ему нужно, а база оставалась полной.
 CHUNK_TEXT_PREVIEW_CHARS = 500
 
+from src.indexing.ids import display_filename
+
 
 
 # ============================================================
@@ -1695,15 +1697,15 @@ class KnowledgeGraphService:
         """(ключ, человекочитаемое имя, вид, доп. поля) для узла визуализации."""
         if label == "Document":
             doc_id = node.get("id") or ""
-            return (f"d:{doc_id}", (node.get("filename") or doc_id), "document",
-                    {"document_id": doc_id})
+            return (f"d:{doc_id}", (display_filename(node.get("filename")) or doc_id),
+                    "document", {"document_id": doc_id})
         if label == "Chunk":
             cid = node.get("id") or ""
             meta = chunk_meta.get(cid, {})
             seq = node.get("chunk_seq")
             if seq is None:
                 seq = meta.get("chunk_seq")
-            fname = meta.get("filename") or ""
+            fname = display_filename(meta.get("filename") or "")
             if fname and seq is not None:
                 name = f"{fname} · фрагмент {seq}"
             elif fname:
@@ -1809,7 +1811,13 @@ class KnowledgeGraphService:
                     "ORDER BY chunk_seq LIMIT $limit",
                     name=entity_name, limit=limit_i,
                 )
-                return [dict(r) for r in res]
+                out = []
+                for r in res:
+                    row = dict(r)
+                    row["stored_filename"] = row.get("filename") or ""
+                    row["filename"] = display_filename(row.get("filename"))
+                    out.append(row)
+                return out
         except Exception as e:
             logger.warning(f"Ошибка выборки чанков сущности «{entity_name}»: {e}")
             return []
@@ -1830,7 +1838,10 @@ class KnowledgeGraphService:
                 )
                 rec = res.single()
                 if rec:
-                    return dict(rec)
+                    data = dict(rec)
+                    data["stored_filename"] = data.get("filename") or ""
+                    data["filename"] = display_filename(data.get("filename"))
+                    return data
                 res2 = session.run(
                     "MATCH (c:Chunk {id: $cid}) RETURN c.id AS chunk_id, "
                     "c.chunk_seq AS chunk_seq, coalesce(c.qdrant_point_id, '') AS point_id, "

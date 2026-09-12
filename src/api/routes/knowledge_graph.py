@@ -7,6 +7,7 @@ from typing import Optional, List
 from loguru import logger
 
 from src.api.middleware.auth_v2 import get_current_user_optional, get_current_admin
+from src.indexing.ids import display_filename
 from src.database.user_models import User
 
 router = APIRouter()
@@ -136,7 +137,7 @@ async def entity_chunks(
             if pl.get("content"):
                 r["content"] = pl["content"]
             if pl.get("filename"):
-                r["filename"] = pl["filename"]
+                r["filename"] = display_filename(pl["filename"])
             if pl.get("document_id"):
                 r["document_id"] = pl["document_id"]
         return {"entity": entity_name, "chunks": rows, "total": len(rows)}
@@ -165,7 +166,7 @@ async def chunk_details(
         if pl.get("content"):
             info["content"] = pl["content"]
         if pl.get("filename"):
-            info["filename"] = pl["filename"]
+            info["filename"] = display_filename(pl["filename"])
         if pl.get("document_id"):
             info["document_id"] = pl["document_id"]
         info["found"] = True

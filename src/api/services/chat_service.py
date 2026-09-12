@@ -601,7 +601,8 @@ class ChatService:
                                     filename = record.filename
                             except Exception:
                                 pass
-                        result['filename'] = filename or doc_id[:12]
+                        from src.indexing.ids import display_filename
+                        result['filename'] = display_filename(filename) or doc_id[:12]
                         score_info = f"rerank:{result.get('rerank_score', 0):.3f}" if 'rerank_score' in result else f"score:{result['score']:.3f}"
                         context_parts.append(
                             f"[Источник {i}] «{filename or doc_id[:12]}» ({score_info}):\n{result['content']}"

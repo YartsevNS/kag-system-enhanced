@@ -13,6 +13,7 @@ Chunk имел id = chunk_id. Связь между базами была воз
 
 from __future__ import annotations
 
+import re
 import uuid
 
 # Отдельный префикс, чтобы пространство имён чанков не пересекалось
@@ -61,3 +62,23 @@ def build_embedding_text(content: str, metadata: dict | None = None) -> str:
     if not parts:
         return content
     return ", ".join(parts) + ": " + content
+
+
+# Префикс, под которым файл лежит на диске: "<document_id>_"
+_UPLOAD_PREFIX_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_"
+)
+
+
+def display_filename(filename: str) -> str:
+    """Человекочитаемое имя файла: без префикса <document_id>_.
+
+    Файлы сохраняются как «<document_id>_<имя>», и это же имя уходит в payload
+    Qdrant и в узлы графа. В интерфейсе такой префикс выглядит как мусор
+    («b93f09…_Инфляция.pdf»), поэтому на ВЫДАЧЕ его снимаем; в хранилище имя
+    остаётся как есть (по нему строится путь к файлу).
+    """
+    if not filename:
+        return ""
+    return _UPLOAD_PREFIX_RE.sub("", str(filename))
