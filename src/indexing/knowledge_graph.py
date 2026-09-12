@@ -23,6 +23,8 @@ from loguru import logger
 import json
 import re
 
+from src.indexing.ids import point_id_for_chunk
+
 
 # ============================================================
 # Data Classes
@@ -237,6 +239,7 @@ class KnowledgeGraphService:
                     MERGE (c:Chunk {id: $chunk_id})
                     SET c.text_preview = $text_preview,
                         c.chunk_seq = $chunk_seq,
+                        c.qdrant_point_id = $qdrant_point_id,
                         c.updated_at = datetime()
                     WITH c
                     MATCH (d:Document {id: $doc_id})
@@ -245,7 +248,8 @@ class KnowledgeGraphService:
                     chunk_id=chunk_id,
                     doc_id=document_id,
                     text_preview=text[:500],
-                    chunk_seq=chunk_seq
+                    chunk_seq=chunk_seq,
+                    qdrant_point_id=point_id_for_chunk(chunk_id)
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания узла чанка: {e}")

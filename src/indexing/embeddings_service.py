@@ -24,6 +24,7 @@ from qdrant_client.models import (
 
 from src.llm.embeddings import EmbeddingClient
 from src.config import get_settings
+from src.indexing.ids import build_embedding_text, point_id_for_chunk
 
 
 def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
@@ -305,8 +306,13 @@ class EmbeddingsService:
 
         logger.info(f"Embed & Store: document={document_id}, chunks={len(chunks)}")
 
-        # Извлекаем тексты
-        texts = [chunk.get("content", "") for chunk in chunks]
+        # Извлекаем тексты. Для эмбеддинга добавляем структурный префикс
+        # (номер стандарта/пункта) — только на стороне документа (passage),
+        # запрос эмбеддится как есть. content в payload остаётся чистым.
+        texts = [
+            build_embedding_text(chunk.get("content", ""), chunk.get("metadata"))
+            for chunk in chunks
+        ]
 
         # Генерируем embeddings батчами
         embeddings = await self._embedding_client.generate_batch(texts, batch_size=self._batch_size)
@@ -322,7 +328,10 @@ class EmbeddingsService:
         # Создаем точки для Qdrant
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{document_id}-{i}"))
+            # Единый идентификатор: point_id — детерминированная функция от
+            # chunk_id (тот же chunk_id у узла Chunk в Neo4j → точечная связь).
+            chunk_id = chunk.get("chunk_id") or f"{document_id}_chunk_{i:05d}"
+            point_id = point_id_for_chunk(chunk_id)
 
             # Формируем вектор: dense (основной) + sparse (BM25)
             vectors = {"dense": embedding}
