@@ -89,6 +89,17 @@ payload верхнего уровня:
 
 ## 6. Проверка после переиндексации
 
+**Автоматическая проверка.** С 2026-09-12 после векторзации документ не просто
+считается готовым: сервис делает exact count точек документа в Qdrant и сверяет
+с числом чанков (`src/indexing/indexing_guards.py`, шаг `verify_points` в
+process-логе документа). 0 точек при ненулевых чанках — провал индексации:
+документ переводится в `failed` с понятной ошибкой, а не в `completed`.
+Расхождение числа точек и чанков пишется warning'ом. Так закрыт класс ошибок
+2026-09-12: документ «обработан, 180 чанков», а в Qdrant 0 точек (коллизии
+point_id), и это было невидимо.
+
+Проверить вручную (когда нужно убедиться самому):
+
 ```bash
 # payload и point_id в Qdrant
 curl -s -X POST http://localhost:6333/collections/kag_documents/points/scroll \
@@ -99,6 +110,24 @@ curl -s -X POST http://localhost:6333/collections/kag_documents/points/scroll \
 docker exec kag-neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" \
   "MATCH (c:Chunk) WHERE c.qdrant_point_id IS NOT NULL RETURN c.id, c.qdrant_point_id LIMIT 5"
 
+# точное число точек документа
+curl -s -X POST http://localhost:6333/collections/kag_documents/points/count \
+  -H "api-key: $QDRANT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"exact": true, "filter": {"must": [{"key":"document_id","match":{"value":"<id>"}}]}}'
+
 # оценка качества до/после
 python scripts/evaluate_retrieval.py --output reports/eval_after.json
 ```
+
+## 7. Прочие предохранители (2026-09-12)
+
+| Что | Где | Поведение |
+|---|---|---|
+| Проверка записи векторов | `document_service._process_document_impl` + `indexing_guards.check_points_written` | 0 точек → `failed`, расхождение → warning |
+| Liveness вместо слепых 60 минут | `recovery.py` + `indexing_guards.recovery_reason` | задачи нет в active/reserved >5 мин → документ перезапускается сразу; порог 60 мин остаётся страховкой, когда `inspect` недоступен |
+| Ретрай дедлоков Neo4j | `indexing_guards.run_with_transient_retry` в `batch_create_entities/relations` | при `TransientError.DeadlockDetected` — до 3 попыток; нетранзиентные ошибки пробрасываются (раньше пачка связей терялась молча) |
+| Ошибка эмбеддинга ≠ «ничего не найдено» | `POST /api/v1/chat/search` | при отказе модели запроса — 503 вместо 200 с пустым списком |
+
+Сверка рассинхрона Qdrant/Neo4j и БД: `scripts/cleanup_orphans.py`
+(dry-run по умолчанию, `--apply` удаляет). Перезаливка текста чанков в граф:
+`scripts/backfill_graph_chunk_text.py`.
