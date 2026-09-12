@@ -1,62 +1,27 @@
 # ===========================================
-# Stage 1: Build
+# KAG MCP Server — тонкий образ поверх kag-base
 # ===========================================
-FROM python:3.11-slim as builder
+# Раньше собирался из собственного Dockerfile (только requirements.txt,
+# 1.67 ГБ) — теперь наследует kag-base, поэтому отдельного набора зависимостей
+# нет. Проверено: src/mcp/ не импортирует occular/docling/torch.
+#
+# Сборка (СНАЧАЛА kag-base той же версии):
+#   docker build -t kre44et/kag-mcp:2026.09.07 -f Dockerfile.mcp .
+#   docker push kre44et/kag-mcp:2026.09.07
 
-# Зеркало Debian (mirror.yandex.ru) — deb.debian.org недоступен из РФ-сети.
-RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
-
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# ===========================================
-# Stage 2: Production
-# ===========================================
-FROM python:3.11-slim as production
-
-# Зеркало Debian (mirror.yandex.ru) — deb.debian.org недоступен из РФ-сети.
-RUN sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true
+FROM kre44et/kag-base:2026.09.07
 
 LABEL maintainer="KAG Team"
-LABEL description="KAG MCP Server"
+LABEL description="KAG MCP Server (Model Context Protocol over HTTP)"
 LABEL version="0.1.0"
-
-RUN apt-get update && apt-get install -y \
-    curl \
-    tesseract-ocr \
-    tesseract-ocr-rus \
-    tesseract-ocr-eng \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-RUN groupadd -r kag && useradd -r -g kag -d /app -s /sbin/nologin kag
-
-WORKDIR /app
 
 COPY --chown=kag:kag src/ /app/src/
 
-ENV PYTHONPATH=/app
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PATH="/opt/venv/bin:$PATH"
-
 EXPOSE 8001
-
-USER kag
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" || exit 1
+
+USER kag
 
 CMD ["uvicorn", "src.mcp.server:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -21,6 +21,28 @@ docker-compose up -d
 - DEV-режим с живым ./src: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
   (сборка из локальных Dockerfile + монтирование кода).
 
+### Порядок сборки образов (kag-base → тонкие)
+
+api/worker/mcp наследуют общий базовый образ `kre44et/kag-base:<tag>`
+(python + apt + venv + requirements + Occular + Playwright + веса).
+Порядок строгий:
+
+```bash
+# 1. База — ТОЛЬКО при изменении requirements.txt / весов (долго, ~30-40 мин)
+docker build -t kre44et/kag-base:2026.09.07 -f docker/base/Dockerfile .
+docker push kre44et/kag-base:2026.09.07
+
+# 2. Тонкие образы — при любом изменении кода (быстро, секунды)
+docker build -t kre44et/kag-api:2026.09.07 -f Dockerfile .
+docker build -t kre44et/kag-worker:2026.09.07 -f Dockerfile.worker .
+docker build -t kre44et/kag-mcp:2026.09.07 -f Dockerfile.mcp .
+docker push kre44et/kag-api:2026.09.07
+docker push kre44et/kag-worker:2026.09.07
+docker push kre44et/kag-mcp:2026.09.07
+```
+
+Экономия: api/worker/mcp делят один тяжёлый базовый слой вместо ~7 ГБ дублей.
+
 ## Бэкап документов (2026-08-24)
 
 - Админка → кнопка «💾 Скачать документы (backup)» рядом с «Переиндексировать».

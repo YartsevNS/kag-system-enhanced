@@ -1,10 +1,32 @@
-# Docker build context — exclude runtime data
+# Docker build context — exclude runtime data и тяжёлые локальные каталоги.
+# Нужны для сборки только: requirements.txt и src/ (см. Dockerfile'ы),
+# поэтому всё остальное можно смело исключать — ускоряет отправку контекста.
 data/
 user_data/
+models/
+weights/
 docker/nginx/ssl/
 .env
 .git
-*.pyc
+.venv/
+venv/
+env/
+ENV/
 __pycache__/
+*.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+backup_*/
+node_modules/
+dist/
+build/
+*.egg-info/
+.idea/
+.vscode/
 docker-compose.dev.yml
+docker-compose.override.yml
+sbom.json
+graphify-out/
+bash.exe.stackdump

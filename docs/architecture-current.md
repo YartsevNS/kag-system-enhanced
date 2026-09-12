@@ -23,6 +23,23 @@
 
 **Worker лимиты:** 4 CPU / 12G (переменные `${WORKER_CPUS:-4.0}` / `${WORKER_MEMORY:-12G}` в compose; менять в админке «Ресурсы Worker» — живой docker update + персистентный патч compose).
 
+## 1a. Образы (схема kag-base + тонкие)
+
+Свои сервисы не собираются на сервере — тянутся готовыми с Docker Hub
+(`kre44et/kag-*:2026.09.07`), код зашит в образ.
+
+| Образ | Состав | Примечание |
+|---|---|---|
+| `kre44et/kag-base` | python 3.11-slim + apt (OCR/poppler/GL/ssh) + venv + requirements + Occular + pyctcdecode + Playwright Chromium + веса HF | тяжёлый (~3.3 ГБ), общий |
+| `kre44et/kag-api` | `FROM kag-base` + `COPY src` + uvicorn :8000 | тонкий |
+| `kre44et/kag-worker` | `FROM kag-base` + `COPY src` + celery | тонкий |
+| `kre44et/kag-mcp` | `FROM kag-base` + `COPY src` + uvicorn :8001 | тонкий |
+| `kre44et/dozerdb` | Neo4j CE 5.26.27 + DozerDB + APOC | `docker/neo4j/Dockerfile` |
+
+Пересобирать `kag-base` — только при изменении requirements.txt/весов;
+изменение кода = пересборка тонкого образа (секунды). Порядок и команды —
+`docs/guides/deploy.md`. Концепция поставки — `docs/distribution.md`.
+
 ## 2. Поток обработки документа
 
 ```

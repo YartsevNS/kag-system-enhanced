@@ -15,16 +15,12 @@ casbin==1.36.0
 # Очереди и планировщик
 celery==5.4.0
 redis==5.2.1
-apscheduler==3.10.4
 
 # Векторная БД
 qdrant-client==1.12.1
 
 # Граф знаний
 neo4j==5.27.0
-
-# MCP
-mcp==1.2.0
 
 # Мониторинг
 prometheus-client==0.21.1
@@ -81,8 +77,9 @@ trafilatura>=2.0.0
 # Playwright — рендеринг SPA/JS-сайтов для веб-мониторинга (тип источника browser)
 playwright>=1.49.0
 
-# FastEmbed — sparse векторы BM25 для гибридного поиска
-fastembed>=0.3.0
+# FastEmbed УДАЛЁН (2026-09): sparse BM25 считается своей реализацией
+# (_tokenize_sparse/_sparse_vec в embeddings_service.py), fastembed в коде
+# не использовался — мёртвая зависимость.
 
 # Docling удалён (2026-08): ветка Docling в hybrid_parser мёртвая — основной
 # путь PyMuPDF → Occular. torch (~3.5GB) не нужен ни api, ни worker (OCR — onnxruntime).

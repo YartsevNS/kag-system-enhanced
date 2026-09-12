@@ -207,15 +207,21 @@ kag-offline-<version>/
 - `docker-compose.yml` использует `image:` (без `build:`) для своих сервисов;
 - `docker-compose.dev.yml` — dev-режим с живым `./src` (для разработки);
 - `deploy.sh` / `deploy-ocr.sh` — pull + up (без сборки);
-- образы публичные (pull без `docker login`).
+- образы публичные (pull без `docker login`);
+- **общий базовый образ `kag-base`** — api/worker/mcp = `FROM kag-base` +
+  `COPY src` (сборка тонкого образа ~2 с вместо ~40 мин); размер своих
+  образов 8.4 ГБ дублей → ~5.2 ГБ (-38%);
+- веса OCR теперь ВШИТЫ в образ полностью (в старой multi-stage сборке
+  7 ONNX-файлов терялись — для air-gapped это был провал);
+- удалены мёртвые зависимости (fastembed, mcp, apscheduler).
 
 Не сделано (roadmap к продаже):
 - [ ] инсталлер `install.sh` (preflight + `.env` + pull/load + health + init);
 - [ ] офлайн-бандл: скрипт сборки (`docker save` + SHA256SUMS + VERSION);
 - [ ] `docker-compose.offline.yml` (локальные имена, без pull);
 - [ ] локальный registry-профиль (registry:2 + инструкция загрузки);
-- [ ] **общий базовый образ `kag-base`** для api/worker (экономия ~3 ГБ);
-- [ ] **mcp из kag-base** вместо отдельного образа (экономия ~1.7 ГБ);
+- [x] ~~общий базовый образ `kag-base` для api/worker~~ — сделано;
+- [x] ~~mcp из kag-base вместо отдельного образа~~ — сделано;
 - [ ] офлайн-лицензирование (ключ + привязка);
 - [ ] документация заказчику (install/admin/security);
 - [ ] проверка на Astra Linux / РЕД ОС / Podman;

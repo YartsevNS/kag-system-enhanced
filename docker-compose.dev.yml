@@ -11,6 +11,12 @@
 # зашит). Этот файл возвращает dev-режим: сборка из локальных Dockerfile'ов
 # + монтирование живого ./src — правки кода видны без пересборки образа
 # (docker compose restart api).
+#
+# ВАЖНО: Dockerfile/Dockerfile.worker/Dockerfile.mcp наследуют образ
+# kre44et/kag-base:2026.09.07. Для dev-сборки он должен быть доступен
+# (собран локально или docker pull kre44et/kag-base:2026.09.07).
+# Пересобирать base нужно только при изменении requirements.txt/весов:
+#   docker build -t kre44et/kag-base:2026.09.07 -f docker/base/Dockerfile .
 
 services:
   api:
