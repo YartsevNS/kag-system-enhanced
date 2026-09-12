@@ -777,6 +777,13 @@ function nodeId(name){
   return nodeMap[name];
 }
 
+// Имя файла для показа: файлы хранятся как «<document_id>_<имя>», и список
+// документов отдаёт именно это имя — префикс в интерфейсе не нужен.
+function dispName(s){
+  return String(s == null ? '' : s).replace(
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_/, '');
+}
+
 function shortLabel(s){
   s = String(s == null ? '' : s);
   return s.length > 34 ? s.slice(0, 33) + '…' : s;
@@ -844,7 +851,7 @@ async function loadDocList(){
       dl.innerHTML = docs.map(function(x){
         const name = x.filename || x.recognized_title || x.id;
         const id = x.id || x.document_id || '';
-        return '<option value="' + String(name).replace(/"/g,'&quot;') + '">' + (x.status || '') + '</option>';
+        return '<option value="' + dispName(name).replace(/"/g,'&quot;') + '">' + (x.status || '') + '</option>';
       }).join('');
     }
   } catch(e) { /* список не критичен */ }
@@ -869,7 +876,7 @@ async function loadDocGraphFromInput(){
     document.getElementById('kg-msg').textContent = 'Документ не найден — начните вводить имя файла (список подгрузится при фокусе)';
     return;
   }
-  await loadDocGraph(doc.id || doc.document_id, doc.filename || doc.recognized_title || '');
+  await loadDocGraph(doc.id || doc.document_id, dispName(doc.filename || doc.recognized_title || ''));
 }
 
 async function loadDocGraph(docId, docName){

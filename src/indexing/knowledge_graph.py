@@ -1909,9 +1909,10 @@ class KnowledgeGraphService:
                     pairs = list(session.run(
                         "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)"
                         "-[:MENTIONS]->(e:Entity) "
-                        "WHERE c.id IN $ids "
+                        "WHERE c.id IN $ids AND e.name IN $names "
                         "RETURN c.id AS cid, e.name AS ename LIMIT 3000",
                         doc=document_id, ids=list(chunk_nodes.values()),
+                        names=[e["name"] for e in ents],
                     ))
                     seen_pairs = set()
                     for p in pairs:
