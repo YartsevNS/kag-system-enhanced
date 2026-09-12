@@ -134,7 +134,9 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
-      - HF_HOME=/app/data/hf_cache
+      # HF_HOME НЕ задаём: веса OCR вшиты в kag-base (/app/.cache/huggingface).
+      # Переопределение на bind-mount (/app/data/hf_cache) ломало ОФЛАЙН-работу —
+      # веса из образа не находились (LocalEntryNotFoundError при HF_HUB_OFFLINE=1).
       # PLAYWRIGHT_BROWSERS_PATH НЕ задаём: браузер вшит в kag-base
       # (/opt/ms-playwright, ENV в образе). Раньше указывал на bind-mount
       # /app/data/ms-playwright, где браузера могло не быть.
