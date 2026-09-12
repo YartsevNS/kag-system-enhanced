@@ -269,6 +269,30 @@
             font-size:0.875rem;
             color:var(--text2);
         }
+        /* Разметка ответа (см. formatMessageText): модель отвечает в markdown,
+           показываем это как форматирование, а не как «**» и «##» */
+        .message-text .msg-h{
+            font-weight:600;
+            color:var(--text);
+            margin:0.6rem 0 0.25rem;
+        }
+        .message-text ul, .message-text ol{
+            margin:0.35rem 0 0.5rem;
+            padding-left:1.4rem;
+        }
+        .message-text li{margin:0.15rem 0;}
+        .message-text code{
+            background:var(--bg2, rgba(255,255,255,0.06));
+            border-radius:4px;
+            padding:0.05rem 0.3rem;
+            font-size:0.85em;
+        }
+        .message-text strong{color:var(--text);}
+        .message-text hr{
+            border:0;
+            border-top:1px solid var(--border-s, var(--border));
+            margin:0.7rem 0;
+        }
         
         .message-meta{
             margin-top:0.5rem;
@@ -983,7 +1007,7 @@
             messageDiv.innerHTML = `
                 <div class="message-avatar">${avatar}</div>
                 <div class="message-content">
-                    <div class="message-text">${escapeHTML(content)}</div>
+                    <div class="message-text">${formatMessageText(content)}</div>
                     <div class="message-meta">
                         ${metadata ? `<span>✨ ${metadata.model || 'N/A'}</span>` : ''}
                         ${metadata && metadata.backend ? `<span>⚙️ ${metadata.backend}</span>` : ''}
@@ -1176,6 +1200,56 @@
         }
         
         // Экранирование HTML
+        // ── Разметка ответа ────────────────────────────────────────────
+        // Модель отвечает в markdown: «## заголовок», «**жирный**», «- пункт».
+        // Показывать это сырым текстом нельзя (в ответе видны звёздочки и
+        // решётки), поэтому разбираем узкий набор разметки и отдаём готовый
+        // HTML. Сначала экранируется ВСЁ — HTML из ответа не исполняется.
+        function formatMessageText(text) {
+            const esc = escapeHTML(text == null ? '' : String(text));
+            const out = [];
+            let buf = [];          // подряд идущие обычные строки
+            let listType = null;   // 'ul' | 'ol' | null
+
+            const inline = (s) => s
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+
+            const flushText = () => {
+                if (buf.length) { out.push(buf.join('\n')); buf = []; }
+            };
+            const closeList = () => {
+                if (listType) { out.push('</' + listType + '>'); listType = null; }
+            };
+
+            for (const raw of esc.split('\n')) {
+                const line = raw.replace(/\s+$/, '');
+                let m;
+                if ((m = line.match(/^\s{0,3}#{1,6}\s*(.+)$/))) {
+                    flushText(); closeList();
+                    out.push('<div class="msg-h">' + inline(m[1]) + '</div>');
+                } else if (/^\s{0,3}([-_*]\s*){3,}$/.test(line)) {
+                    flushText(); closeList(); out.push('<hr>');
+                } else if ((m = line.match(/^\s{0,3}[-*+]\s+(.+)$/))) {
+                    flushText();
+                    if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+                    out.push('<li>' + inline(m[1]) + '</li>');
+                } else if ((m = line.match(/^\s{0,3}\d+[.)]\s+(.+)$/))) {
+                    flushText();
+                    if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
+                    out.push('<li>' + inline(m[1]) + '</li>');
+                } else if (line.trim() === '') {
+                    flushText(); closeList(); buf.push('');
+                } else {
+                    closeList(); buf.push(inline(line));
+                }
+            }
+            flushText(); closeList();
+            return out.join('');
+        }
+
         function escapeHTML(str) {
             const div = document.createElement('div');
             div.textContent = str;
