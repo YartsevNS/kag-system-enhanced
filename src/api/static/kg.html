@@ -94,6 +94,8 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
       <input type="text" id="kg-doc" list="kg-docs" placeholder="Фильтр по документу (имя файла)" style="min-width:260px" onfocus="loadDocList()" onkeydown="if(event.key==='Enter')loadDocGraphFromInput()">
       <datalist id="kg-docs"></datalist>
       <button class="btn" onclick="loadDocGraphFromInput()">Граф по документу</button>
+      <input type="text" id="kg-text" placeholder="Поиск фрагментов по тексту (например: ГОСТ Р 34.10)" style="min-width:280px" onkeydown="if(event.key==='Enter')searchChunksFromInput()">
+      <button class="btn" onclick="searchChunksFromInput()">Найти фрагменты</button>
       <button class="btn-outline" onclick="clearDocFilter()">Снять фильтр</button>
       <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
       <button class="btn-outline" onclick="toggleFullscreenViz()">⛶ На весь экран</button>
@@ -656,7 +658,9 @@ function ensureCy(){
           'target-arrow-shape':'triangle', 'target-arrow-color':'#777',
           'label':'data(label)', 'font-size':8, 'color':'#888', 'text-rotation':'autorotate',
           'text-background-color':'#171717', 'text-background-opacity':0.7, 'text-background-padding':'2px' } },
-      { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } }
+      { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } },
+      // Найденные по тексту фрагменты — яркая обводка (соседи по уровню обычные)
+      { selector:'.matched', style:{ 'border-width':4, 'border-color':'#f5a524' } }
     ],
     layout:{ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 },
     wheelSensitivity:0.2, minZoom:0.05, maxZoom:3
@@ -761,8 +765,11 @@ async function loadChunkText(chunkId){
     const r = await fetch(API + '/chunk/' + encodeURIComponent(chunkId), { headers: authHeaders() });
     const d = await r.json();
     if (!d.found) { body.innerHTML = 'фрагмент не найден в графе'; return; }
+    const node = (typeof cy !== 'undefined' && cy)
+      ? cy.nodes().filter(function(n){ return n.data('chunk_id') === chunkId; })[0] : null;
+    d.matched = node ? !!node.data('matched') : false;
     const head = esc(d.filename || '') + (d.chunk_seq != null ? ' · фрагмент ' + esc(d.chunk_seq) : '') +
-                 (d.page ? ', стр. ' + esc(d.page) : '');
+                 (d.page ? ', стр. ' + esc(d.page) : '') + (d.matched ? ' · совпадение по поиску' : '');
     body.innerHTML = '<div style="font-size:11px;color:var(--text4)">' + head + '</div>' +
       '<div style="font-size:12px;color:var(--text2);max-height:260px;overflow:auto;white-space:pre-wrap">' +
       esc(String(d.content || '').slice(0, 2000)) + '</div>' +
@@ -877,6 +884,43 @@ async function loadDocGraphFromInput(){
     return;
   }
   await loadDocGraph(doc.id || doc.document_id, dispName(doc.filename || doc.recognized_title || ''));
+}
+
+// Поиск фрагментов по тексту: в браузер уходит только выборка (совпадения +
+// соседи по уровню), а не весь документ. Уровень берётся из селектора страницы.
+async function searchChunksFromInput(){
+  const q = (document.getElementById('kg-text').value || '').trim();
+  if (!q){ document.getElementById('kg-msg').textContent = 'Введите текст для поиска'; return; }
+  const level = document.getElementById('kg-depth').value || '1';
+  const docId = docFilterId || '';
+  document.getElementById('kg-msg').textContent = '⏳ Ищу фрагменты...';
+  try {
+    let url = API + '/search-chunks?q=' + encodeURIComponent(q) + '&level=' + encodeURIComponent(level);
+    if (docId) url += '&doc_id=' + encodeURIComponent(docId);
+    const r = await fetch(url, { headers: authHeaders() });
+    const d = await r.json();
+    const g = { nodes: d.nodes || [], edges: d.edges || [] };
+    if (!g.nodes.length){
+      document.getElementById('kg-msg').textContent = 'Ничего не найдено по «' + q + '»' +
+        (docId ? ' в выбранном документе' : '');
+      return;
+    }
+    const c = ensureCy();
+    c.elements().remove();
+    Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
+    addGraphData(g);
+    c.nodes().filter(function(n){ return n.data('matched'); }).addClass('matched');
+    c.layout({ name:'cose', animate:true, padding:30, nodeRepulsion:10000, idealEdgeLength:110, gravity:0.85 }).run();
+    c.fit(undefined, 40);
+    const chunks = g.nodes.filter(function(n){ return n.kind === 'chunk'; }).length;
+    const matched = g.nodes.filter(function(n){ return n.kind === 'chunk' && n.matched; }).length;
+    document.getElementById('kg-msg').textContent = '«' + q + '»: совпадений ' + (d.hits || matched) +
+      ', показано ' + chunks + ' фрагментов (совпадения + соседи по ' + level +
+      ' ур.), сущностей ' + g.nodes.filter(function(n){ return n.kind === 'entity'; }).length +
+      (d.fulltext ? ' · поиск по полнотекстовому индексу' : ' · поиск перебором (индекс недоступен)');
+  } catch(e){
+    document.getElementById('kg-msg').textContent = 'Ошибка поиска: ' + (e.message || e);
+  }
 }
 
 async function loadDocGraph(docId, docName){

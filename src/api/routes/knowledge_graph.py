@@ -147,6 +147,32 @@ async def entity_chunks(
         return {"entity": entity_name, "chunks": [], "error": str(e)}
 
 
+@router.get("/search-chunks",
+            summary="Найти фрагменты по тексту + соседние по уровню (фильтр по документу)")
+async def search_chunks(
+    q: str,
+    doc_id: str = "",
+    level: int = 1,
+    limit: int = 20,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Поиск фрагментов в графе: совпадения плюс соседи по chunk_seq (±level).
+
+    Затем в браузер уходит только эта выборка — не весь документ.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        result = kg_service.search_chunks(q, doc_id or "", level, limit)
+        if not result:
+            return {"query": q, "nodes": [], "edges": [], "hits": 0, "chunks_shown": 0}
+        result["query"] = q
+        return result
+    except Exception as e:
+        logger.warning(f"Ошибка поиска фрагментов «{q}»: {e}")
+        return {"query": q, "nodes": [], "edges": [], "hits": 0, "chunks_shown": 0,
+                "error": str(e)}
+
+
 @router.get("/document/{document_id}/graph",
             summary="Подграф документа: фрагменты и сущности (фильтр по документу)")
 async def document_graph(

@@ -1831,6 +1831,206 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка выборки чанков сущности «{entity_name}»: {e}")
             return []
 
+    # Полнотекстовый индекс по тексту чанков: создаётся один раз (IF NOT EXISTS),
+    # ускоряет поиск «найди фрагменты про X» вместо полного сканирования CONTAINS.
+    FULLTEXT_INDEX = "chunk_text_fulltext"
+
+    def _ensure_chunk_fulltext_index(self, session) -> bool:
+        try:
+            session.run(
+                f"CREATE FULLTEXT INDEX {self.FULLTEXT_INDEX} IF NOT EXISTS "
+                "FOR (c:Chunk) ON EACH [c.text]"
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"Полнотекстовый индекс по чанкам недоступен: {e}")
+            return False
+
+    @staticmethod
+    def _lucene_query(query: str) -> str:
+        """Термы запроса в Lucene: убрать спецсимволы, склеить через AND.
+
+        «ГОСТ Р 34.10» содержит точку и дефис — в Lucene это специальные символы,
+        поэтому чистим и работаем с токенами длиной >= 2.
+        """
+        import re as _re
+        cleaned = _re.sub(r"[+\-=&|><!(){}\[\]^\"~*?:/\\]", " ", str(query or ""))
+        terms = [t for t in cleaned.split() if len(t) >= 2]
+        return " AND ".join(f'"{t}"' for t in terms[:12])
+
+    @staticmethod
+    def _chunk_match_terms(query: str) -> List[str]:
+        import re as _re
+        cleaned = _re.sub(r"[^\w\s.\-]", " ", str(query or ""))
+        return [t.lower() for t in cleaned.split() if len(t) >= 2][:12]
+
+    def search_chunks(self, query: str, doc_id: str = "", level: int = 1,
+                      limit_hits: int = 20, limit_chunks: int = 150) -> Dict:
+        """Найти фрагменты по тексту и добавить соседей по chunk_seq.
+
+        Возвращает подграф в том же формате, что get_entity_graph /
+        get_document_graph: {nodes, edges} + служебные поля (hits, chunks_shown).
+        """
+        if not self.driver:
+            return {}
+        q = (query or "").strip()
+        if not q:
+            return {}
+        try:
+            level_i = max(1, min(int(level or 1), 5))
+            limit_hits = max(1, min(int(limit_hits or 20), 60))
+            limit_chunks = max(1, min(int(limit_chunks or 150), 400))
+            with self.driver.session() as session:
+                hits: List[Dict] = []
+                used_fulltext = False
+                lucene = self._lucene_query(q)
+                if lucene and self._ensure_chunk_fulltext_index(session):
+                    try:
+                        rows = session.run(
+                            "CALL db.index.fulltext.queryNodes($idx, $q) YIELD node, score "
+                            "MATCH (d:Document)-[:HAS_CHUNK]->(node) "
+                            "WHERE $doc_id = '' OR d.id = $doc_id "
+                            "RETURN node.id AS cid, node.chunk_seq AS seq, "
+                            "coalesce(node.text,'') AS text, d.id AS did, d.filename AS fname, "
+                            "score ORDER BY score DESC LIMIT $limit",
+                            idx=self.FULLTEXT_INDEX, q=lucene,
+                            doc_id=doc_id or "", limit=limit_hits,
+                        )
+                        hits = [dict(r) for r in rows]
+                        used_fulltext = bool(hits)
+                    except Exception as e:
+                        logger.warning(f"Полнотекстовый поиск не сработал ({e}), откат на CONTAINS")
+
+                if not hits:
+                    # Откат: все термы должны встречаться (AND), ранк — по числу вхождений
+                    terms = self._chunk_match_terms(q)
+                    if not terms:
+                        return {}
+                    rows = session.run(
+                        "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) "
+                        "WHERE ($doc_id = '' OR d.id = $doc_id) "
+                        "AND all(t IN $terms WHERE toLower(coalesce(c.text,'')) CONTAINS t) "
+                        "RETURN c.id AS cid, c.chunk_seq AS seq, coalesce(c.text,'') AS text, "
+                        "d.id AS did, d.filename AS fname, size(c.text) AS score "
+                        "ORDER BY score DESC LIMIT $limit",
+                        doc_id=doc_id or "", terms=terms, limit=limit_hits,
+                    )
+                    hits = [dict(r) for r in rows]
+                if not hits:
+                    return {"nodes": [], "edges": [], "hits": 0, "chunks_shown": 0,
+                            "fulltext": used_fulltext}
+
+                # соседи: seq ± level внутри того же документа
+                wanted = {}      # (did, seq) -> True
+                for h in hits:
+                    seq = h.get("seq")
+                    if seq is None:
+                        continue
+                    for s in range(int(seq) - level_i, int(seq) + level_i + 1):
+                        if s >= 0:
+                            wanted[(h.get("did"), s)] = True
+                hit_keys = {(h.get("did"), h.get("seq")) for h in hits}
+
+                nodes: Dict[str, dict] = {}
+                edges: List[Dict] = []
+                chunk_rows = list(session.run(
+                    "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) "
+                    "WHERE d.id IN $docs AND c.chunk_seq IN $seqs "
+                    "RETURN c.id AS cid, c.chunk_seq AS seq, c.qdrant_point_id AS pid, "
+                    "d.id AS did, d.filename AS fname "
+                    "ORDER BY did, seq LIMIT $limit",
+                    docs=sorted({k[0] for k in wanted}),
+                    seqs=sorted({k[1] for k in wanted}),
+                    limit=limit_chunks,
+                ))
+                chunk_ids = []
+                for c in chunk_rows:
+                    cid = c["cid"]
+                    key = f"c:{cid}"
+                    matched = (c["did"], c["seq"]) in hit_keys
+                    fname = display_filename(c["fname"])
+                    chunk_ids.append(cid)
+                    nodes[key] = {
+                        "key": key,
+                        "name": f"{fname} · фрагмент {c['seq']}" if fname else f"фрагмент {c['seq']}",
+                        "kind": "chunk", "type": "Chunk",
+                        "chunk_id": cid, "chunk_seq": c["seq"],
+                        "document_id": c["did"], "filename": fname,
+                        "matched": matched,
+                    }
+                    dkey = f"d:{c['did']}"
+                    nodes.setdefault(dkey, {"key": dkey, "name": fname or c["did"],
+                                            "kind": "document", "type": "Document",
+                                            "document_id": c["did"]})
+                    edges.append({"source": dkey, "target": key, "source_name": fname,
+                                  "target_name": nodes[key]["name"], "type": "HAS_CHUNK"})
+
+                # соседство: цепочка по chunk_seq внутри документа
+                by_doc: Dict[str, List[int]] = {}
+                for c in chunk_rows:
+                    by_doc.setdefault(c["did"], []).append(c["seq"])
+                for did, seqs in by_doc.items():
+                    seqs = sorted(set(s for s in seqs if s is not None))
+                    for a, b in zip(seqs, seqs[1:]):
+                        # соединяем только реально соседние в документе
+                        if abs(int(b) - int(a)) <= level_i:
+                            sid, tid = None, None
+                            for c in chunk_rows:
+                                if c["did"] == did and c["seq"] == a:
+                                    sid = f"c:{c['cid']}"
+                                if c["did"] == did and c["seq"] == b:
+                                    tid = f"c:{c['cid']}"
+                            if sid and tid:
+                                edges.append({"source": sid, "target": tid,
+                                              "source_name": nodes[sid]["name"],
+                                              "target_name": nodes[tid]["name"],
+                                              "type": "NEXT"})
+
+                # сущности найденных (и соседних) чанков
+                ents = list(session.run(
+                    "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) WHERE c.id IN $ids "
+                    "RETURN e.name AS name, e.type AS type, count(DISTINCT c) AS mentions "
+                    "ORDER BY mentions DESC LIMIT 150",
+                    ids=chunk_ids,
+                ))
+                for e in ents:
+                    ekey = f"e:{e['name']}"
+                    nodes.setdefault(ekey, {"key": ekey, "name": e["name"], "kind": "entity",
+                                            "type": e["type"] or "Entity",
+                                            "entity_type": e["type"], "mentions": e["mentions"]})
+                if chunk_ids and ents:
+                    pairs = list(session.run(
+                        "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) "
+                        "WHERE c.id IN $ids AND e.name IN $names "
+                        "RETURN c.id AS cid, e.name AS ename LIMIT 3000",
+                        ids=chunk_ids, names=[e["name"] for e in ents],
+                    ))
+                else:
+                    pairs = []
+                seen = set()
+                for pr in pairs:
+                    pair = (pr["cid"], pr["ename"])
+                    if pair in seen:
+                        continue
+                    seen.add(pair)
+                    skey, tkey = f"c:{pr['cid']}", f"e:{pr['ename']}"
+                    edges.append({"source": skey, "target": tkey,
+                                  "source_name": nodes.get(skey, {}).get("name", ""),
+                                  "target_name": nodes.get(tkey, {}).get("name", ""),
+                                  "type": "MENTIONS"})
+
+                return {
+                    "nodes": list(nodes.values()),
+                    "edges": edges,
+                    "hits": len(hits),
+                    "chunks_shown": len(chunk_rows),
+                    "fulltext": used_fulltext,
+                    "level": level_i,
+                }
+        except Exception as e:
+            logger.warning(f"Ошибка поиска фрагментов по «{q}»: {e}")
+            return {}
+
     def get_document_graph(self, document_id: str, with_chunks: bool = True,
                            limit_chunks: int = 150, limit_entities: int = 120) -> List[Dict]:
         """Подграф одного документа: документ → чанки → сущности.
