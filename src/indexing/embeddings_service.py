@@ -523,14 +523,19 @@ class EmbeddingsService:
         # Генерируем embedding для запроса
         query_embedding = await self._embedding_client.generate(query)
 
-        # Создаем фильтр если есть
+        # Создаем фильтр если есть.
+        # ВАЖНО: ниже в этой функции есть локальный импорт MatchValue/MatchAny,
+        # поэтому модульные имена здесь недоступны (Python считает их локальными).
+        # Импортируем под алиасами в начале блока.
         conditions = []
         if filters:
+            from qdrant_client.models import MatchValue as _MV_F, MatchAny as _MA_F
+
             if "document_id" in filters:
                 conditions.append(
                     FieldCondition(
                         key="document_id",
-                        match=MatchValue(value=filters["document_id"])
+                        match=_MV_F(value=filters["document_id"])
                     )
                 )
 
@@ -538,7 +543,7 @@ class EmbeddingsService:
                 conditions.append(
                     FieldCondition(
                         key="file_type",
-                        match=MatchValue(value=filters["file_type"])
+                        match=_MV_F(value=filters["file_type"])
                     )
                 )
 
@@ -548,22 +553,29 @@ class EmbeddingsService:
                 if filters.get(key):
                     value = filters[key]
                     if isinstance(value, (list, tuple, set)):
-                        from qdrant_client.models import MatchAny as _MatchAny
                         conditions.append(
-                            FieldCondition(key=key, match=_MatchAny(any=list(value)))
+                            FieldCondition(key=key, match=_MA_F(any=list(value)))
                         )
                     else:
                         conditions.append(
-                            FieldCondition(key=key, match=MatchValue(value=value))
+                            FieldCondition(key=key, match=_MV_F(value=value))
                         )
 
             if domain:
                 conditions.append(
                     FieldCondition(
                         key="domain",
-                        match=MatchValue(value=domain)
+                        match=_MV_F(value=domain)
                     )
                 )
+
+        # domain — независимый параметр: применяется и без filters
+        # (раньше был вложен в `if filters:` и терялся при пустых filters).
+        if domain and not filters:
+            from qdrant_client.models import MatchValue as _MV_D
+            conditions.append(
+                FieldCondition(key="domain", match=_MV_D(value=domain))
+            )
 
         # ── ACL pre-filter: права доступа (visibility + allow/deny) ───────
         # Доступно, если: public ИЛИ пользователь/группа в allow-списках.
