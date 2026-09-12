@@ -804,7 +804,7 @@ function addGraphData(g){
     if (!c.getElementById(id).length){
       c.add({ data:{ id:id, key:key, name:n.name, kind:n.kind || 'entity',
                      chunk_id:n.chunk_id || '', document_id:n.document_id || '',
-                     chunk_seq:n.chunk_seq, label:shortLabel(n.name),
+                     chunk_seq:n.chunk_seq, matched:!!n.matched, label:shortLabel(n.name),
                      type:n.type, color:typeColor(n.type), weight:1 } });
     }
   });
