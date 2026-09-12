@@ -181,9 +181,13 @@ def main() -> int:
         print(f"    новый document_id: {new_id}")
 
         try:
-            _http(f"{base}/api/v1/upload/{new_id}/process", {}, args.token)
+            # ВАЖНО: именно reindex, а не process. Если документ уже существует
+            # (дедупликация по хэшу вернула старый id) и помечен completed,
+            # process ничего не сделает — чанки не пересоздадутся.
+            # reindex внутри вызывает process_document(force=True).
+            _http(f"{base}/api/v1/upload/{new_id}/reindex", {}, args.token)
         except Exception as e:
-            print(f"    process ошибка: {e}")
+            print(f"    reindex ошибка: {e}")
         status = wait_completed(base, new_id, args.token)
         print(f"    итог обработки: {status}")
 

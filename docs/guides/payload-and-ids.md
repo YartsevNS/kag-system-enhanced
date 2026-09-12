@@ -8,11 +8,25 @@
 | Сущность | Идентификатор | Как считается |
 |---|---|---|
 | Чанк в Neo4j | `Chunk.id` | `{document_id}_chunk_{seq:05d}` (человекочитаемый) |
-| Точка в Qdrant | `point_id` | `uuid5(NAMESPACE_DNS, "kag-chunk:" + chunk_id)` |
+| Точка в Qdrant | `point_id` | `uuid5(NAMESPACE_DNS, "kag-chunk:{document_id}:{chunk_id}")` |
 | Обратная ссылка | `Chunk.qdrant_point_id` | тот же uuid5 (пишется при создании узла) |
 
 Зачем: из графа можно вычислить `point_id` и достать вектор точечно (без поиска
 по payload). Повторная индексация того же `chunk_id` даёт тот же `point_id`.
+
+⚠️ **document_id в ключе обязателен.** `chunk_id` вида `chunk_00001` встречается
+в КАЖДОМ документе — без `document_id` все документы писали бы точки с одним
+`point_id` и перезаписывали друг друга (симптом: документ «обработан, 180 чанков»,
+а в Qdrant по нему 0 точек). Смежное требование: чанкинг обязан получать
+`document_id` (`parsers.chunk_document(segments, document_id)`), иначе `chunk_id`
+теряет префикс документа. Проверка после индексации:
+
+```bash
+curl -s -X POST http://localhost:6333/collections/kag_documents/points/count \
+  -H "api-key: $QDRANT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"exact": true, "filter": {"must": [{"key":"document_id","match":{"value":"<id>"}}]}}'
+# count должен быть > 0
+```
 
 ```python
 from src.indexing.ids import point_id_for_chunk
