@@ -78,3 +78,7 @@ bash.exe.stackdump
 /system_monitor.py
 /weights/
 graphify-out/
+
+# Оценка retrieval: рабочий набор и отчёты — личные данные, не в git
+scripts/eval_questions.json
+reports/

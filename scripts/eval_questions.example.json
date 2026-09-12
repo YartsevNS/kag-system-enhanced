@@ -1,0 +1,24 @@
+{
+  "description": "Пример эталонного набора для scripts/evaluate_retrieval.py. Скопируйте в eval_questions.json (он в .gitignore) и заполните реальными вопросами. Документы для разметки: python scripts/evaluate_retrieval.py --list-documents",
+  "k_values": [1, 3, 5, 10],
+  "questions": [
+    {
+      "query": "какие требования предъявляются к средствам защиты информации?",
+      "relevant_document_ids": ["ВСТАВЬТЕ_ID_ДОКУМЕНТА_1", "ВСТАВЬТЕ_ID_ДОКУМЕНТА_2"],
+      "relevant_chunk_ids": [],
+      "notes": "документный уровень: любой чанк из этих документов считается попаданием"
+    },
+    {
+      "query": "класс защищённости ГИС и меры защиты",
+      "relevant_document_ids": ["ВСТАВЬТЕ_ID_ДОКУМЕНТА_3"],
+      "relevant_chunk_ids": [],
+      "notes": ""
+    },
+    {
+      "query": "порядок управления инцидентами информационной безопасности",
+      "relevant_document_ids": ["ВСТАВЬТЕ_ID_ДОКУМЕНТА_4"],
+      "relevant_chunk_ids": ["ID_КОНКРЕТНОГО_ЧАНКА_ЕСЛИ_РАЗМЕЧЕН"],
+      "notes": "chunk-level: если указан relevant_chunk_ids, дополнительно считается chunk_recall@K / chunk_mrr"
+    }
+  ]
+}
