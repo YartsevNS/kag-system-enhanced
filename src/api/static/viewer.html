@@ -677,14 +677,114 @@ const DOC_TYPES = [
   ['order','Приказ'],['news','Новость'],['other','Другое'],['unknown','Неизвестно']
 ];
 
-function openEditModal() {
+// Полный список типов = встроенные + добавленные в админке
+// (админка → «Типы документов», GET/POST /api/v1/admin/models/doc-types).
+let docTypesAll = DOC_TYPES.map(function(t) { return { key: t[0], label: t[1], builtin: true }; });
+let currentUser = null;
+
+async function loadCurrentUser() {
+  try {
+    const r = await fetch('/api/v1/auth/me', { credentials: 'include' });
+    if (r.ok) currentUser = await r.json();
+  } catch (e) { currentUser = null; }
+}
+
+async function loadDocTypes() {
+  const seen = {};
+  docTypesAll.forEach(function(t) { seen[t.key] = true; });
+  try {
+    const r = await fetch('/api/v1/admin/models/doc-types', { credentials: 'include' });
+    if (!r.ok) return;   // нет прав/ошибка — остаются встроенные
+    const d = await r.json();
+    (d.types || []).forEach(function(t) {
+      const key = String(typeof t === 'string' ? t : (t.key || '')).trim();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      docTypesAll.push({
+        key: key,
+        label: String(typeof t === 'string' ? t : (t.label || t.key || '')).trim() || key,
+        builtin: false
+      });
+    });
+  } catch (e) { console.warn('Список типов документов:', e); }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderTypeOptions() {
+  const sel = document.getElementById('edit-type');
+  const cur = (currentDoc && currentDoc.document_type) || '';
+  const opts = docTypesAll.slice();
+  // Текущий тип может отсутствовать в списке — показываем его, иначе правка
+  // одного названия молча меняла бы ещё и тип.
+  if (cur && !opts.some(function(t) { return t.key === cur; })) {
+    opts.push({ key: cur, label: cur, builtin: false });
+  }
+  let html = opts.map(function(t) {
+    return '<option value="' + escapeHtml(t.key) + '"' + (t.key === cur ? ' selected' : '') + '>' +
+           escapeHtml(t.label) + '</option>';
+  }).join('');
+  if (currentUser && currentUser.is_admin) {
+    html += '<option value="__add__">＋ Добавить тип…</option>';
+  }
+  sel.innerHTML = html;
+}
+
+function onTypeChange() {
+  const sel = document.getElementById('edit-type');
+  const row = document.getElementById('edit-type-add');
+  if (sel.value === '__add__') {
+    row.style.display = 'flex';
+    document.getElementById('edit-type-new').focus();
+    sel.value = (currentDoc && currentDoc.document_type) || (docTypesAll[0] && docTypesAll[0].key) || '';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+async function addDocType() {
+  const inp = document.getElementById('edit-type-new');
+  const st = document.getElementById('edit-type-status');
+  const name = (inp.value || '').trim();
+  if (!name) { st.textContent = 'Введите название'; return; }
+  st.textContent = 'Добавляю…';
+  try {
+    const r = await fetch('/api/v1/admin/models/doc-types', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', name: name })
+    });
+    const d = await r.json().catch(function() { return {}; });
+    if (!r.ok) { st.textContent = d.message || ('Ошибка ' + r.status); return; }
+    const key = name.toLowerCase();   // бэкенд хранит ключ в нижнем регистре
+    if (!docTypesAll.some(function(t) { return t.key === key; })) {
+      docTypesAll.push({ key: key, label: name, builtin: false });
+    }
+    currentDoc.document_type = key;
+    renderTypeOptions();
+    document.getElementById('edit-type-add').style.display = 'none';
+    inp.value = '';
+    st.textContent = '';
+    toast('Тип «' + name + '» добавлен — нажмите «Сохранить»');
+  } catch (e) {
+    st.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+async function openEditModal() {
   if (!currentDoc) return;
   document.getElementById('edit-name').value = currentDoc.filename || '';
-  const sel = document.getElementById('edit-type');
-  sel.innerHTML = DOC_TYPES.map(function(t) {
-    const selAttr = (currentDoc.document_type === t[0]) ? 'selected' : '';
-    return '<option value="' + t[0] + '" ' + selAttr + '>' + t[1] + '</option>';
-  }).join('');
+  document.getElementById('edit-type-status').textContent = '';
+  document.getElementById('edit-type-new').value = '';
+  document.getElementById('edit-type-add').style.display = 'none';
+  if (!currentUser) await loadCurrentUser();
+  await loadDocTypes();
+  renderTypeOptions();
   document.getElementById('edit-overlay').classList.add('active');
 }
 
@@ -731,7 +831,12 @@ async function saveEdit() {
       <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Название</label>
       <input type="text" id="edit-name" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px">
       <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Тип документа</label>
-      <select id="edit-type" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
+      <select id="edit-type" onchange="onTypeChange()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
+      <div id="edit-type-add" style="display:none;align-items:center;gap:8px;margin:-6px 0 14px">
+        <input type="text" id="edit-type-new" placeholder="Название нового типа" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+        <button class="btn" onclick="addDocType()">Добавить</button>
+        <span id="edit-type-status" style="font-size:12px;color:var(--text4)"></span>
+      </div>
       <div style="display:flex;align-items:center;gap:12px">
         <button class="btn btn-accent" onclick="saveEdit()">💾 Сохранить</button>
         <button class="btn" onclick="closeEditModal()">Отмена</button>

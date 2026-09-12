@@ -1881,7 +1881,11 @@ async def update_doc_types(data: dict):
     try:
         from src.api.services.config_store import config_store
         action = data.get("action", "add")
-        name = data.get("name", "").strip().lower()
+        # Ключ всегда в нижнем регистре (по нему идёт сверка), а подпись
+        # сохраняем как ввёл пользователь: иначе в списках типов у людей
+        # висело «паспорт» вместо «Паспорт».
+        raw_name = (data.get("name") or "").strip()
+        name = raw_name.lower()
         if not name:
             return {"status": "error", "message": "Имя типа не указано"}
 
@@ -1900,7 +1904,7 @@ async def update_doc_types(data: dict):
 
         if action == "add":
             if name not in _keys(types):
-                types.append({"key": name, "label": name})
+                types.append({"key": name, "label": raw_name})
             else:
                 return {"status": "ok", "message": "Без изменений"}
         elif action == "remove":
