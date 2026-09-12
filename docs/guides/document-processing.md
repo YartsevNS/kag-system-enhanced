@@ -79,6 +79,47 @@ DELETE /api/v1/upload/{id} удаляет ВСЕ следы документа �
 Проверено на проде: загрузка → обработка → Qdrant/БД/файл/миниатюра есть →
 DELETE чужим 403 → DELETE владельцем 200 → БД/Qdrant/файл/миниатюра чисто.
 
+## Просмотр документа: текстовый слой PDF (2026-09-12)
+
+PDF в системе НЕ пересобирается: исходный файл сохраняется как есть в
+`data/uploads/<document_id>_<имя>.pdf` и отдаётся как есть —
+`GET /api/v1/upload/{document_id}/preview` (он же за кнопкой «Скачать»).
+Обработка (OCR, парсинг, чанки) файл не перезаписывает, поэтому текстовый слой
+исходника сохраняется. Проверка на ec288909: у файла на диске 50 страниц и
+119 798 символов текста, у того же PDF из `/preview` — те же 119 798.
+
+Значит «PDF без текстового слоя» — это не про файл, а про отображение.
+Просмотрщик (`src/api/static/viewer.html`, pdf.js 3.11.174) раньше рисовал
+только канвас: текст нельзя было выделить, скопировать, и его не находил
+браузерный Ctrl+F. Теперь страница — это контейнер `.pdf-page` с канвасом и
+прозрачным текстовым слоем поверх, построенным по тому же viewport.
+
+Две тонкости этой сборки pdf.js (проверено на стенде с реальным PDF):
+
+- класс `pdfjsLib.TextLayer` в бандле НЕ экспортирован (строка есть, объекта
+  нет) — фактически работает откат на `pdfjsLib.renderTextLayer`;
+- промис этой задачи ждать нельзя: если он не разрешится, `await` подвесит
+  остаток `renderPage` (номера страниц, кнопки). Отрисовку не ждём, ошибки
+  только логируем.
+
+Быстрая проверка, что слой есть (эндпоинт требует авторизацию — без токена
+вернётся 89 байт JSON с ошибкой `AUTH_*`, и pymupdf скажет «no objects found»):
+
+```
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PASSWORD\"}" \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/api/v1/upload/<document_id>/preview -o data/_check.pdf
+docker exec kag-api python -c "
+import pymupdf; d = pymupdf.open('/app/data/_check.pdf')
+print(d.page_count, sum(len(p.get_text()) for p in d))"
+```
+
+Проверено 2026-09-12 на ec288909: исходник и `/preview` — по 50 страниц и
+119 798 символов, текст начинается одинаково.
+
 ## Файлы
 
 - `src/api/routes/upload.py` — убран автозапуск enqueue (4 места), добавлен
@@ -86,6 +127,7 @@ DELETE чужим 403 → DELETE владельцем 200 → БД/Qdrant/фай
 - `src/api/routes/admin_models.py` — GET/POST `processing-config`
 - `src/api/static/documents.html` — баннер, кнопка «Обработать», loadProcessingConfig/processDocument
 - `src/api/static/admin.html` — секция «Обработка документов» (сворачиваемая)
+- `src/api/static/viewer.html` — просмотрщик: канвас + текстовый слой pdf.js
 
 ## Примечания
 
