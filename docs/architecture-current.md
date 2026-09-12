@@ -8,7 +8,8 @@
 | Сервис | Роль | Порт |
 |---|---|---|
 | `kag-api` | FastAPI, REST API + статика (15+ HTML-страниц) | 8000 (только 127.0.0.1) |
-| `kag-worker` | Celery worker (solo-пул), обработка документов | — |
+| `kag-worker` | Celery worker (solo-пул), обработка документов (очереди documents,celery) + beat | — |
+| `kag-worker-maintenance` | Celery worker для очереди maintenance (веб-мониторинг, служебные) — отдельно, чтобы мониторинг не блокировал документы | — |
 | `kag-scheduler` | APScheduler — расписание веб-монитора | — |
 | `kag-mcp` | MCP-сервер | 8001 |
 | `kag-qdrant` | Векторная БД | 6333/6334 |
