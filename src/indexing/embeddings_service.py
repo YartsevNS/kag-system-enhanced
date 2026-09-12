@@ -463,25 +463,24 @@ class EmbeddingsService:
 
     @staticmethod
     def _tokenize_sparse(text: str) -> Dict[str, int]:
-        """Токенизировать текст → {стабильный id слова: частота}.
+        """Токены sparse-вектора: нормализация → стоп-слова → стемминг.
 
-        id = crc32 слова (стабилен между документами и запросами), чтобы
-        sparse-векторы разных чанков и запроса были согласованы.
+        Реализация вынесена в src/indexing/lexical.py (там же объяснение, почему
+        сырые токены не годились: русская морфология и частотные слова).
+        id = crc32(стем) — стабилен между документами и запросами.
         """
-        import re, zlib
-        words = re.findall(r"[a-zа-яё0-9]+", (text or "").lower())
-        freq: Dict[str, int] = {}
-        for w in words:
-            freq[w] = freq.get(w, 0) + 1
+        from src.indexing import lexical
+        import zlib
+
         out: Dict[int, int] = {}
-        for w, c in freq.items():
-            tid = zlib.crc32(w.encode("utf-8")) & 0x7FFFFFFF
-            out[tid] = out.get(tid, 0) + c
+        for token, count in lexical.sparse_terms(text).items():
+            tid = zlib.crc32(token.encode("utf-8")) & 0x7FFFFFFF
+            out[tid] = out.get(tid, 0) + count
         return out
 
     def _sparse_vec(self, text: str) -> Dict[str, list]:
-        m = self._tokenize_sparse(text)
-        return {"indices": list(m.keys()), "values": list(m.values())}
+        from src.indexing import lexical
+        return lexical.sparse_vector(text)
 
     async def set_document_access(self, document_id: str, access: dict):
         """Обновить payload access у всех чанков документа (без переиндексации).
