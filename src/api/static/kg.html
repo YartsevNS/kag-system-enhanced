@@ -678,6 +678,20 @@ function typeColor(t){
   return KG_PALETTE[h % KG_PALETTE.length];
 }
 
+// Показывает подписи узлов в зависимости от масштаба и размера графа.
+// Объявлена на верхнем уровне: её вызывают и обработчики графа, и построение
+// графов (сущность/документ/поиск) — внутри ensureCy она была не видна снаружи.
+function applyLabelVisibility(){
+  if (typeof cy === 'undefined' || !cy) return;
+  // На плотных графах (сотни узлов) подписи при обычном масштабе сливаются в
+  // кашу, поэтому порог зависит от размера: маленький граф — с 0.5, большой —
+  // только при близком приближении. Найденные фрагменты подписаны всегда.
+  const big = cy.nodes().length > 120;
+  const show = cy.zoom() >= (big ? 1.1 : 0.5);
+  cy.nodes().toggleClass('with-label', show);
+  cy.nodes('.matched').addClass('with-label');
+}
+
 function ensureCy(){
   if (cy) return cy;
   cy = cytoscape({
@@ -707,16 +721,6 @@ function ensureCy(){
     wheelSensitivity:0.2, minZoom:0.05, maxZoom:3
   });
   // Подписи показываем только при достаточном зуме — иначе они накладываются
-  function applyLabelVisibility(){
-    if (!cy) return;
-    // На плотных графах (сотни узлов) подписи при обычном масштабе сливаются в
-    // кашу, поэтому порог зависит от размера: маленький граф — с 0.5, большой —
-    // только при близком приближении. Найденные фрагменты подписаны всегда.
-    const big = cy.nodes().length > 120;
-    const show = cy.zoom() >= (big ? 1.1 : 0.5);
-    cy.nodes().toggleClass('with-label', show);
-    cy.nodes('.matched').addClass('with-label');
-  }
   cy.on('zoom', applyLabelVisibility);
   cy.on('layoutstop', applyLabelVisibility);
   cy.on('tap','node',function(evt){
