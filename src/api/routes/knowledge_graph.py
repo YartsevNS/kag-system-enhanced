@@ -87,6 +87,73 @@ async def entity_graph(
         return {"entity": entity_name, "graph": [], "error": str(e)}
 
 
+@router.get("/entity/{entity_name}/chunks",
+            summary="Чанки, где упоминается сущность (текст и страница из Qdrant)")
+async def entity_chunks(
+    entity_name: str,
+    limit: int = 8,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Чанки сущности: номер фрагмента, документ, превью и полный текст.
+
+    Превью берём из графа (там полная копия текста), а номер СТРАНИЦЫ и полный
+    текст — из payload Qdrant: в графе страницы нет. Именно этого не хватало в
+    /kg, чтобы от сущности перейти к фрагменту и к файлу.
+    """
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        from src.indexing.embeddings_service import embeddings_service
+
+        rows = kg_service.entity_chunks(entity_name, limit)
+        point_ids = [r.get("point_id") for r in rows if r.get("point_id")]
+        payloads = await embeddings_service.get_points_payload(point_ids) if point_ids else {}
+        for r in rows:
+            pl = payloads.get(str(r.get("point_id") or ""), {}) or {}
+            meta = pl.get("metadata") or {}
+            r["page"] = pl.get("page") or meta.get("page_number") or meta.get("page")
+            if pl.get("content"):
+                r["content"] = pl["content"]
+            if pl.get("filename"):
+                r["filename"] = pl["filename"]
+            if pl.get("document_id"):
+                r["document_id"] = pl["document_id"]
+        return {"entity": entity_name, "chunks": rows, "total": len(rows)}
+    except Exception as e:
+        logger.warning(f"Ошибка чанков сущности «{entity_name}»: {e}")
+        return {"entity": entity_name, "chunks": [], "error": str(e)}
+
+
+@router.get("/chunk/{chunk_id}", summary="Чанк: текст, документ, страница")
+async def chunk_details(
+    chunk_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Один чанк по id — текст (из Qdrant, если есть) и страница для перехода."""
+    try:
+        from src.indexing.knowledge_graph import kg_service
+        from src.indexing.embeddings_service import embeddings_service
+
+        info = kg_service.chunk_info(chunk_id)
+        if not info:
+            return {"chunk_id": chunk_id, "found": False}
+        point_id = info.get("point_id")
+        payloads = await embeddings_service.get_points_payload([point_id]) if point_id else {}
+        pl = payloads.get(str(point_id), {}) or {}
+        meta = pl.get("metadata") or {}
+        info["page"] = pl.get("page") or meta.get("page_number") or meta.get("page")
+        if pl.get("content"):
+            info["content"] = pl["content"]
+        if pl.get("filename"):
+            info["filename"] = pl["filename"]
+        if pl.get("document_id"):
+            info["document_id"] = pl["document_id"]
+        info["found"] = True
+        return info
+    except Exception as e:
+        logger.warning(f"Ошибка чанка «{chunk_id}»: {e}")
+        return {"chunk_id": chunk_id, "found": False, "error": str(e)}
+
+
 @router.get("/hybrid-search", summary="Гибридный поиск")
 async def hybrid_search(
     q: str, 

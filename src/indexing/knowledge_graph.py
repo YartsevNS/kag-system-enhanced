@@ -1662,10 +1662,71 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка получения сущностей документа: {e}")
             return []
 
+    # Виды узлов для визуализации: по ним /kg решает, что показать по клику.
+    # Раньше Document/Chunk отдавались как есть — у них нет свойства name, имя
+    # падало на id, и в графе висели «b93f09…».
+    @staticmethod
+    def _first_label(node) -> str:
+        labels = list(node.labels)
+        return labels[0] if labels else "Unknown"
+
+    @staticmethod
+    def _chunk_meta_for_ids(session, chunk_ids: List[str]) -> Dict[str, dict]:
+        """Имя файла и документ для чанков (у узла Chunk их нет — берём у родителя)."""
+        if not chunk_ids:
+            return {}
+        try:
+            res = session.run(
+                "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) WHERE c.id IN $ids "
+                "RETURN c.id AS cid, c.chunk_seq AS seq, d.id AS did, d.filename AS filename",
+                ids=list(chunk_ids),
+            )
+            return {
+                r["cid"]: {"chunk_seq": r["seq"], "document_id": r["did"],
+                           "filename": r["filename"]}
+                for r in res
+            }
+        except Exception as e:
+            logger.debug(f"Метаданные чанков не получены: {e}")
+            return {}
+
+    @classmethod
+    def _describe_node(cls, node, label: str, chunk_meta: Dict[str, dict]):
+        """(ключ, человекочитаемое имя, вид, доп. поля) для узла визуализации."""
+        if label == "Document":
+            doc_id = node.get("id") or ""
+            return (f"d:{doc_id}", (node.get("filename") or doc_id), "document",
+                    {"document_id": doc_id})
+        if label == "Chunk":
+            cid = node.get("id") or ""
+            meta = chunk_meta.get(cid, {})
+            seq = node.get("chunk_seq")
+            if seq is None:
+                seq = meta.get("chunk_seq")
+            fname = meta.get("filename") or ""
+            if fname and seq is not None:
+                name = f"{fname} · фрагмент {seq}"
+            elif fname:
+                name = fname
+            elif seq is not None:
+                name = f"фрагмент {seq}"
+            else:
+                name = cid
+            return (f"c:{cid}", name, "chunk",
+                    {"chunk_id": cid,
+                     "chunk_seq": seq,
+                     "document_id": meta.get("document_id") or "",
+                     "filename": fname,
+                     "qdrant_point_id": node.get("qdrant_point_id") or ""})
+        nm = node.get("name") or node.get("id") or ""
+        return (f"e:{nm}", nm, "entity", {"entity_type": node.get("type") or ""})
+
     def get_entity_graph(self, entity_name: str, depth: int = 2) -> List[Dict]:
         """Получить подграф вокруг сущности — multi-hop обход.
-        
+
         Используется для GraphRAG: понимание контекста сущности через её соседей.
+        Узлы отдаются с ключом (для идентичности в интерфейсе), человекочитаемым
+        именем и видом: сущность / документ / чанк.
         """
         if not self.driver:
             return []
@@ -1683,29 +1744,104 @@ class KnowledgeGraphService:
                     "MATCH path = (e:Entity {name: $name})"
                     f"-[*1..{depth_i}]-(related) RETURN path LIMIT 50"
                 )
-                result = session.run(query, name=entity_name)
-                nodes = set()
+                paths = list(session.run(query, name=entity_name))
+
+                chunk_ids = set()
+                for record in paths:
+                    for node in record["path"].nodes:
+                        if self._first_label(node) == "Chunk" and node.get("id"):
+                            chunk_ids.add(node.get("id"))
+                chunk_meta = self._chunk_meta_for_ids(session, sorted(chunk_ids))
+
+                nodes: Dict[str, dict] = {}
                 edges = []
-                for record in result:
+                for record in paths:
                     path = record["path"]
                     for node in path.nodes:
-                        nodes.add((
-                            node.get("name", node.get("id", "")),
-                            # ВАЖНО: тип для раскраски — свойство e.type
-                            # (person/organization/legal_term/...), а НЕ label
-                            # узла (у всех Entity он одинаковый).
-                            node.get("type") or (list(node.labels)[0] if node.labels else "Unknown")
-                        ))
+                        label = self._first_label(node)
+                        key, name, kind, extra = self._describe_node(node, label, chunk_meta)
+                        if key not in nodes:
+                            nodes[key] = {
+                                "key": key,
+                                "name": name,
+                                "kind": kind,
+                                # ВАЖНО: тип для раскраски — свойство e.type
+                                # (person/organization/legal_term/...), а НЕ label
+                                # узла (у всех Entity он одинаковый).
+                                "type": node.get("type") or label,
+                                **extra,
+                            }
                     for rel in path.relationships:
+                        s_key, s_name, _, _ = self._describe_node(
+                            rel.start_node, self._first_label(rel.start_node), chunk_meta)
+                        t_key, t_name, _, _ = self._describe_node(
+                            rel.end_node, self._first_label(rel.end_node), chunk_meta)
                         edges.append({
-                            "source": rel.start_node.get("name", ""),
-                            "target": rel.end_node.get("name", ""),
-                            "type": rel.type
+                            "source": s_key,
+                            "target": t_key,
+                            "source_name": s_name,
+                            "target_name": t_name,
+                            "type": rel.type,
                         })
-                return [{"nodes": [{"name": n, "type": t} for n, t in nodes], "edges": edges}]
+                return [{"nodes": list(nodes.values()), "edges": edges}]
         except Exception as e:
             logger.warning(f"Ошибка получения графа: {e}")
             return []
+
+    def entity_chunks(self, entity_name: str, limit: int = 8) -> List[Dict]:
+        """Чанки, которые упоминают сущность: документ, номер фрагмента, превью.
+
+        Схема графа: Document-[:HAS_CHUNK]->Chunk-[:MENTIONS]->Entity.
+        """
+        if not self.driver:
+            return []
+        try:
+            limit_i = max(1, min(int(limit or 8), 50))
+            with self.driver.session() as session:
+                res = session.run(
+                    "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity {name: $name}) "
+                    "OPTIONAL MATCH (d:Document)-[:HAS_CHUNK]->(c) "
+                    "RETURN c.id AS chunk_id, c.chunk_seq AS chunk_seq, "
+                    "coalesce(c.qdrant_point_id, '') AS point_id, "
+                    "coalesce(d.id, '') AS document_id, "
+                    "coalesce(d.filename, '') AS filename, "
+                    f"left(coalesce(c.text, ''), {CHUNK_TEXT_PREVIEW_CHARS}) AS preview "
+                    "ORDER BY chunk_seq LIMIT $limit",
+                    name=entity_name, limit=limit_i,
+                )
+                return [dict(r) for r in res]
+        except Exception as e:
+            logger.warning(f"Ошибка выборки чанков сущности «{entity_name}»: {e}")
+            return []
+
+    def chunk_info(self, chunk_id: str) -> Optional[Dict]:
+        """Один чанк по id: документ, имя файла, номер, полный текст из графа."""
+        if not self.driver:
+            return None
+        try:
+            with self.driver.session() as session:
+                res = session.run(
+                    "MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk {id: $cid}) "
+                    "RETURN c.id AS chunk_id, c.chunk_seq AS chunk_seq, "
+                    "coalesce(c.qdrant_point_id, '') AS point_id, "
+                    "d.id AS document_id, d.filename AS filename, "
+                    "coalesce(c.text, '') AS content LIMIT 1",
+                    cid=chunk_id,
+                )
+                rec = res.single()
+                if rec:
+                    return dict(rec)
+                res2 = session.run(
+                    "MATCH (c:Chunk {id: $cid}) RETURN c.id AS chunk_id, "
+                    "c.chunk_seq AS chunk_seq, coalesce(c.qdrant_point_id, '') AS point_id, "
+                    "'' AS document_id, '' AS filename, coalesce(c.text, '') AS content LIMIT 1",
+                    cid=chunk_id,
+                )
+                rec2 = res2.single()
+                return dict(rec2) if rec2 else None
+        except Exception as e:
+            logger.warning(f"Ошибка выборки чанка «{chunk_id}»: {e}")
+            return None
 
     def hybrid_search(self, query_entities: List[str], doc_ids: List[str] = None) -> List[str]:
         """Гибридный поиск: найти чанки, связанные с заданными сущностями.

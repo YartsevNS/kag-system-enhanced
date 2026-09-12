@@ -666,12 +666,103 @@ function ensureCy(){
   cy.on('zoom', applyLabelVisibility);
   cy.on('layoutstop', applyLabelVisibility);
   cy.on('tap','node',function(evt){
-    const n = evt.target;
-    const nm = String(n.data('name')||'').replace(/'/g,"\\'");
-    document.getElementById('kg-info').innerHTML = '<b style="color:#fff">' + (n.data('label')||'') + '</b> <span style="color:var(--text4)">' + (n.data('type')||'') + '</span> <button class="btn-sm" onclick="expandNode(\'' + nm + '\')" style="margin-left:8px">+ соседи</button>';
+    showNodeInfo(evt.target);
   });
   cy.on('tap',function(evt){ if (evt.target === cy) document.getElementById('kg-info').innerHTML=''; });
   return cy;
+}
+
+// ── Панель по узлу ─────────────────────────────────────────────────────
+// Сущность → фрагменты, где она встречается (текст + переход к файлу и к
+// странице); чанк → его текст; документ → файл и его чанки.
+// Страница и полный текст берутся из Qdrant (в графе страницы нет).
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function attrStr(s){ return esc(s).replace(/'/g, "\\'"); }
+
+function openDoc(docId, page){
+  if (!docId) return;
+  window.open('/viewer?id=' + encodeURIComponent(docId) + (page ? '&page=' + encodeURIComponent(page) : ''), '_blank');
+}
+function openDocChunks(docId){
+  if (!docId) return;
+  window.open('/chunks?doc_id=' + encodeURIComponent(docId), '_blank');
+}
+
+function showNodeInfo(n){
+  const d = n.data();
+  const kindName = {entity:'сущность', document:'документ', chunk:'фрагмент'}[d.kind] || '';
+  let html = '<b style="color:#fff">' + esc(d.label || d.name || '') + '</b>' +
+             ' <span style="color:var(--text4)">' + esc(kindName) + '</span>';
+  if (d.kind === 'entity') {
+    html += ' <button class="btn-sm" onclick="expandNode(\'' + attrStr(d.name) + '\')" style="margin-left:8px">+ соседи</button>' +
+            '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">⏳ ищу фрагменты…</div>';
+  } else if (d.kind === 'chunk') {
+    if (d.document_id) {
+      html += ' <button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + '\')" style="margin-left:8px">открыть документ</button>';
+    }
+    html += '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">⏳ читаю текст…</div>';
+  } else if (d.kind === 'document') {
+    html += ' <button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + '\')" style="margin-left:8px">открыть документ</button>' +
+            ' <button class="btn-sm" onclick="openDocChunks(\'' + attrStr(d.document_id) + '\')">чанки</button>' +
+            '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">файл откроется в просмотрщике</div>';
+  } else {
+    html += ' <button class="btn-sm" onclick="expandNode(\'' + attrStr(d.name) + '\')" style="margin-left:8px">+ соседи</button>';
+  }
+  document.getElementById('kg-info').innerHTML = html;
+  if (d.kind === 'entity') loadEntityChunks(d.name);
+  else if (d.kind === 'chunk' && d.chunk_id) loadChunkText(d.chunk_id);
+}
+
+async function loadEntityChunks(name){
+  const body = document.getElementById('kg-info-body');
+  if (!body) return;
+  try {
+    const r = await fetch(API + '/entity/' + encodeURIComponent(name) + '/chunks?limit=6', { headers: authHeaders() });
+    const d = await r.json();
+    const rows = d.chunks || [];
+    if (!rows.length) {
+      body.innerHTML = 'фрагменты не найдены (сущность есть только в связях с другими сущностями)';
+      return;
+    }
+    body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность (' + rows.length + '):</div>' +
+      rows.map(function(c){
+        const fname = esc(c.filename || String(c.document_id || '').slice(0, 8));
+        const sub = 'фрагмент ' + esc(c.chunk_seq != null ? c.chunk_seq : '?') + (c.page ? ', стр. ' + esc(c.page) : '');
+        const text = esc(String(c.content || c.preview || '').slice(0, 300));
+        const pageArg = (c.page != null && c.page !== '') ? "', '" + attrStr(c.page) : "'";
+        return '<div style="border-left:2px solid var(--border);padding:4px 8px;margin:4px 0">' +
+          '<div style="font-size:11px;color:var(--text4)">' + fname + ' · ' + sub + '</div>' +
+          '<div style="font-size:12px;color:var(--text2)">' + text + '</div>' +
+          '<div style="margin-top:4px">' +
+            (c.document_id ? '<button class="btn-sm" onclick="openDoc(\'' + attrStr(c.document_id) + pageArg + ')">открыть на странице</button> ' : '') +
+            (c.document_id ? '<button class="btn-sm" onclick="openDocChunks(\'' + attrStr(c.document_id) + '\')">все чанки документа</button>' : '') +
+          '</div></div>';
+      }).join('');
+  } catch(e) {
+    body.innerHTML = 'ошибка загрузки фрагментов: ' + esc(e.message || e);
+  }
+}
+
+async function loadChunkText(chunkId){
+  const body = document.getElementById('kg-info-body');
+  if (!body) return;
+  try {
+    const r = await fetch(API + '/chunk/' + encodeURIComponent(chunkId), { headers: authHeaders() });
+    const d = await r.json();
+    if (!d.found) { body.innerHTML = 'фрагмент не найден в графе'; return; }
+    const head = esc(d.filename || '') + (d.chunk_seq != null ? ' · фрагмент ' + esc(d.chunk_seq) : '') +
+                 (d.page ? ', стр. ' + esc(d.page) : '');
+    body.innerHTML = '<div style="font-size:11px;color:var(--text4)">' + head + '</div>' +
+      '<div style="font-size:12px;color:var(--text2);max-height:260px;overflow:auto;white-space:pre-wrap">' +
+      esc(String(d.content || '').slice(0, 2000)) + '</div>' +
+      (d.document_id ? '<div style="margin-top:4px"><button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + "', '" + attrStr(d.page || '') + '\')">открыть на странице</button></div>' : '');
+  } catch(e) {
+    body.innerHTML = 'ошибка загрузки фрагмента: ' + esc(e.message || e);
+  }
 }
 
 function nodeId(name){
@@ -679,18 +770,27 @@ function nodeId(name){
   return nodeMap[name];
 }
 
+function shortLabel(s){
+  s = String(s == null ? '' : s);
+  return s.length > 34 ? s.slice(0, 33) + '…' : s;
+}
+
 function addGraphData(g){
   const c = ensureCy();
   (g.nodes||[]).forEach(function(n){
-    const id = nodeId(n.name);
+    const key = n.key || n.name;
+    const id = nodeId(key);
     if (!c.getElementById(id).length){
-      c.add({ data:{ id:id, name:n.name, label:String(n.name||'').length>30 ? n.name.slice(0,29)+'…' : n.name, type:n.type, color:typeColor(n.type), weight:1 } });
+      c.add({ data:{ id:id, key:key, name:n.name, kind:n.kind || 'entity',
+                     chunk_id:n.chunk_id || '', document_id:n.document_id || '',
+                     chunk_seq:n.chunk_seq, label:shortLabel(n.name),
+                     type:n.type, color:typeColor(n.type), weight:1 } });
     }
   });
   (g.edges||[]).forEach(function(e){
     const sid = nodeId(e.source), tid = nodeId(e.target);
-    if (!c.getElementById(sid).length) c.add({ data:{ id:sid, name:e.source, label:String(e.source||'').slice(0,30), type:'', color:typeColor(''), weight:1 } });
-    if (!c.getElementById(tid).length) c.add({ data:{ id:tid, name:e.target, label:String(e.target||'').slice(0,30), type:'', color:typeColor(''), weight:1 } });
+    if (!c.getElementById(sid).length) c.add({ data:{ id:sid, key:e.source, name:e.source_name || e.source, kind:'entity', chunk_id:'', document_id:'', label:shortLabel(e.source_name || e.source), type:'', color:typeColor(''), weight:1 } });
+    if (!c.getElementById(tid).length) c.add({ data:{ id:tid, key:e.target, name:e.target_name || e.target, kind:'entity', chunk_id:'', document_id:'', label:shortLabel(e.target_name || e.target), type:'', color:typeColor(''), weight:1 } });
     const eid = sid + '__' + tid + '__' + (e.type||'');
     if (!c.getElementById(eid).length) c.add({ data:{ id:eid, source:sid, target:tid, label:e.type } });
   });

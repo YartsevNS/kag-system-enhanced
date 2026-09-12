@@ -805,6 +805,31 @@ class EmbeddingsService:
         logger.debug(f"Найдено {len(formatted_results)} результатов")
         return formatted_results
 
+    async def get_points_payload(self, point_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Payload точек Qdrant по их id (одним запросом).
+
+        Зачем: в графе лежит копия текста чанка, но НЕТ номера страницы — она
+        есть только в payload Qdrant. Нужно витрине чанков в /kg (текст + переход
+        на страницу документа).
+        """
+        ids = [str(i) for i in (point_ids or []) if i]
+        if not ids or not self._qdrant_client:
+            return {}
+        try:
+            points = self._qdrant_client.retrieve(
+                collection_name=self.collection_name,
+                ids=ids,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось прочитать payload точек Qdrant ({len(ids)}): {e}")
+            return {}
+        out: Dict[str, Dict[str, Any]] = {}
+        for p in points or []:
+            out[str(p.id)] = p.payload or {}
+        return out
+
     async def count_document_points(self, document_id: str) -> int:
         """Сколько точек документа реально лежит в Qdrant (exact count).
 
