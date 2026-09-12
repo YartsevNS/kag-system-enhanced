@@ -486,7 +486,8 @@ def check_stuck_documents(self):
         raise self.retry(exc=e, countdown=120)
 
 
-@celery_app.task(bind=True, queue="maintenance", max_retries=3, default_retry_delay=300)
+@celery_app.task(bind=True, queue="maintenance", max_retries=3, default_retry_delay=300,
+                 soft_time_limit=1200, time_limit=1500)
 def run_monitor_check(self, source_id: str = None):
     """Запустить проверку источников мониторинга (Celery)."""
     try:

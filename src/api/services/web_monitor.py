@@ -33,6 +33,7 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
+import asyncio as _asyncio
 import hashlib
 import json
 import re
@@ -609,16 +610,20 @@ class WebMonitorService:
         for source in to_check:
             logger.info(f"🔍 Проверяю источник: {source.name} ({source.type})")
             try:
+                # Жёсткий таймаут на источник: сетевые зависания (RSS/сайт не
+                # отвечает) не должны блокировать всю задачу и очередь — раньше
+                # мониторинг мог висеть до task_time_limit (2 часа).
+                _timeout = 180
                 if source.type == "rss":
-                    result = await self._check_rss(source)
+                    result = await _asyncio.wait_for(self._check_rss(source), timeout=_timeout)
                 elif source.type == "scrape":
-                    result = await self._check_scrape(source)
+                    result = await _asyncio.wait_for(self._check_scrape(source), timeout=_timeout)
                 elif source.type == "browser":
-                    result = await self._check_browser(source)
+                    result = await _asyncio.wait_for(self._check_browser(source), timeout=_timeout)
                 elif source.type == "change":
-                    result = await self._check_change(source)
+                    result = await _asyncio.wait_for(self._check_change(source), timeout=_timeout)
                 elif source.type == "api":
-                    result = await self._check_api(source)
+                    result = await _asyncio.wait_for(self._check_api(source), timeout=_timeout)
                 else:
                     result = MonitorResult(source_id=source.id, status="error", error=f"Неизвестный тип: {source.type}")
 

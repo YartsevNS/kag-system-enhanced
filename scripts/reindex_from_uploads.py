@@ -43,9 +43,16 @@ def _http(url: str, payload: Optional[dict] = None, token: Optional[str] = None,
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read().decode()
-    return json.loads(body) if body else {}
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode()
+        return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        # Не падаем на отдельных ошибках (404 удалённого документа и т.п.) —
+        # вызывающий код решает, что делать.
+        return {"__http_error__": e.code, "__body__": e.read().decode()[:200]}
+    except Exception as e:
+        return {"__http_error__": str(e)}
 
 
 def _http_multipart(url: str, path: Path, token: Optional[str], timeout: float = 600.0) -> dict:
@@ -76,6 +83,8 @@ def wait_completed(base: str, doc_id: str, token: str, max_wait: float = 3600.0)
     last = ""
     while time.time() - start < max_wait:
         st = _http(f"{base}/api/v1/upload/{doc_id}/status", token=token)
+        if "__http_error__" in st:
+            return f"http_{st['__http_error__']}"
         status = st.get("status") or ""
         if status != last:
             print(f"      статус: {status} ({st.get('progress')})", flush=True)
