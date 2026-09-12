@@ -28,6 +28,30 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .search-row input{flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none;font-family:system-ui, -apple-system, sans-serif}
 .search-row input:focus{border-color:var(--accent)}
 .search-row select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-size:13px;outline:none}
+
+/* Панель управления графом: режимы → поле → действие, вторичное — справа */
+.kg-tools{margin-bottom:12px}
+.kg-modes{display:inline-flex;gap:2px;background:var(--elevated);border:1px solid var(--border);border-radius:9999px;padding:3px;margin-bottom:10px}
+.kg-mode{background:transparent;border:none;color:var(--text4);font-size:12px;font-family:inherit;padding:6px 14px;border-radius:9999px;cursor:pointer;transition:color 0.15s,background 0.15s}
+.kg-mode:hover{color:var(--text2)}
+.kg-mode.active{background:var(--accent);color:#fff;font-weight:600}
+.kg-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.kg-row input[type=text]{flex:1 1 280px;min-width:220px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit}
+.kg-row input[type=text]:focus{border-color:var(--accent)}
+.kg-level{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text4);white-space:nowrap}
+.kg-level select{background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 10px;color:var(--text2);font-size:13px;outline:none;font-family:inherit}
+.kg-row-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.kg-hint{font-size:11px;color:var(--text4);margin-top:8px;line-height:1.5}
+.kg-chip{display:inline-flex;align-items:center;gap:8px;margin-top:8px;background:rgba(94,106,210,0.15);color:var(--accent-h, #a5b4fc);border:1px solid var(--border);border-radius:9999px;padding:4px 12px;font-size:11px}
+.kg-chip b{color:var(--text2);font-weight:600}
+.kg-chip-x{cursor:pointer;color:var(--text4);font-weight:bold;font-size:13px;line-height:1}
+.kg-chip-x:hover{color:var(--red2, #f87171)}
+/* В каждом режиме видно только своё поле */
+#kg-doc, #kg-text, #kg-hint-doc{display:none}
+.kg-tools.mode-document #kg-doc{display:block}
+.kg-tools.mode-document #kg-node{display:none}
+.kg-tools.mode-text #kg-text{display:block}
+.kg-tools.mode-text #kg-node{display:none}
 .btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s}
 .btn:hover{opacity:0.85}
 .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all 0.15s}
@@ -82,23 +106,33 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
   <!-- Визуализация графа -->
   <div class="panel" id="kg-viz-panel">
     <h2>🌐 Визуализация графа</h2>
-    <div class="search-row">
-      <input type="text" id="kg-node" list="kg-entities" placeholder="Имя сущности (например: Банк России)" onkeydown="if(event.key==='Enter')loadGraphFromInput()" oninput="onKgInput()">
-      <datalist id="kg-entities"></datalist>
-      <select id="kg-depth" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text2)">
-        <option value="1">1 уровень</option>
-        <option value="2" selected>2 уровня</option>
-        <option value="3">3 уровня</option>
-      </select>
-      <button class="btn" onclick="loadGraphFromInput()">Показать граф</button>
-      <input type="text" id="kg-doc" list="kg-docs" placeholder="Фильтр по документу (имя файла)" style="min-width:260px" onfocus="loadDocList()" onkeydown="if(event.key==='Enter')loadDocGraphFromInput()">
-      <datalist id="kg-docs"></datalist>
-      <button class="btn" onclick="loadDocGraphFromInput()">Граф по документу</button>
-      <input type="text" id="kg-text" placeholder="Поиск фрагментов по тексту (например: ГОСТ Р 34.10)" style="min-width:280px" onkeydown="if(event.key==='Enter')searchChunksFromInput()">
-      <button class="btn" onclick="searchChunksFromInput()">Найти фрагменты</button>
-      <button class="btn-outline" onclick="clearDocFilter()">Снять фильтр</button>
-      <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
-      <button class="btn-outline" onclick="toggleFullscreenViz()">⛶ На весь экран</button>
+    <div class="kg-tools mode-entity" id="kg-tools">
+      <div class="kg-modes" role="tablist">
+        <button class="kg-mode active" data-mode="entity" onclick="setKgMode('entity')" title="Граф вокруг сущности">Сущность</button>
+        <button class="kg-mode" data-mode="document" onclick="setKgMode('document')" title="Структура одного документа">Документ</button>
+        <button class="kg-mode" data-mode="text" onclick="setKgMode('text')" title="Поиск фрагментов по тексту графа">Фрагменты по тексту</button>
+      </div>
+      <div class="kg-row">
+        <input type="text" id="kg-node" list="kg-entities" placeholder="Имя сущности (например: Банк России)" onkeydown="if(event.key==='Enter')runKgMode()" oninput="onKgInput()">
+        <input type="text" id="kg-doc" list="kg-docs" placeholder="Имя файла или часть названия" onfocus="loadDocList()" onkeydown="if(event.key==='Enter')runKgMode()">
+        <input type="text" id="kg-text" placeholder="Текст запроса (например: ГОСТ Р 34.10)" onkeydown="if(event.key==='Enter')runKgMode()">
+        <datalist id="kg-entities"></datalist>
+        <datalist id="kg-docs"></datalist>
+        <label class="kg-level" id="kg-level-label">уровень
+          <select id="kg-depth">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <button class="btn" onclick="runKgMode()">Показать</button>
+        <div class="kg-row-right">
+          <button class="btn-outline" onclick="if(cy)cy.fit(undefined,40)">Сбросить вид</button>
+          <button class="btn-outline" onclick="toggleFullscreenViz()">⛶ На весь экран</button>
+        </div>
+      </div>
+      <div class="kg-hint" id="kg-hint"></div>
+      <div id="kg-chip"></div>
     </div>
     <div id="kg-msg" style="font-size:12px;color:var(--text4);margin-bottom:8px"></div>
     <div id="cy" style="width:100%;height:560px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
@@ -840,11 +874,60 @@ async function onKgInput(){
   }, 300);
 }
 
+// ── Режимы панели ──────────────────────────────────────────────────────
+// Один режим — одно поле — одно действие: так на странице не свалка кнопок,
+// а понятная последовательность. Уровень означает разное, подсказка ниже это
+// проговаривает.
+const KG_MODES = {
+  entity:   { input:'kg-node', placeholder:'Имя сущности (например: Банк России)',
+              hint:'Граф вокруг сущности: её связи и соседи. Уровень — глубина обхода (1 — только прямые соседи).',
+              run: function(){ return loadGraphFromInput(); } },
+  document: { input:'kg-doc', placeholder:'Имя файла или часть названия',
+              hint:'Структура документа: его фрагменты и сущности, извлечённые из них. Уровень не используется.',
+              run: function(){ return loadDocGraphFromInput(); } },
+  text:     { input:'kg-text', placeholder:'Текст запроса (например: ГОСТ Р 34.10)',
+              hint:'Поиск по тексту фрагментов в графе. Уровень — радиус соседства: к каждому совпадению добавляются ±N фрагментов того же документа.',
+              run: function(){ return searchChunksFromInput(); } },
+};
+let kgMode = 'entity';
+
+function setKgMode(mode){
+  if (!KG_MODES[mode]) return;
+  kgMode = mode;
+  const tools = document.getElementById('kg-tools');
+  tools.className = 'kg-tools mode-' + mode;
+  document.querySelectorAll('.kg-mode').forEach(function(b){
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  const def = KG_MODES[mode];
+  const inp = document.getElementById(def.input);
+  if (inp) inp.placeholder = def.placeholder;
+  document.getElementById('kg-hint').textContent = def.hint;
+  if (mode === 'document') loadDocList();
+}
+
+function runKgMode(){
+  const def = KG_MODES[kgMode];
+  if (def) def.run();
+}
+
+// Чип активного фильтра по документу (вместо постоянной кнопки «Снять фильтр»)
+function renderDocChip(){
+  const el = document.getElementById('kg-chip');
+  if (!el) return;
+  if (!docFilterId){ el.innerHTML = ''; return; }
+  el.innerHTML = '<span class="kg-chip">фильтр по документу: <b>' + esc(docFilterName || docFilterId.slice(0, 8)) +
+    '</b> <span class="kg-chip-x" title="снять фильтр" onclick="clearDocFilter()">×</span></span>';
+}
+
 // Документ, по которому построен граф: используется как фильтр фрагментов в
 // панели по клику на сущность (видно, в каких фрагментах ЭТОГО файла она есть).
 let docFilterId = '';
 let docFilterName = '';
 let docListCache = null;
+
+// Инициализация панели: подсказка режима и чип фильтра
+setKgMode('entity');
 
 async function loadDocList(){
   if (docListCache) return;
@@ -942,6 +1025,7 @@ async function loadDocGraph(docId, docName){
     docFilterId = docId;
     docFilterName = docName || '';
     document.getElementById('kg-doc').value = docName || '';
+    renderDocChip();
     const kinds = {};
     (g.nodes||[]).forEach(function(n){ kinds[n.kind] = (kinds[n.kind]||0)+1; });
     const docNode = (g.nodes||[]).filter(function(n){ return n.kind === 'document'; }).length;
@@ -958,12 +1042,12 @@ function clearDocFilter(){
   docFilterName = '';
   const el = document.getElementById('kg-doc');
   if (el) el.value = '';
+  renderDocChip();
   document.getElementById('kg-msg').textContent = 'Фильтр по документу снят';
 }
 
 async function loadGraph(name, depth){
-  docFilterId = '';
-  docFilterName = '';
+  if (docFilterId){ docFilterId = ''; docFilterName = ''; renderDocChip(); }
   document.getElementById('kg-msg').textContent = '⏳ Загрузка...';
   try {
     const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=' + depth, { headers: authHeaders() });
