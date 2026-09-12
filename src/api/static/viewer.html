@@ -521,13 +521,21 @@ async function renderPage(num) {
       });
       await layer.render();
     } else if (pdfjsLib.renderTextLayer) {
-      // pdf.js 2.x
-      pdfjsLib.renderTextLayer({
+      // Старый/урезанный API (в сборке 3.11.174 класс TextLayer не экспортирован).
+      // Отрисовку НЕ ждём: слой дорисуется сам, а страница (номера, кнопки)
+      // не должна зависеть от его промиса — если он не разрешится, вьюер
+      // замер бы на этом месте. Ошибки только логируем.
+      const task = pdfjsLib.renderTextLayer({
         textContent: textContent,
         container: textLayerDiv,
         viewport: viewport,
         textDivs: [],
       });
+      if (task && task.promise && task.promise.catch) {
+        task.promise.catch(function (err) {
+          console.warn('Текстовый слой (renderTextLayer):', err);
+        });
+      }
     }
   } catch (e) {
     console.warn('Текстовый слой не отрисован:', e);
