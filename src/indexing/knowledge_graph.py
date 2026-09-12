@@ -12,18 +12,34 @@ Knowledge Graph Service — Neo4j-сервис для KAG (v2.0, Expert System).
 API: Bolt-драйвер neo4j
 Схема:
   Document {id, filename, metadata, created_at, updated_at}
-      └─[:HAS_CHUNK]→ Chunk {id, text_preview, chunk_seq, updated_at}
+      └─[:HAS_CHUNK]→ Chunk {id, chunk_seq, qdrant_point_id, text, updated_at}
                           └─[:MENTIONS]→ Entity {name, type, confidence, properties, source_docs[], updated_at}
                                             └─[:RELATED_TO|SIGNED_BY|DATED|AMOUNT|...]→ Entity
 """
 
+# Chunk.text — ПРОИЗВОДНОЕ значение (кэш), а не источник правды.
+# Источник правды по тексту чанка — payload.content в Qdrant; в графе лежит
+# ПОЛНАЯ копия (без усечения) для фрагментов и показа без обращения к Qdrant.
+# Усечение делает потребитель на ЧТЕНИИ (CHUNK_TEXT_PREVIEW_CHARS), а не запись:
+# иначе по графу не отличить «текст обрезан при сохранении» от «потребитель
+# просил 500 символов». Свойство перезаписывается при каждой индексации
+# документа; при рассинхроне с Qdrant (Outbox-очереди нет) лечится
+# scripts/backfill_graph_chunk_text.py — точечная перезаливка из Qdrant по
+# qdrant_point_id, без эмбеддингов и LLM.
 from typing import Dict, Any, List, Optional, Set, Tuple
+
 from dataclasses import dataclass, field
 from loguru import logger
 import json
 import re
 
 from src.indexing.ids import point_id_for_chunk
+
+# Сколько символов текста чанка отдавать потребителям (обозреватель /kg, API).
+# В графе хранится ПОЛНЫЙ текст (Chunk.text) — усечение делается на чтении,
+# чтобы потребитель сам решал, сколько ему нужно, а база оставалась полной.
+CHUNK_TEXT_PREVIEW_CHARS = 500
+
 
 
 # ============================================================
@@ -227,8 +243,14 @@ class KnowledgeGraphService:
 
     def create_chunk_node(self, chunk_id: str, document_id: str, text: str, chunk_seq: int = 0):
         """Создать/обновить узел чанка и связь HAS_CHUNK с документом.
-        
-        Храним первые 500 символов текста в графе — для быстрого предпросмотра.
+
+        Храним ПОЛНЫЙ текст чанка (c.text) — это производная копия
+        payload.content из Qdrant (источник правды там), нужна, чтобы граф
+        отдавал фрагменты без обращения к Qdrant. Усечение для показа делает
+        потребитель (CHUNK_TEXT_PREVIEW_CHARS), а не запись: иначе по графу
+        не отличить обрезанный при сохранении текст от «потребитель просил 500».
+        Старое свойство text_preview (500 символов) снимаем — оно дублировало
+        префикс c.text.
         """
         if not self.driver:
             return
@@ -237,17 +259,18 @@ class KnowledgeGraphService:
                 session.run(
                     """
                     MERGE (c:Chunk {id: $chunk_id})
-                    SET c.text_preview = $text_preview,
+                    SET c.text = $text,
                         c.chunk_seq = $chunk_seq,
                         c.qdrant_point_id = $qdrant_point_id,
                         c.updated_at = datetime()
+                    REMOVE c.text_preview
                     WITH c
                     MATCH (d:Document {id: $doc_id})
                     MERGE (d)-[:HAS_CHUNK]->(c)
                     """,
                     chunk_id=chunk_id,
                     doc_id=document_id,
-                    text_preview=text[:500],
+                    text=text or "",
                     chunk_seq=chunk_seq,
                     qdrant_point_id=point_id_for_chunk(chunk_id, document_id)
                 )
@@ -1698,10 +1721,13 @@ class KnowledgeGraphService:
                 params[param_name] = term
             
             where_str = " OR ".join(where_clauses)
+            # Усечение для выдачи задаём явно: в графе текст ПОЛНЫЙ, 500 символов —
+            # это решение потребителя на чтении (CHUNK_TEXT_PREVIEW_CHARS).
+            params["preview_chars"] = CHUNK_TEXT_PREVIEW_CHARS
             query = f"""
                 MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
                 WHERE {where_str}
-                RETURN DISTINCT c.id as chunk_id, c.text_preview as text,
+                RETURN DISTINCT c.id as chunk_id, left(c.text, $preview_chars) as text,
                        d.id as doc_id, d.filename as filename,
                        count(e) as entity_count
                 ORDER BY entity_count DESC
@@ -1714,7 +1740,7 @@ class KnowledgeGraphService:
                     query = f"""
                         MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk)<-[:HAS_CHUNK]-(d:Document)
                         WHERE ({where_str}) AND d.id IN $doc_ids
-                        RETURN DISTINCT c.id as chunk_id, c.text_preview as text,
+                        RETURN DISTINCT c.id as chunk_id, left(c.text, $preview_chars) as text,
                                d.id as doc_id, d.filename as filename,
                                count(e) as entity_count
                         ORDER BY entity_count DESC

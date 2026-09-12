@@ -101,7 +101,7 @@ async def hybrid_search(
     relevance_score: минимальный score для Qdrant-результатов (0 = без фильтра)
     """
     try:
-        from src.indexing.knowledge_graph import kg_service
+        from src.indexing.knowledge_graph import kg_service, CHUNK_TEXT_PREVIEW_CHARS
         from src.indexing.embeddings_service import embeddings_service
         
         entities = [e.strip() for e in q.split(",") if e.strip()]
@@ -136,7 +136,10 @@ async def hybrid_search(
                     seen_texts.add(text_key)
                     results.append({
                         "chunk_id": point.get("chunk_id", ""),
-                        "text": content[:500],
+                        # Усечение осознанное: в Qdrant текст полный, обозревателю /kg
+                        # достаточно превью — тот же лимит, что для графовых
+                        # результатов (knowledge_graph.CHUNK_TEXT_PREVIEW_CHARS).
+                        "text": content[:CHUNK_TEXT_PREVIEW_CHARS],
                         "doc_id": point.get("document_id", ""),
                         # ВАЖНО: filename из payload-поля filename, НЕ file_type!
                         # Была ошибка: point.get("file_type") — подставлялся MIME-тип
