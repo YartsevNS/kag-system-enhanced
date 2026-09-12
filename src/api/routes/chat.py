@@ -343,6 +343,17 @@ async def search_chunks(
         )
         return {"chunks": chunks, "total": len(chunks), "filters": filters or None}
     except Exception as e:
+        # Отказ модели эмбеддингов — это НЕ «ничего не найдено», а сбой сервиса:
+        # отдаём 503, иначе клиент видит пустой результат и считает, что
+        # документов нет (2026-09-12: при 429 от GigaChat было ровно так).
+        from src.indexing.embeddings_service import EmbeddingUnavailableError
+        if isinstance(e, EmbeddingUnavailableError):
+            logger.error(f"Поиск недоступен: эмбеддинг запроса не получен ({e})")
+            raise HTTPException(
+                status_code=503,
+                detail="Сервис эмбеддингов недоступен: запрос не удалось векторизовать. "
+                       "Повторите попытку позже.",
+            )
         logger.error(f"Search error: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}
 
