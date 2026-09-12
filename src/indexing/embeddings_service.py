@@ -28,6 +28,16 @@ from src.config import get_settings
 from src.indexing.ids import build_embedding_text, point_id_for_chunk
 
 
+class EmbeddingUnavailableError(RuntimeError):
+    """Сервис эмбеддингов недоступен: запрос не удалось векторизовать.
+
+    Отдельный тип нужен, чтобы API отличал «модель недоступна» от «ничего не
+    нашлось»: до 2026-09-12 поиск при отказе эмбеддинга отвечал 200 OK с пустым
+    списком, и это выглядело как отсутствие документов в базе.
+    """
+
+
+
 def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
     """
     Convert a Qdrant FieldCondition to a dict suitable for REST API.
@@ -530,8 +540,16 @@ class EmbeddingsService:
         if self._embedding_client is None:
             await self.initialize()
 
-        # Генерируем embedding для запроса
-        query_embedding = await self._embedding_client.generate(query)
+        # Генерируем embedding для запроса.
+        # Отказ модели эмбеддингов — это ошибка сервиса, а не «ничего не
+        # найдено»: поднимаем EmbeddingUnavailableError, чтобы API вернул 503
+        # (2026-09-12: при 429 от GigaChat поиск молча отдавал пустой список).
+        try:
+            query_embedding = await self._embedding_client.generate(query)
+        except Exception as e:
+            logger.error(f"Эмбеддинг запроса не получен ({type(e).__name__}): {e}")
+            raise EmbeddingUnavailableError(str(e)) from e
+
 
         # Создаем фильтр если есть.
         # ВАЖНО: ниже в этой функции есть локальный импорт MatchValue/MatchAny,
@@ -713,6 +731,24 @@ class EmbeddingsService:
 
         logger.debug(f"Найдено {len(formatted_results)} результатов")
         return formatted_results
+
+    async def count_document_points(self, document_id: str) -> int:
+        """Сколько точек документа реально лежит в Qdrant (exact count).
+
+        Нужно для проверки после векторзации: раньше статус completed ставился
+        по числу чанков из парсера, и провал записи (0 точек) был невидим.
+        """
+        if self._qdrant_client is None:
+            await self.initialize()
+        result = self._qdrant_client.count(
+            collection_name=self.collection_name,
+            count_filter=Filter(
+                must=[FieldCondition(key="document_id",
+                                     match=MatchValue(value=document_id))]
+            ),
+            exact=True,
+        )
+        return int(getattr(result, "count", 0) or 0)
 
     async def delete_document(self, document_id: str) -> bool:
         """

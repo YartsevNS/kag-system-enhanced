@@ -10,7 +10,10 @@ Recovery-модуль: автоматическое восстановление
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from loguru import logger
+
+from src.indexing.indexing_guards import recovery_reason
 
 # Порог «зависшего» документа. Был 5 мин — recovery сбрасывал в pending любые
 # большие документы, которые обрабатываются дольше 5 минут (например, 5000+
@@ -18,6 +21,35 @@ from loguru import logger
 # блокируя solo-пул и «замораживая» счётчик completed. 60 минут — запас под
 # самые большие документы (task_time_limit всё равно 2 часа).
 STUCK_THRESHOLD_MINUTES = 60
+
+# Порог «задача потеряна»: если документ в processing, а его задачи нет ни в
+# active, ни в reserved ни у одного worker'а — она умерла (рестарт/убийство
+# worker'а), и ждать 60 минут незачем: пользователь всё это время видит
+# «обрабатывается». 5 минут — запас на переключение статуса и на то, чтобы
+# задача успела появиться в active после постановки в очередь.
+LIVENESS_GRACE_MINUTES = 5
+
+
+def _alive_document_ids(timeout: float = 10.0) -> Optional[set]:
+    """document_id задач, которые сейчас в active/reserved у воркеров.
+
+    Возвращает None, если состояние узнать не удалось (inspect недоступен) —
+    тогда работает только жёсткий порог STUCK_THRESHOLD_MINUTES.
+    """
+    try:
+        from src.indexing.celery_app import celery_app
+        inspector = celery_app.control.inspect(timeout=timeout)
+        ids = set()
+        for state, getter in (("active", inspector.active), ("reserved", inspector.reserved)):
+            for tasks in (getter() or {}).values():
+                for task in tasks or []:
+                    did = (task.get("kwargs") or {}).get("document_id")
+                    if did:
+                        ids.add(did)
+        return ids
+    except Exception as e:
+        logger.warning(f"[Recovery] состояние задач неизвестно (inspect): {e}")
+        return None
 
 
 def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False) -> dict:
@@ -40,6 +72,9 @@ def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False)
     result = {"recovered": 0, "skipped": 0, "errors": [], "details": []}
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(minutes=STUCK_THRESHOLD_MINUTES)
+    # Один запрос к воркерам на весь проход: какие задачи реально живы.
+    # None (inspect недоступен) — работаем по жёсткому порогу, как раньше.
+    alive_ids = _alive_document_ids()
 
     try:
         all_docs = get_doc_repo().get_all() or {}
@@ -121,16 +156,31 @@ def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False)
         else:
             updated_at = threshold - timedelta(seconds=1)
 
-        if updated_at >= threshold:
+        # Жива ли задача документа? Если её нет ни в active, ни в reserved —
+        # она потеряна (рестарт/убийство worker'а), и ждать 60 минут незачем:
+        # всё это время пользователь видит «обрабатывается».
+        age_minutes = (now - updated_at).total_seconds() / 60.0
+        reason = recovery_reason(
+            status, age_minutes, alive_ids, doc_id,
+            STUCK_THRESHOLD_MINUTES, LIVENESS_GRACE_MINUTES,
+        )
+        if reason is None:
             result["skipped"] += 1
             continue
 
-        # Документ завис — восстанавливаем
-        logger.warning(
-            f"[Recovery] ЗАВИСШИЙ документ: {doc_id} "
-            f"({doc_data.get('filename')}), "
-            f"прошло >{STUCK_THRESHOLD_MINUTES} мин"
-        )
+        if reason == "lost_task":
+            logger.warning(
+                f"[Recovery] ПОТЕРЯННАЯ задача: {doc_id} "
+                f"({doc_data.get('filename')}) — задачи нет у воркеров, "
+                f"{age_minutes:.0f} мин без обновления"
+            )
+        else:
+            logger.warning(
+                f"[Recovery] ЗАВИСШИЙ документ: {doc_id} "
+                f"({doc_data.get('filename')}), {age_minutes:.0f} мин "
+                f"(порог {STUCK_THRESHOLD_MINUTES} мин)"
+            )
+
 
         try:
             doc_data["status"] = "pending"
@@ -146,6 +196,7 @@ def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False)
                 "document_id": doc_id,
                 "filename": doc_data.get("filename", "?"),
                 "was_stuck_since": updated_at_str,
+                "reason": reason,
             })
 
             # QueueGuard: снимаем замок ПЕРЕД перезапуском. Если задача реально

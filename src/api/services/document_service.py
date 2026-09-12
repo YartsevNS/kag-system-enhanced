@@ -25,6 +25,9 @@ from pydantic import BaseModel, Field
 
 from src.indexing.parsers import document_parser
 from src.indexing.embeddings_service import embeddings_service
+from src.indexing.indexing_guards import (
+    POINTS_EMPTY, POINTS_MISMATCH, check_points_written, points_verdict_message,
+)
 from src.config import get_settings
 
 
@@ -679,6 +682,28 @@ class DocumentService:
                 "embedding_model": getattr(_emb_client, "model", "unknown"),
                 "dimensions": getattr(_emb_client, "_dimensions", None) or 0
             })
+
+            # ── Проверка записи векторов (предохранитель) ────────────────
+            # Векторный сервис возвращает число ОТПРАВЛЕННЫХ векторов, но это не
+            # гарантия, что точки в Qdrant есть: 2026-09-12 коллизии point_id
+            # перезаписывали данные, документ числился completed, а точек было 0.
+            # Сверяем exact count; пусто — падаем (документ станет failed),
+            # расхождение — warning (частичная запись тоже подозрительна).
+            real_points = await embeddings_service.count_document_points(document_id)
+            verdict = check_points_written(len(chunks), real_points)
+            plog.log("verify_points", {
+                "expected": len(chunks), "in_qdrant": real_points, "verdict": verdict
+            })
+            if verdict == POINTS_EMPTY:
+                raise RuntimeError(
+                    "Проверка индексации не пройдена: "
+                    + points_verdict_message(verdict, len(chunks), real_points)
+                )
+            if verdict == POINTS_MISMATCH:
+                logger.warning(
+                    f"{document_id}: "
+                    + points_verdict_message(verdict, len(chunks), real_points)
+                )
 
             # ── Таблицы → document_tables (структурно, для точных запросов) ──
             # Таблицы уже в сегментах (markdown в Qdrant). Дополнительно храним
