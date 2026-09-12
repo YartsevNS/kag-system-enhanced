@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from loguru import logger
 import os
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
@@ -141,6 +141,7 @@ app.include_router(web_monitor.router, prefix="/api/v1/monitor", tags=["web-moni
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
+app.include_router(chunks.router, prefix="/api/v1", tags=["chunks"])
 
 # Статические файлы и веб-интерфейс
 static_path = os.path.join(os.path.dirname(__file__), "static")

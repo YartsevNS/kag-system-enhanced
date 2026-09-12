@@ -94,6 +94,7 @@ from loguru import logger
 
 from src.models import DocumentStatus
 from src.api.services.document_service import document_service
+from src.api.services.chunk_order import chunk_seq_of
 from src.security.validator import SecurityValidator, SecurityValidationError
 from src.api.middleware.auth_v2 import get_current_user_optional
 from src.database.user_models import User
@@ -1252,28 +1253,22 @@ async def get_document_chunks(
         all_chunks = []
         for r in all_results:
             payload = r.get("payload", {})
+            seq = chunk_seq_of(payload)
             all_chunks.append({
                 "id": r.get("id", ""),
                 "chunk_id": payload.get("chunk_id", ""),
                 "text": payload.get("text", payload.get("content", "")),
-                "chunk_index": payload.get("chunk_index", 0),
-                "chunk_seq": payload.get("chunk_seq", payload.get("chunk_index", 0)),
+                "chunk_index": payload.get("chunk_index", (payload.get("metadata") or {}).get("chunk_index", 0)),
+                "chunk_seq": seq,
                 "metadata": payload.get("metadata", {}),
                 "document_id": document_id
             })
-        
-        # Сортируем: chunk_seq если есть, иначе номер из chunk_id
-        def sort_key(c):
-            seq = c.get("chunk_seq")
-            if seq and seq > 0:
-                return seq
-            cid = c.get("chunk_id", "")
-            try:
-                return int(cid.replace("chunk_", "").split("_")[0])
-            except (ValueError, IndexError):
-                return c.get("chunk_index", 0)
-        all_chunks.sort(key=sort_key)
-        
+
+        # Сортируем по номеру чанка (см. src/api/services/chunk_order.py — общий
+        # разбор: номер лежит в metadata, а не на верхнем уровне payload).
+        all_chunks.sort(key=lambda c: (c.get("chunk_seq") or 10 ** 9,
+                                       str(c.get("chunk_id") or "")))
+
         total = len(all_chunks)
         chunks = all_chunks[offset:offset + limit]
         
