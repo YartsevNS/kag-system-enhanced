@@ -158,6 +158,17 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button>
   </div>
 
+  <!-- Баннер запрета загрузки новых документов (управляется из админки) -->
+  <div id="upload-banner" style="display:none;align-items:center;gap:10px;background:rgba(229,72,77,0.10);border:1px solid rgba(229,72,77,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)">
+    <span style="font-size:16px">🚫</span>
+    <div style="flex:1;line-height:1.5">
+      <strong>Загрузка документов отключена администратором</strong> — новые документы не принимаются
+      (ни вручную, ни парсером сайтов, ни по RSS).
+      <span id="upload-banner-msg" style="color:var(--text2)"></span>
+    </div>
+    <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button>
+  </div>
+
   <div class="upload-zone" id="upload-zone">
     <div class="upload-icon">📤</div>
     <div class="upload-text">Загрузить документы</div>
@@ -331,6 +342,7 @@ let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadProcessingConfig();
+  loadIngestConfig();
   loadCurrentUser();
   loadAll();
   loadFormatsBar();
@@ -392,6 +404,10 @@ function setupDragDrop() {
 
 async function uploadFiles(files) {
   if (!files.length) return;
+  if (uploadsBlocked) {
+    toast('🚫 Загрузка документов отключена администратором' + (uploadBlockMsg ? ': ' + uploadBlockMsg : ''), true);
+    return;
+  }
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '⏳ Загрузка...';
 
@@ -1015,6 +1031,34 @@ function ocrLink(d) {
 // ── Блокировка обработки (управляется из админки) ─────────────────────
 let processingBlocked = false;
 let processingBlockMsg = 'техническое обслуживание';
+
+// ── Запрет загрузки новых документов (управляется из админки) ─────────
+// Действует на все источники: UI/API, парсинг сайтов, RSS. Обработку
+// уже загруженных документов не затрагивает.
+let uploadsBlocked = false;
+let uploadBlockMsg = '';
+
+async function loadIngestConfig() {
+  try {
+    const r = await fetch(`${API}/admin/models/ingest-config`, { credentials: 'include' });
+    const d = await r.json();
+    if (!d || typeof d.blocked !== 'boolean') return;
+    uploadsBlocked = d.blocked;
+    uploadBlockMsg = d.message || '';
+    const b = document.getElementById('upload-banner');
+    if (b) {
+      b.style.display = uploadsBlocked ? 'flex' : 'none';
+      const m = document.getElementById('upload-banner-msg');
+      if (m) m.textContent = (uploadsBlocked && uploadBlockMsg) ? ` (${uploadBlockMsg})` : '';
+    }
+    const zone = document.getElementById('upload-zone');
+    if (zone) {
+      zone.style.opacity = uploadsBlocked ? '0.45' : '';
+      zone.style.cursor = uploadsBlocked ? 'not-allowed' : '';
+      zone.title = uploadsBlocked ? 'Загрузка документов отключена администратором' : '';
+    }
+  } catch (e) { console.error('ingest-config load:', e); }
+}
 let currentUser = null;
 
 async function loadCurrentUser() {

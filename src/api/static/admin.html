@@ -583,6 +583,28 @@
             </div>
         </div>
 
+        <!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) -->
+        <div class="section">
+            <h2 class="section-title">📥 Загрузка документов</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                <label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label>
+            </div>
+            <div style="margin-bottom:12px">
+                <label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label>
+                <input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+            </div>
+            <button class="btn btn-primary" onclick="saveUploadConfig()">💾 Сохранить</button>
+            <span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
+                <strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
+                «Документы» и через API, парсинг сайтов (watched_urls) и RSS — новые документы не появляются ниоткуда
+                (API отвечает 423, мониторинг пропускает обход источников).
+                Обработка уже загруженных документов этим переключателем НЕ затрагивается — она управляется отдельной
+                галочкой «Обработка документов» выше.
+            </div>
+        </div>
+
         <!-- Обработка документов -->
         <div class="section">
             <h2 class="section-title">⚙️ Обработка документов</h2>
@@ -1216,6 +1238,39 @@
                 });
                 const d = await r.json();
                 if (st) st.textContent = d.status === 'ok' ? '✅ Сохранено' : ('❌ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+
+        // ── Загрузка документов: запрет новых поступлений ───────────────
+        // Запрет действует на все источники: UI/API, парсинг сайтов, RSS.
+        // Путь /ingest-config (не /upload-config — тот отдаёт разрешённые форматы).
+        async function loadUploadConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/ingest-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const cb = document.getElementById('upload-blocked');
+                if (cb && typeof d.blocked === 'boolean') cb.checked = d.blocked;
+                const msg = document.getElementById('upload-message');
+                if (msg && d.message) msg.value = d.message;
+            } catch (e) { console.error('ingest-config load:', e); }
+        }
+        async function saveUploadConfig() {
+            const st = document.getElementById('upload-status');
+            if (st) st.textContent = '⏳ Сохранение...';
+            try {
+                const r = await apiFetch(`${API_URL}/ingest-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        blocked: document.getElementById('upload-blocked').checked,
+                        message: document.getElementById('upload-message').value,
+                    })
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok'
+                    ? (d.blocked ? '✅ Загрузка документов запрещена' : '✅ Загрузка документов разрешена')
+                    : ('❌ ' + (d.message || 'ошибка'));
             } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
 
@@ -2509,6 +2564,7 @@
         loadNeo4jConfig();
         loadBrandingConfig();
         loadProcessingConfig();
+        loadUploadConfig();
 
         loadAll();
         setInterval(loadStatus, 30000);

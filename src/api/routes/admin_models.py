@@ -1724,6 +1724,46 @@ async def save_processing_config(data: dict):
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/ingest-config", summary="Статус загрузки документов (блокировка поступления)")
+async def get_upload_config():
+    """Вернуть {blocked, message}: запрещена ли ЗАГРУЗКА новых документов.
+
+    Запрет действует на все источники: ручную загрузку из UI/API, парсинг сайтов
+    (watched_urls) и RSS. Обработка уже загруженных — отдельная настройка
+    processing-config.
+    """
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "uploads") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {
+            "blocked": bool(cfg.get("blocked", False)),
+            "message": str(cfg.get("message", "")),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/ingest-config", summary="Сохранить блокировку загрузки документов")
+async def save_upload_config(data: dict):
+    """Админ запрещает/разрешает загрузку новых документов (все источники)."""
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "uploads") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        if "blocked" in data:
+            cfg["blocked"] = bool(data["blocked"])
+        if "message" in data:
+            cfg["message"] = str(data["message"]).strip()[:200]
+        config_store.set("system", "uploads", cfg)
+        return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
+                "message": str(cfg.get("message", ""))}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 # ═══════════════════════════════════════
 # Настройки поиска (Hybrid Search)
 # ═══════════════════════════════════════

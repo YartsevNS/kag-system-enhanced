@@ -131,6 +131,22 @@ def _check_rate_limit(ip: str):
         })
     _RATE_STORE[ip].append(now)
 
+
+def _deny_if_uploads_blocked():
+    """423, если админ отключил загрузку документов (system/uploads.blocked).
+
+    Проверка нужна и в сервисе (единая точка для парсинга сайтов и RSS), и здесь:
+    у API должен быть понятный отказ с кодом, а не 500 из глубины сервиса.
+    """
+    from src.api.services.ingest_guard import ingest_block_message
+
+    msg = ingest_block_message()
+    if msg:
+        raise HTTPException(status_code=423, detail={
+            "code": "UPLOADS_BLOCKED",
+            "message": f"Загрузка документов отключена: {msg}",
+        })
+
 # Директория для TUS чанков (временные файлы)
 TUS_DIR = Path("/tmp/tus_uploads")
 
@@ -411,6 +427,8 @@ async def upload_document(
     upload_id = str(uuid.uuid4())
     filename = file.filename or f"unnamed_{upload_id[:8]}"
 
+    _deny_if_uploads_blocked()
+
     # Rate limit
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
@@ -517,6 +535,8 @@ async def upload_documents_batch(
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
 
+    _deny_if_uploads_blocked()
+
     logger.info(f"Пакетная загрузка: {len(files)} файлов")
 
     uploaded_by = current_user.id if current_user else None
@@ -607,6 +627,8 @@ async def upload_bulk(
     # Rate limit
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
+
+    _deny_if_uploads_blocked()
 
     upload_id = str(uuid.uuid4())
     filename = file.filename or f"archive_{upload_id[:8]}"

@@ -575,14 +575,25 @@ class WebMonitorService:
 
     async def run_check(self, source_id: Optional[str] = None, force: bool = False) -> List[MonitorResult]:
         """Запустить проверку: всех источников или одного конкретного.
-        
+
         Args:
             source_id: ID источника для проверки (None = все активные)
             force: если True — игнорировать enabled и check_interval
-        
+
         Returns:
             Список результатов проверки по каждому источнику
         """
+        # Админский запрет загрузки распространяется и на парсинг сайтов/RSS:
+        # новые документы не должны появляться в системе ниоткуда. Обход
+        # источников при этом не делаем вовсе — иначе мониторинг будет
+        # бессмысленно скачивать страницы и падать на сохранении.
+        from src.api.services.ingest_guard import ingest_block_message
+
+        blocked = ingest_block_message()
+        if blocked:
+            logger.info(f"[Monitor] загрузка документов отключена ({blocked}) — проверка источников пропущена")
+            return []
+
         sources = self.get_sources()
         if source_id:
             sources = [s for s in sources if s.id == source_id]

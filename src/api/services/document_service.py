@@ -225,6 +225,15 @@ class DocumentService:
             sanitized = f"document_{uuid.uuid4().hex[:8]}{Path(filename).suffix}"
         filename = sanitized
 
+        # ========== Этап 0.5: запрет загрузки (переключатель админа) ==========
+        # Единая точка: сюда приходят и ручная загрузка из UI/API, и парсинг
+        # сайтов, и RSS (web_monitor). Пока загрузка запрещена, новые документы
+        # не попадают в систему НИ ОТКУДА. Обработка уже загруженных —
+        # отдельная настройка system/processing.
+        from src.api.services.ingest_guard import ensure_ingest_allowed
+
+        ensure_ingest_allowed()
+
         # ========== Этап 1: вычисляем SHA-256 хеш содержимого ==========
         file_hash = hashlib.sha256(file_content).hexdigest()
         file_size = len(file_content)
