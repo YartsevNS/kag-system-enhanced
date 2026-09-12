@@ -125,6 +125,15 @@ def test_deepseek_unavailable_account_marks_not_ok(monkeypatch):
     assert "недоступен" in res["message"]
 
 
+def test_negative_balance_is_not_ok(monkeypatch):
+    payload = {"is_available": True,
+               "balance_infos": [{"currency": "CNY", "total_balance": "-1.18"}]}
+    res = _run_balance(monkeypatch, payload)
+    assert res["balance_ok"] is False, "исчерпанный/отрицательный баланс не может быть «ок»"
+    assert "исчерпан" in res["message"]
+    assert res["balance"] == -1.18
+
+
 def test_gigachat_reports_unknown_not_zero(monkeypatch):
     res = _run_balance(monkeypatch, {"whatever": 1}, provider="gigachat",
                        url="https://gigachat.devices.sberbank.ru/api/v1")

@@ -952,8 +952,15 @@ async def _provider_balance(provider_type: str, base_url: str, api_key: str) -> 
                     except (TypeError, ValueError):
                         amount = 0.0
                 available = d.get("is_available")
-                ok_status = bool(available) if available is not None else amount > 0
-                note = "" if available in (None, True) else " (аккаунт недоступен)"
+                # Нулевой/отрицательный баланс — это НЕ «всё хорошо»: у DeepSeek
+                # is_available остаётся true и при исчерпанном балансе (проверено:
+                # -1.18 CNY), поэтому смотрим и на сумму.
+                if amount <= 0:
+                    ok_status = False
+                    note = " (баланс исчерпан)" if available in (None, True) else " (аккаунт недоступен)"
+                else:
+                    ok_status = bool(available) if available is not None else True
+                    note = "" if available in (None, True) else " (аккаунт недоступен)"
                 return {"ok": True, "provider": prov, "balance_ok": ok_status,
                         "balance_known": True, "balance": amount,
                         "balance_usd": amount if currency == "USD" else None,
