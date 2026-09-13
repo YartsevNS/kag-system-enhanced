@@ -152,3 +152,21 @@ def test_конвейер_анализ_до_векторизации():
     assert i_analyze < i_embed, "карточка должна собираться ДО эмбеддинга"
     assert 'metadata["card_prefix"]' not in src  # префикс кладётся через метаданные чанка
     assert '_md["card_prefix"] = card_prefix' in src
+
+
+def test_настройки_префикса_карточки():
+    """Префикс — настройка, а не константа: замер показал чувствительность к длине."""
+    from src.config import get_settings
+    s = get_settings()
+    assert isinstance(s.CARD_PREFIX_ENABLED, bool)
+    assert 20 <= s.CARD_PREFIX_MAX_CHARS <= 1000
+
+
+def test_короткий_префикс_без_тем():
+    """Короткий вариант (title+type) не должен тянуть темы — иначе тема документа перевешивает чанк."""
+    prefix = build_card_prefix(
+        {"title": "СТО БР ИББС", "document_type": "стандарт",
+         "topics": ["криптография", "защита"], "summary": "о чём-то"},
+        max_chars=80,
+    )
+    assert len(prefix) <= 80

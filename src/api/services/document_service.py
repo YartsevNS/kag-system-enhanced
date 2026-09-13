@@ -714,7 +714,14 @@ class DocumentService:
                     })
                     _doc_fresh = get_doc_repo().get_dict(document_id) or {}
                     _card = card_from_record(_doc_fresh)
-                    card_prefix = build_card_prefix(_card)
+                    # Длина и включение префикса — из настроек (замер показал, что длинный
+                    # префикс меняет баланс top-1/top-k, см. src/config.py).
+                    from src.config import get_settings as _get_settings
+                    _cfg_card = _get_settings()
+                    if _cfg_card.CARD_PREFIX_ENABLED:
+                        card_prefix = build_card_prefix(
+                            _card, max_chars=_cfg_card.CARD_PREFIX_MAX_CHARS
+                        )
                     if card_prefix:
                         for _c in chunks:
                             _md = _c.get("metadata")
