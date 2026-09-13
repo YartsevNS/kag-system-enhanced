@@ -170,3 +170,12 @@ def test_короткий_префикс_без_тем():
         max_chars=80,
     )
     assert len(prefix) <= 80
+
+
+def test_чанки_документа_не_включают_карточку():
+    """Карточка (level=document) не должна попадать в перестроение графа как чанк."""
+    src = Path("src/indexing/embeddings_service.py").read_text(encoding="utf-8")
+    i = src.index("async def get_document_chunks")
+    body = src[i:i + 1600]
+    assert 'key="level"' in body and 'value="document"' in body
+    assert "must_not" in body

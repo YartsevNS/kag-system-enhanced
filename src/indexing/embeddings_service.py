@@ -1034,6 +1034,9 @@ class EmbeddingsService:
         try:
             if self._qdrant_client is None:
                 await self.initialize()
+            # ВАЖНО: карточка документа (level=document) — НЕ чанк. Без этого фильтра она
+            # попадала в перестроение графа как чанк с id «card» (живой случай 2026-09-13:
+            # сущности извлекались из текста карточки и создавался узел Chunk {id: card}).
             results, _ = await asyncio.to_thread(self._qdrant_client.scroll, collection_name=self.collection_name,
                 scroll_filter=Filter(
                     must=[
@@ -1041,7 +1044,8 @@ class EmbeddingsService:
                             key="document_id",
                             match=MatchValue(value=document_id)
                         )
-                    ]
+                    ],
+                    must_not=[FieldCondition(key="level", match=MatchValue(value="document"))],
                 ),
                 limit=1000)
 
