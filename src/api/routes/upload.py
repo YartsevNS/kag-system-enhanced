@@ -115,6 +115,10 @@ MAX_FILE_SIZE = _settings.MAX_FILE_SIZE
 # Сколько чанков документа тянем из Qdrant за раз (scroll, не пагинация):
 # при достижении лимита в ответе будет truncated=True, чтобы это не было тихой потерей.
 CHUNKS_SCROLL_LIMIT = 10000
+# /queue: сколько ждать ответа воркеров и сколько держать результат в кэше
+QUEUE_INSPECT_TIMEOUT = 2.0
+QUEUE_CACHE_TTL = 5.0
+_QUEUE_CACHE: dict = {"at": 0.0, "inspect": None}
 
 # Rate limiter: не более N запросов в минуту на upload
 from collections import defaultdict
@@ -1189,7 +1193,6 @@ async def search_document_tables(
     """
     ensure_can_read(document_id, current_user)
     try:
-        import json
         from src.database.session import get_session_local
         from src.database.document_table_models import DocumentTable
         maker = get_session_local()
@@ -1530,7 +1533,9 @@ async def get_document_details(
             from src.database.user_models import User as UserModel
             get_engine()
             session = get_session_local()()
-            user = session.query(UserModel).filter(UserModel.id == uploaded_by).first()
+            user = await asyncio.to_thread(
+                lambda: session.query(UserModel).filter(UserModel.id == uploaded_by).first()
+            )
             if user:
                 uploaded_by_name = user.username
             session.close()
@@ -1546,9 +1551,10 @@ async def get_document_details(
     try:
         from src.indexing.qdrant_service import get_qdrant_service
         qdrant_service = get_qdrant_service()
-        results = qdrant_service.scroll_points(
+        results = await asyncio.to_thread(
+            qdrant_service.scroll_points,
             filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
-            limit=1
+            limit=1,
         )
         if results:
             payload = results[0].get("payload", {})
@@ -1564,9 +1570,10 @@ async def get_document_details(
         try:
             from src.indexing.qdrant_service import get_qdrant_service
             qdrant_service = get_qdrant_service()
-            results = qdrant_service.scroll_points(
+            results = await asyncio.to_thread(
+                qdrant_service.scroll_points,
                 filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
-                limit=3
+                limit=3,
             )
             if results:
                 text = " ".join([r.get("payload", {}).get("text", "") for r in results])
@@ -1614,7 +1621,7 @@ async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
     """
     from src.api.services.document_repository import get_doc_repo
     repo = get_doc_repo()
-    if not repo.get(document_id):
+    if not await asyncio.to_thread(repo.get, document_id):
         raise HTTPException(status_code=404, detail="Документ не найден")
 
     data = {}
@@ -1626,7 +1633,7 @@ async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
     if not data:
         return {"status": "ok", "message": "Ничего не изменено"}
 
-    repo.upsert(document_id, data)
+    await asyncio.to_thread(repo.upsert, document_id, data)
 
     # При смене типа — обновляем payload всех чанков в Qdrant
     if "document_type" in data:
@@ -1716,7 +1723,6 @@ async def reanalyze_all_documents(
     Фоновый переанализ всех completed-документов через LLM.
     Определяет document_type, recognized_title, summary, topics.
     """
-    import asyncio
     try:
         from src.api.services.document_analyzer import document_analyzer
         from src.api.services.document_repository import get_doc_repo
@@ -1908,7 +1914,6 @@ async def reprocess_pending_documents(
     Найти все документы со статусом 'pending' и запустить их обработку заново.
     Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
     """
-    import asyncio
     from src.api.services.config_store import config_store
     from src.api.services.document_repository import get_doc_repo
 
@@ -1961,13 +1966,20 @@ async def queue_status():
     try:
         from src.indexing.celery_app import celery_app
         
-        # Получаем инспекцию воркеров
-        # inspect() — блокирующий вызов с сетевым таймаутом (секунды).
-        def _inspect():
-            i = celery_app.control.inspect()
-            return i.active() or {}, i.reserved() or {}, i.scheduled() or {}
+        # inspect() ждёт ответа воркеров (в замере — до 3 с), поэтому:
+        # 1) короткий таймаут ответа, 2) кэш на несколько секунд — дашборду
+        # точность до секунд не нужна, а воркеров такой опрос не дёргает.
+        now = time.monotonic()
+        cached = _QUEUE_CACHE["inspect"]
+        if cached and now - _QUEUE_CACHE["at"] < QUEUE_CACHE_TTL:
+            active_tasks, reserved_tasks, scheduled_tasks = cached
+        else:
+            def _inspect():
+                i = celery_app.control.inspect(timeout=QUEUE_INSPECT_TIMEOUT)
+                return i.active() or {}, i.reserved() or {}, i.scheduled() or {}
 
-        active_tasks, reserved_tasks, scheduled_tasks = await asyncio.to_thread(_inspect)
+            active_tasks, reserved_tasks, scheduled_tasks = await asyncio.to_thread(_inspect)
+            _QUEUE_CACHE.update(at=now, inspect=(active_tasks, reserved_tasks, scheduled_tasks))
         
         workers = []
         total_active = 0
@@ -2042,7 +2054,9 @@ async def view_ocr_markdown(
     md_path = document_service._ocr_dir / f"{record.filename}.md"
     if not md_path.exists():
         raise HTTPException(status_code=404, detail="Markdown не найден")
-    return PlainTextResponse(md_path.read_text(encoding="utf-8"), media_type="text/markdown")
+    # Markdown после OCR бывает на сотни КБ — читаем в потоке.
+    text = await asyncio.to_thread(md_path.read_text, encoding="utf-8")
+    return PlainTextResponse(text, media_type="text/markdown")
 
 
 
