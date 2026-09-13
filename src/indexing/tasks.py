@@ -511,9 +511,14 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
                 )
                 _label = str((doc.get("recognized_title") or "") or filename or "")
                 _secs = _ps(chunks, filename)
+                # ВНИМАНИЕ: запятая после значения перед `for` в dict comprehension —
+                # синтаксическая ошибка ({k: v, for x in y}). Уже второй раз на этом
+                # спотыкаюсь (первый — в document_service): в batch-компиляции её не
+                # видно, если предыдущий файл упал раньше.
                 _crumbs = {
-                    f"{doc_id}:sec:{s['section_index']}":
-                        _bc(_label, s.get("number", ""), s.get("title", "")),
+                    f"{doc_id}:sec:{s['section_index']}": _bc(
+                        _label, s.get("number", ""), s.get("title", ""),
+                    )
                     for s in _secs
                 }
                 if _secs:
