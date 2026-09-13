@@ -236,6 +236,16 @@ def test_backup_documents_skips_caches():
     assert "include_caches" in body, "у бэкапа документов должен быть флаг кэшей"
     assert "BACKUP_CACHE_CATEGORIES" in body, "кэши должны отсекаться тем же списком"
 
+def test_deploy_rejects_broken_base64_and_python():
+    """Проверка в живом стенде показала: битый base64 записывался как текст и затёр
+    api/__init__.py. Теперь кодировка задаётся явно, а .py проверяется компиляцией."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert 'encoding: str = Field(default="auto"' in src
+    assert "Неизвестная кодировка" in src
+    assert 'if ext == ".py":' in src and "compile(content, req.file_path" in src
+    assert 'base64.b64decode(req.file_content, validate=True)' in src
+
+
 def test_documents_backup_survives_long_filenames():
     """Бэкап документов не должен падать на именах длиннее лимита ФС (Errno 36).
 

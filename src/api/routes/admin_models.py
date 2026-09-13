@@ -1098,6 +1098,9 @@ class DeployRequest(BaseModel):
     file_content: Optional[str] = Field(default=None, description="Содержимое файла для записи (base64 или текст)")
     file_path: Optional[str] = Field(default=None, description="Путь к файлу относительно /app/src/")
     action: str = Field(default="write_file", description="Действие: write_file | git_pull | restart")
+    # Явный способ кодирования содержимого: раньше «битый base64» молча
+    # записывался как текст (и так затёр api/__init__.py при проверке).
+    encoding: str = Field(default="auto", description="auto | utf8 | base64")
 
 @router.post("/deploy", summary="Деплой: запись файла, git pull или перезапуск")
 async def deploy_action(req: DeployRequest):
@@ -1134,7 +1137,9 @@ async def deploy_action(req: DeployRequest):
             content = req.file_content
             # base64 — только явно и со строгой проверкой (validate=True):
             # иначе произвольный текст с валидным префиксом даёт мусорные байты
-            encoding = getattr(req, "encoding", None) or "auto"
+            encoding = (req.encoding or "auto").lower()
+            if encoding not in ("auto", "utf8", "base64"):
+                return {"status": "error", "message": f"Неизвестная кодировка: {encoding}"}
             if encoding == "base64":
                 try:
                     content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
@@ -1142,10 +1147,19 @@ async def deploy_action(req: DeployRequest):
                     return {"status": "error", "message": f"Некорректный base64: {e}"}
             elif encoding == "auto":
                 try:
-                    decoded = base64.b64decode(req.file_content, validate=True)
-                    content = decoded.decode("utf-8")
+                    content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
                 except Exception:
                     content = req.file_content  # обычный текст
+
+            # Python-файл должен быть синтаксически корректным: иначе запись
+            # через веб-деплой ломает сервис (проверено на практике — файл с
+            # мусором вместо кода).
+            if ext == ".py":
+                try:
+                    compile(content, req.file_path, "exec")
+                except SyntaxError as e:
+                    return {"status": "error",
+                            "message": f"Файл .py не компилируется (строка {e.lineno}): {e.msg}"}
 
             size = len(content.encode("utf-8"))
             if size > settings.DEPLOY_MAX_FILE_BYTES:
