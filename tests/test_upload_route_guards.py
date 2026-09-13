@@ -99,3 +99,30 @@ def test_dependency_names_are_imported():
     used = set(re.findall(r"Depends\((\w+)", SRC))
     missing = sorted(n for n in used if n not in header)
     assert not missing, f"не импортированы зависимости: {missing}"
+
+
+def test_reprocess_pending_has_no_create_task():
+    """create_task без ссылки + count до выполнения: заменено на прямой enqueue."""
+    body = _body("reprocess_pending_documents")
+    assert "create_task" not in body, "вернулся asyncio.create_task"
+    assert "enqueue_document(did, force=True)" in body, "нет прямой постановки в очередь"
+    assert "_process_document_async" not in SRC, "вернулась обёртка _process_document_async"
+
+
+def test_no_dead_task_imports():
+    assert "from src.indexing.tasks import process_document" not in SRC, (
+        "мёртвый импорт process_document вернулся (нигде не используется)"
+    )
+
+
+def test_bulk_uses_archive_guard():
+    assert "check_member_names(" in SRC and "check_tar_members(" in SRC, (
+        "upload_bulk распаковывает архивы без проверки имён/ссылок"
+    )
+    assert "safe_target(" in SRC, "нет проверки пути распаковки"
+    assert "ArchiveRejected" in SRC, "отказ по архиву не обрабатывается отдельно"
+
+
+def test_limits_come_from_settings():
+    assert "MAX_FILE_SIZE = _settings.MAX_FILE_SIZE" in SRC, "лимит файла снова хардкод"
+    assert "UPLOAD_TEMP_DIR" in SRC, "каталог распаковки снова хардкод /tmp"

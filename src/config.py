@@ -179,6 +179,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
+    # Загрузка файлов и архивов
+    # Раньше были хардкодом в upload.py (MAX_FILE_SIZE = 1 ГБ, каталог /tmp).
+    MAX_FILE_SIZE: int = 1024 * 1024 * 1024                  # на один файл, ГБ
+    MAX_ARCHIVE_ENTRIES: int = 1000                          # файлов в архиве
+    MAX_ARCHIVE_UNCOMPRESSED: int = 2 * 1024 * 1024 * 1024   # распакованного, 2 ГБ
+    UPLOAD_TEMP_DIR: str = "/tmp"                            # распаковка архивов
+
     # Безопасность
     AUTH_ENABLED: bool = False
     KAG_API_TOKEN: str = ""

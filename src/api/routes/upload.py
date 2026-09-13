@@ -58,6 +58,14 @@ from loguru import logger
 from src.models import DocumentStatus
 from src.api.services.document_service import document_service
 from src.api.services.chunk_order import chunk_seq_of
+from src.api.services.archive_guard import (
+    ArchiveRejected,
+    check_limits,
+    check_member_names,
+    check_tar_members,
+    safe_target,
+)
+from src.config import get_settings
 from src.security.validator import SecurityValidator, SecurityValidationError
 from src.api.middleware.auth_v2 import get_current_admin, get_current_user_optional
 from src.database.user_models import User
@@ -78,7 +86,9 @@ from src.api.services.document_access import (
 router = APIRouter()
 
 # Лимит одного файла (1GB)
-MAX_FILE_SIZE = 1024 * 1024 * 1024
+# Лимиты берём из настроек, а не держим литералами в роутере.
+_settings = get_settings()
+MAX_FILE_SIZE = _settings.MAX_FILE_SIZE
 
 # Rate limiter: не более N запросов в минуту на upload
 import time
@@ -661,7 +671,8 @@ async def upload_bulk(
         raise HTTPException(status_code=400, detail=f"Ошибка чтения архива: {e}")
 
     # Создаём временную папку для распаковки
-    extract_dir = Path(f"/tmp/bulk_{upload_id}")
+    # Каталог распаковки — из настроек (раньше литерал /tmp).
+    extract_dir = Path(_settings.UPLOAD_TEMP_DIR) / f"bulk_{upload_id}"
     extract_dir.mkdir(parents=True, exist_ok=True)
 
     uploaded_by = current_user.id if current_user else None
@@ -676,15 +687,28 @@ async def upload_bulk(
         if ext in (".zip",):
             import zipfile
             with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
-                for info in zf.infolist():
+                infos = zf.infolist()
+                # Лимиты и имена проверяем ДО распаковки: иначе ZIP-бомба
+                # (тысячи файлов или гигабайты нулей) успеет лечь на диск.
+                check_limits(
+                    [(i.filename, i.file_size) for i in infos],
+                    len(archive_bytes),
+                    _settings.MAX_ARCHIVE_ENTRIES,
+                    _settings.MAX_ARCHIVE_UNCOMPRESSED,
+                )
+                check_member_names([i.filename for i in infos], extract_dir)
+                for info in infos:
                     if info.filename.startswith("__") or info.filename.startswith("."):
                         continue
                     entry_ext = Path(info.filename).suffix.lower()
                     if entry_ext not in allowed_exts:
                         continue
-                    # Извлекаем во временную папку
+                    target = safe_target(extract_dir, info.filename)
+                    if target is None:
+                        continue
+                    # Извлекаем во временную папку (имя проверено выше)
                     zf.extract(info, extract_dir)
-                    extracted_path = extract_dir / info.filename
+                    extracted_path = target
                     if not extracted_path.is_file():
                         continue
 
@@ -699,14 +723,28 @@ async def upload_bulk(
                     # tarfile.open режим определяется по расширению
             mode = "r:gz" if ext in (".gz", ".tgz") else "r:"
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode=mode) as tf:
-                for member in tf.getmembers():
+                members = tf.getmembers()
+                # tarfile.extract НЕ защищён от «../» (в отличие от zipfile с
+                # Python 3.6) и позволяет symlink-атаку: проверяем имена, ссылки
+                # и спецфайлы; лимиты — по суммарному размеру.
+                check_limits(
+                    [(m.name, m.size) for m in members],
+                    len(archive_bytes),
+                    _settings.MAX_ARCHIVE_ENTRIES,
+                    _settings.MAX_ARCHIVE_UNCOMPRESSED,
+                )
+                check_tar_members(members, extract_dir)
+                for member in members:
                     if not member.isfile():
                         continue
                     entry_ext = Path(member.name).suffix.lower()
                     if entry_ext not in allowed_exts:
                         continue
+                    target = safe_target(extract_dir, member.name)
+                    if target is None:
+                        continue
                     tf.extract(member, extract_dir)
-                    extracted_path = extract_dir / member.name
+                    extracted_path = target
                     if not extracted_path.is_file():
                         continue
 
@@ -719,6 +757,12 @@ async def upload_bulk(
 
     except HTTPException:
         raise
+    except ArchiveRejected as e:
+        # Отказ по безопасности/лимитам — это не «ошибка распаковки»:
+        # 400 для пустого/битого архива, 413 когда превышены лимиты.
+        logger.warning(f"[{upload_id}] архив отклонён ({e.code}): {e.reason}")
+        status = 400 if e.code in ("ARCHIVE_EMPTY",) else 413
+        raise HTTPException(status_code=status, detail=f"Архив отклонён: {e.reason}")
     except Exception as e:
         logger.error(f"[{upload_id}] Ошибка распаковки архива: {e}")
         raise HTTPException(status_code=400, detail=f"Ошибка распаковки: {e}")
@@ -1706,7 +1750,6 @@ async def reindex_all_documents(
     """
     try:
         from src.api.services.document_repository import get_doc_repo
-        from src.indexing.tasks import process_document
 
         all_docs = get_doc_repo().get_all() or {}
         ids = [
@@ -1867,15 +1910,25 @@ async def reprocess_pending_documents(
         return {"success": True, "message": "Нет pending-документов", "count": 0}
     
     logger.info(f"Запускаю переобработку {len(pending)} pending-документов")
+    # Постановка в очередь СИНХРОННАЯ (Redis-замок QueueGuard), поэтому
+    # asyncio.create_task здесь ничего не давало: ссылку на задачу никто не
+    # сохранял (её мог собрать GC), а count увеличивался до фактической
+    # постановки. Ставим задачу напрямую и считаем только успешные.
     count = 0
+    skipped = 0
     for did, doc in pending:
         try:
-            asyncio.create_task(_process_document_async(did))
-            count += 1
+            if enqueue_document(did, force=True):
+                count += 1
+            else:
+                skipped += 1
         except Exception as e:
             logger.warning(f"Не удалось запустить {did}: {e}")
     
-    return {"success": True, "message": f"Запущена переобработка", "count": count}
+    message = f"Запущена переобработка: {count}"
+    if skipped:
+        message += f" (уже в очереди: {skipped})"
+    return {"success": True, "message": message, "count": count, "skipped": skipped}
 
 
 @router.get("/queue", summary="Статус очереди обработки")
@@ -1925,16 +1978,6 @@ async def queue_status():
             "error": str(e),
         }
 
-
-async def _process_document_async(document_id: str):
-    """Запустить фоновую обработку документа через Celery (с дедупликацией)."""
-    try:
-        # QueueGuard: единая точка постановки — защита от дублей.
-        if not enqueue_document(document_id):
-            logger.debug(f"Документ {document_id} уже в очереди — повтор не нужен")
-    except Exception as e:
-        from loguru import logger
-        logger.warning(f"Не удалось запустить Celery задачу для {document_id}: {e}")
 
 @router.get("/{document_id}/ocr", summary="Проверить наличие OCR/Markdown")
 async def check_ocr(
@@ -1989,7 +2032,6 @@ async def reprocess_ocr(
 ):
     """Принудительно перезапускает OCR и создание Markdown для документа."""
     from src.api.services.document_service import document_service
-    from src.indexing.tasks import process_document
     
     record = document_service.get_document_status(document_id)
     if not record:
