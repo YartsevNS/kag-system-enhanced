@@ -136,16 +136,23 @@ class TestGOSTCrypto:
         
         assert decrypted.decode('utf-8') == plaintext
 
-    def test_generate_key(self):
-        """Тест генерации ключа"""
-        crypto1 = GOSTCrypto()
-        crypto2 = GOSTCrypto()
-        
-        # Ключи должны быть разными
-        assert crypto1.key != crypto2.key
-        
-        # Длина ключа 32 байта
+    def test_generate_key(self, tmp_path):
+        """Свежие ключи различаются и имеют длину 32 байта; тот же файл — тот же ключ.
+
+        Раньше тест создавал два GOSTCrypto() с путём ПО УМОЛЧАНИЮ
+        (`/app/data/.encryption_key`): если файл уже существует (локальная разработка,
+        стенд), оба читают один и тот же ключ, и проверка «ключи разные» падала —
+        падал тест, а не код. Теперь путь свой на каждый экземпляр.
+        """
+        crypto1 = GOSTCrypto(key_path=tmp_path / "key1.bin")
+        crypto2 = GOSTCrypto(key_path=tmp_path / "key2.bin")
+
+        assert crypto1.key != crypto2.key, "свежесгенерированные ключи должны различаться"
         assert len(crypto1.key) == 32
+
+        # Повторная загрузка того же файла даёт тот же ключ — иначе шифротекст
+        # перестал бы читаться после рестарта.
+        assert GOSTCrypto(key_path=tmp_path / "key1.bin").key == crypto1.key
 
 
 # ===========================================
@@ -451,8 +458,11 @@ class TestSecurityValidator:
         client_id = "client-123"
         now = datetime.utcnow()
         
-        # Создаем больше запросов чем лимит
-        requests = [now - timedelta(seconds=i) for i in range(150)]
+        # Создаем больше запросов чем лимит В ПРЕДЕЛАХ ОКНА.
+        # Раньше было `timedelta(seconds=i) for i in range(150)` — 150 запросов,
+        # растянутых на 150 секунд, а окно 60 с: в окно попадало 60 < 100, лимит
+        # не превышался, и тест падал «не по делу». 150 × 0.2 с = 30 с < 60 с.
+        requests = [now - timedelta(seconds=i * 0.2) for i in range(150)]
         
         result = SecurityValidator.rate_limit_check(
             client_id=client_id,

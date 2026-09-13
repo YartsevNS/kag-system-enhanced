@@ -28,36 +28,6 @@ def mock_auth_token():
     }
 
 
-def _auth_headers(roles=("admin",)):
-    """Валидный локальный JWT для тестов — без БД.
-
-    Middleware (`src/api/middleware/security.py`) проверяет подпись тем же
-    `settings.JWT_SECRET` и берёт роли из payload — в БД он не ходит. Поэтому токен
-    можно выпустить прямо здесь и получить настоящие 200 на защищённых роутах,
-    вместо подмены проверки на «401 и всё».
-    """
-    import jwt as _jwt
-    from datetime import datetime, timedelta, timezone
-
-    from src.config import get_settings
-
-    settings = get_settings()
-    if not settings.JWT_SECRET:
-        # В тестовом окружении .env нет, поэтому секрет подписи пустой, а PyJWT
-        # отказывается подписывать пустым ключом. Ставим тестовое значение:
-        # get_settings() кэширован, поэтому middleware проверит им же. В прод это
-        # не попадает — там JWT_SECRET приходит из .env (политика: секретов в коде нет).
-        settings.JWT_SECRET = "unit-test-signing-key"
-    payload = {
-        "sub": "test-admin",
-        "username": "test-admin",
-        "roles": list(roles),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-    }
-    token = _jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-    return {"Authorization": f"Bearer {token}"}
-
-
 class TestHealthCheck:
     """Тесты проверки работоспособности"""
 
@@ -167,18 +137,18 @@ class TestUploadEndpoints:
 class TestAdminEndpoints:
     """Тесты административных эндпоинтов"""
 
-    def test_system_status(self, client):
+    def test_system_status(self, client, auth_headers):
         """GET /api/v1/admin/status: без токена 401, админу — 200 или редирект /setup.
 
         Тест был красным: шёл без токена и ждал 200 — с появлением auth-middleware
         админские роуты требуют JWT. Валидный токен выпускается локально
-        (`_auth_headers`): middleware проверяет подпись и роли, в БД не ходит.
+        (`auth_headers` из conftest): middleware проверяет подпись и роли, в БД не ходит.
         Дальше вступает SetupCheck: в тестовом окружении система не настроена,
         поэтому 302 на /setup — это тоже корректный ответ, а не отказ доступа.
         """
         assert client.get("/api/v1/admin/status").status_code == 401
 
-        response = client.get("/api/v1/admin/status", headers=_auth_headers(),
+        response = client.get("/api/v1/admin/status", headers=auth_headers,
                               follow_redirects=False)
         assert response.status_code in (200, 302, 307), response.status_code
         if response.status_code in (302, 307):
@@ -188,11 +158,11 @@ class TestAdminEndpoints:
             assert "service" in data or "status" in data
             assert "components" in data
 
-    def test_dependencies(self, client):
+    def test_dependencies(self, client, auth_headers):
         """Проверка SBOM: без токена 401, админу — список зависимостей (или /setup)."""
         assert client.get("/api/v1/admin/dependencies").status_code == 401
 
-        response = client.get("/api/v1/admin/dependencies", headers=_auth_headers(),
+        response = client.get("/api/v1/admin/dependencies", headers=auth_headers,
                               follow_redirects=False)
         assert response.status_code in (200, 302, 307), response.status_code
         if response.status_code == 200:
@@ -200,11 +170,11 @@ class TestAdminEndpoints:
             assert "dependencies" in data
             assert isinstance(data["dependencies"], list)
 
-    def test_metrics(self, client):
+    def test_metrics(self, client, auth_headers):
         """Проверка метрик: без токена 401, админу — словарь (или редирект /setup)."""
         assert client.get("/api/v1/admin/metrics").status_code == 401
 
-        response = client.get("/api/v1/admin/metrics", headers=_auth_headers(),
+        response = client.get("/api/v1/admin/metrics", headers=auth_headers,
                               follow_redirects=False)
         assert response.status_code in (200, 302, 307), response.status_code
         if response.status_code == 200:

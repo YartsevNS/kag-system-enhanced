@@ -270,7 +270,9 @@ class TestMe:
 
     def test_me_wrong_secret(self, client):
         """Token signed with wrong secret returns 401."""
-        from jose import jwt
+        # PyJWT, а не python-jose: jose в зависимостях нет (тест падал
+        # с ModuleNotFoundError ещё до этой правки).
+        import jwt
         from datetime import datetime, timedelta, timezone
         bad_token = jwt.encode(
             {"sub": "frank", "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},

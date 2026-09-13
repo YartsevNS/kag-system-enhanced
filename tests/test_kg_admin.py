@@ -124,8 +124,10 @@ ADMIN_OPS = [
     ("post", "/api/v1/kg/post-process"),
     ("post", "/api/v1/kg/stop-rebuild"),
     ("post", "/api/v1/kg/domain-schema"),
-    ("post", "/api/v1/kg/watchdog/start"),
-    ("post", "/api/v1/kg/watchdog/stop"),
+    # Раньше здесь были /kg/watchdog/start и /kg/watchdog/stop — таких роутов нет
+    # (есть GET /watchdog/status и POST /type-watchdog/start): тест получал 404
+    # вместо 403 и падал «не по делу». Список сверен с src/api/routes/knowledge_graph.py.
+    ("post", "/api/v1/kg/type-watchdog/start"),
     ("post", "/api/v1/kg/cypher"),
 ]
 

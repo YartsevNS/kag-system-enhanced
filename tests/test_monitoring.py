@@ -25,9 +25,8 @@ from sqlalchemy.orm import sessionmaker
 @pytest.fixture(scope="function")
 def test_db():
     """Create an in-memory SQLite database for testing."""
-    # ВАЖНО: модели мониторинга (watched_urls, watched_folders, notifications) лежат
-    # в отдельном модуле, но на том же Base. Без импорта модуля SQLAlchemy о таблицах
-    # не знает, и create_all создаёт пустую схему → тесты падают с «no such table».
+    # SQLAlchemy не знает о таблицах, пока модель не импортирована; create_all без
+    # этого импорта создаёт ПУСТУЮ схему → «no such table: watched_urls». Не удалять.
     from src.database import monitoring_models  # noqa: F401
     from sqlalchemy.pool import StaticPool
 
@@ -49,37 +48,8 @@ def test_db():
         Base.metadata.drop_all(bind=engine)
 
 
-def _auth_headers(roles=("admin",)):
-    """Валидный локальный JWT для тестов — без БД.
-
-    Middleware (`src/api/middleware/security.py`) проверяет подпись тем же
-    `settings.JWT_SECRET` и берёт роли из payload — в БД он не ходит. Токен нужен
-    потому, что все эндпоинты ниже (`/api/v1/watchers/*`, `/api/v1/notifications/*`)
-    защищены: без него они отвечают 401, и тесты, написанные до появления middleware,
-    падали все сразу (18 штук).
-    """
-    import jwt as _jwt
-    from datetime import datetime, timedelta, timezone
-
-    from src.config import get_settings
-
-    settings = get_settings()
-    if not settings.JWT_SECRET:
-        # В тестовом окружении .env нет, поэтому секрет пустой, а PyJWT отказывается
-        # подписывать пустым ключом. get_settings() кэширован — middleware увидит то же.
-        settings.JWT_SECRET = "unit-test-signing-key"
-    payload = {
-        "sub": "test-admin",
-        "username": "test-admin",
-        "roles": list(roles),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-    }
-    token = _jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-    return {"Authorization": f"Bearer {token}"}
-
-
 @pytest.fixture
-def client(test_db, monkeypatch):
+def client(test_db, auth_headers, monkeypatch):
     """Test client: in-memory DB, JWT и «система настроена» для SetupCheck."""
     # SetupCheckMiddleware в тестовом окружении считает систему НЕнастроенной
     # (config_store недоступен — .env нет) и уводит любой API-запрос на /setup.
@@ -98,7 +68,7 @@ def client(test_db, monkeypatch):
     client = TestClient(app)
     # Заголовок по умолчанию: тестов на «без токена» в этом наборе нет, а без него
     # все защищённые роуты отдают 401 и тесты падают не по делу.
-    client.headers.update(_auth_headers())
+    client.headers.update(auth_headers)
     yield client
     app.dependency_overrides.clear()
 
