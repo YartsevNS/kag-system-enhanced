@@ -1558,17 +1558,22 @@ async def save_function_map(req: FunctionMapSaveRequest):
     if req.function == "embedding":
         try:
             env_path = get_settings().ENV_FILE_PATH
-            if os.path.exists(env_path):
-                with open(env_path, "r") as f:
-                    env_lines = f.readlines()
-                new_lines = []
-                for line in env_lines:
-                    if line.startswith("EMBEDDING_MODEL="):
-                        new_lines.append(f"EMBEDDING_MODEL={req.model}\n")
-                    else:
-                        new_lines.append(line)
-                with open(env_path, "w") as f:
-                    f.writelines(new_lines)
+
+            def _update_env_model(path: str, model: str) -> bool:
+                """Правка EMBEDDING_MODEL в .env (файловый IO → в отдельный поток)."""
+                if not os.path.exists(path):
+                    return False
+                with open(path, "r") as fh:
+                    lines = fh.readlines()
+                out = [
+                    (f"EMBEDDING_MODEL={model}" + chr(10)) if line.startswith("EMBEDDING_MODEL=") else line
+                    for line in lines
+                ]
+                with open(path, "w") as fh:
+                    fh.writelines(out)
+                return True
+
+            if await asyncio.to_thread(_update_env_model, env_path, req.model):
                 logger.info(f".env EMBEDDING_MODEL обновлён: {req.model}")
         except Exception as e:
             logger.warning(f"Не удалось обновить .env для embedding: {e}")
