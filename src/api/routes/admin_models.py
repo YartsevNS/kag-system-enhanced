@@ -1790,13 +1790,33 @@ async def save_processing_config(data: dict):
         cfg = config_store.get("system", "processing") or {}
         if not isinstance(cfg, dict):
             cfg = {}
+        was_blocked = bool(cfg.get("blocked", False))
         if "blocked" in data:
             cfg["blocked"] = bool(data["blocked"])
         if "message" in data:
             cfg["message"] = str(data["message"]).strip()[:200]
         config_store.set("system", "processing", cfg)
-        return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
-                "message": str(cfg.get("message", ""))}
+        blocked_now = bool(cfg.get("blocked", False))
+
+        # Сняли блокировку — очередь сама не поедет: документы без задачи
+        # останутся pending. Подхватываем их сразу, чтобы галочка снималась
+        # предсказуемо. Ошибка возобновления не должна ломать ответ: настройка
+        # уже сохранена, очередь подхватит старт worker'а или следующий тик.
+        resumed = None
+        if was_blocked and not blocked_now:
+            try:
+                from src.indexing.recovery import recover_stuck_documents
+                resumed = await asyncio.to_thread(recover_stuck_documents, True, True)
+                logger.info(
+                    f"[processing] блокировка снята, очередь подхвачена: "
+                    f"восстановлено {resumed.get('recovered', 0)}"
+                )
+            except Exception as e:
+                logger.warning(f"[processing] возобновление очереди после снятия блокировки: {e}")
+
+        return {"status": "ok", "blocked": blocked_now,
+                "message": str(cfg.get("message", "")),
+                "resumed": resumed}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

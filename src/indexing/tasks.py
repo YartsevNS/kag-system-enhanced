@@ -11,6 +11,10 @@ from datetime import datetime, timedelta, timezone
 from loguru import logger
 
 from src.indexing.celery_app import celery_app
+from src.indexing.processing_guard import (
+    PROCESSING_BLOCK_RETRY_S,
+    processing_blocked,
+)
 from src.api.services.document_service import document_service
 
 
@@ -40,6 +44,18 @@ def process_document(
     если документ уже processing (другая копия задачи выполняется) или уже
     completed без force — задача выходит без обработки.
     """
+    # Административная блокировка обработки (system/processing) — очередь
+    # обязана её уважать, иначе пауза действует только на кнопку «Обработать».
+    # Задачу не теряем: откладываем повтор, документ остаётся в очереди и
+    # поедет сразу после снятия блокировки.
+    blocked, block_msg = processing_blocked()
+    if blocked:
+        logger.warning(
+            f"[Celery] Обработка остановлена администратором ({block_msg}): "
+            f"{document_id} отложен на {PROCESSING_BLOCK_RETRY_S} с"
+        )
+        raise self.retry(countdown=PROCESSING_BLOCK_RETRY_S, max_retries=None)
+
     logger.info(f"[Celery] Начало обработки: {document_id}")
     
     try:

@@ -14,6 +14,7 @@ from typing import Optional
 from loguru import logger
 
 from src.indexing.indexing_guards import recovery_reason
+from src.indexing.processing_guard import processing_blocked
 
 # Порог «зависшего» документа. Был 5 мин — recovery сбрасывал в pending любые
 # большие документы, которые обрабатываются дольше 5 минут (например, 5000+
@@ -67,6 +68,19 @@ def recover_stuck_documents(requeue: bool = True, requeue_pending: bool = False)
     Returns:
         dict: {recovered: N, skipped: M, errors: [...]}
     """
+    # Административная блокировка (system/processing): во время паузы статусы
+    # всё равно восстанавливаем («завис» → pending, чтобы интерфейс не врал),
+    # а ставить задачи в очередь — нет, иначе пауза не действует.
+    # Возобновление: снятие блокировки (POST /processing-config) или старт worker'а.
+    blocked, block_msg = processing_blocked()
+    if blocked:
+        requeue = False
+        requeue_pending = False
+        logger.info(
+            f"[Recovery] обработка остановлена администратором ({block_msg}) — "
+            f"постановка задач пропущена"
+        )
+
     from src.api.services.document_repository import get_doc_repo
 
     result = {"recovered": 0, "skipped": 0, "errors": [], "details": []}
