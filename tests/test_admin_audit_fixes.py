@@ -160,9 +160,23 @@ def test_http_error_is_not_zero_balance(monkeypatch):
 
 
 # ── 3. Бэкап: хардкод только как фолбэк ────────────────────────────────
-def test_backup_categories_are_dynamic_with_fallback():
+def test_backup_categories_are_dynamic_only():
+    """Категории — только из БД: хардкод-список убран, при сбое чтения — 503."""
     src = ROUTES_FILE.read_text(encoding="utf-8")
-    assert "def _all_config_categories" in src, "должен быть динамический сбор категорий"
-    assert "SELECT DISTINCT category FROM system_configs" in src
-    assert "include_caches" in src, "кэши (entity_cache) пропускаются по умолчанию"
-    assert "BACKUP_CACHE_CATEGORIES" in src
+    assert src.count("def _all_config_categories") == 1, "хелпер должен быть один"
+    assert src.count("SELECT DISTINCT category FROM system_configs") == 1, \
+        "запрос категорий не должен дублироваться (используется и в backup-documents)"
+    assert "BACKUP_NAMESPACES" not in src, "устаревший хардкод-список должен быть удалён"
+    assert "include_caches" in src and "BACKUP_CACHE_CATEGORIES" in src
+    assert "503" in src, "при нечитаемых категориях бэкап должен отвечать ошибкой"
+
+
+def test_restart_ollama_keeps_admin_contract():
+    """Страница админки проверяет result.status — контракт不能被 ломать."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert '"status": "success" if ok else "warning"' in src
+    for field in ("systemctl_active", "http_responding", "service_active", "api_responding"):
+        assert f'"{field}"' in src, f"поле {field} должно быть в ответе"
+    # второй ssh-вызов не должен использовать sudo -n (без tty кэш прав не работает)
+    assert "sudo -n systemctl" not in src
+    assert src.count("sudo -S -p '' systemctl") == 2

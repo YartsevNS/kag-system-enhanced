@@ -487,7 +487,9 @@ async def restart_ollama(connection_id: str = "default"):
     """Перезапустить Ollama на удалённом хосте по сохранённым SSH-настройкам.
 
     Пароли (SSH и sudo) не попадают в командную строку: SSH-пароль идёт через
-    SSHPASS, sudo-пароль — по stdin (см. _ssh_argv_and_env).
+    SSHPASS, sudo-пароль — по stdin (см. _ssh_argv_and_env). Оба вызова sudo
+    используют -S с паролем по stdin: ssh без tty может не закэшировать права,
+    поэтому вариант sudo -n во второй команде ненадёжен.
     """
     import asyncio
     import subprocess
@@ -511,33 +513,48 @@ async def restart_ollama(connection_id: str = "default"):
         )
         logger.info(f"Результат перезапуска: returncode={result.returncode}")
 
-        await asyncio.sleep(8)
+        # Ждём подъёма: опрос API до ~20 с, выходим сразу после первого ответа
+        # (раньше была слепая пауза 8 секунд).
+        api_ok = False
+        for _ in range(20):
+            await asyncio.sleep(1)
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    response = await client.get(f"http://{config.host}:{config.ollama_port}/")
+                if response.status_code == 200:
+                    api_ok = True
+                    break
+            except Exception:
+                continue
 
-        status_cmd = f"sudo -n systemctl is-active {service}"
-        status_argv, status_env, _ = _ssh_argv_and_env(config, status_cmd)
+        status_cmd = f"sudo -S -p '' systemctl is-active {service}"
+        status_argv, status_env, status_stdin = _ssh_argv_and_env(config, status_cmd)
         status_result = await asyncio.to_thread(
             subprocess.run,
             status_argv,
             env=status_env,
+            input=status_stdin,
             capture_output=True,
             text=True,
             timeout=20,
         )
-        is_active = status_result.stdout.strip() == "active"
+        last_line = (status_result.stdout or "").strip().splitlines()
+        is_active = bool(last_line) and last_line[-1].strip() == "active"
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"http://{config.host}:{config.ollama_port}/")
-                api_ok = response.status_code == 200
-        except Exception:
-            api_ok = False
-
+        ok = bool(is_active or api_ok)
+        message = ("Ollama перезапущен" if ok else
+                   f"Перезапуск не подтверждён: {status_result.stderr.strip()[:200]}")
         return {
-            "success": bool(is_active or api_ok),
+            # контракт страницы админки (проверяет result.status)
+            "status": "success" if ok else "warning",
+            "success": ok,
+            "message": message,
+            # прежние имена полей — для совместимости
+            "systemctl_active": is_active,
+            "http_responding": api_ok,
+            # и понятные новые
             "service_active": is_active,
             "api_responding": api_ok,
-            "message": ("Ollama перезапущен" if is_active or api_ok
-                        else f"Перезапуск не подтверждён: {result.stderr.strip()[:200]}"),
         }
     except Exception as e:
         logger.error(f"Ошибка перезапуска Ollama: {e}")
@@ -1395,7 +1412,10 @@ async def check_provider_balance(provider_id: str):
     res = await _provider_balance(provider.type, provider.url or "", provider.api_key or "")
     return {
         "provider_id": provider_id,
+        # provider исторически = тип провайдера (openai/deepseek/...);
+        # provider_type добавлен, чтобы не путать его с provider_id
         "provider": res.get("provider"),
+        "provider_type": res.get("provider"),
         "ok": res.get("ok", True),
         "balance_ok": res.get("balance_ok"),
         "balance_known": res.get("balance_known", False),
@@ -1957,20 +1977,18 @@ from datetime import datetime
 # включить параметром ?include_caches=true (entity_cache — эмбеддинги сущностей).
 BACKUP_CACHE_CATEGORIES = {"entity_cache"}
 
-# Базовый список — только ФОЛБЭК, если не удалось прочитать категории из БД.
-# Раньше он был единственным источником и отстал: в бэкап не попадали providers,
-# search, system (блокировки!), setup, upload_config — при переносе на другой
-# сервер терялась конфигурация провайдеров LLM. /backup-documents уже собирает
-# категории динамически; теперь так же делает и /backup.
-BACKUP_NAMESPACES = [
-    "web_monitor", "ocr", "chunking", "embedding", "function_map",
-    "llm_config", "ext_llm", "kg_config", "ui", "documents",
-    "process_logs", "llm", "upload_formats", "hot_folder",
-    "ssh_config", "model_manager",
-]
+# Хардкод-список категорий УБРАН: он отставал от реальности (в нём были и
+# вовсе несуществующие upload_formats и model_manager). Единственный источник —
+# сама БД; если её не прочитать, честно отвечаем ошибкой, а не отдаём частичный
+# бэкап, из которого потом «непонятно почему» пропали настройки.
+
 
 def _all_config_categories() -> List[str]:
-    """Все категории настроек из system_configs (источник — сама БД)."""
+    """Все категории настроек из system_configs (источник — сама БД).
+
+    Возвращает [] если БД недоступна — вызывающий код решает, что делать
+    (бэкап отдаёт 503, documents-бэкап просто не кладёт config_store.json).
+    """
     try:
         from src.database.session import get_session_local
         from sqlalchemy import text as _text
@@ -1984,8 +2002,8 @@ def _all_config_categories() -> List[str]:
         finally:
             session.close()
     except Exception as e:
-        logger.warning(f"[backup] категории из БД не прочитаны ({e}) — беру базовый список")
-        return list(BACKUP_NAMESPACES)
+        logger.warning(f"[backup] категории настроек из БД не прочитаны: {e}")
+        return []
 
 
 @router.get("/backup", summary="Backup всех настроек системы")
@@ -1997,6 +2015,11 @@ async def get_backup(include_caches: bool = False):
     """
     from src.api.services.config_store import config_store
     categories = _all_config_categories()
+    if not categories:
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось прочитать список категорий настроек из БД — бэкап неполный, повторите позже",
+        )
     skipped = [c for c in categories if c in BACKUP_CACHE_CATEGORIES]
     if not include_caches:
         categories = [c for c in categories if c not in BACKUP_CACHE_CATEGORIES]
@@ -2481,17 +2504,8 @@ async def backup_documents():
                 from src.api.services.config_store import config_store
                 from src.database.session import get_session_local
                 from sqlalchemy import text as _text
-                categories = []
-                try:
-                    _maker = get_session_local()
-                    _s = _maker()
-                    try:
-                        rows = _s.execute(_text("SELECT DISTINCT category FROM system_configs")).fetchall()
-                        categories = [r[0] for r in rows if r[0]]
-                    finally:
-                        _s.close()
-                except Exception:
-                    categories = []
+                # тот же источник, что и в /backup (без дублирования запроса)
+                categories = _all_config_categories()
                 cfg_all = {}
                 for cat in categories:
                     cfg_all[cat] = config_store.get_all(cat)
