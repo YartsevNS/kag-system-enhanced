@@ -12,9 +12,9 @@
 ## Где мы сейчас
 
 - Репозиторий (ноутбук): `C:\VSCODE_PROJECT\kag-system-enhanced`, ветка **PREPROD**,
-  последний коммит **996ef15**, дерево чистое.
+  последний коммит **0cd9950**, дерево чистое.
 - Сервер 18 (`yartsevn@192.168.50.18`, `/home/yartsevn/kag-system`): `kag-api`,
-  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.41**.
+  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.42**.
 - Загрузка новых документов на стенде заблокирована галочкой (`UPLOADS_BLOCKED`);
   документов 47, все `completed`.
 - Тесты: `test_warm_init_invalidation` (5), `test_config_store_cache` (5),
@@ -38,7 +38,7 @@
 | `embeddings_service.py` | окно переинициализации 60 с при смене модели | подпись модели: смена → переинициализация сразу |
 | `type_watchdog.py` | ФС/БД сторожа в его цикле → в поток | `/health` 2.2–3.1 мс во время работы сторожа |
 | `routes/admin.py` | Keycloak (`urllib`) и `subprocess.check_output` в async → в поток | `/admin/keycloak/users` 0.387 с, `/health` 2.2–3.1 мс |
-| `config_store.py` | `get` = 10.4 мс (не короткий SELECT) → кэш чтения 2 с внутри хранилища | 10.4 → 0.007 мс (85 мест разом) |
+| `config_store.py` | `get` = 10.4 мс (не короткий SELECT) → кэш чтения 2 с внутри хранилища; затем отсутствующий ключ читался из БД всегда → отрицательный кэш | 10.4 → 0.001–0.007 мс (85 мест разом); отсутствующий ключ 1.1 → 0.001–0.002 мс |
 | `routes/upload.py` | 4 × `get_all()` в async-роутах → в поток; остальные 19 мест обоснованы построчно | `POST /reprocess-pending` 0.049 с |
 | `routes/chunks.py`, `chat_service.py`, `main.py`, `hot_folder_watcher.py`, `routes/watchers.py`, `routes/knowledge_graph.py`, `indexing/knowledge_graph.py` | горячие пути в поток + флаги (`truncated`, `scroll_limit`) | `/chunks` total 3495; чат-мета 4.2 с / 47 документов |
 
@@ -56,8 +56,9 @@ SLA по замерам: **`/health` под нагрузкой чата ≤ 10 �
 ## Открыто (по убыванию полезности)
 
 1. **Построчные обоснования по остатку карты** — в момент правки файла, не отдельным
-   проходом: `admin_models.py` 43 места (следующий шаг), затем `document_service.py` 16.
-   Формат: строка | вызов | замер | решение | почему.
+   проходом. Сделано: `upload.py` 19, `admin_models.py` 43 (правок не потребовалось —
+   все находки либо в потоке, либо дешёвые по замеру). Осталось: `document_service.py` 16,
+   `main.py` 14, `routes/knowledge_graph.py` 11. Формат: строка | вызов | замер | решение | почему.
 2. Searchable PDF для сканов: наложить OCR-текст (`data/ocr_results/*.pdf.md`) на
    страницы исходника — у сканов нет текстового слоя.
 3. Чистка git-истории от утёкших секретов (Neo4j — 16 коммитов, sudo — 2, JWT — 2);
