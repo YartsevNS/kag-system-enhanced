@@ -7,6 +7,7 @@
 * наружу отдаётся копия (мутация не портит кэш);
 * TTL маленький — изменения из другого процесса видны быстро.
 """
+import copy
 import time
 
 from src.api.services.config_store import PostgresConfigStore, config_store
@@ -27,7 +28,8 @@ class _FakeStore(PostgresConfigStore):
             return value
         self.reads += 1
         self._cache_put(config_id, self._value)
-        return value
+        # как в настоящем get(): наружу уходит свежий объект, кэш не портится
+        return copy.deepcopy(self._value)
 
     def set(self, category, key, value):  # noqa: D102
         self._value = value
@@ -61,7 +63,7 @@ def test_ttl_is_short_and_expires():
     store = _FakeStore()
     store.CACHE_TTL_SECONDS = 0.05
     store.get("system", "processing")
-    time.sleep(0.06)
+    time.sleep(0.25)   # с запасом: тест не должен зависеть от планировщика
     store.get("system", "processing")
     assert store.reads == 2, "после истечения TTL чтение должно идти в источник"
 
