@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
 import time
+import asyncio
 import httpx
 from loguru import logger
 
@@ -563,8 +564,12 @@ class ChatService:
             meta_context = ""
             logger.info("Мета-запрос (count): RAG пропущен, отвечу по stats_line")
         elif intent == "list":
-            meta_context = self._build_documents_list_context(
-                user_message, group_ids, is_admin, limit=25
+            # Хелпер синхронный и ходит в БД: в async-методе это блокирует
+            # event loop на время запроса (а мы это делаем на КАЖДЫЙ запрос
+            # пользователя к чату) — уводим в поток.
+            meta_context = await asyncio.to_thread(
+                self._build_documents_list_context,
+                user_message, group_ids, is_admin, 25,
             )
             logger.info(
                 "Мета-запрос (list): RAG пропущен, использую список из БД (25)"

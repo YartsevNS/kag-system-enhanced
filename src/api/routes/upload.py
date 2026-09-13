@@ -1512,7 +1512,9 @@ async def get_document_details(
                 # Обновим в памяти и в БД
                 if record:
                     record.chunks_count = real_count
-                    document_service._save_document_to_db(document_id)
+                    await asyncio.to_thread(
+                        document_service._save_document_to_db, document_id
+                    )
         except Exception:
             pass
     
@@ -1898,7 +1900,8 @@ async def check_duplicate(hash: str = ""):
         return {"duplicate": False, "message": "Невалидный хеш"}
     try:
         from src.api.services.document_service import document_service
-        existing = document_service._find_by_hash(hash)
+        # Синхронный поиск по хешу (SQL) из async-роута → в поток.
+        existing = await asyncio.to_thread(document_service._find_by_hash, hash)
         if existing:
             return {
                 "duplicate": True,
@@ -2088,7 +2091,7 @@ async def reprocess_ocr(
     
     record.status = "pending"
     record.progress = 0
-    document_service._save_document_to_db(document_id)
+    await asyncio.to_thread(document_service._save_document_to_db, document_id)
     
     # QueueGuard: force=True — это осознанный ручной перезапуск (reprocess),
     # поэтому разрешаем постановку, даже если документ был completed.

@@ -14,12 +14,17 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+import asyncio
 from fastapi import APIRouter, Depends
 
 from src.api.middleware.auth_v2 import get_current_user_optional
 from src.database.user_models import User
 
 logger = logging.getLogger(__name__)
+
+# Сколько чанков тянем из Qdrant за один scroll: при достижении лимита в ответе
+# будет truncated=True, чтобы усечение не было тихим (как в /upload/{id}/chunks).
+CHUNKS_SCROLL_LIMIT = 50000
 
 router = APIRouter()
 
@@ -44,8 +49,12 @@ async def list_chunks(
         if document_id:
             scroll_filter = {"must": [{"key": "document_id", "match": {"value": document_id}}]}
 
-        points = qdrant_service.scroll_points(filter=scroll_filter, limit=50000)
+        # Синхронный клиент Qdrant в async-роуте: в поток, иначе блокируем loop.
+        points = await asyncio.to_thread(
+            qdrant_service.scroll_points, filter=scroll_filter, limit=CHUNKS_SCROLL_LIMIT
+        )
 
+        truncated = len(points) >= CHUNKS_SCROLL_LIMIT
         items = []
         for p in points:
             payload = p.get("payload") or {}
@@ -66,7 +75,12 @@ async def list_chunks(
                                   str(c.get("chunk_id") or "")))
         total = len(items)
         page = items[offset:offset + limit]
-        return {"chunks": page, "total": total, "offset": offset, "limit": limit}
+        return {
+            "chunks": page, "total": total, "offset": offset, "limit": limit,
+            # Усечение не должно быть тихим: если из Qdrant взяли предел
+            # scroll-а, клиент это видит.
+            "truncated": truncated, "scroll_limit": CHUNKS_SCROLL_LIMIT,
+        }
     except Exception as e:
         logger.error(f"Ошибка получения общего списка чанков: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}
