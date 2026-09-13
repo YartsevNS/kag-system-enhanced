@@ -144,6 +144,13 @@ class FolderWatcher:
         """
         self._observer: Optional[Observer] = None
         self._handlers: Dict[str, FolderWatcherHandler] = {}
+        # ObservedWatch от observer.schedule(): именно его (а НЕ обработчик) требует
+        # observer.unschedule(). Раньше сюда передавали handler → KeyError из watchdog
+        # и 500 при снятии папки с наблюдения (нашёл тест на живом стенде).
+        self._watches: Dict[str, Any] = {}
+        # Режим рекурсии по папке: start() раньше жёстко ставил recursive=True и терял
+        # выбор пользователя из add_folder(recursive=...).
+        self._recursive: Dict[str, bool] = {}
         self._ingestion_callback = ingestion_callback
         self._running = False
         self._lock = threading.Lock()
@@ -182,9 +189,13 @@ class FolderWatcher:
             db_factory=db_factory,
         )
         self._handlers[folder_path] = handler
+        self._recursive[folder_path] = recursive
 
         if self._observer and self._running:
-            self._observer.schedule(handler, folder_path, recursive=recursive)
+            # schedule() возвращает ObservedWatch — сохраняем его для unschedule()
+            self._watches[folder_path] = self._observer.schedule(
+                handler, folder_path, recursive=recursive
+            )
             logger.info(f"Added watch: {folder_path} (recursive={recursive})")
 
     def remove_folder(self, folder_path: str):
@@ -195,9 +206,15 @@ class FolderWatcher:
             folder_path: Folder path to remove.
         """
         folder_path = str(Path(folder_path).resolve())
-        handler = self._handlers.pop(folder_path, None)
-        if handler and self._observer:
-            self._observer.unschedule(handler)
+        self._handlers.pop(folder_path, None)
+        self._recursive.pop(folder_path, None)
+        watch = self._watches.pop(folder_path, None)
+        if watch is not None and self._observer:
+            try:
+                self._observer.unschedule(watch)
+            except KeyError:
+                # Наблюдение уже снято (например, observer перезапущен) — не ошибка.
+                logger.debug(f"Наблюдение уже снято: {folder_path}")
             logger.info(f"Stopped watching: {folder_path}")
 
     def start(self):
@@ -210,8 +227,11 @@ class FolderWatcher:
             if self._running:
                 return
             self._observer = Observer()
+            self._watches.clear()
             for folder_path, handler in self._handlers.items():
-                self._observer.schedule(handler, folder_path, recursive=True)
+                self._watches[folder_path] = self._observer.schedule(
+                    handler, folder_path, recursive=self._recursive.get(folder_path, True)
+                )
             self._observer.start()
             self._running = True
             logger.info(
@@ -225,6 +245,7 @@ class FolderWatcher:
                 self._observer.stop()
                 self._observer.join(timeout=10)
                 self._observer = None
+            self._watches.clear()
             self._running = False
             logger.info("FolderWatcher stopped")
 
