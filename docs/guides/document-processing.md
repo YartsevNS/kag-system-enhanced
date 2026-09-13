@@ -241,3 +241,44 @@ process_document` внутри `reindex_all_documents`/`reprocess_ocr` удал�
 `reprocess_pending_documents` больше не создаёт `asyncio.create_task` без ссылки —
 постановка в очередь идёт напрямую, счётчик считает только успешные постановки
 (плюс `skipped`), обёртка `_process_document_async` удалена.
+
+## Синхронный I/O в async: карта и правки (2026-09-13, образ 2026.09.13.29)
+
+Проблема классовая, поэтому сначала карта. AST-скан
+(`reports/_scratch/scan_sync_io.py`) обходит все async-функции проекта и ищет
+блокирующие вызовы (ФС, БД, Qdrant, Neo4j, HTTP, subprocess, docker SDK,
+celery inspect), не обёрнутые в `asyncio.to_thread`. Результат на момент скана:
+**258 мест в 21 файле**, из них `upload.py` — 56, `admin_models.py` — 51,
+`knowledge_graph.py` — 18, `document_service.py` — 16, `admin.py` — 15,
+`web_monitor.py` — 15, `type_watchdog.py` — 15, `main.py` — 14, `tasks.py` — 11.
+По видам: `config_store` 100, операции `Path` 70, репозиторий документов 24,
+`open()` 14, Qdrant 12, криптография 12, `urllib` 7, `kg_service` 5,
+`subprocess` 4, архивы 5, celery `inspect` 1.
+
+Что сделано в `upload.py` (23 обёртки `asyncio.to_thread`): TUS (создание, HEAD,
+PATCH, DELETE), чтение БД в `/details`, scroll Qdrant в `/chunks`, `celery inspect`
+в `/queue`, архивы (`infolist`/`getmembers`/`extract`), чтение файла при загрузке
+из архива, генерация миниатюры.
+
+Отдельно — **поиск файла документа**. Раньше каждое превью и миниатюра
+перебирали три каталога (`iterdir` + `startswith`): при 10 000 документов это
+10 000 системных вызовов на запрос. Файлы сохраняются как `<document_id>_<имя>`,
+поэтому добавлен `document_service.find_file()` — точный путь; перебор оставлен
+fallback-ом для старых имён и **требует разделитель `_`** (иначе `doc-1` совпал бы
+с `doc-10_other.pdf` — поймано тестом, это был настоящий дефект префиксного поиска).
+Замеры после правки: `/details` 63 мс, `/chunks` 30 мс, `/thumbnail` 29 мс,
+`/preview` 29 мс, `/list` 38 мс.
+
+Что ещё закрыто в этом заходе: `CHUNKS_SCROLL_LIMIT` + `truncated`/`scroll_limit`
+в ответе `/chunks` (усечение больше не тихое); TUS DELETE отдаёт **204** явным
+`Response(status_code=204)`; `TUS_DIR` и каталог миниатюр — из настроек; задача на
+удалённый документ (гонка `get()` → `enqueue`) завершается `{"status": "not_found"}`
+с warning вместо падения в `document_service`.
+
+Границы разумного (чтобы не оборачивать всё подряд): в поток имеет смысл уводить
+вызовы с реальным ожиданием — Qdrant/Neo4j/HTTP/`subprocess`/архивы/большие файлы/
+`inspect`. Одиночное чтение настроек (`config_store.get`) — это короткий запрос к
+БД; оборачивать их сотнями стоит только на горячих путях, иначе это churn без
+выигрыша. `celery inspect` остаётся медленным сам по себе (в замере `/queue` —
+3.1 с, он ждёт ответа воркеров): обёртка убирает блокировку event loop, но сам
+эндпоинт стоит ограничить таймаутом `inspect(timeout=2)`.
