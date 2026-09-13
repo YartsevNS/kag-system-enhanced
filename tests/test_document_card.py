@@ -179,3 +179,16 @@ def test_чанки_документа_не_включают_карточку():
     body = src[i:i + 1600]
     assert 'key="level"' in body and 'value="document"' in body
     assert "must_not" in body
+
+def test_acl_фильтр_карточек_использует_MatchAny():
+    """MatchValue(any=...) падает с ValidationError — для списков нужен MatchAny.
+
+    Живой случай: search_documents с непустыми group_ids ронял сравнительный режим
+    («2 validation errors for MatchValue»), а карточки с ACL вообще не искались.
+    """
+    src = Path("src/indexing/embeddings_service.py").read_text(encoding="utf-8")
+    i = src.index("async def search_documents")
+    body = src[i:i + 2200]
+    assert "MatchAny as _MANY" in body, "нужен импорт MatchAny"
+    assert "_MANY(any=" in body, "для списков групп/пользователей — MatchAny"
+    assert "_MA(any=" not in body, "MatchValue(any=...) недопустим"

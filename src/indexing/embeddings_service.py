@@ -918,14 +918,17 @@ class EmbeddingsService:
             return []
 
         from qdrant_client.models import (
-            FieldCondition as _FC, MatchValue as _MA, Filter as _QF,
+            FieldCondition as _FC, MatchValue as _MA, MatchAny as _MANY, Filter as _QF,
         )
         must = [_FC(key="level", match=_MA(value="document"))]
         must_not = []
         if user_id or group_ids:
+            # ВНИМАНИЕ: для списков нужен MatchAny, а не MatchValue(any=...) — второй падает
+            # с ValidationError «Field required value / Extra inputs are not permitted any»
+            # (живой случай 2026-09-13: сравнительный режим не собирался при непустых group_ids).
             if group_ids:
-                must_not.append(_FC(key="deny_group_ids", match=_MA(any=list(group_ids))))
-            must_not.append(_FC(key="deny_user_ids", match=_MA(any=[user_id] if user_id else [])))
+                must_not.append(_FC(key="deny_group_ids", match=_MANY(any=list(group_ids))))
+            must_not.append(_FC(key="deny_user_ids", match=_MANY(any=[user_id] if user_id else [])))
         flt = _QF(must=must, must_not=must_not or None)
 
         resp = await asyncio.to_thread(
