@@ -42,7 +42,10 @@ class PostgresConfigStore:
             try:
                 record = session.query(SystemConfig).filter_by(id=config_id).first()
                 if record and record.value:
-                    return json.loads(record.value)
+                    # _decode_value: JSON, а если не разбирается — сырая строка
+                    # (так лежат значения, записанные до 2026-09-13: «idle»,
+                    # «running»). Прямой json.loads на них падал и отдавал None.
+                    return self._decode_value(record.value)
                 return default
             finally:
                 session.close()
@@ -57,10 +60,13 @@ class PostgresConfigStore:
             session = self._get_session()
             config_id = f"{category}:{key}"
 
-            if isinstance(value, (dict, list, bool, int, float)):
+            # ВСЁ пишем как JSON, включая строки: иначе round-trip ломается —
+            # сырое «123» читалось как int, а «running» вообще как None
+            # (json.loads не разбирает незакавыченный текст).
+            try:
                 serialized = json.dumps(value)
-            else:
-                serialized = str(value)
+            except TypeError:
+                serialized = json.dumps(str(value))
 
             record = session.query(SystemConfig).filter_by(id=config_id).first()
             if record:
