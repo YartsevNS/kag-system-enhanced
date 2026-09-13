@@ -17,6 +17,22 @@ HOT_DIR = Path("/app/data/hot")
 POLL_INTERVAL = 5  # секунд между проверками (если inotify не сработал)
 
 
+def _list_hot_files() -> list:
+    """Имена файлов в hot-каталоге (синхронно, вызывается через to_thread)."""
+    try:
+        if not HOT_DIR.exists():
+            return []
+        return [f.name for f in HOT_DIR.iterdir() if f.is_file()]
+    except OSError:
+        return []
+
+
+def _read_file_bytes(path) -> bytes:
+    """Прочитать файл (синхронно, вызывается через to_thread)."""
+    with open(path, "rb") as f:
+        return f.read()
+
+
 class HotFolderWatcher:
     """
     Наблюдатель за hot-директорией.
@@ -39,14 +55,12 @@ class HotFolderWatcher:
 
         self._running = True
 
-        # Создаём hot директорию если нет
-        HOT_DIR.mkdir(parents=True, exist_ok=True)
+        # Создаём hot директорию если нет. ФС — в потоке: watcher живёт в
+        # процессе API, синхронные вызовы в его цикле блокируют event loop.
+        await asyncio.to_thread(HOT_DIR.mkdir, parents=True, exist_ok=True)
 
         # Помечаем уже существующие файлы как "виденные"
-        if HOT_DIR.exists():
-            for f in HOT_DIR.iterdir():
-                if f.is_file():
-                    self._seen_files.add(f.name)
+        self._seen_files.update(await asyncio.to_thread(_list_hot_files))
 
         logger.info(f"📁 HotFolderWatcher: запущен, директория: {HOT_DIR}")
 
@@ -94,15 +108,14 @@ class HotFolderWatcher:
         """Polling — проверка новых файлов каждые N секунд."""
         while self._running:
             try:
-                if HOT_DIR.exists():
-                    for f in HOT_DIR.iterdir():
-                        if not f.is_file():
-                            continue
-                        if f.name not in self._seen_files:
-                            self._seen_files.add(f.name)
-                            # Небольшая задержка чтобы файл дописался
-                            await asyncio.sleep(1)
-                            await self._process_file(f)
+                # Список файлов — в потоке (это цикл polling, а не разовая работа).
+                names = await asyncio.to_thread(_list_hot_files)
+                for name in names:
+                    if name not in self._seen_files:
+                        self._seen_files.add(name)
+                        # Небольшая задержка чтобы файл дописался
+                        await asyncio.sleep(1)
+                        await self._process_file(HOT_DIR / name)
             except Exception as e:
                 logger.warning(f"HotFolderWatcher poll error: {e}")
             await asyncio.sleep(POLL_INTERVAL)
@@ -116,15 +129,14 @@ class HotFolderWatcher:
         try:
             # Ждём пока файл допишется (проверяем стабильность размера)
             for _ in range(5):
-                size1 = file_path.stat().st_size
+                size1 = await asyncio.to_thread(lambda: file_path.stat().st_size)
                 await asyncio.sleep(0.5)
-                size2 = file_path.stat().st_size
+                size2 = await asyncio.to_thread(lambda: file_path.stat().st_size)
                 if size1 == size2:
                     break
 
-            # Читаем файл
-            with open(file_path, "rb") as f:
-                content = f.read()
+            # Читаем файл (в потоке: файлы бывают крупные)
+            content = await asyncio.to_thread(_read_file_bytes, file_path)
 
             if not content:
                 logger.warning(f"[HotFolder] Пустой файл: {filename}")

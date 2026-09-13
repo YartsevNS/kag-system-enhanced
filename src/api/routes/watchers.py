@@ -9,6 +9,7 @@ Endpoints:
 from typing import Optional, List
 from pathlib import Path
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -170,7 +171,11 @@ async def check_single_url(
     db: Session = Depends(get_db),
 ):
     """Trigger an immediate check of a single watched URL."""
-    record = db.query(WatchedURL).filter(WatchedURL.id == url_id).first()
+    # SQLAlchemy-сессия синхронная: запрос в потоке, иначе блокируем event loop.
+    # (В синхронных обработчиках этого не нужно — FastAPI сам зовёт их в пуле.)
+    record = await asyncio.to_thread(
+        lambda: db.query(WatchedURL).filter(WatchedURL.id == url_id).first()
+    )
     if not record:
         raise HTTPException(status_code=404, detail="URL not found")
 

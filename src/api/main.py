@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from loguru import logger
+import asyncio
 import os
 
 from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks
@@ -174,9 +175,14 @@ if os.path.exists(static_path):
 
 # ── Общая функция отдачи HTML с no-cache ─────────────────────────────
 
-def _html_response(path: str) -> FileResponse:
-    """Отдать HTML-файл с заголовками против кеширования."""
-    if os.path.exists(path):
+async def _html_response(path: str) -> FileResponse:
+    """Отдать HTML-файл с заголовками против кеширования.
+
+    Проверка существования файла — в потоке: страницы отдаются на каждый переход
+    в интерфейсе, а os.path.exists в async-обработчике блокирует event loop.
+    """
+    exists = await asyncio.to_thread(os.path.exists, path)
+    if exists:
         return FileResponse(
             path,
             headers={
@@ -212,7 +218,7 @@ async def admin_web(request: Request):
     """
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
-    return _html_response(os.path.join(static_path, "admin.html"))
+    return await _html_response(os.path.join(static_path, "admin.html"))
 
 
 @app.get("/docker", summary="Docker Dashboard")
@@ -229,19 +235,19 @@ async def docker_dashboard(request: Request):
 @app.get("/setup", summary="Страница первоначальной настройки")
 async def setup_page():
     """Страница Setup Wizard"""
-    return _html_response(os.path.join(static_path, "setup.html"))
+    return await _html_response(os.path.join(static_path, "setup.html"))
 
 
 @app.get("/login", summary="Страница входа")
 async def login_page():
     """Страница аутентификации"""
-    return _html_response(os.path.join(static_path, "login.html"))
+    return await _html_response(os.path.join(static_path, "login.html"))
 
 
 @app.get("/documents", summary="Управление документами")
 async def documents_page():
     """Страница управления документами"""
-    return _html_response(os.path.join(static_path, "documents.html"))
+    return await _html_response(os.path.join(static_path, "documents.html"))
 
 
 @app.get("/qdrant", summary="Qdrant Database Dashboard")
@@ -267,7 +273,7 @@ async def chunks_page():
 @app.get("/chat", summary="Чат с AI")
 async def chat_page():
     """Страница чата"""
-    return _html_response(os.path.join(static_path, "chat.html"))
+    return await _html_response(os.path.join(static_path, "chat.html"))
 
 
 @app.get("/monitoring", summary="Мониторинг")
@@ -292,7 +298,7 @@ async def users_page(request: Request):
 
 @app.get("/know", summary="База знаний KAG")
 async def know_web():
-    return _html_response(os.path.join(static_path, "know.html"))
+    return await _html_response(os.path.join(static_path, "know.html"))
 
 
 @app.get("/logs", summary="Логи системы")
@@ -374,11 +380,11 @@ async def prompts_help_page():
 
 @app.get("/monitor", summary="Веб-мониторинг")
 async def monitor_page():
-    return _html_response(os.path.join(static_path, "monitor.html"))
+    return await _html_response(os.path.join(static_path, "monitor.html"))
 
 
 @app.get("/news", summary="Лента новостей")
 async def news_page():
-    return _html_response(os.path.join(static_path, "news.html"))
+    return await _html_response(os.path.join(static_path, "news.html"))
 
 
