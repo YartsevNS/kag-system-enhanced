@@ -392,3 +392,41 @@ running, и `idle` после сброса. Тесты — `tests/test_config_st
 Урок для похожих случаев: если значение пишут одним способом, а читают другим,
 баг видно ТОЛЬКО на живом вызове (тот же класс, что `compare_and_set` и
 `get_ext_llm()` без `await`). Проверка: `set(X)` → `get(X) == X` на стенде.
+
+### Тела админских запросов переведены на Pydantic (2026-09-13, образ 2026.09.13.20)
+
+Было: девять эндпоинтов `admin_models.py` и `update_domain_schema` принимали
+`data: dict` — FastAPI ничего не валидировал, ошибки типа всплывали позже и
+выглядели как 500, в OpenAPI схем не было.
+
+Стало: `GraphModelConfig`, `ChatPromptConfig`, `BrandingConfig`,
+`ProcessingBlockConfig`, `IngestBlockConfig`, `SearchModeConfig`,
+`Neo4jConfigUpdate`, `DocTypeAction`, `WorkerResources` (admin_models.py) и
+`DomainSchemaUpdate` (knowledge_graph.py). Проверено на стенде:
+
+- валидные тела всех десяти эндпоинтов — 200, как раньше;
+- неверный тип — **422** с внятной причиной (`bool_parsing`, `int_parsing`,
+  `string_type`). Раньше, например, `{"blocked": "нет"}` молча превращалось в
+  `False`, а `{"batch_size": "abc"}` давало 500 из `int()`;
+- частичное обновление не затирает остальные поля;
+- в OpenAPI 10/10 схем, `requestBody` ссылается на модель.
+
+Детали, которые важно не потерять при следующих правках:
+
+- обработчики различали «поле не прислали» и «прислали null» через `"key" in data`,
+  поэтому работают с `payload.model_dump(exclude_unset=True)` — семантика та же;
+- где тело сохраняется ЦЕЛИКОМ (`/graph`, ручная доменная схема) — `extra="allow"`,
+  иначе неизвестные поля молча пропали бы при записи в config_store;
+- `cpus`/`memory` приходят и строкой, и числом → `Union[str, float, int]`
+  (Pydantic v2 не превращает float в str).
+
+Попутно обнаружено: `/openapi.json` закрыт middleware (302 → `/login`), а страница
+`/api/docs` публична и грузит спецификацию именно оттуда — то есть Swagger UI
+не работает ни анонимно, ни с Bearer-токеном в браузере. Лечится либо открытием
+`/openapi.json` (сейчас в нём нет секретов), либо переопределением
+`openapi_url="/api/openapi.json"` с исключением в middleware.
+
+Ещё одна находка того же класса, что и `/cypher`: в `knowledge_graph.py` осталось
+около десятка `return {"status": "error", "message": ...}` с кодом 200 (watchdog,
+validate, post-process, domain-schema и т. д.). UI части из них проверяет
+`d.message`, поэтому перевод на 4xx/5xx нужно делать вместе с правкой страниц.
