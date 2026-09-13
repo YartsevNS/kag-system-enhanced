@@ -1167,7 +1167,15 @@ async def process_document_now(
 
     try:
         from src.indexing.queue_guard import enqueue_document
-        enqueue_document(document_id, force=True)
+        # enqueue_document возвращает False, когда задача для документа уже
+        # стоит (Redis-замок QueueGuard занят): раньше роут всё равно отвечал
+        # «поставлено», и нажатие «Обработать» выглядело успешным, ничего не
+        # запуская. Теперь это честный 409 — как у /rebuild-graph.
+        if not enqueue_document(document_id, force=True):
+            raise HTTPException(
+                status_code=409,
+                detail="Документ уже в очереди обработки (или обрабатывается) — повторная постановка не нужна",
+            )
         return {"status": "queued", "document_id": document_id,
                 "message": "Документ поставлен в очередь обработки"}
     except FileNotFoundError:
@@ -1220,15 +1228,24 @@ async def process_all_mine(current_user: Optional[User] = Depends(get_current_us
 
     from src.indexing.queue_guard import enqueue_document
     queued = 0
+    skipped = 0
     for did in targets:
         try:
-            enqueue_document(did, force=True)
-            queued += 1
+            # False = задача для документа уже стоит (QueueGuard): считаем
+            # отдельно, иначе счётчик врал («поставлено 5», а постановок 3).
+            if enqueue_document(did, force=True):
+                queued += 1
+            else:
+                skipped += 1
+                logger.info(f"process-all: {did} уже в очереди — повтор не нужен")
         except Exception as e:
             logger.warning(f"process-all: не удалось поставить {did}: {e}")
 
-    return {"status": "ok", "queued": queued, "total_pending": len(targets),
-            "message": f"Поставлено в очередь: {queued} из {len(targets)}"}
+    message = f"Поставлено в очередь: {queued} из {len(targets)}"
+    if skipped:
+        message += f" (уже были в очереди: {skipped})"
+    return {"status": "ok", "queued": queued, "skipped": skipped,
+            "total_pending": len(targets), "message": message}
 
 
 @router.get("/{document_id}/chunks", summary="Чанки документа")
@@ -1601,16 +1618,21 @@ async def reindex_all_documents():
             did for did, doc in all_docs.items()
             if isinstance(doc, dict) and doc.get("status") == "completed"
         ]
+        queued = 0
         for did in ids:
             # QueueGuard: force=True — это осознанная принудительная
             # переиндексация completed-документов (смена модели и т.п.).
             # Без force= completed-документ не был бы переставлен.
-            enqueue_document(did, force=True)
+            # Считаем только реальные постановки: False = уже в очереди.
+            if enqueue_document(did, force=True):
+                queued += 1
 
         return {
             "status": "ok",
-            "message": f"Поставлено в очередь на переиндексацию: {len(ids)} документов",
+            "message": f"Поставлено в очередь на переиндексацию: {queued} из {len(ids)} документов",
             "total": len(ids),
+            "queued": queued,
+            "skipped": len(ids) - queued,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -1803,7 +1825,8 @@ async def _process_document_async(document_id: str):
     """Запустить фоновую обработку документа через Celery (с дедупликацией)."""
     try:
         # QueueGuard: единая точка постановки — защита от дублей.
-        enqueue_document(document_id)
+        if not enqueue_document(document_id):
+            logger.debug(f"Документ {document_id} уже в очереди — повтор не нужен")
     except Exception as e:
         from loguru import logger
         logger.warning(f"Не удалось запустить Celery задачу для {document_id}: {e}")
@@ -1866,9 +1889,19 @@ async def reprocess_ocr(document_id: str):
     
     # QueueGuard: force=True — это осознанный ручной перезапуск (reprocess),
     # поэтому разрешаем постановку, даже если документ был completed.
-    task = enqueue_document(document_id, force=True)
+    queued = enqueue_document(document_id, force=True)
+    if not queued:
+        # Документ уже в очереди: раньше здесь возвращалось "status": "ok" с
+        # "task_id": "duplicate_skipped" — читающий видел успех и не понимал,
+        # что переобработки не будет.
+        return {
+            "status": "already_queued",
+            "message": f"Документ уже в очереди обработки: {document_id}",
+            "document_id": document_id,
+        }
     return {
         "status": "ok",
         "message": f"Переобработка запущена: {document_id}",
-        "task_id": str(task) if task else "duplicate_skipped"
+        "document_id": document_id,
+        "queued": True,
     }

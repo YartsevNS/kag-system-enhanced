@@ -1111,6 +1111,9 @@ async function processDocument(id) {
   try {
     const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
     const d = await r.json();
+    // 409 = задача уже стоит (QueueGuard). Это не ошибка пользователя, поэтому
+    // показываем нейтрально, а не красным «❌».
+    if (r.status === 409) { toast('ℹ️ ' + (d.detail || d.message || 'Документ уже в очереди обработки')); return; }
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Ошибка запуска обработки'));
     toast('✅ ' + (d.message || 'Документ поставлен в очередь обработки'));
     setTimeout(() => { loadAll(); }, 800);
