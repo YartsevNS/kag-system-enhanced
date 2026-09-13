@@ -10,6 +10,41 @@ from typing import Dict, Any
 class Settings(BaseSettings):
     """Настройки приложения"""
 
+    # ── Пути деплоя и файла окружения (шаг 11: убрали хардкод из роутеров)
+    DEPLOY_SRC_PATH: str = "/app/src"
+    DEPLOY_REPO_PATH: str = "/home/yartsevn/kag-system"
+    ENV_FILE_PATH: str = "/app/kag.env"
+    # Максимальный размер файла, который принимает /deploy (write_file)
+    DEPLOY_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
+    # ── Пути деплоя и файла окружения (шаг 11: убрали хардкод из роутеров)
+    DEPLOY_SRC_PATH: str = "/app/src"
+    DEPLOY_REPO_PATH: str = "/home/yartsevn/kag-system"
+    ENV_FILE_PATH: str = "/app/kag.env"
+    # Максимальный размер файла, который принимает /deploy (write_file)
+    DEPLOY_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
+    # ── Пути деплоя и файла окружения (шаг 11: убрали хардкод из роутеров)
+    DEPLOY_SRC_PATH: str = "/app/src"
+    DEPLOY_REPO_PATH: str = "/home/yartsevn/kag-system"
+    ENV_FILE_PATH: str = "/app/kag.env"
+    # Максимальный размер файла, который принимает /deploy (write_file)
+    DEPLOY_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
+    # ── Пути деплоя и файла окружения (шаг 11: убрали хардкод из роутеров)
+    DEPLOY_SRC_PATH: str = "/app/src"
+    DEPLOY_REPO_PATH: str = "/home/yartsevn/kag-system"
+    ENV_FILE_PATH: str = "/app/kag.env"
+    # Максимальный размер файла, который принимает /deploy (write_file)
+    DEPLOY_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
+    # ── Пути деплоя и файла окружения (шаг 11: убрали хардкод из роутеров)
+    DEPLOY_SRC_PATH: str = "/app/src"
+    DEPLOY_REPO_PATH: str = "/home/yartsevn/kag-system"
+    ENV_FILE_PATH: str = "/app/kag.env"
+    # Максимальный размер файла, который принимает /deploy (write_file)
+    DEPLOY_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
     APP_VERSION: str = "0.3.0"
 
     # FastAPI

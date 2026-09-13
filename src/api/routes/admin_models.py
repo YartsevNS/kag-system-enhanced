@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from src.api.services.config_store import config_store
 from src.api.services.model_manager import model_manager
 from src.api.services.ssh_manager import ssh_manager, SSHConnectionConfig
 from src.api.services.docker_monitor import docker_monitor
@@ -384,7 +385,6 @@ class ChunkingConfigRequest(BaseModel):
 @router.get("/chunking-config", summary="Получить настройки чанкинга")
 async def get_chunking_config():
     """Получить текущие настройки чанкинга (хранятся в PostgreSQL, config_store)"""
-    from src.api.services.config_store import config_store
     from src.config import get_settings
     _cfg = get_settings()
 
@@ -399,7 +399,6 @@ async def get_chunking_config():
 @router.post("/chunking-config", summary="Сохранить настройки чанкинга")
 async def save_chunking_config(request: ChunkingConfigRequest):
     """Сохранить настройки чанкинга (PostgreSQL, config_store)"""
-    from src.api.services.config_store import config_store
     
     config = {
         "chunk_size": request.chunk_size,
@@ -517,7 +516,7 @@ async def restart_ollama(connection_id: str = "default"):
         # Ждём подъёма: опрос API до ~20 с, выходим сразу после первого ответа
         # (раньше была слепая пауза 8 секунд).
         api_ok = False
-        for _ in range(20):
+        for _ in range(12):
             await asyncio.sleep(1)
             try:
                 async with httpx.AsyncClient(timeout=3.0) as client:
@@ -674,7 +673,6 @@ async def switch_embedding_model(request: SwitchEmbeddingRequest):
         
         # Сохраняем в config_store
         try:
-            from src.api.services.config_store import config_store
             config = config_store.get("embedding", "default") or {}
             config["model"] = request.model_name
             config_store.set("embedding", "default", config)
@@ -749,7 +747,6 @@ _ext_llm_config: ExtLLMConfig = ExtLLMConfig(url=get_settings().OLLAMA_BASE_URL)
 
 # Инициализация из БД при старте модуля
 try:
-    from src.api.services.config_store import config_store
     saved = config_store.get("ext_llm", "default")
     if saved and (saved.get("model") or saved.get("api_key")):
         _ext_llm_config = ExtLLMConfig(
@@ -769,7 +766,6 @@ async def save_ext_llm(config: ExtLLMConfig):
     _ext_llm_config = config
     # Персистентное сохранение в БД
     try:
-        from src.api.services.config_store import config_store
         config_store.set("ext_llm", "default", {
             "url": config.url,
             "model": config.model,
@@ -782,32 +778,61 @@ async def save_ext_llm(config: ExtLLMConfig):
     return {"status": "ok", "message": "Настройки сохранены"}
 
 
-@router.get("/ext-llm", summary="Получить настройки внешнего LLM")
-async def get_ext_llm():
-    """Получить текущие настройки внешнего LLM.
-    
-    ВСЕГДА загружает из config_store (PostgreSQL) приоритетно.
-    Глобальная переменная — только fallback если БД недоступна.
+def _load_ext_llm_from_db() -> ExtLLMConfig:
+    """Настройки внешнего LLM из config_store (синхронно, без глобала).
+
+    Раньше настройки лежали в модульном _ext_llm_config, который расходится с БД
+    при нескольких воркерах uvicorn, а «перечитывание» через async-функцию без
+    await вообще ничего не делало (корутина выбрасывалась).
     """
-    global _ext_llm_config
-    # Всегда пробуем загрузить из БД
     try:
-        from src.api.services.config_store import config_store
-        saved = config_store.get("ext_llm", "default")
+        saved = config_store.get("ext_llm", "default") or {}
         if saved and (saved.get("model") or saved.get("api_key")):
-            _ext_llm_config = ExtLLMConfig(
-                url=saved.get("url", ""),
+            return ExtLLMConfig(
+                url=saved.get("url", "") or get_settings().OLLAMA_BASE_URL,
                 model=saved.get("model", ""),
                 provider=saved.get("provider", "ollama"),
-                api_key=saved.get("api_key", "")
+                api_key=saved.get("api_key", ""),
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[ext-llm] настройки из БД не прочитаны: {e}")
+    return _ext_llm_config
+
+
+def _load_graph_model_from_db() -> Dict[str, Any]:
+    """Модель графа из config_store (синхронно, без глобала)."""
+    try:
+        saved = config_store.get("graph_model", "default") or {}
+        if isinstance(saved, dict) and saved.get("model"):
+            return saved
+    except Exception as e:
+        logger.debug(f"[graph] настройки из БД не прочитаны: {e}")
+    return _graph_model_config
+
+
+def _mask_secret(value: str) -> str:
+    """Ключ для показа: последние 4 символа, остальное скрыто."""
+    if not value:
+        return ""
+    tail = value[-4:] if len(value) > 8 else ""
+    return f"***{tail}" if tail else "***"
+
+
+@router.get("/ext-llm", summary="Получить настройки внешнего LLM")
+async def get_ext_llm():
+    """Текущие настройки внешнего LLM (из config_store).
+
+    api_key маскируется: раньше эндпоинт отдавал ключ в открытом виде, и он
+    попадал в логи/скриншоты админки. Полный ключ доступен только тем кодом,
+    который ходит к провайдеру.
+    """
+    cfg = _load_ext_llm_from_db()
     return {
-        "url": _ext_llm_config.url,
-        "model": _ext_llm_config.model,
-        "provider": _ext_llm_config.provider,
-        "api_key": _ext_llm_config.api_key
+        "url": cfg.url,
+        "model": cfg.model,
+        "provider": cfg.provider,
+        "api_key": _mask_secret(cfg.api_key),
+        "api_key_set": bool(cfg.api_key),
     }
 
 
@@ -820,29 +845,29 @@ async def test_ext_llm():
     расходится с БД (тест мог идти по старым данным).
     """
     import aiohttp
-    get_ext_llm()
+    cfg = _load_ext_llm_from_db()
     
     try:
-        if _ext_llm_config.provider == "ollama":
-            url = f"{_ext_llm_config.url}/api/generate"
+        if cfg.provider == "ollama":
+            url = f"{cfg.url}/api/generate"
             payload = {
-                "model": _ext_llm_config.model,
+                "model": cfg.model,
                 "prompt": "Ответь одним словом: ОК",
                 "stream": False,
                 "options": {"max_tokens": 5}
             }
             headers = {}
-        elif _ext_llm_config.provider in ("openai", "deepseek", "openrouter"):
+        elif cfg.provider in ("openai", "deepseek", "openrouter"):
             # OpenAI-совместимый API
-            url = f"{_ext_llm_config.url}/v1/chat/completions"
+            url = f"{cfg.url}/v1/chat/completions"
             payload = {
-                "model": _ext_llm_config.model,
+                "model": cfg.model,
                 "messages": [{"role": "user", "content": "Say OK"}],
                 "max_tokens": 5
             }
-            headers = {"Authorization": f"Bearer {_ext_llm_config.api_key}"} if _ext_llm_config.api_key else {}
+            headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
         else:
-            return {"ok": False, "error": f"Провайдер {_ext_llm_config.provider} пока не поддерживается для теста"}
+            return {"ok": False, "error": f"Провайдер {cfg.provider} пока не поддерживается для теста"}
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
@@ -859,6 +884,7 @@ async def test_ext_llm():
 
 @router.get("/ext-llm/models", summary="Список моделей внешнего провайдера")
 async def list_ext_llm_models(provider: str = "ollama"):
+    cfg = _load_ext_llm_from_db()
     """Получить список доступных моделей для указанного провайдера.
     
     Для Ollama — возвращает локально загруженные модели.
@@ -870,7 +896,7 @@ async def list_ext_llm_models(provider: str = "ollama"):
             # Локальные модели
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{_ext_llm_config.url}/api/tags",
+                    f"{cfg.url}/api/tags",
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as resp:
                     if resp.status == 200:
@@ -881,7 +907,7 @@ async def list_ext_llm_models(provider: str = "ollama"):
                     return {"models": [], "error": f"Ollama: HTTP {resp.status}"}
         
         # Внешние провайдеры — OpenAI-совместимый API
-        api_key = _ext_llm_config.api_key
+        api_key = cfg.api_key
         if not api_key:
             return {"models": [], "error": "API ключ не указан. Сохраните ключ в настройках."}
         
@@ -889,7 +915,7 @@ async def list_ext_llm_models(provider: str = "ollama"):
         # OpenRouter и OpenAI используют /v1/models
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{_ext_llm_config.url}/v1/models",
+                f"{cfg.url}/v1/models",
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as resp:
@@ -1009,13 +1035,13 @@ async def _provider_balance(provider_type: str, base_url: str, api_key: str) -> 
 
 @router.get("/ext-llm/balance", summary="Проверить баланс провайдера (устаревшая система)")
 async def check_ext_llm_balance():
-    """Баланс внешнего провайдера из СТАРОЙ конфигурации (_ext_llm_config).
+    """Баланс внешнего провайдера из СТАРОЙ конфигурации (ext_llm в настройках).
 
     Логика одна на три эндпоинта — _provider_balance(); этот остаётся для
     совместимости со старыми страницами.
     """
-    res = await _provider_balance(_ext_llm_config.provider, _ext_llm_config.url,
-                                  _ext_llm_config.api_key)
+    cfg = _load_ext_llm_from_db()
+    res = await _provider_balance(cfg.provider, cfg.url, cfg.api_key)
     return {"provider": res.get("provider"), "balance_ok": res.get("balance_ok"),
             "message": res.get("message"), "balance": res.get("balance", 0),
             "display": res.get("display")}
@@ -1027,9 +1053,10 @@ async def check_graph_balance():
 
     Логика — общая _provider_balance(); поле display отдаём как раньше.
     """
-    res = await _provider_balance(_graph_model_config.get("provider", "ollama"),
-                                  _graph_model_config.get("url", "https://api.deepseek.com"),
-                                  _graph_model_config.get("api_key", ""))
+    cfg = _load_graph_model_from_db()
+    res = await _provider_balance(cfg.get("provider", "ollama"),
+                                  cfg.get("url", "https://api.deepseek.com"),
+                                  cfg.get("api_key", ""))
     return {"provider": res.get("provider"), "balance_ok": res.get("balance_ok"),
             "balance_usd": res.get("balance_usd"), "display": res.get("display", "—"),
             "message": res.get("message")}
@@ -1039,7 +1066,6 @@ _graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 # Инициализация из БД при старте
 try:
-    from src.api.services.config_store import config_store
     saved = config_store.get("graph_model", "default")
     if saved and saved.get("model"):
         _graph_model_config = saved
@@ -1048,15 +1074,8 @@ except Exception:
 
 @router.get("/graph", summary="Получить модель для графа")
 async def get_graph_model():
-    # Пробуем загрузить из config_store
-    try:
-        from src.api.services.config_store import config_store
-        saved = config_store.get("graph_model", "default")
-        if saved and saved.get("model"):
-            return saved
-    except Exception:
-        pass
-    return _graph_model_config
+    """Модель графа: всегда из config_store (глобал — только fallback)."""
+    return _load_graph_model_from_db()
 
 @router.post("/graph", summary="Сохранить модель для графа")
 async def save_graph_model(config: dict):
@@ -1064,7 +1083,6 @@ async def save_graph_model(config: dict):
     _graph_model_config = config
     # Сохраняем в config_store
     try:
-        from src.api.services.config_store import config_store
         config_store.set("graph_model", "default", config)
     except Exception as e:
         logger.warning(f"Не удалось сохранить в config_store: {e}")
@@ -1097,25 +1115,52 @@ async def deploy_action(req: DeployRequest):
         if not req.file_content or not req.file_path:
             return {"status": "error", "message": "file_content и file_path обязательны для write_file"}
 
-        full_path = os.path.join("/app/src", req.file_path)
-        # Безопасность: только внутри /app/src
-        if not os.path.realpath(full_path).startswith("/app/src"):
+        settings = get_settings()
+        src_root = settings.DEPLOY_SRC_PATH
+        full_path = os.path.join(src_root, req.file_path)
+        # Безопасность: только внутри каталога исходников
+        if not os.path.realpath(full_path).startswith(os.path.realpath(src_root)):
             return {"status": "error", "message": "Недопустимый путь"}
+
+        # Расширение: только текстовые файлы проекта (нельзя класть .so/.pyc/бинарь)
+        allowed_ext = {".py", ".json", ".txt", ".md", ".yaml", ".yml",
+                       ".html", ".js", ".css", ".sql", ".cfg", ".ini", ".env"}
+        ext = os.path.splitext(req.file_path)[1].lower()
+        if ext not in allowed_ext:
+            return {"status": "error",
+                    "message": f"Расширение {ext or '(нет)'} не разрешено для записи"}
 
         try:
             content = req.file_content
-            # Пробуем декодировать base64
-            try:
-                content = base64.b64decode(req.file_content).decode("utf-8")
-            except Exception:
-                pass  # Не base64 — используем как есть
+            # base64 — только явно и со строгой проверкой (validate=True):
+            # иначе произвольный текст с валидным префиксом даёт мусорные байты
+            encoding = getattr(req, "encoding", None) or "auto"
+            if encoding == "base64":
+                try:
+                    content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
+                except Exception as e:
+                    return {"status": "error", "message": f"Некорректный base64: {e}"}
+            elif encoding == "auto":
+                try:
+                    decoded = base64.b64decode(req.file_content, validate=True)
+                    content = decoded.decode("utf-8")
+                except Exception:
+                    content = req.file_content  # обычный текст
 
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            size = len(content.encode("utf-8"))
+            if size > settings.DEPLOY_MAX_FILE_BYTES:
+                return {"status": "error",
+                        "message": f"Файл больше лимита {settings.DEPLOY_MAX_FILE_BYTES} байт"}
 
-            logger.info(f"Deploy: записан файл {full_path} ({len(content)} байт)")
-            return {"status": "ok", "message": f"Файл {req.file_path} записан ({len(content)} байт)"}
+            def _write_file() -> int:
+                os.makedirs(os.path.dirname(full_path) or src_root, exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                return len(content)
+
+            written = await asyncio.to_thread(_write_file)
+            logger.info(f"Deploy: записан файл {full_path} ({written} байт)")
+            return {"status": "ok", "message": f"Файл {req.file_path} записан ({written} байт)"}
         except Exception as e:
             logger.error(f"Deploy: ошибка записи {req.file_path}: {e}")
             return {"status": "error", "message": str(e)}
@@ -1125,7 +1170,7 @@ async def deploy_action(req: DeployRequest):
             result = await asyncio.to_thread(
                 subprocess.run,
                 ["git", "pull"],
-                cwd="/home/yartsevn/kag-system",
+                cwd=get_settings().DEPLOY_REPO_PATH,
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -1144,7 +1189,7 @@ async def deploy_action(req: DeployRequest):
             result = await asyncio.to_thread(
                 subprocess.run,
                 ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "api"],
-                cwd="/home/yartsevn/kag-system",
+                cwd=get_settings().DEPLOY_REPO_PATH,
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -1184,7 +1229,6 @@ ALL_SUPPORTED_EXTENSIONS = {
 def _get_allowed_extensions() -> dict:
     """Загрузить разрешённые расширения из config_store."""
     try:
-        from src.api.services.config_store import config_store
         saved = config_store.get("upload_config", "allowed_extensions")
         if saved and isinstance(saved, dict):
             return saved
@@ -1211,7 +1255,6 @@ class UploadConfigRequest(BaseModel):
 async def save_upload_config(req: UploadConfigRequest):
     """Сохранить список разрешённых форматов."""
     try:
-        from src.api.services.config_store import config_store
         config_store.set("upload_config", "allowed_extensions", req.allowed)
         return {"status": "ok", "message": "Настройки форматов сохранены"}
     except Exception as e:
@@ -1226,7 +1269,6 @@ async def save_upload_config(req: UploadConfigRequest):
 async def get_chat_prompt():
     """Получить текущий системный промпт для чата."""
     try:
-        from src.api.services.config_store import config_store
         saved = config_store.get("llm", "default") or {}
         prompt = saved.get("system_prompt", "")
         return {"prompt": prompt}
@@ -1238,7 +1280,6 @@ async def get_chat_prompt():
 async def save_chat_prompt(data: dict):
     """Сохранить системный промпт для чата в config_store."""
     try:
-        from src.api.services.config_store import config_store
         prompt = data.get("prompt", "")
         existing = config_store.get("llm", "default") or {}
         existing["system_prompt"] = prompt
@@ -1464,7 +1505,7 @@ async def get_function_map(function_name: str):
             "function": function_name,
             "provider_id": provider_service.get_default_provider_id() or "",
             "model": "",
-            "system_prompt": provider_service._load_default_prompt(function_name),
+            "system_prompt": provider_service.load_default_prompt(function_name),
             "parameters": {"temperature": 0.7, "max_tokens": 4096},
             "is_default": True,
         }
@@ -1502,7 +1543,7 @@ async def save_function_map(req: FunctionMapSaveRequest):
     # Обновляем .env если это embedding модель (чтобы не сбрасывалась при пересоздании контейнеров)
     if req.function == "embedding":
         try:
-            env_path = "/app/kag.env"
+            env_path = get_settings().ENV_FILE_PATH
             if os.path.exists(env_path):
                 with open(env_path, "r") as f:
                     env_lines = f.readlines()
@@ -1658,7 +1699,6 @@ async def migrate_old_config():
 @router.get("/branding-config", summary="Настройки брендинга")
 async def get_branding_config():
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "branding") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1674,7 +1714,6 @@ async def get_branding_config():
 @router.post("/branding-config", summary="Сохранить брендинг")
 async def save_branding_config(data: dict):
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "branding") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1698,7 +1737,6 @@ async def save_branding_config(data: dict):
 async def get_processing_config():
     """Вернуть {blocked: bool, message: str} — блокирует ли админ запуск обработки."""
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "processing") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1714,7 +1752,6 @@ async def get_processing_config():
 async def save_processing_config(data: dict):
     """Админ блокирует/разблокирует запуск обработки (кнопка «Обработать» на странице Документы)."""
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "processing") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1738,7 +1775,6 @@ async def get_ingest_config():
     processing-config.
     """
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "uploads") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1754,7 +1790,6 @@ async def get_ingest_config():
 async def save_ingest_config(data: dict):
     """Админ запрещает/разрешает загрузку новых документов (все источники)."""
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("system", "uploads") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1780,7 +1815,6 @@ async def get_search_config():
     mode: dense | hybrid_auto | hybrid_always (см. EmbeddingsService.SEARCH_MODES)
     """
     try:
-        from src.api.services.config_store import config_store
         from src.indexing.embeddings_service import EmbeddingsService
 
         cfg = config_store.get("search", "config") or {}
@@ -1802,7 +1836,6 @@ async def save_search_config(data: dict):
     Старый (совместимость): {"sparse_enabled": bool[, "sparse_mode": "lexical_only"|"always"]}.
     """
     try:
-        from src.api.services.config_store import config_store
         from src.indexing.embeddings_service import EmbeddingsService
 
         cfg = config_store.get("search", "config") or {}
@@ -1834,7 +1867,6 @@ async def save_search_config(data: dict):
 async def get_neo4j_config():
     """Вернуть настройки графа: батч-запись, размер батча, таймаут."""
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("neo4j", "config") or {}
         return {
             "batch_enabled": bool(cfg.get("batch_enabled", True)),
@@ -1848,7 +1880,6 @@ async def get_neo4j_config():
 @router.post("/neo4j-config", summary="Сохранить настройки Neo4j")
 async def save_neo4j_config(data: dict):
     try:
-        from src.api.services.config_store import config_store
         cfg = config_store.get("neo4j", "config") or {}
         if not isinstance(cfg, dict):
             cfg = {}
@@ -1873,7 +1904,6 @@ async def save_neo4j_config(data: dict):
 @router.get("/doc-types", summary="Получить список типов документов")
 async def get_doc_types():
     try:
-        from src.api.services.config_store import config_store
         type_list = config_store.get("kg_config", "doc_types") or {}
         types = type_list.get("types", []) if isinstance(type_list, dict) else []
         return {"types": types}
@@ -1884,7 +1914,6 @@ async def get_doc_types():
 @router.post("/doc-types", summary="Изменить список типов")
 async def update_doc_types(data: dict):
     try:
-        from src.api.services.config_store import config_store
         action = data.get("action", "add")
         # Ключ всегда в нижнем регистре (по нему идёт сверка), а подпись
         # сохраняем как ввёл пользователь: иначе в списках типов у людей
@@ -1939,7 +1968,6 @@ class ThemeRequest(BaseModel):
 async def get_theme():
     """Возвращает сохранённую тему (light/dark). По умолчанию light."""
     try:
-        from src.api.services.config_store import config_store
         theme = config_store.get("ui", "theme") or {"value": "light"}
         return theme
     except Exception:
@@ -1948,7 +1976,6 @@ async def get_theme():
 @router.post("/theme", summary="Сохранить тему пользователя")
 async def save_theme(body: ThemeRequest):
     """Сохраняет выбранную тему в PostgreSQL."""
-    from src.api.services.config_store import config_store
     config_store.set("ui", "theme", {"value": body.theme})
     return {"status": "ok", "theme": body.theme}
 
@@ -1964,14 +1991,12 @@ class OcrSettingsRequest(BaseModel):
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
-    from src.api.services.config_store import config_store
     cfg = config_store.get("ocr", "settings") or {"force_ocr": False, "dpi": 200}
     cfg.setdefault("table_model", "pymupdf")
     return cfg
 
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
 async def save_ocr_settings(body: OcrSettingsRequest):
-    from src.api.services.config_store import config_store
     config_store.set("ocr", "settings", {
         "force_ocr": body.force_ocr, "dpi": body.dpi,
         "enable_summarization": body.enable_summarization,
@@ -2022,7 +2047,6 @@ async def get_backup(include_caches: bool = False):
     include_caches=true добавляет и кэши (entity_cache) — по умолчанию они
     пропускаются: восстанавливать кэш бессмысленно, он пересчитается.
     """
-    from src.api.services.config_store import config_store
     categories = _all_config_categories()
     if not categories:
         raise HTTPException(
@@ -2036,7 +2060,8 @@ async def get_backup(include_caches: bool = False):
               "categories": categories, "skipped_caches": skipped, "data": {}}
     for ns in categories:
         try:
-            data = config_store.get_all(ns)
+            # config_store ходит в БД синхронно — читаем в потоке
+            data = await asyncio.to_thread(config_store.get_all, ns)
             if data:
                 backup["data"][ns] = data
         except Exception as e:
@@ -2046,7 +2071,6 @@ async def get_backup(include_caches: bool = False):
     return JSONResponse(content=backup, headers=headers)
 import json, traceback
 from fastapi import UploadFile, File
-from src.api.services.config_store import config_store
 
 @router.post("/backup-restore", summary="Восстановить настройки из backup JSON")
 async def restore_backup(file: UploadFile = File(...)):
@@ -2067,7 +2091,7 @@ async def restore_backup(file: UploadFile = File(...)):
             continue
         try:
             for key, value in ns_data.items():
-                config_store.set(ns, key, value)
+                await asyncio.to_thread(config_store.set, ns, key, value)
             restored += 1
         except Exception as e:
             errors.append(f"{ns}: {e}")
@@ -2085,7 +2109,6 @@ async def restore_backup(file: UploadFile = File(...)):
 @router.get("/system-config", summary="Внешний адрес и статус Keycloak")
 async def get_system_config():
     """Вернуть внешний адрес (config_store) + статус Keycloak + SSO."""
-    from src.api.services.config_store import config_store
     settings = get_settings()
     cfg = config_store.get("system", "config", {})
     if not isinstance(cfg, dict):
@@ -2114,7 +2137,6 @@ async def save_system_config(req: SystemConfigRequest):
     через деплой (.env / docker-compose.yml), НЕ через API. На живом
     сервере compose-файл и контейнер keycloak не трогаются.
     """
-    from src.api.services.config_store import config_store
     cfg = config_store.get("system", "config", {})
     if not isinstance(cfg, dict):
         cfg = {}
@@ -2172,7 +2194,6 @@ SCALING_DEFAULTS = {
 async def get_scaling():
     """Вернуть: текущее состояние (запущенные worker'ы, память Neo4j)
     + сохранённые целевые настройки масштабирования из config_store."""
-    from src.api.services.config_store import config_store
     cfg = config_store.get("scaling", "config", {})
     if not isinstance(cfg, dict):
         cfg = {}
@@ -2201,7 +2222,6 @@ async def save_scaling(req: ScalingConfigRequest):
     ВАЖНО: только сохраняет ЦЕЛЕВЫЕ значения — НЕ применяет. Применяются
     при следующем деплое (см. комментарии в docker-compose.yml).
     """
-    from src.api.services.config_store import config_store
     cfg = config_store.get("scaling", "config", {})
     if not isinstance(cfg, dict):
         cfg = {}
@@ -2225,13 +2245,31 @@ async def save_scaling(req: ScalingConfigRequest):
 # Worker Resources — настройка CPU/памяти
 # ═══════════════════════════════════════
 
+def _container_by_service(client, service: str, fallback_name: str):
+    """Найти контейнер сервиса по compose-метке, с fallback на старое имя.
+
+    Имена вида kag-keycloak/kag-neo4j ломаются при запуске с другим
+    проектом (`docker compose -p other`) — ищем по метке, как уже делает
+    _find_worker_container.
+    """
+    try:
+        found = client.containers.list(
+            all=True, filters={"label": f"com.docker.compose.service={service}"}
+        )
+        if found:
+            return found[0]
+    except Exception:
+        pass
+    return client.containers.get(fallback_name)
+
+
 def _docker_keycloak_status() -> Dict[str, Any]:
     """Статус контейнера Keycloak (синхронный docker SDK → вызывать в потоке)."""
     out = {"container_running": False, "hostname": None, "mode": "unknown"}
     try:
         import docker
         client = docker.from_env()
-        kc = client.containers.get("kag-keycloak")
+        kc = _container_by_service(client, "keycloak", "kag-keycloak")
         out["container_running"] = kc.status == "running"
         env = kc.attrs.get("Config", {}).get("Env", [])
         for e in env:
@@ -2252,7 +2290,7 @@ def _docker_worker_state() -> Dict[str, Any]:
         client = docker.from_env()
         out["worker_count"] = len([c for c in client.containers.list() if "worker" in c.name])
         try:
-            neo = client.containers.get("kag-neo4j")
+            neo = _container_by_service(client, "neo4j", "kag-neo4j")
             for e in neo.attrs.get("Config", {}).get("Env", []):
                 if e.startswith("NEO4J_dbms_memory_heap_max"):
                     out["neo4j_heap"] = e.split("=", 1)[1]
@@ -2333,7 +2371,6 @@ async def update_worker_resources(req: dict):
 
     # Сохраняем целевые значения (применятся при следующем deploy).
     try:
-        from src.api.services.config_store import config_store
         config_store.set("worker", "resources", {"cpus": cpus, "memory": memory})
     except Exception as e:
         return {"status": "error", "message": f"Не удалось сохранить: {e}"}
@@ -2369,10 +2406,11 @@ async def list_aliases(include_pending: bool = False, verdict: str = ""):
     """
     try:
         from src.indexing.knowledge_graph import kg_service
-        pairs = kg_service.list_alias_pairs(include_pending=include_pending, verdict=verdict)
+        pairs = await asyncio.to_thread(kg_service.list_alias_pairs,
+                                    include_pending=include_pending, verdict=verdict)
         # Если просим pending — отдельно показываем счётчик непросмотренных
         pending_count = len([
-            p for p in kg_service.list_alias_pairs(include_pending=True)
+            p for p in await asyncio.to_thread(kg_service.list_alias_pairs, include_pending=True)
             if not p.get("reviewed")
         ])
         return {
@@ -2390,7 +2428,7 @@ async def add_alias(request: AliasPairRequest):
     """Добавить пару (alias → canonical) в словарь."""
     try:
         from src.indexing.knowledge_graph import kg_service
-        ok = kg_service.save_alias_pair(
+        ok = await asyncio.to_thread(kg_service.save_alias_pair, 
             canonical=request.canonical_name.strip(),
             alias=request.alias.strip(),
             entity_type=request.entity_type,
@@ -2415,7 +2453,7 @@ async def update_alias(pair_id: str, request: AliasPairRequest):
     """
     try:
         from src.indexing.knowledge_graph import kg_service
-        ok = kg_service.update_alias_pair(
+        ok = await asyncio.to_thread(kg_service.update_alias_pair, 
             pair_id,
             alias=request.alias,
             canonical=request.canonical_name,
@@ -2435,7 +2473,7 @@ async def apply_aliases():
     """Применить все approved-пары к графу Neo4j (слить алиасы в канонические узлы)."""
     try:
         from src.indexing.knowledge_graph import kg_service
-        res = kg_service.apply_alias_pairs()
+        res = await asyncio.to_thread(kg_service.apply_alias_pairs)
         return {"status": "ok", **res, "message": f"Применено пар: {res.get('applied', 0)}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2450,12 +2488,12 @@ async def review_alias(pair_id: str, verdict: str = Query("approved", pattern="^
     """
     try:
         from src.indexing.knowledge_graph import kg_service
-        ok = kg_service.review_alias_pair(pair_id, verdict)
+        ok = await asyncio.to_thread(kg_service.review_alias_pair, pair_id, verdict)
         if not ok:
             return {"status": "error", "message": "Пара не найдена"}
         # Если approved — сразу применяем к графу
         if verdict == "approved":
-            kg_service.apply_alias_pairs()
+            await asyncio.to_thread(kg_service.apply_alias_pairs)
         return {"status": "ok", "message": f"Пара {'подтверждена' if verdict == 'approved' else 'отклонена'}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2466,7 +2504,7 @@ async def delete_alias(pair_id: str):
     """Удалить пару из словаря."""
     try:
         from src.indexing.knowledge_graph import kg_service
-        ok = kg_service.delete_alias_pair(pair_id)
+        ok = await asyncio.to_thread(kg_service.delete_alias_pair, pair_id)
         if not ok:
             return {"status": "error", "message": "Пара не найдена"}
         return {"status": "ok", "message": "Пара удалена"}
@@ -2479,7 +2517,7 @@ async def delete_alias(pair_id: str):
 # ═══════════════════════════════════════
 
 @router.get("/backup-documents", summary="Скачать все документы (ZIP: файлы + метаданные)")
-async def backup_documents():
+async def backup_documents(include_caches: bool = False):
     """Собрать все документы (файлы из uploads + documents_meta.json) в ZIP.
 
     Файлы кладутся в подпапку documents/, метаданные — documents_meta.json
@@ -2494,7 +2532,8 @@ async def backup_documents():
     from src.api.services.document_repository import get_doc_repo
     from src.api.services.document_service import document_service
 
-    docs = get_doc_repo().get_all() or {}
+    # репозиторий ходит в БД синхронно — читаем в потоке
+    docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
     upload_dir = Path(document_service._upload_dir)
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
@@ -2510,13 +2549,19 @@ async def backup_documents():
     # выходит за лимит имени ФС (255 байт) — path.exists() падал с Errno 36 и
     # ломал весь бэкап.
     files_by_doc = {}
-    try:
+
+    def _index_uploads() -> Dict[str, Any]:
+        idx: Dict[str, Any] = {}
         for entry in upload_dir.iterdir():
             if not entry.is_file():
                 continue
             name = entry.name
             doc_key = name[:36] if len(name) > 36 else name
-            files_by_doc.setdefault(doc_key, entry)
+            idx.setdefault(doc_key, entry)
+        return idx
+
+    try:
+        files_by_doc = await asyncio.to_thread(_index_uploads)
     except Exception as e:
         logger.warning(f"[backup] не удалось прочитать каталог {upload_dir}: {e}")
 
@@ -2542,7 +2587,7 @@ async def backup_documents():
                     continue
                 arcname = _safe_arcname(doc_id, src_path)
                 try:
-                    zf.write(src_path, arcname=arcname)
+                    await asyncio.to_thread(zf.write, src_path, arcname)
                     files_added += 1
                 except Exception as e:
                     skipped.append({"document_id": doc_id, "file": src_path.name,
@@ -2560,18 +2605,20 @@ async def backup_documents():
             # ── Словарь алиасов (entity_aliases) ────────────────────────────
             try:
                 from src.indexing.knowledge_graph import kg_service
-                aliases = kg_service.list_alias_pairs(include_pending=True)
+                aliases = await asyncio.to_thread(kg_service.list_alias_pairs, include_pending=True)
                 zf.writestr("aliases.json", json.dumps(aliases, ensure_ascii=False, indent=1, default=str))
             except Exception as e:
                 zf.writestr("aliases.json", json.dumps({"error": str(e)}, ensure_ascii=False))
 
             # ── Настройки (config_store: все категории из system_configs) ──
             try:
-                from src.api.services.config_store import config_store
                 from src.database.session import get_session_local
                 from sqlalchemy import text as _text
-                # тот же источник, что и в /backup (без дублирования запроса)
+                # тот же источник, что и в /backup; кэши (entity_cache) по
+                # умолчанию не кладём — архив растёт, а кэш пересчитывается
                 categories = _all_config_categories()
+                if not include_caches:
+                    categories = [c for c in categories if c not in BACKUP_CACHE_CATEGORIES]
                 cfg_all = {}
                 for cat in categories:
                     cfg_all[cat] = config_store.get_all(cat)
@@ -2611,10 +2658,13 @@ async def backup_documents():
             content={"status": "error", "message": f"Ошибка формирования ZIP: {e}"},
         )
 
+    size_mb = os.path.getsize(tmp_path) / (1024 * 1024)
     logger.info(
         f"[backup] ZIP готов: документов {len(docs)}, файлов {files_added}, "
-        f"пропущено {len(skipped)}, {os.path.getsize(tmp_path)} байт"
+        f"пропущено {len(skipped)}, {size_mb:.1f} МБ"
     )
+    if size_mb > 500:
+        logger.warning(f"[backup] архив {size_mb:.0f} МБ — проверьте, не растёт ли он из-за кэшей")
     return FileResponse(
         tmp_path,
         media_type="application/zip",

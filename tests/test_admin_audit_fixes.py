@@ -25,14 +25,12 @@ from src.api.routes.admin_models import (
 
 ROUTES_FILE = Path("src/api/routes/admin_models.py")
 
-
 # ── 1. SSH: пароли вне командной строки ────────────────────────────────
 def _cfg(**kw):
     base = dict(host="192.168.50.41", port=22, username="nick",
                 password=None, sudo_password=None)
     base.update(kw)
     return SimpleNamespace(**base)
-
 
 def test_ssh_password_not_in_argv():
     pw = "SuperSecret123"
@@ -43,13 +41,11 @@ def test_ssh_password_not_in_argv():
     assert env.get("SSHPASS") == pw
     assert stdin_text is None
 
-
 def test_ssh_without_password_uses_plain_ssh():
     argv, env, stdin_text = _ssh_argv_and_env(_cfg(), "echo OK")
     assert argv[0] == "ssh"
     assert "SSHPASS" not in env
     assert stdin_text is None
-
 
 def test_sudo_password_goes_to_stdin():
     sudo_pw = "SudoSecret456"
@@ -57,13 +53,11 @@ def test_sudo_password_goes_to_stdin():
     assert sudo_pw not in " ".join(argv)
     assert stdin_text == sudo_pw + "\n", "sudo-пароль должен уходить по stdin"
 
-
 def test_service_name_is_sanitized():
     assert _safe_service_name("ollama") == "ollama"
     assert _safe_service_name("ollama.service") == "ollama.service"
     for evil in ("ollama; rm -rf /", "ollama && curl x", "`id`", "a\nb", ""):
         assert _safe_service_name(evil) == "ollama", f"инъекция не отсечена: {evil!r}"
-
 
 def test_no_shell_true_and_no_sshpass_p_in_source():
     src = ROUTES_FILE.read_text(encoding="utf-8")
@@ -74,7 +68,6 @@ def test_no_shell_true_and_no_sshpass_p_in_source():
         assert '"sshpass", "-p"' not in text, f"{name}: пароль нельзя давать sshpass аргументом"
     assert '"sshpass", "-e"' in ssh_src, "ssh_manager должен брать пароль из env (sshpass -e)"
 
-
 # ── 2. Баланс провайдеров ──────────────────────────────────────────────
 class _FakeResponse:
     def __init__(self, status_code: int, payload: dict):
@@ -83,7 +76,6 @@ class _FakeResponse:
 
     def json(self):
         return self._payload
-
 
 class _FakeClient:
     """Подменяет httpx.AsyncClient: отдаёт заранее заданный ответ."""
@@ -100,12 +92,10 @@ class _FakeClient:
     async def get(self, url, headers=None, **kw):
         return self._response
 
-
 def _run_balance(monkeypatch, payload, status=200, provider="deepseek",
                  url="https://api.deepseek.com", key="k"):
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_FakeResponse(status, payload)))
     return asyncio.run(_provider_balance(provider, url, key))
-
 
 def test_deepseek_balance_read_from_balance_infos(monkeypatch):
     payload = {"is_available": True,
@@ -117,13 +107,11 @@ def test_deepseek_balance_read_from_balance_infos(monkeypatch):
     assert res["balance_known"] is True
     assert "42.50 CNY" in res["display"]
 
-
 def test_deepseek_unavailable_account_marks_not_ok(monkeypatch):
     payload = {"is_available": False, "balance_infos": [{"currency": "USD", "total_balance": "0.00"}]}
     res = _run_balance(monkeypatch, payload)
     assert res["balance_ok"] is False
     assert "недоступен" in res["message"]
-
 
 def test_negative_balance_is_not_ok(monkeypatch):
     payload = {"is_available": True,
@@ -133,7 +121,6 @@ def test_negative_balance_is_not_ok(monkeypatch):
     assert "исчерпан" in res["message"]
     assert res["balance"] == -1.18
 
-
 def test_gigachat_reports_unknown_not_zero(monkeypatch):
     res = _run_balance(monkeypatch, {"whatever": 1}, provider="gigachat",
                        url="https://gigachat.devices.sberbank.ru/api/v1")
@@ -141,23 +128,19 @@ def test_gigachat_reports_unknown_not_zero(monkeypatch):
     assert res["balance_known"] is False
     assert "не реализована" in res["message"]
 
-
 def test_ollama_is_unlimited_without_http(monkeypatch):
     res = _run_balance(monkeypatch, {}, provider="ollama", url="", key="")
     assert res["balance_ok"] is True and res["display"] == "∞"
 
-
 def test_no_api_key_reported(monkeypatch):
     res = _run_balance(monkeypatch, {}, key="")
     assert res["balance_ok"] is False and "не указан" in res["message"]
-
 
 def test_http_error_is_not_zero_balance(monkeypatch):
     res = _run_balance(monkeypatch, {}, status=401)
     assert res["balance_ok"] is False
     assert "недействителен" in res["message"]
     assert res.get("balance") is None, "при ошибке нельзя показывать баланс"
-
 
 # ── 3. Бэкап: хардкод только как фолбэк ────────────────────────────────
 def test_backup_categories_are_dynamic_only():
@@ -170,7 +153,6 @@ def test_backup_categories_are_dynamic_only():
     assert "include_caches" in src and "BACKUP_CACHE_CATEGORIES" in src
     assert "503" in src, "при нечитаемых категориях бэкап должен отвечать ошибкой"
 
-
 def test_ingest_config_functions_renamed():
     """Дублей имён быть не должно: у блокировки ингеста свои имена функций."""
     src = ROUTES_FILE.read_text(encoding="utf-8")
@@ -178,7 +160,6 @@ def test_ingest_config_functions_renamed():
     assert src.count("async def save_upload_config(") == 1
     assert src.count("async def get_ingest_config(") == 1
     assert src.count("async def save_ingest_config(") == 1
-
 
 def test_sync_calls_wrapped_in_to_thread():
     """Синхронные сервисы не должны вызываться из async-эндпоинтов напрямую."""
@@ -193,14 +174,67 @@ def test_sync_calls_wrapped_in_to_thread():
     # subprocess в /deploy не должен блокировать loop (timeout до 120 с)
     assert "result = subprocess.run(" not in src
 
+def test_config_store_imported_once_at_top():
+    """config_store должен импортироваться на уровне модуля, а не внутри функций.
 
-def test_test_ext_llm_reloads_config_from_db():
-    """Проверка внешнего LLM не должна опираться на глобал из памяти процесса."""
+    Раньше импорт был внизу файла + 39 локальных копий: работало «случайно»
+    (импорт выполняется при загрузке модуля), но ломается при рефакторинге.
+    """
     src = ROUTES_FILE.read_text(encoding="utf-8")
-    i = src.index("async def test_ext_llm(")
-    block = src[i:i + 600]
-    assert "get_ext_llm()" in block, "перед использованием настроек нужно перечитать их из БД"
+    imp = "from src.api.services.config_store import config_store"
+    assert src.count(imp) == 1 or src.count(imp) == 2, "импорт должен быть один (плюс явный алиас)"
+    assert src.index(imp) < src.index("@router."), \
+        "импорт должен быть в шапке модуля, до объявления роутов"
+    # локальные дубли в функциях недопустимы (кроме явного алиаса 'as cs')
+    for line in src.splitlines():
+        st = line.strip()
+        if st.startswith("from src.api.services.config_store import") and st != imp:
+            assert st.endswith("as cs"), f"неожиданный локальный импорт: {st}"
 
+def test_ext_llm_uses_sync_loader_not_global():
+    """test_ext_llm не должен вызывать async-функцию без await (баг «never awaited»)."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "def _load_ext_llm_from_db()" in src
+    assert "def _load_graph_model_from_db()" in src
+    assert (chr(10) + "    get_ext_llm()" + chr(10)) not in src, "нельзя вызывать async-функцию без await"
+    i = src.index("async def test_ext_llm(")
+    block = src[i:i + 700]
+    assert "cfg = _load_ext_llm_from_db()" in block
+    assert "_ext_llm_config." not in block, "в тесте не должно быть чтения глобала"
+    # ключ наружу не отдаём в открытом виде
+    assert "_mask_secret" in src
+
+def test_deploy_write_file_is_hardened():
+    """write_file: только разрешённые расширения, строгий base64, лимит размера."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "allowed_ext" in src and ".py" in src
+    assert "base64.b64decode(req.file_content, validate=True)" in src
+    assert "DEPLOY_MAX_FILE_BYTES" in src
+    assert "DEPLOY_SRC_PATH" in src and "DEPLOY_REPO_PATH" in src
+    cfg = Path("src/config.py").read_text(encoding="utf-8")
+    for name in ("DEPLOY_SRC_PATH", "DEPLOY_REPO_PATH", "ENV_FILE_PATH", "DEPLOY_MAX_FILE_BYTES"):
+        assert name in cfg, f"нет настройки {name}"
+
+def test_sync_services_wrapped_in_alias_and_backup():
+    """Neo4j в элиасах и файловые/БД-операции в бэкапах — через to_thread."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "await asyncio.to_thread(kg_service." in src
+    # ни одного необёрнутого вызова kg_service
+    for line in src.splitlines():
+        if "kg_service." in line and "to_thread" not in line and "import" not in line:
+            raise AssertionError(f"необёрнутый вызов Neo4j: {line.strip()[:80]}")
+    assert "_index_uploads" in src, "индексация каталога uploads должна идти в потоке"
+    assert "await asyncio.to_thread(config_store.get_all, ns)" in src
+    assert "await asyncio.to_thread(config_store.set, ns, key, value)" in src
+
+def test_backup_documents_skips_caches():
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    i = src.index("async def backup_documents(")
+    tail = src[i:]
+    nxt = tail.find(chr(10) + "@router.")
+    body = tail if nxt == -1 else tail[:nxt]   # функция может быть последней в файле
+    assert "include_caches" in body, "у бэкапа документов должен быть флаг кэшей"
+    assert "BACKUP_CACHE_CATEGORIES" in body, "кэши должны отсекаться тем же списком"
 
 def test_documents_backup_survives_long_filenames():
     """Бэкап документов не должен падать на именах длиннее лимита ФС (Errno 36).
@@ -217,7 +251,6 @@ def test_documents_backup_survives_long_filenames():
     assert 'status_code=500' in src, "неудачный ZIP должен отдавать 500"
     # запрещённая конструкция, из-за которой падало: имя из полного названия
     assert 'f"{doc_id}_{filename}"' not in src
-
 
 def test_restart_ollama_keeps_admin_contract():
     """Страница админки проверяет result.status — контракт不能被 ломать."""

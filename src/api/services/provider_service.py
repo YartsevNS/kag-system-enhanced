@@ -378,7 +378,7 @@ class ProviderService:
             # Промпт не задан в настройках — показываем дефолт из prompts/*.txt
             d["prompt_from_settings"] = bool((d.get("system_prompt") or "").strip())
             if not d["prompt_from_settings"]:
-                d["system_prompt"] = self._load_default_prompt(fname)
+                d["system_prompt"] = self.load_default_prompt(fname)
             result.append(d)
         return result
 
@@ -392,7 +392,7 @@ class ProviderService:
         # Источник промпта: настройки (правил админ) или файл репозитория.
         d["prompt_from_settings"] = bool((d.get("system_prompt") or "").strip())
         if not d["prompt_from_settings"]:
-            d["system_prompt"] = self._load_default_prompt(function_name)
+            d["system_prompt"] = self.load_default_prompt(function_name)
             d["prompt_file"] = self._prompt_file_path(function_name)
         else:
             d["prompt_file"] = self._prompt_file_path(function_name)
@@ -472,7 +472,7 @@ class ProviderService:
         # prompts/{function}.txt. Так промпты версионируются в git и не теряются
         # при backup/переустановке, но переопределяются через админку.
         if not system_prompt:
-            system_prompt = self._load_default_prompt(function_name)
+            system_prompt = self.load_default_prompt(function_name)
         return {
             "provider": provider.type,
             "url": (provider.url or "").rstrip("/"),
@@ -498,8 +498,10 @@ class ProviderService:
                 pass
         return None
 
+    # Публичный метод (шаг 9): раньше был _load_default_prompt, но его вызывал
+    # роутер — приватный метод извне. Псевдоним ниже оставлен для совместимости.
     @staticmethod
-    def _load_default_prompt(function_name: str) -> str:
+    def load_default_prompt(function_name: str) -> str:
         """Загрузить дефолтный системный промпт из prompts/{function}.txt."""
         path = ProviderService._prompt_file_path(function_name)
         if not path:
@@ -547,7 +549,7 @@ class ProviderService:
                 if (data.get("system_prompt") or "").strip():
                     result["already_set"].append(fname)
                     continue
-                content = self._load_default_prompt(fname)
+                content = self.load_default_prompt(fname)
                 if not content.strip():
                     result["no_file"].append(fname)
                     continue
@@ -599,10 +601,10 @@ class ProviderService:
         # Создаём дефолтные привязки для всех функций.
         # system_prompt берём из prompts/*.txt (версионируются в git, не теряются).
         default_maps = {
-            "chat":         FunctionMap("chat", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("chat")),
+            "chat":         FunctionMap("chat", "ollama-main", "phi4-mini:latest", system_prompt=self.load_default_prompt("chat")),
             "embedding":    FunctionMap("embedding", "ollama-main", "nomic-embed-text"),
-            "graph":        FunctionMap("graph", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("graph")),
-            "doc_analysis": FunctionMap("doc_analysis", "ollama-main", "phi4-mini:latest", system_prompt=self._load_default_prompt("doc_analysis")),
+            "graph":        FunctionMap("graph", "ollama-main", "phi4-mini:latest", system_prompt=self.load_default_prompt("graph")),
+            "doc_analysis": FunctionMap("doc_analysis", "ollama-main", "phi4-mini:latest", system_prompt=self.load_default_prompt("doc_analysis")),
         }
 
         for fm in default_maps.values():
