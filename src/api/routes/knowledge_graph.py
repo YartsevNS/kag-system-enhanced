@@ -418,6 +418,11 @@ async def post_process_graph(
     Опционально: только для одного документа.
     """
     try:
+        # Аудит мутации: пост-обработка меняет граф (dedup, связывание сущностей).
+        logger.info(
+            f"[post-process] user={getattr(current_user, 'username', '?')} "
+            f"document_id={document_id or 'все документы'}"
+        )
         result = await asyncio.to_thread(kg_service.post_process_entities, document_id)
         # Также простой dedup для Community Edition
         dedup_count = await asyncio.to_thread(kg_service.deduplicate_entities_by_name)
@@ -433,6 +438,8 @@ async def stop_rebuild(current_user: User = Depends(get_current_admin)):
     try:
         from src.api.services.config_store import config_store
         config_store.set("kg_config", "rebuild_stop", True)
+        # Аудит мутации: кто остановил перестроение графа.
+        logger.info(f"[rebuild] остановка: user={getattr(current_user, 'username', '?')}")
         return {"status": "ok", "message": "Сигнал остановки отправлен. Текущий документ будет последним."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
