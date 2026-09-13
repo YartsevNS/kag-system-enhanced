@@ -10,6 +10,7 @@
 """
 
 import os
+import traceback
 import asyncio
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
@@ -107,7 +108,6 @@ async def save_ssh_config(request: SSHConfigRequest, connection_id: str = "defau
         raise
     except Exception as e:
         logger.error(f"Ошибка сохранения SSH конфигурации: {e}")
-        import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -558,7 +558,12 @@ async def restart_ollama(connection_id: str = "default"):
         }
     except Exception as e:
         logger.error(f"Ошибка перезапуска Ollama: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка перезапуска: {e}")
+        # Страница админки читает result.status: 500 с {"detail": ...} она
+        # показала бы как «❌ undefined», поэтому отвечаем своим JSON.
+        return {"status": "error", "success": False,
+                "message": f"Ошибка перезапуска: {e}",
+                "systemctl_active": False, "http_responding": False,
+                "service_active": False, "api_responding": False}
 
 @router.get("/status", summary="Получить статус системы моделей")
 async def get_models_status():
@@ -734,16 +739,17 @@ async def delete_model(model_name: str):
 
 # === Внешние LLM для анализа документов ===
 
-from pydantic import BaseModel
-from typing import Optional as Opt
 
 class ExtLLMConfig(BaseModel):
     url: str = ""
     model: str = "phi4-mini"
-    api_key: Opt[str] = None
+    api_key: Optional[str] = None
     provider: str = "ollama"
 
 _ext_llm_config: ExtLLMConfig = ExtLLMConfig(url=get_settings().OLLAMA_BASE_URL)
+
+# Модель графа: значение по умолчанию; загружается из БД ниже
+_graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 # Инициализация из БД при старте модуля
 try:
@@ -755,8 +761,9 @@ try:
             provider=saved.get("provider", "ollama"),
             api_key=saved.get("api_key", "")
         )
-except Exception:
-    pass
+except Exception as e:
+    # молчаливый fallback опасен: админ не узнает, что настройки не прочитаны
+    logger.warning(f"[ext-llm] инициализация из БД не удалась, работаю на значениях по умолчанию: {e}")
 
 
 @router.post("/ext-llm", summary="Сохранить настройки внешнего LLM")
@@ -884,12 +891,12 @@ async def test_ext_llm():
 
 @router.get("/ext-llm/models", summary="Список моделей внешнего провайдера")
 async def list_ext_llm_models(provider: str = "ollama"):
-    cfg = _load_ext_llm_from_db()
     """Получить список доступных моделей для указанного провайдера.
-    
+
     Для Ollama — возвращает локально загруженные модели.
     Для OpenAI/DeepSeek/OpenRouter — обращается к API провайдера с сохранённым ключом.
     """
+    cfg = _load_ext_llm_from_db()
     import aiohttp
     try:
         if provider == "ollama":
@@ -1062,15 +1069,14 @@ async def check_graph_balance():
             "message": res.get("message")}
 
 
-_graph_model_config = {"model": "phi4-mini:latest", "provider": "ollama"}
 
 # Инициализация из БД при старте
 try:
     saved = config_store.get("graph_model", "default")
     if saved and saved.get("model"):
         _graph_model_config = saved
-except Exception:
-    pass
+except Exception as e:
+    logger.warning(f"[graph] инициализация модели графа из БД не удалась, беру значение по умолчанию: {e}")
 
 @router.get("/graph", summary="Получить модель для графа")
 async def get_graph_model():
@@ -1100,7 +1106,7 @@ class DeployRequest(BaseModel):
     action: str = Field(default="write_file", description="Действие: write_file | git_pull | restart")
     # Явный способ кодирования содержимого: раньше «битый base64» молча
     # записывался как текст (и так затёр api/__init__.py при проверке).
-    encoding: str = Field(default="auto", description="auto | utf8 | base64")
+    encoding: str = Field(default="utf8", description="utf8 | base64 | auto")
 
 @router.post("/deploy", summary="Деплой: запись файла, git pull или перезапуск")
 async def deploy_action(req: DeployRequest):
@@ -1115,7 +1121,7 @@ async def deploy_action(req: DeployRequest):
     import base64
 
     if req.action == "write_file":
-        if not req.file_content or not req.file_path:
+        if req.file_content is None or not req.file_path:
             return {"status": "error", "message": "file_content и file_path обязательны для write_file"}
 
         settings = get_settings()
@@ -1146,10 +1152,17 @@ async def deploy_action(req: DeployRequest):
                 except Exception as e:
                     return {"status": "error", "message": f"Некорректный base64: {e}"}
             elif encoding == "auto":
-                try:
-                    content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
-                except Exception:
-                    content = req.file_content  # обычный текст
+                # Декодируем base64 ТОЛЬКО если строка действительно на него похожа
+                # (иначе литерал вида "aGVsbG8=" тихо превращался в "hello").
+                import re as _re
+                looks_b64 = bool(_re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", req.file_content or ""))
+                if looks_b64 and len(req.file_content) % 4 == 0:
+                    try:
+                        content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
+                    except Exception:
+                        content = req.file_content
+                else:
+                    content = req.file_content
 
             # Python-файл должен быть синтаксически корректным: иначе запись
             # через веб-деплой ломает сервис (проверено на практике — файл с
@@ -1566,7 +1579,7 @@ async def save_function_map(req: FunctionMapSaveRequest):
                 with open(path, "r") as fh:
                     lines = fh.readlines()
                 out = [
-                    (f"EMBEDDING_MODEL={model}" + chr(10)) if line.startswith("EMBEDDING_MODEL=") else line
+                    f"EMBEDDING_MODEL={model}\n" if line.startswith("EMBEDDING_MODEL=") else line
                     for line in lines
                 ]
                 with open(path, "w") as fh:
@@ -1978,7 +1991,6 @@ async def update_doc_types(data: dict):
         return {"status": "error", "message": str(e)}
 
 # Theme API
-from pydantic import BaseModel
 
 class ThemeRequest(BaseModel):
     theme: str  # "light" or "dark"
@@ -2036,11 +2048,12 @@ BACKUP_CACHE_CATEGORIES = {"entity_cache"}
 # бэкап, из которого потом «непонятно почему» пропали настройки.
 
 
-def _all_config_categories() -> List[str]:
-    """Все категории настроек из system_configs (источник — сама БД).
+def _all_config_categories() -> Optional[List[str]]:
+    """Все категории настроек из system_configs.
 
-    Возвращает [] если БД недоступна — вызывающий код решает, что делать
-    (бэкап отдаёт 503, documents-бэкап просто не кладёт config_store.json).
+    None — БД недоступна (ошибка), [] — таблица пуста (свежая установка).
+    Раньше оба случая возвращали [], и /backup отвечал 503 даже когда настроек
+    просто нет, а бэкап документов молча клал пустой config_store.json.
     """
     try:
         from src.database.session import get_session_local
@@ -2056,7 +2069,7 @@ def _all_config_categories() -> List[str]:
             session.close()
     except Exception as e:
         logger.warning(f"[backup] категории настроек из БД не прочитаны: {e}")
-        return []
+        return None
 
 
 @router.get("/backup", summary="Backup всех настроек системы")
@@ -2067,7 +2080,7 @@ async def get_backup(include_caches: bool = False):
     пропускаются: восстанавливать кэш бессмысленно, он пересчитается.
     """
     categories = _all_config_categories()
-    if not categories:
+    if categories is None:
         raise HTTPException(
             status_code=503,
             detail="Не удалось прочитать список категорий настроек из БД — бэкап неполный, повторите позже",
@@ -2108,9 +2121,14 @@ async def restore_backup(file: UploadFile = File(...)):
     for ns, ns_data in data["data"].items():
         if not isinstance(ns_data, dict):
             continue
+        def _restore_ns(namespace: str, values: dict) -> int:
+            """Записать namespace настроек (один переключение в поток, не по ключу)."""
+            for k, v in values.items():
+                config_store.set(namespace, k, v)
+            return len(values)
+
         try:
-            for key, value in ns_data.items():
-                await asyncio.to_thread(config_store.set, ns, key, value)
+            await asyncio.to_thread(_restore_ns, ns, ns_data)
             restored += 1
         except Exception as e:
             errors.append(f"{ns}: {e}")
@@ -2307,7 +2325,10 @@ def _docker_worker_state() -> Dict[str, Any]:
     try:
         import docker
         client = docker.from_env()
-        out["worker_count"] = len([c for c in client.containers.list() if "worker" in c.name])
+        workers = client.containers.list(
+            all=True, filters={"label": "com.docker.compose.service=worker"}
+        )
+        out["worker_count"] = len(workers)
         try:
             neo = _container_by_service(client, "neo4j", "kag-neo4j")
             for e in neo.attrs.get("Config", {}).get("Env", []):
@@ -2584,14 +2605,25 @@ async def backup_documents(include_caches: bool = False):
     except Exception as e:
         logger.warning(f"[backup] не удалось прочитать каталог {upload_dir}: {e}")
 
+    def _truncate_bytes(text: str, max_bytes: int) -> str:
+        """Обрезать строку по БАЙТАМ UTF-8 (не по символам!).
+
+        Для кириллицы 1 символ = 2 байта, для CJK — 3: обрезка по символам давала
+        имя длиннее лимита ФС и снова Errno 36 на записи в архив.
+        """
+        raw = text.encode("utf-8")
+        if len(raw) <= max_bytes:
+            return text
+        return raw[:max_bytes].decode("utf-8", errors="ignore")
+
     def _safe_arcname(doc_id: str, src_path) -> str:
-        """Имя внутри архива: id + укороченное исходное имя (лимит 180 байт)."""
+        """Имя внутри архива: id + укороченное имя (180 байт, с расширением)."""
         base = src_path.name
         base = base[37:] if base.startswith(doc_id + "_") else base
         stem, dot, ext = base.rpartition(".")
-        limit = 120
         if stem:
-            short = stem[:limit]
+            # оставляем запас на "documents/", id (37) и расширение
+            short = _truncate_bytes(stem, 150)
             base = f"{short}.{ext}" if dot else short
         else:
             base = f"{doc_id}{'.' + ext if dot else ''}"
@@ -2625,9 +2657,9 @@ async def backup_documents(include_caches: bool = False):
             try:
                 from src.indexing.knowledge_graph import kg_service
                 aliases = await asyncio.to_thread(kg_service.list_alias_pairs, include_pending=True)
-                zf.writestr("aliases.json", json.dumps(aliases, ensure_ascii=False, indent=1, default=str))
+                await asyncio.to_thread(zf.writestr, "aliases.json", json.dumps(aliases, ensure_ascii=False, indent=1, default=str))
             except Exception as e:
-                zf.writestr("aliases.json", json.dumps({"error": str(e)}, ensure_ascii=False))
+                await asyncio.to_thread(zf.writestr, "aliases.json", json.dumps({"error": str(e)}, ensure_ascii=False))
 
             # ── Настройки (config_store: все категории из system_configs) ──
             try:
@@ -2636,14 +2668,16 @@ async def backup_documents(include_caches: bool = False):
                 # тот же источник, что и в /backup; кэши (entity_cache) по
                 # умолчанию не кладём — архив растёт, а кэш пересчитывается
                 categories = _all_config_categories()
+                if categories is None:
+                    raise RuntimeError("категории настроек не прочитаны (БД недоступна)")
                 if not include_caches:
                     categories = [c for c in categories if c not in BACKUP_CACHE_CATEGORIES]
                 cfg_all = {}
                 for cat in categories:
-                    cfg_all[cat] = config_store.get_all(cat)
-                zf.writestr("config_store.json", json.dumps(cfg_all, ensure_ascii=False, indent=1, default=str))
+                    cfg_all[cat] = await asyncio.to_thread(config_store.get_all, cat)
+                await asyncio.to_thread(zf.writestr, "config_store.json", json.dumps(cfg_all, ensure_ascii=False, indent=1, default=str))
             except Exception as e:
-                zf.writestr("config_store.json", json.dumps({"error": str(e)}, ensure_ascii=False))
+                await asyncio.to_thread(zf.writestr, "config_store.json", json.dumps({"error": str(e)}, ensure_ascii=False))
 
             # ── Чат-истории (chat_sessions + chat_messages) ────────────────
             try:
@@ -2662,9 +2696,9 @@ async def backup_documents(include_caches: bool = False):
                         )
                 finally:
                     _s.close()
-                zf.writestr("chat_history.json", json.dumps(chat, ensure_ascii=False, indent=1, default=str))
+                await asyncio.to_thread(zf.writestr, "chat_history.json", json.dumps(chat, ensure_ascii=False, indent=1, default=str))
             except Exception as e:
-                zf.writestr("chat_history.json", json.dumps({"error": str(e)}, ensure_ascii=False))
+                await asyncio.to_thread(zf.writestr, "chat_history.json", json.dumps({"error": str(e)}, ensure_ascii=False))
     except Exception as e:
         try:
             os.unlink(tmp_path)

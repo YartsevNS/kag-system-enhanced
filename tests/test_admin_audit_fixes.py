@@ -225,7 +225,10 @@ def test_sync_services_wrapped_in_alias_and_backup():
             raise AssertionError(f"необёрнутый вызов Neo4j: {line.strip()[:80]}")
     assert "_index_uploads" in src, "индексация каталога uploads должна идти в потоке"
     assert "await asyncio.to_thread(config_store.get_all, ns)" in src
-    assert "await asyncio.to_thread(config_store.set, ns, key, value)" in src
+    # восстановление настроек — один поток на namespace, а не на каждый ключ
+    assert "_restore_ns" in src and "await asyncio.to_thread(_restore_ns, ns, ns_data)" in src
+    # метаданные и история чатов тоже уходят в поток
+    assert src.count("to_thread(zf.writestr") >= 5
 
 def test_backup_documents_skips_caches():
     src = ROUTES_FILE.read_text(encoding="utf-8")
@@ -240,10 +243,51 @@ def test_deploy_rejects_broken_base64_and_python():
     """Проверка в живом стенде показала: битый base64 записывался как текст и затёр
     api/__init__.py. Теперь кодировка задаётся явно, а .py проверяется компиляцией."""
     src = ROUTES_FILE.read_text(encoding="utf-8")
-    assert 'encoding: str = Field(default="auto"' in src
+    # по умолчанию utf8: base64-подобный литерал больше не декодируется молча
+    assert 'encoding: str = Field(default="utf8"' in src
+    assert "looks_b64" in src
     assert "Неизвестная кодировка" in src
     assert 'if ext == ".py":' in src and "compile(content, req.file_path" in src
     assert 'base64.b64decode(req.file_content, validate=True)' in src
+
+
+def test_backup_arcname_truncates_by_bytes():
+    """Имя в архиве режется по БАЙТАМ: для CJK 120 символов = 360 байт = снова Errno 36."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "def _truncate_bytes" in src
+    assert 'raw[:max_bytes].decode("utf-8", errors="ignore")' in src
+    assert "stem[:limit]" not in src, "обрезка по символам недопустима"
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("am_bytes", ROUTES_FILE)
+    # функцию проверяем копией логики: импорт модуля требует БД
+    def _truncate_bytes(text: str, max_bytes: int) -> str:
+        raw = text.encode("utf-8")
+        return text if len(raw) <= max_bytes else raw[:max_bytes].decode("utf-8", errors="ignore")
+
+    cjk = "漢" * 200            # 3 байта на символ
+    out = _truncate_bytes(cjk, 150)
+    assert len(out.encode("utf-8")) <= 150
+    assert out  # непустой результат
+    rus = "я" * 200             # 2 байта на символ
+    assert len(_truncate_bytes(rus, 150).encode("utf-8")) <= 150
+
+
+def test_backup_distinguishes_db_error_from_empty():
+    """Ошибка БД (None) и пустая таблица ([]) — разные случаи."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "Optional[List[str]]" in src
+    assert "return None" in src
+    assert "if categories is None:" in src
+    assert "категории настроек не прочитаны" in src
+
+
+def test_init_logs_fallback():
+    """Молчаливый fallback при старте запрещён — должно быть предупреждение."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert src.count("настройки из БД при старте не загружены") == 0  # формулировка иная
+    assert src.count("инициализация из БД не удалась") == 1
+    assert src.count("инициализация модели графа из БД не удалась") == 1
 
 
 def test_documents_backup_survives_long_filenames():
