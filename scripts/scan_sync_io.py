@@ -182,10 +182,11 @@ def main(root: Path):
     if len(hot) > 40:
         print(f"  … ещё {len(hot) - 40}")
     print()
-    print("детально по upload.py:")
+    detail_file = sys.argv[2] if len(sys.argv) > 2 else "upload.py"
+    print(f"детально по {detail_file}:")
     for path, line, src, func, _ in all_found:
-        if path.name == "upload.py":
-            print(f"  {line:5}  {func:28} {src}")
+        if path.name == detail_file:
+            print(f"  {line:5}  {func:28} {src[:70]}")
     return all_found
 
 
