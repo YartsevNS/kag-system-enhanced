@@ -1,4 +1,4 @@
-# Состояние работы — KAG (обновлено 2026-09-13, сессия по синхронному I/O в async)
+# Состояние работы — KAG (обновлено 2026-09-13: триаж чанков — штампы/дубли не идут в LLM)
 
 Файл для возобновления после сжатия контекста или в новой сессии.
 
@@ -14,7 +14,14 @@
 - Репозиторий (ноутбук): `C:\VSCODE_PROJECT\kag-system-enhanced`, ветка **PREPROD**,
   последний коммит **0cd9950**, дерево чистое.
 - Сервер 18 (`yartsevn@192.168.50.18`, `/home/yartsevn/kag-system`): `kag-api`,
-  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.44**.
+  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.53**.
+- **Сделано: триаж чанков** (`src/indexing/chunk_triage.py`) — штампы (копия чанка ещё
+  минимум в 2 ЧУЖИХ документах, косинус ≥ 0.95) и внутридокументные дубли (≥ 0.95) не
+  отправляются в LLM-извлечение; узлы чанков создаются, штампы помечаются
+  `Chunk.is_boilerplate = true`, шаг `graph_triage` виден в журнале обработки.
+  Настройки: `GRAPH_TRIAGE_ENABLED`, `CHUNK_BOILERPLATE_SIM` (0.95),
+  `CHUNK_BOILERPLATE_MIN_DOCS` (3), `CHUNK_DUP_SIM` (0.95). Детали, замеры и три ловушки —
+  `docs/guides/chunk-triage.md`.
 - Загрузка новых документов на стенде заблокирована галочкой (`UPLOADS_BLOCKED`);
   документов 47, все `completed`.
 - Тесты: `test_warm_init_invalidation` (5), `test_config_store_cache` (5),
