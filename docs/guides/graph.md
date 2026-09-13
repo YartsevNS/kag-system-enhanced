@@ -181,3 +181,42 @@ MATCH (d:Document) WHERE NOT (d)-[:HAS_CHUNK]->() RETURN d.id, d.filename;
 // Связи между сущностями
 MATCH (a:Entity)-[r:RELATED_TO]->(b:Entity) RETURN a.name, r.type, b.name LIMIT 50;
 ```
+
+## Доменная схема сущностей: где живёт состояние (2026-09-13, образ 2026.09.13.17)
+
+Симптом: в админке выбираешь пресет доменной схемы (universal / infosec / legal …),
+интерфейс подтверждает, но после перезапуска api схема снова «universal», а
+извлечение сущностей в worker'е идёт по универсальной схеме — выбранный пресет
+на пайплайн не влияет вообще.
+
+Причина: схема и пресет жили ТОЛЬКО в памяти процесса. В config_store писали
+(`kg_config:active_preset`, `kg_config:domain_schema`), но не читали нигде: при
+старте экстрактор брал `DOMAIN_SCHEMA = SCHEMA_PRESETS["universal"]`. Worker —
+отдельный процесс, он переключение в api не видел в принципе, а извлечение
+сущностей идёт именно там.
+
+Как сделано теперь:
+
+- единый ключ настроек `kg_config:domain_schema_active` =
+  `{"mode": "preset"|"manual", "preset": имя_или_None, "schema": {...}}` —
+  единственный источник правды;
+- `EntityExtractor.apply_stored_domain_schema()` применяет его в процессе и
+  возвращает режим (`preset:<имя>` | `manual` | `default`); вызывается
+  при старте api (`main.py` lifespan), в задаче `process_document` (worker) и на
+  чтение `GET /api/v1/kg/domain-schema` — интерфейс всегда показывает состояние
+  из настроек, а не из памяти;
+- ручная схема помечает пресет как «manual» (`set_domain_schema(..., mark_manual=True)`),
+  иначе интерфейс продолжал бы подсвечивать пресет, которого уже нет;
+- сбой чтения настроек — fail-open: применяется текущая схема, в лог идёт warning.
+
+Проверка (обязательно с рестартом — иначе баг не виден):
+переключить пресет → `docker restart kag-api` → `GET /domain-schema` должен
+показать тот же пресет и то же число типов; затем в контейнере worker'а
+`entity_extractor.apply_stored_domain_schema()` должен вернуть `preset:<имя>`.
+
+Заодно по тому же обзору: лимиты подграфа документа клампятся (1..500, как в
+остальных пяти эндпоинтах), `/type-watchdog/status` считает одним проходом,
+`q_lower` в `/hybrid-search` вынесен из цикла, убран неиспользуемый параметр в
+`/stats`, `EmbeddingsService.is_initialized()` заменяет обращение роутов к
+приватному `_embedding_client`, в `/cypher` добавлен аудит-лог
+(`user=… limit=… rows=… query='…'[:200]`).
