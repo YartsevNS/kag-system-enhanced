@@ -15,60 +15,6 @@
 import time
 from typing import Dict, Any, Callable
 
-_cache: Dict[str, Dict[str, Any]] = {}
-
-_CACHE_MAX = 500
-
-
-def _cache_key(args, kwargs) -> str:
-    """Ключ кэша БЕЗ объектов-моделей.
-
-    Раньше ключ строился как str(args)+str(sorted(kwargs.items())), и в него
-    попадал объект User. У моделей SQLAlchemy нет своего __repr__, поэтому
-    получался адрес памяти: ключи «случайно» различались, а после сборки мусора
-    адрес переиспользуется — то есть один пользователь мог получить ответ,
-    закэшированный для другого. Сейчас в ключ идут только простые значения
-    (id документа, числа, строки), а пользователь — его id.
-    """
-    def norm(value):
-        if isinstance(value, (str, int, float, bool, type(None))):
-            return value
-        if isinstance(value, (list, tuple)):
-            return tuple(norm(v) for v in value)
-        if isinstance(value, dict):
-            return tuple(sorted((k, norm(v)) for k, v in value.items()))
-        for attr in ("id", "username"):
-            got = getattr(value, attr, None)
-            if isinstance(got, (str, int)):
-                return f"{type(value).__name__}:{got}"
-        return type(value).__name__
-
-    return f"{norm(args)!r}|{norm(kwargs)!r}"
-
-
-def _cached(ttl=2.0):
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
-            key = _cache_key(args, kwargs)
-            now = time.monotonic()
-            val = _cache.get(key)
-            if val and val[1] > now:
-                return val[0]
-            res = await func(*args, **kwargs)
-            _cache[key] = (res, now + ttl)
-            # Чистим просроченные; если после этого записей всё ещё много —
-            # срезаем самые старые (иначе при потоке запросов с непросроченным
-            # TTL словарь рос бесконечно).
-            if len(_cache) > 100:
-                for k in [k for k, v in _cache.items() if v[1] < now]:
-                    _cache.pop(k, None)
-            if len(_cache) > _CACHE_MAX:
-                for k in sorted(_cache, key=lambda k: _cache[k][1])[: len(_cache) - _CACHE_MAX]:
-                    _cache.pop(k, None)
-            return res
-        return wrapper
-    return decorator
-
 import os
 import io
 import uuid
@@ -102,7 +48,7 @@ def _json_parse_source(raw) -> str:
 import asyncio
 import json
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -117,7 +63,6 @@ from src.api.middleware.auth_v2 import get_current_admin, get_current_user_optio
 from src.database.user_models import User
 
 # Celery задача обработки документов (вместо asyncio.Queue)
-from src.indexing.tasks import process_document as celery_process_document
 # QueueGuard — единая точка постановки задач с защитой от дублей.
 # ВАЖНО: все постановки документов на обработку идут ТОЛЬКО через
 # enqueue_document() (Redis-замок + проверка статуса), а не через
@@ -1058,13 +1003,33 @@ async def get_document_access(
     }
 
 
+class DocumentAccessUpdate(BaseModel):
+    """Права доступа документа (частичное обновление).
+
+    Списки приходят и массивами, и JSON-строками (форма загрузки отправляет
+    строки, модалка «Права» — массив), поэтому тип — Union[list, str];
+    разбор в единую форму делает parse_id_list.
+    """
+
+    visibility: Optional[str] = None
+    allow_group_ids: Optional[Union[List[str], str]] = None
+    deny_group_ids: Optional[Union[List[str], str]] = None
+    allow_user_ids: Optional[Union[List[str], str]] = None
+    deny_user_ids: Optional[Union[List[str], str]] = None
+
+
 @router.put("/{document_id}/access", summary="Сохранить права доступа документа")
-async def update_document_access(document_id: str, data: dict, current_user: Optional[User] = Depends(get_current_user_optional)):
+async def update_document_access(
+    document_id: str,
+    payload: DocumentAccessUpdate,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Обновить права документа и payload чанков в Qdrant (без переиндексации текста).
 
     Многопользовательность: права может менять владелец документа (uploaded_by)
     или админ. Системные документы без владельца — любой авторизованный.
     """
+    data = payload.model_dump(exclude_unset=True)
     try:
         from src.api.services.document_repository import get_doc_repo
         doc = get_doc_repo().get(document_id)
@@ -1083,12 +1048,14 @@ async def update_document_access(document_id: str, data: dict, current_user: Opt
                 detail="Недостаточно прав: можно менять права только своих документов",
             )
 
+        # Частичное обновление: непереданное поле сохраняет текущее значение
+        # (раньше отсутствие поля в теле молча сбрасывало соответствующий список).
         access = {
             "visibility": data.get("visibility", doc.visibility or "public"),
-            "allow_group_ids": data.get("allow_group_ids", []),
-            "deny_group_ids": data.get("deny_group_ids", []),
-            "allow_user_ids": data.get("allow_user_ids", []),
-            "deny_user_ids": data.get("deny_user_ids", []),
+            "allow_group_ids": data.get("allow_group_ids", _parse_id_list(doc.allow_group_ids)),
+            "deny_group_ids": data.get("deny_group_ids", _parse_id_list(doc.deny_group_ids)),
+            "allow_user_ids": data.get("allow_user_ids", _parse_id_list(doc.allow_user_ids)),
+            "deny_user_ids": data.get("deny_user_ids", _parse_id_list(doc.deny_user_ids)),
         }
         if access["visibility"] not in ("public", "restricted"):
             access["visibility"] = "public"
@@ -1418,7 +1385,6 @@ async def get_document_chunks(
         return {"chunks": [], "total": 0, "error": str(e)}
 
 
-@_cached(ttl=10.0)
 @router.get("/{document_id}/details", summary="Детальная информация о документе")
 async def get_document_details(
     document_id: str,
@@ -1458,18 +1424,11 @@ async def get_document_details(
     # Если in-memory показывает 0, но в Qdrant есть чанки — обновим
     if chunks_count == 0:
         try:
-            from src.indexing.qdrant_service import get_qdrant_service
-            qdrant = get_qdrant_service()
-            qdrant_results = qdrant.scroll_points(
-                filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
-                limit=1
-            )
-            # Считаем реальное количество через отдельный запрос
-            all_qdrant = qdrant.scroll_points(
-                filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
-                limit=100000
-            )
-            real_count = len(all_qdrant)
+            # Точный count вместо двух scroll (раньше: limit=1 «проверить» +
+            # limit=100000 «посчитать» — то есть выгрузка всех точек документа
+            # на каждый показ карточки).
+            from src.indexing.embeddings_service import embeddings_service
+            real_count = await embeddings_service.count_document_points(document_id)
             if real_count > 0:
                 chunks_count = real_count
                 # Обновим в памяти и в БД

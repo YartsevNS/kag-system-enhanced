@@ -70,13 +70,21 @@ def test_tus_create_respects_upload_block():
     )
 
 
-def test_cache_key_has_no_model_objects():
-    assert "_cache_key" in SRC, "нет нормализации ключа кэша"
-    key_fn = _body("_cache_key")
-    assert "id" in key_fn and "username" in key_fn, (
-        "ключ кэша должен брать у объектов стабильный id, а не адрес памяти"
+def test_dead_cache_is_removed():
+    """@_cached не применялся к роуту (FastAPI держит оригинальную функцию) —
+    мёртвый кэш с ключом по адресу памяти убран, а не «починен»."""
+    assert "_cached" not in SRC, "в модуле снова есть декоратор кэша"
+    assert "_cache: Dict" not in SRC, "вернулся модульный кэш"
+    assert "count_document_points" in SRC, (
+        "/details должен считать чанки точным count, а не прокруткой всех точек"
     )
-    assert "_CACHE_MAX" in SRC, "кэш не ограничен по размеру"
+
+
+def test_document_access_has_pydantic_model():
+    assert "class DocumentAccessUpdate" in SRC, "права документа принимаются без модели"
+    assert "payload.model_dump(exclude_unset=True)" in SRC, (
+        "частичное обновление прав должно опираться на exclude_unset"
+    )
 
 
 def test_dependency_names_are_imported():
