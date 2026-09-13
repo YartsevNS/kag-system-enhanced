@@ -217,8 +217,14 @@ class ChatService:
             )
             if not comparison_enabled() or not is_comparison_question(query):
                 return "", []
-            subs = await self._decompose_query(query)
-            sides_q = comparison_entities(query, subs)
+            from src.indexing.comparison import split_comparison_sides
+            # Сначала дешёвое разбиение по союзу (без LLM): работает и на коротких вопросах,
+            # где _decompose_query молчит из-за своего порога длины (живой случай: режим
+            # не включался ни разу). LLM-декомпозиция — только как резерв.
+            sides_q = split_comparison_sides(query)
+            if not sides_q:
+                subs = await self._decompose_query(query)
+                sides_q = comparison_entities(query, subs)
             if not sides_q:
                 return "", []
             from src.indexing.embeddings_service import embeddings_service

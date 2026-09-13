@@ -88,6 +88,32 @@ def build_comparison_context(sides: List[Dict[str, Any]], chunks_per_side: int =
     return "\n\n".join(parts)
 
 
+# Вводные слова, которые не являются стороной сравнения
+_LEAD_RE = r"^\s*(?:сравни(?:ть)?|сравнение|чем\s+отлича(?:ются|ется)|в\s+чём\s+разниц(?:а|ы)|разница\s+между|что\s+общего)\s*"
+_TAIL_RE = r"^\s*(?:требовани(?:я|й|е)\s+(?:к|в)|правила|порядок)\s*"
+_SPLIT_RE = r"\s+(?:и|против|vs\.?|—|–)\s+"
+
+
+def split_comparison_sides(query: str) -> List[str]:
+    """Разбить сравнительный вопрос на две стороны БЕЗ LLM: «сравнить X и Y» → [X, Y].
+
+    Почему не через _decompose_query: у него предварительное условие «вопрос длиннее 60
+    символов», поэтому короткие сравнительные вопросы («сравнить ГОСТ Р 34.11 и 34.13») он
+    не разбирал, и режим сравнения МОЛЧА не включался ни разу (проверка лога: 0 срабатываний
+    при включённом флаге). Разделение по союзу работает без модели и мгновенно.
+    """
+    import re as _re
+    q = _re.sub(_LEAD_RE, "", (query or "").strip(), flags=_re.IGNORECASE)
+    q = _re.sub(_TAIL_RE, "", q, flags=_re.IGNORECASE)
+    parts = _re.split(_SPLIT_RE, q, flags=_re.IGNORECASE)
+    cleaned: List[str] = []
+    for part in parts:
+        part = _re.sub(r"^(?:и|а\s+также)\s+", "", part.strip(" .,?;:"), flags=_re.IGNORECASE)
+        if len(part) >= 3:
+            cleaned.append(part.strip())
+    return cleaned[:2] if len(cleaned) >= 2 else []
+
+
 def comparison_entities(query: str, subqueries: List[str]) -> Optional[List[str]]:
     """Стороны сравнения: подвопросы, если их два и больше; иначе None."""
     subs = [s.strip() for s in (subqueries or []) if s and s.strip()]

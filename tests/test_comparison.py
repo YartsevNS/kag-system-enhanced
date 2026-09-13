@@ -98,3 +98,18 @@ def test_сравнительный_режим_подключён():
     assert "COMPARISON_INSTRUCTION" in src
     assert "search_documents" in src, "стороны берутся по карточкам документов"
     assert 'filters={"document_id": doc_id}' in src, "фрагменты — в границах своего документа"
+
+
+def test_разбиение_сторон_без_llm():
+    """Короткие сравнительные вопросы: режим обязан включаться (был случай 0 срабатываний)."""
+    from src.indexing.comparison import split_comparison_sides
+    assert split_comparison_sides("сравнить ГОСТ Р 34.11-2012 и ГОСТ Р 34.13-2015") == \
+        ["ГОСТ Р 34.11-2012", "ГОСТ Р 34.13-2015"]
+    got = split_comparison_sides("чем отличаются требования TLS 1.2 и TLS 1.3 с российскими криптоалгоритмами")
+    # «требования» остаётся в стороне намеренно: для поиска «требования TLS 1.2» точнее, чем
+    # просто «TLS 1.2» — важно, что стороны разделены и вторая не потеряла уточнение.
+    assert len(got) == 2 and got[0].endswith("TLS 1.2"), got
+    assert "TLS 1.3" in got[1], got
+    got2 = split_comparison_sides("сравнить требования к выработке общего ключа и транспортным ключевым контейнерам")
+    assert len(got2) == 2 and "выработке" in got2[0], got2
+    assert split_comparison_sides("какие требования к хэш-функции Стрибог") == []
