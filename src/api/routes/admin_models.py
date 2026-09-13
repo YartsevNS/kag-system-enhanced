@@ -118,7 +118,7 @@ async def test_ssh_connection(connection_id: str = "default"):
     """
     try:
         config = ssh_manager.get_config(connection_id)
-        result = ssh_manager.test_connection(config)
+        result = await asyncio.to_thread(ssh_manager.test_connection, config)
         return result
     except Exception as e:
         logger.error(f"Ошибка теста SSH: {e}")
@@ -170,7 +170,7 @@ async def restart_container(container_name: str):
     Перезапустить Docker контейнер.
     """
     try:
-        success = docker_monitor.restart_container(container_name)
+        success = await asyncio.to_thread(docker_monitor.restart_container, container_name)
         if success:
             return {"status": "success", "message": f"Контейнер {container_name} перезапущен"}
         else:
@@ -186,7 +186,7 @@ async def restart_container(container_name: str):
 async def stop_container(container_name: str):
     """Остановить Docker контейнер"""
     try:
-        success = docker_monitor.stop_container(container_name)
+        success = await asyncio.to_thread(docker_monitor.stop_container, container_name)
         if success:
             return {"status": "success", "message": f"Контейнер {container_name} остановлен"}
         else:
@@ -202,7 +202,7 @@ async def stop_container(container_name: str):
 async def start_container(container_name: str):
     """Запустить Docker контейнер"""
     try:
-        success = docker_monitor.start_container(container_name)
+        success = await asyncio.to_thread(docker_monitor.start_container, container_name)
         if success:
             return {"status": "success", "message": f"Контейнер {container_name} запущен"}
         else:
@@ -254,7 +254,7 @@ async def get_system_info():
 async def get_cpu_info():
     """Информация о CPU"""
     try:
-        return system_monitor.get_cpu_info()
+        return await asyncio.to_thread(system_monitor.get_cpu_info)
     except Exception as e:
         logger.error(f"Ошибка получения CPU info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -264,7 +264,7 @@ async def get_cpu_info():
 async def get_memory_info():
     """Информация о памяти"""
     try:
-        return system_monitor.get_memory_info()
+        return await asyncio.to_thread(system_monitor.get_memory_info)
     except Exception as e:
         logger.error(f"Ошибка получения memory info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -274,7 +274,7 @@ async def get_memory_info():
 async def get_disk_info():
     """Информация о дисках"""
     try:
-        return system_monitor.get_disk_info()
+        return await asyncio.to_thread(system_monitor.get_disk_info)
     except Exception as e:
         logger.error(f"Ошибка получения disk info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -284,7 +284,7 @@ async def get_disk_info():
 async def get_network_info():
     """Информация о сети"""
     try:
-        return system_monitor.get_network_info()
+        return await asyncio.to_thread(system_monitor.get_network_info)
     except Exception as e:
         logger.error(f"Ошибка получения network info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -309,7 +309,7 @@ async def get_qdrant_info(collection_name: str = "kag_documents"):
     - Примеры документов
     """
     try:
-        return qdrant_monitor.get_full_info(collection_name)
+        return await asyncio.to_thread(qdrant_monitor.get_full_info, collection_name)
     except Exception as e:
         logger.error(f"Ошибка получения Qdrant info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -319,7 +319,7 @@ async def get_qdrant_info(collection_name: str = "kag_documents"):
 async def get_qdrant_collections():
     """Получить список всех коллекций"""
     try:
-        return qdrant_monitor.get_collections_list()
+        return await asyncio.to_thread(qdrant_monitor.get_collections_list)
     except Exception as e:
         logger.error(f"Ошибка получения коллекций: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -329,7 +329,7 @@ async def get_qdrant_collections():
 async def get_collection_info(collection_name: str):
     """Детальная информация о коллекции"""
     try:
-        return qdrant_monitor.get_collection_info(collection_name)
+        return await asyncio.to_thread(qdrant_monitor.get_collection_info, collection_name)
     except Exception as e:
         logger.error(f"Ошибка получения информации о коллекции: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -339,7 +339,8 @@ async def get_collection_info(collection_name: str):
 async def get_collection_points(collection_name: str, limit: int = 20):
     """Получить пример точек (документов) из коллекции"""
     try:
-        return {"points": qdrant_monitor.get_points_sample(collection_name, limit)}
+        points = await asyncio.to_thread(qdrant_monitor.get_points_sample, collection_name, limit)
+        return {"points": points}
     except Exception as e:
         logger.error(f"Ошибка получения точек: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -349,7 +350,7 @@ async def get_collection_points(collection_name: str, limit: int = 20):
 async def get_payload_stats(collection_name: str):
     """Статистика по метаданным (payload)"""
     try:
-        return qdrant_monitor.get_payload_stats(collection_name)
+        return await asyncio.to_thread(qdrant_monitor.get_payload_stats, collection_name)
     except Exception as e:
         logger.error(f"Ошибка получения статистики payload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -364,7 +365,7 @@ async def get_collection_chunks(
 ):
     """Получить чанки из коллекции с пагинацией"""
     try:
-        return qdrant_monitor.get_chunks(collection_name, limit, offset, document_id)
+        return await asyncio.to_thread(qdrant_monitor.get_chunks, collection_name, limit, offset, document_id)
     except Exception as e:
         logger.error(f"Ошибка получения чанков: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -812,8 +813,14 @@ async def get_ext_llm():
 
 @router.post("/ext-llm/test", summary="Тест подключения к внешнему LLM")
 async def test_ext_llm():
-    """Проверить подключение к внешнему LLM."""
+    """Проверить подключение к внешнему LLM.
+
+    Настройки читаются из config_store перед проверкой: глобал _ext_llm_config —
+    только загруженный при старте fallback, и при нескольких воркерах uvicorn он
+    расходится с БД (тест мог идти по старым данным).
+    """
     import aiohttp
+    get_ext_llm()
     
     try:
         if _ext_llm_config.provider == "ollama":
@@ -1115,12 +1122,13 @@ async def deploy_action(req: DeployRequest):
 
     elif req.action == "git_pull":
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "pull"],
                 cwd="/home/yartsevn/kag-system",
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
             logger.info(f"Git pull: {result.stdout}")
             return {
@@ -1133,12 +1141,13 @@ async def deploy_action(req: DeployRequest):
 
     elif req.action == "restart":
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "api"],
                 cwd="/home/yartsevn/kag-system",
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
             logger.info(f"Docker restart: {result.stdout}")
             return {
@@ -1721,7 +1730,7 @@ async def save_processing_config(data: dict):
 
 
 @router.get("/ingest-config", summary="Статус загрузки документов (блокировка поступления)")
-async def get_upload_config():
+async def get_ingest_config():
     """Вернуть {blocked, message}: запрещена ли ЗАГРУЗКА новых документов.
 
     Запрет действует на все источники: ручную загрузку из UI/API, парсинг сайтов
@@ -1742,7 +1751,7 @@ async def get_upload_config():
 
 
 @router.post("/ingest-config", summary="Сохранить блокировку загрузки документов")
-async def save_upload_config(data: dict):
+async def save_ingest_config(data: dict):
     """Админ запрещает/разрешает загрузку новых документов (все источники)."""
     try:
         from src.api.services.config_store import config_store
@@ -2086,20 +2095,8 @@ async def get_system_config():
     # SSO: config_store (переключается кнопками в админке) или env AUTH_ENABLED
     sso_enabled = cfg.get("sso_enabled", settings.AUTH_ENABLED)
 
-    kc_status = {"mode": "unknown", "hostname": None, "container_running": False}
-    try:
-        import docker
-        client = docker.from_env()
-        kc = client.containers.get("kag-keycloak")
-        kc_status["container_running"] = kc.status == "running"
-        env = kc.attrs.get("Config", {}).get("Env", [])
-        for e in env:
-            if e.startswith("KC_HOSTNAME="):
-                kc_status["hostname"] = e.split("=", 1)[1]
-        cmd = kc.attrs.get("Config", {}).get("Cmd", [])
-        kc_status["mode"] = "dev" if any("start-dev" in str(c) for c in cmd) else "production"
-    except Exception:
-        pass
+    # docker SDK синхронный — читаем в отдельном потоке, чтобы не держать loop
+    kc_status = await asyncio.to_thread(_docker_keycloak_status)
 
     return {"base_url": base_url, "sso_enabled": bool(sso_enabled), "keycloak": kc_status}
 
@@ -2181,25 +2178,8 @@ async def get_scaling():
         cfg = {}
     cfg = {**SCALING_DEFAULTS, **cfg}
 
-    current = {"worker_count": 0, "neo4j_heap": None, "neo4j_pagecache": None}
-    try:
-        import docker
-        client = docker.from_env()
-        workers = [c for c in client.containers.list() if "worker" in c.name]
-        current["worker_count"] = len(workers)
-        # Память Neo4j из env контейнера
-        try:
-            neo = client.containers.get("kag-neo4j")
-            env = neo.attrs.get("Config", {}).get("Env", [])
-            for e in env:
-                if e.startswith("NEO4J_dbms_memory_heap_max"):
-                    current["neo4j_heap"] = e.split("=", 1)[1]
-                if e.startswith("NEO4J_dbms_memory_pagecache"):
-                    current["neo4j_pagecache"] = e.split("=", 1)[1]
-        except Exception:
-            pass
-    except Exception:
-        pass
+    # docker SDK синхронный — читаем в отдельном потоке
+    current = await asyncio.to_thread(_docker_worker_state)
 
     return {"current": current, "config": cfg}
 
@@ -2245,6 +2225,58 @@ async def save_scaling(req: ScalingConfigRequest):
 # Worker Resources — настройка CPU/памяти
 # ═══════════════════════════════════════
 
+def _docker_keycloak_status() -> Dict[str, Any]:
+    """Статус контейнера Keycloak (синхронный docker SDK → вызывать в потоке)."""
+    out = {"container_running": False, "hostname": None, "mode": "unknown"}
+    try:
+        import docker
+        client = docker.from_env()
+        kc = client.containers.get("kag-keycloak")
+        out["container_running"] = kc.status == "running"
+        env = kc.attrs.get("Config", {}).get("Env", [])
+        for e in env:
+            if e.startswith("KC_HOSTNAME="):
+                out["hostname"] = e.split("=", 1)[1]
+        cmd = kc.attrs.get("Config", {}).get("Cmd", [])
+        out["mode"] = "dev" if any("start-dev" in str(c) for c in cmd) else "production"
+    except Exception as e:
+        logger.debug(f"[admin] статус Keycloak через docker недоступен: {e}")
+    return out
+
+
+def _docker_worker_state() -> Dict[str, Any]:
+    """Число worker-контейнеров и память Neo4j (синхронный docker SDK → в поток)."""
+    out: Dict[str, Any] = {"worker_count": 0, "neo4j_heap": None, "neo4j_pagecache": None}
+    try:
+        import docker
+        client = docker.from_env()
+        out["worker_count"] = len([c for c in client.containers.list() if "worker" in c.name])
+        try:
+            neo = client.containers.get("kag-neo4j")
+            for e in neo.attrs.get("Config", {}).get("Env", []):
+                if e.startswith("NEO4J_dbms_memory_heap_max"):
+                    out["neo4j_heap"] = e.split("=", 1)[1]
+                if e.startswith("NEO4J_dbms_memory_pagecache"):
+                    out["neo4j_pagecache"] = e.split("=", 1)[1]
+        except Exception:
+            pass
+    except Exception as e:
+        logger.debug(f"[admin] состояние worker через docker недоступно: {e}")
+    return out
+
+
+def _docker_worker_resources() -> Dict[str, Any]:
+    """cpus/memory контейнера worker (синхронный docker SDK → в поток)."""
+    import docker
+    client = docker.from_env()
+    w = _find_worker_container(client)
+    host_cfg = w.attrs["HostConfig"]
+    return {
+        "cpus": str(host_cfg.get("NanoCpus", 0) / 1e9) if host_cfg.get("NanoCpus") else "2.0",
+        "memory": str(host_cfg.get("Memory", 0) / (1024 ** 3)) + "G" if host_cfg.get("Memory") else "4G",
+    }
+
+
 def _find_worker_container(client):
     """Найти контейнер worker.
 
@@ -2266,15 +2298,8 @@ def _find_worker_container(client):
 @router.get("/worker-resources", summary="Текущие ресурсы worker")
 async def get_worker_resources():
     """Читает текущие cpus/memory из docker-compose.yml для worker."""
-    import docker
     try:
-        client = docker.from_env()
-        w = _find_worker_container(client)
-        host_cfg = w.attrs["HostConfig"]
-        return {
-            "cpus": str(host_cfg.get("NanoCpus", 0) / 1e9) if host_cfg.get("NanoCpus") else "2.0",
-            "memory": str(host_cfg.get("Memory", 0) / (1024**3)) + "G" if host_cfg.get("Memory") else "4G",
-        }
+        return await asyncio.to_thread(_docker_worker_resources)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

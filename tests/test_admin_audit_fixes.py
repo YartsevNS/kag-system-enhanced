@@ -171,6 +171,37 @@ def test_backup_categories_are_dynamic_only():
     assert "503" in src, "при нечитаемых категориях бэкап должен отвечать ошибкой"
 
 
+def test_ingest_config_functions_renamed():
+    """Дублей имён быть не должно: у блокировки ингеста свои имена функций."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert src.count("async def get_upload_config(") == 1
+    assert src.count("async def save_upload_config(") == 1
+    assert src.count("async def get_ingest_config(") == 1
+    assert src.count("async def save_ingest_config(") == 1
+
+
+def test_sync_calls_wrapped_in_to_thread():
+    """Синхронные сервисы не должны вызываться из async-эндпоинтов напрямую."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    for pattern in ("return system_monitor.get_cpu_info()",
+                    "return system_monitor.get_disk_info()",
+                    "return qdrant_monitor.get_collections_list()",
+                    "success = docker_monitor.restart_container(",
+                    "result = ssh_manager.test_connection(config)"):
+        assert pattern not in src, f"не обёрнуто в to_thread: {pattern}"
+    assert src.count("asyncio.to_thread") >= 20, "должно быть обёрнуто большинство вызовов"
+    # subprocess в /deploy не должен блокировать loop (timeout до 120 с)
+    assert "result = subprocess.run(" not in src
+
+
+def test_test_ext_llm_reloads_config_from_db():
+    """Проверка внешнего LLM не должна опираться на глобал из памяти процесса."""
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    i = src.index("async def test_ext_llm(")
+    block = src[i:i + 600]
+    assert "get_ext_llm()" in block, "перед использованием настроек нужно перечитать их из БД"
+
+
 def test_documents_backup_survives_long_filenames():
     """Бэкап документов не должен падать на именах длиннее лимита ФС (Errno 36).
 
