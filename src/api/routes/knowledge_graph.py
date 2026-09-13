@@ -4,6 +4,7 @@ API-роуты для Knowledge Graph (Neo4j).
 
 import asyncio
 
+from pydantic import BaseModel, ConfigDict
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Literal, Optional, List
 from loguru import logger
@@ -474,9 +475,24 @@ async def get_domain_schema(current_user: Optional[User] = Depends(get_current_u
         return {"error": str(e)}
 
 
+class DomainSchemaUpdate(BaseModel):
+    """Доменная схема: либо {"preset": имя}, либо ручная схема.
+
+    Ручной режим сохраняется в настройки ЦЕЛИКОМ, поэтому неизвестные поля
+    разрешены (extra="allow") — иначе они молча пропали бы.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    preset: Optional[str] = None
+    core: Optional[dict] = None
+    relations: Optional[dict] = None
+    extended: Optional[dict] = None
+
+
 @router.post("/domain-schema", summary="Обновить доменную схему")
 async def update_domain_schema(
-    data: dict,
+    payload: DomainSchemaUpdate,
     current_user: User = Depends(get_current_admin)
 ):
     """
@@ -486,10 +502,11 @@ async def update_domain_schema(
     - Переключение пресета: {"preset": "accounting"}
     - Ручная схема: {"core": {...}, "relations": {...}, "extended": {...}}
     """
+    data = payload.model_dump(exclude_unset=True)
     try:
         from src.indexing.entity_extractor import entity_extractor, EntityExtractor
         from src.api.services.config_store import config_store
-        
+
         # Режим 1: переключение пресета
         if "preset" in data:
             preset_name = data["preset"]

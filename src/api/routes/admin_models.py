@@ -13,11 +13,11 @@ import os
 import subprocess
 import traceback
 import asyncio
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, HTTPException, Query
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.services.config_store import config_store
 from src.api.services.model_manager import model_manager
@@ -45,6 +45,80 @@ class SSHConfigRequest(BaseModel):
     sudo_password: Optional[str] = Field(default=None, description="Пароль для sudo")
     ollama_port: int = Field(default=11434, description="Порт Ollama API")
     ollama_service_name: str = Field(default="ollama", description="Имя сервиса Ollama")
+
+
+# ── Тела запросов (админка) ────────────────────────────────────────────────
+# Раньше это были `data: dict`: FastAPI не валидировал ничего, ошибки типа
+# всплывали позже как 500, и в OpenAPI не было схемы. Модели ниже описывают
+# ровно те поля, которые обработчики читают; для тел, которые сохраняются
+# целиком, разрешены неизвестные поля (extra="allow") — иначе они бы молча
+# пропадали при записи в config_store.
+
+class GraphModelConfig(BaseModel):
+    """Модель для извлечения графа (сохраняется целиком)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model: Optional[str] = None
+    provider: Optional[str] = None
+
+
+class ChatPromptConfig(BaseModel):
+    """Системный промпт чата."""
+
+    prompt: Optional[str] = ""
+
+
+class BrandingConfig(BaseModel):
+    """Брендинг интерфейса (частичное обновление)."""
+
+    name: Optional[str] = None
+    version: Optional[str] = None
+    footer: Optional[str] = None
+
+
+class ProcessingBlockConfig(BaseModel):
+    """Блокировка обработки документов (частичное обновление)."""
+
+    blocked: Optional[bool] = None
+    message: Optional[str] = None
+
+
+class IngestBlockConfig(BaseModel):
+    """Блокировка загрузки документов (частичное обновление)."""
+
+    blocked: Optional[bool] = None
+    message: Optional[str] = None
+
+
+class SearchModeConfig(BaseModel):
+    """Режим поиска: mode (новый способ) или sparse_enabled/sparse_mode (старый)."""
+
+    mode: Optional[str] = None
+    sparse_enabled: Optional[bool] = None
+    sparse_mode: Optional[str] = None
+
+
+class Neo4jConfigUpdate(BaseModel):
+    """Настройки записи в Neo4j (частичное обновление)."""
+
+    batch_enabled: Optional[bool] = None
+    batch_size: Optional[int] = None
+    timeout: Optional[int] = None
+
+
+class DocTypeAction(BaseModel):
+    """Действие над списком типов документов."""
+
+    action: Optional[str] = "add"
+    name: Optional[str] = None
+
+
+class WorkerResources(BaseModel):
+    """Целевые ресурсы worker. Приходит и строкой («4.0», «8G»), и числом."""
+
+    cpus: Optional[Union[str, float, int]] = None
+    memory: Optional[Union[str, float, int]] = None
 
 
 @router.get("/ssh-config", summary="Получить настройки SSH подключения")
@@ -1084,7 +1158,8 @@ async def get_graph_model():
     return _load_graph_model_from_db()
 
 @router.post("/graph", summary="Сохранить модель для графа")
-async def save_graph_model(config: dict):
+async def save_graph_model(payload: GraphModelConfig):
+    config = payload.model_dump()
     global _graph_model_config
     _graph_model_config = config
     # Сохраняем в config_store
@@ -1307,7 +1382,8 @@ async def get_chat_prompt():
 
 
 @router.post("/chat-prompt", summary="Сохранить системный промпт чата")
-async def save_chat_prompt(data: dict):
+async def save_chat_prompt(payload: ChatPromptConfig):
+    data = payload.model_dump(exclude_unset=True)
     """Сохранить системный промпт для чата в config_store."""
     try:
         prompt = data.get("prompt", "")
@@ -1747,7 +1823,8 @@ async def get_branding_config():
 
 
 @router.post("/branding-config", summary="Сохранить брендинг")
-async def save_branding_config(data: dict):
+async def save_branding_config(payload: BrandingConfig):
+    data = payload.model_dump(exclude_unset=True)
     try:
         cfg = config_store.get("system", "branding") or {}
         if not isinstance(cfg, dict):
@@ -1784,7 +1861,8 @@ async def get_processing_config():
 
 
 @router.post("/processing-config", summary="Сохранить блокировку обработки документов")
-async def save_processing_config(data: dict):
+async def save_processing_config(payload: ProcessingBlockConfig):
+    data = payload.model_dump(exclude_unset=True)
     """Админ блокирует/разблокирует запуск обработки (кнопка «Обработать» на странице Документы)."""
     try:
         cfg = config_store.get("system", "processing") or {}
@@ -1842,7 +1920,8 @@ async def get_ingest_config():
 
 
 @router.post("/ingest-config", summary="Сохранить блокировку загрузки документов")
-async def save_ingest_config(data: dict):
+async def save_ingest_config(payload: IngestBlockConfig):
+    data = payload.model_dump(exclude_unset=True)
     """Админ запрещает/разрешает загрузку новых документов (все источники)."""
     try:
         cfg = config_store.get("system", "uploads") or {}
@@ -1884,7 +1963,8 @@ async def get_search_config():
 
 
 @router.post("/search-config", summary="Сохранить настройки поиска")
-async def save_search_config(data: dict):
+async def save_search_config(payload: SearchModeConfig):
+    data = payload.model_dump(exclude_unset=True)
     """Сменить режим поиска одним значением mode (или старым способом).
 
     Новый способ: {"mode": "dense" | "hybrid_auto" | "hybrid_always"}.
@@ -1933,7 +2013,8 @@ async def get_neo4j_config():
 
 
 @router.post("/neo4j-config", summary="Сохранить настройки Neo4j")
-async def save_neo4j_config(data: dict):
+async def save_neo4j_config(payload: Neo4jConfigUpdate):
+    data = payload.model_dump(exclude_unset=True)
     try:
         cfg = config_store.get("neo4j", "config") or {}
         if not isinstance(cfg, dict):
@@ -1967,7 +2048,8 @@ async def get_doc_types():
 
 
 @router.post("/doc-types", summary="Изменить список типов")
-async def update_doc_types(data: dict):
+async def update_doc_types(payload: DocTypeAction):
+    data = payload.model_dump(exclude_unset=True)
     try:
         action = data.get("action", "add")
         # Ключ всегда в нижнем регистре (по нему идёт сверка), а подпись
@@ -2412,7 +2494,8 @@ async def get_worker_resources():
 
 
 @router.put("/worker-resources", summary="Задать целевые ресурсы worker")
-async def update_worker_resources(req: dict):
+async def update_worker_resources(payload: WorkerResources):
+    req = payload.model_dump(exclude_unset=True)
     """Сохраняет целевые cpus/memory worker в config_store.
 
     ПРИМЕНЕНИЕ — только через деплой (docker-compose.yml, env
