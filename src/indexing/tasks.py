@@ -418,7 +418,18 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
                 processed += 1
                 continue
 
-            for i, chunk in enumerate(chunks[:10]):
+            # ВАЖНО: обрабатываем ВСЕ чанки, а не первые 10.
+            # Раньше здесь стоял chunks[:10] (остаток старого ограничения): документ
+            # в 23 чанка получал граф на 10 узлов (43% текста), документ в 212 чанков —
+            # на 4.7%, и это молча портило и /kg, и поиск по графу. В конвейере
+            # (document_service._build_knowledge_graph_async) лимит убрали, здесь — нет.
+            chunks_done = 0
+            for i, chunk in enumerate(chunks):
+                # Остановку проверяем на каждом чанке: перестроение большого документа
+                # длится минутами, админ должен иметь возможность прервать его сразу.
+                if config_store.get("kg_config", "rebuild_stop"):
+                    logger.info(f"[rebuild] остановлено администратором на {filename}, чанков сделано: {chunks_done}/{len(chunks)}")
+                    break
                 chunk_id = chunk.get("chunk_id", f"chunk_{i}")
                 chunk_text = chunk.get("content", "")
                 chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
@@ -427,11 +438,13 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
                     await entity_extractor.extract_and_store(doc_id, chunk_id, chunk_text, chunk_seq, filename)
                 except Exception as e:
                     logger.debug(f"[rebuild] Ошибка извлечения {filename}: {e}")
+                chunks_done += 1
 
             results.append({
                 "document_id": doc_id,
                 "filename": filename,
-                "chunks_processed": min(len(chunks), 10),
+                "chunks_processed": chunks_done,
+                "chunks_total": len(chunks),
             })
             processed += 1
 
