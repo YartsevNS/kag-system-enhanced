@@ -2001,6 +2001,67 @@ async def save_graph_build_config(payload: GraphBuildConfig):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ── Реранкер: включение/выключение и выбор модели (переранжирование выдачи) ──
+# Найдено 2026-09-13: модель была захардкожена («BAAI/bge-reranker-v2-m3»), которой у flashrank
+# нет → 404 → реранкер не загружался НИКОГДА, а вместо явного «выключено» молча включался
+# BM25-фолбэк, падал с division by zero и отдавал исходный порядок. Теперь это настройка.
+
+class RerankerConfig(BaseModel):
+    """Тело POST /reranker-config (все поля опциональны, исключены — не трогаем)."""
+    model_config = ConfigDict(extra="forbid")
+    enabled: Optional[bool] = Field(None, description="Включить переранжирование")
+    model: Optional[str] = Field(None, description="Имя модели из списка flashrank")
+    cache_dir: Optional[str] = Field(None, description="Каталог кэша модели")
+    top_k: Optional[int] = Field(None, ge=1, le=50, description="Сколько результатов оставлять")
+
+
+@router.get("/reranker-config", summary="Настройки и статус реранкера")
+async def get_reranker_config_endpoint():
+    """Настройки реранкера + загружена ли модель + последняя ошибка (для админки)."""
+    try:
+        from src.indexing.reranker import reranker_status
+        return await asyncio.to_thread(reranker_status)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/reranker-config", summary="Сохранить настройки реранкера")
+async def save_reranker_config_endpoint(payload: RerankerConfig):
+    """Сохранить настройки. Неизвестная модель — 422 со списком доступных."""
+    from src.indexing.reranker import SUPPORTED_MODELS, reranker_status
+    data = payload.model_dump(exclude_unset=True)
+    try:
+        model = data.get("model")
+        if model is not None and model not in SUPPORTED_MODELS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Неизвестная модель '{model}'. Доступны: {', '.join(SUPPORTED_MODELS)}",
+            )
+        cfg = config_store.get("reranker", "config") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        for key in ("enabled", "model", "cache_dir", "top_k"):
+            if key in data and data[key] is not None:
+                cfg[key] = data[key]
+        config_store.set("reranker", "config", cfg)
+        logger.info(f"[reranker] настройки сохранены: {cfg}")
+        return await asyncio.to_thread(reranker_status)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Не удалось сохранить настройки реранкера: {e}")
+
+
+@router.post("/reranker-config/warm", summary="Загрузить модель реранкера сейчас")
+async def warm_reranker_endpoint():
+    """Скачать модель в кэш и загрузить её (для изолированного контура — заранее)."""
+    try:
+        from src.indexing.reranker import warm_reranker
+        return await asyncio.to_thread(warm_reranker, True)
+    except Exception as e:
+        return {"loaded": False, "error": f"{type(e).__name__}: {e}"}
+
+
 @router.get("/ingest-config", summary="Статус загрузки документов (блокировка поступления)")
 async def get_ingest_config():
     """Вернуть {blocked, message}: запрещена ли ЗАГРУЗКА новых документов.

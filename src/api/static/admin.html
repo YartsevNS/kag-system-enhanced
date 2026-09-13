@@ -647,6 +647,32 @@
             </div>
         </div>
 
+        <!-- Реранкер: переранжирование выдачи (cross-encoder) -->
+        <div class="section">
+            <h2 class="section-title">🎯 Реранкер (переранжирование результатов поиска)</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+                <input type="checkbox" id="reranker-enabled" onchange="saveRerankerConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                <label for="reranker-enabled" style="font-size:14px;font-weight:600;cursor:pointer">Включить реранкер</label>
+                <select id="reranker-model" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px"></select>
+                <button class="btn" onclick="warmRerankerModel()" title="Скачать модель в кэш и загрузить её сейчас">⬇️ Загрузить модель</button>
+            </div>
+            <span id="reranker-status" style="font-size:12px;color:var(--text4)"></span>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
+                <strong>Что это.</strong> Cross-encoder переранжирует найденные фрагменты перед отправкой в LLM:
+                берёт top-N из векторного поиска и упорядочивает их по смысловой близости к вопросу. Это улучшает
+                то, какие именно фрагменты попадут в ответ.<br>
+                <strong>Модель.</strong> По умолчанию выбрана <em>ms-marco-MultiBERT-L-12</em> — единственная
+                мультиязычная модель из списка flashrank (остальные работают на английском, для русских текстов это хуже).<br>
+                <strong>Почему раньше не работало.</strong> В коде была захардкожена модель
+                <em>BAAI/bge-reranker-v2-m3</em>, которой у flashrank нет: запрос уходил на несуществующий файл и
+                получал 404, реранкер не загружался никогда, а вместо явного «выключено» молча включался BM25-фолбэк,
+                который падал и возвращал исходный порядок. Теперь состояние видно здесь и переключается.<br>
+                <strong>Кэш модели.</strong> Скачивается в <em>/app/data/models/flashrank</em> (постоянный каталог
+                ./data — переживает пересоздание контейнера). Для изолированного контура модель нужно скачать заранее
+                кнопкой «Загрузить модель» или вшить в образ.
+            </div>
+        </div>
+
         <!-- Настройки поиска -->
         <div class="section">
             <h2 class="section-title">🔍 Настройки поиска</h2>
@@ -1259,6 +1285,59 @@
                 });
                 const d = await r.json();
                 if (st) st.textContent = d.status === 'ok' ? '✅ Сохранено' : ('❌ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+
+        // ── Реранкер: включение/выключение, выбор модели, предзагрузка ─────
+        async function loadRerankerConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/reranker-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const sel = document.getElementById('reranker-model');
+                if (sel && Array.isArray(d.available_models)) {
+                    sel.innerHTML = d.available_models.map(m =>
+                        `<option value="${m}"${m === d.model ? ' selected' : ''}>${m}</option>`).join('');
+                }
+                const cb = document.getElementById('reranker-enabled');
+                if (cb) cb.checked = !!d.enabled;
+                renderRerankerStatus(d);
+            } catch (e) { console.error('reranker-config load:', e); }
+        }
+        function renderRerankerStatus(d) {
+            const st = document.getElementById('reranker-status');
+            if (!st || !d) return;
+            const state = d.enabled ? (d.loaded ? 'включён, модель загружена' : 'включён, модель ещё не загружена') : 'выключен';
+            st.textContent = `${state} · модель: ${d.model} · кэш: ${d.cache_dir}`
+                + (d.load_error ? ` · ошибка: ${d.load_error}` : '');
+        }
+        async function saveRerankerConfig() {
+            const st = document.getElementById('reranker-status');
+            if (st) st.textContent = '⏳ Сохранение...';
+            try {
+                const r = await apiFetch(`${API_URL}/reranker-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        enabled: document.getElementById('reranker-enabled').checked,
+                        model: document.getElementById('reranker-model').value,
+                    })
+                });
+                const d = await r.json();
+                if (!r.ok) { if (st) st.textContent = '❌ ' + (d.detail || 'ошибка'); return; }
+                renderRerankerStatus(d);
+                if (st) st.textContent = '✅ ' + st.textContent;
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+        async function warmRerankerModel() {
+            const st = document.getElementById('reranker-status');
+            if (st) st.textContent = '⏳ Загружаю модель (первый раз скачивается, может занять минуту)...';
+            try {
+                const r = await apiFetch(`${API_URL}/reranker-config/warm`, {method: 'POST'});
+                const d = await r.json();
+                if (st) st.textContent = d.loaded
+                    ? `✅ модель загружена: ${d.model}`
+                    : `❌ не загрузилась: ${d.error || d.detail || 'ошибка'}`;
             } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
 
@@ -2669,6 +2748,7 @@
         loadBrandingConfig();
         loadProcessingConfig();
         loadGraphConfig();
+        loadRerankerConfig();
         loadUploadConfig();
 
         loadAll();
