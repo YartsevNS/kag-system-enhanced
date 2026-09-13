@@ -523,6 +523,11 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
             processed += 1
 
         config_store.set("kg_config", "rebuild_stop", False)
+        try:
+            from src.indexing.entity_extractor import entity_extractor as _ee
+            logger.info(f"[rebuild] записей в кэше извлечения: {_ee.cache_size()}")
+        except Exception:
+            pass
         config_store.set("kg_config", "rebuild_status", "completed")
         config_store.set("kg_config", "rebuild_progress", {
             "processed": processed, "total": total, "current_doc": "",

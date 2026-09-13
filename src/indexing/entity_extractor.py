@@ -301,6 +301,42 @@ class EntityExtractor:
             pass  # не критично
         return {"status": "ok", "preset": preset_name, "name": cls.SCHEMA_PRESETS[preset_name]["name"]}
 
+    # ── Кэш извлечения: версия ключа ────────────────────────────────────────
+    # Ключ кэша = llm_<версия>_<хэш текста>. Без версии кэш не знал, ЧЕМ извлекали:
+    # после смены модели, доменной схемы или промпта старые чанки возвращали прежний
+    # результат молча (ложное «работает по-новому»). Версия считается из того, что
+    # реально влияет на извлечение. Меняете ШАБЛОНЫ промптов в коде ниже — увеличьте
+    # PROMPT_EPOCH, иначе кэш останется от старой логики.
+    PROMPT_EPOCH = 1
+
+    @classmethod
+    def cache_version(cls, cfg: Optional[Dict[str, Any]] = None) -> str:
+        """Короткая версия кэша извлечения (модель, промпт, схема, режим)."""
+        import hashlib as _h
+        import json as _json
+        cfg = cfg or {}
+        schema = getattr(cls, "DOMAIN_SCHEMA", None) or {}
+        payload = "|".join([
+            str(getattr(cls, "PROMPT_EPOCH", 1)),
+            str(cfg.get("model") or ""),
+            str(cfg.get("provider") or ""),
+            str(cfg.get("extraction_mode") or ""),
+            str(cfg.get("system_prompt") or "")[:2000],
+            str(getattr(cls, "_active_preset", "")),
+            _json.dumps(schema, ensure_ascii=False, sort_keys=True)[:5000],
+        ])
+        return _h.sha256(payload.encode("utf-8")).hexdigest()[:8]
+
+    @staticmethod
+    def cache_size() -> int:
+        """Сколько записей кэша извлечения лежит в Postgres (метрика/очистка)."""
+        try:
+            from src.api.services.config_store import config_store
+            data = config_store.get_all("entity_cache") or {}
+            return sum(1 for k in data if str(k).startswith("llm_"))
+        except Exception:
+            return 0
+
     @classmethod
     def get_active_preset(cls) -> str:
         """Получить имя активного пресета."""
@@ -355,10 +391,24 @@ class EntityExtractor:
         # Экономит токены при переиндексации и на повторяющихся фрагментах
         # (одинаковые страницы/таблицы в разных версиях документов).
         import hashlib as _hl
-        _cache_key = f"llm_{_hl.sha256(chunk_text.encode('utf-8')).hexdigest()[:20]}"
+        _text_hash = _hl.sha256(chunk_text.encode('utf-8')).hexdigest()[:20]
+        _ver = self.cache_version(cfg)
+        _cache_key = f"llm_{_ver}_{_text_hash}"
+        _legacy_key = f"llm_{_text_hash}"
         try:
             from src.api.services.config_store import config_store
             _cached = config_store.get("entity_cache", _cache_key)
+            if not (_cached and isinstance(_cached, dict) and _cached.get("entities")):
+                # Переходный путь: записи старого формата (без версии) переиспользуем и
+                # переносим под новый ключ. Без этого смена формата ключа заставила бы
+                # заново извлекать весь корпус (~3800 чанков × 2 LLM-вызова).
+                _legacy = config_store.get("entity_cache", _legacy_key)
+                if _legacy and isinstance(_legacy, dict) and _legacy.get("entities"):
+                    _cached = _legacy
+                    try:
+                        config_store.set("entity_cache", _cache_key, _legacy)
+                    except Exception:
+                        pass
             if _cached and isinstance(_cached, dict) and _cached.get("entities"):
                 logger.debug(f"[graph] Кэш LLM: {chunk_id} ({_cache_key[:16]}…)")
                 return {
