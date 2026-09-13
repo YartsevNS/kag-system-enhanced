@@ -53,6 +53,28 @@ SLA по замерам: **`/health` под нагрузкой чата ≤ 10 �
 - решать по замеру: `config_store.get` 10.4 мс, `repo.get` 1.3 мс, `repo.upsert` 5.0 мс;
 - при правках файлов скриптом нормализовать окончания строк (якоря CRLF/LF).
 
+## Тесты: набор полностью зелёный (2026-09-13)
+
+**Полный прогон: 380 passed, 0 failed** (было 4 failed, 376 passed). Разбор:
+
+| Тест | Причина | Правка |
+|---|---|---|
+| `test_auth.py::test_me_wrong_secret` | `from jose import jwt`, а python-jose в зависимостях нет | переведено на PyJWT |
+| `test_kg_admin.py::test_admin_ops_forbidden_for_regular_user` | в `ADMIN_OPS` пути `/kg/watchdog/start|stop`, которых нет (есть `GET /watchdog/status`, `POST /type-watchdog/start`) → 404 вместо 403 | список сверен с роутером; стража проверена на реальных роутах |
+| `test_security.py::test_generate_key` | два `GOSTCrypto()` с путём по умолчанию читали ОДИН файл ключа → «ключи разные» падало | `tmp_path` на экземпляр + проверка, что тот же файл даёт тот же ключ |
+| `test_security.py::test_rate_limit_exceeded` | 150 запросов, растянутых на 150 с, при окне 60 с → в окне 60 < 100, лимит не превышен | 150 запросов в 30 с > 100 |
+
+Плюс ранее в этот день: `test_api.py` 7 падений → 16 passed, `test_monitoring.py` 18 → 32
+passed (причина: auth-middleware + SetupCheck + пустая тестовая SQLite из-за StaticPool и
+неимпортированных `monitoring_models`).
+
+**Где что лежит:** токен для тестов — фикстура `auth_headers` в `tests/conftest.py` (секрет
+— уникальный фейк на прогон через `monkeypatch`). Подмена `_is_configured` — в фикстуре
+`client` файла `test_monitoring.py` (снимается автоматически).
+
+**Урок:** красный набор скрывал два реальных бага (`folder_watcher.remove_folder` → 500,
+`doc-1`/`doc-10_other.pdf`). Ни один из 22 починенных тестов не удалён и не пропущен.
+
 ## Сессия 2026-09-13 (продолжение): тесты, folder_watcher, скилл
 
 - **`src/monitoring/folder_watcher.py` — реальная ошибка, найденная тестом:**
