@@ -47,7 +47,10 @@ JUDGE_PROMPT = """Ты — строгий оценщик ответов RAG-си
 Верни ТОЛЬКО JSON: {{"score": 0.0, "missing": ["..."], "wrong": ["..."], "comment": "одна фраза"}}"""
 
 
-def post_json(path: str, payload: dict, timeout: int = 180) -> dict:
+# Таймаут щедрый: длинные вопросы (письма и рекомендации Банка России) на стенде
+# отвечались дольше 180 с — из-за этого 4 вопроса из 20 приходили пустыми
+# (TimeoutError), и это выглядело как нулевое качество ответа. Это сбой измерителя.
+def post_json(path: str, payload: dict, timeout: int = 600) -> dict:
     req = urllib.request.Request(
         f"{API}{path}",
         data=json.dumps(payload).encode("utf-8"),
@@ -80,7 +83,29 @@ async def judge(question: str, expected: str, actual: str) -> dict:
     )
     if isinstance(res, dict) and "score" in res:
         return res
-    return {"score": 0.0, "comment": f"судья не разобрал ответ: {str(res)[:120]}"}
+
+    # Судья может вернуть {"raw": "```json {...}```"} — достаём JSON терпимо
+    # (снимаем markdown, берём сбалансированный объект от первой скобки).
+    raw = str((res or {}).get("raw") if isinstance(res, dict) else res or "")
+    if raw:
+        import re as _re
+        text = _re.sub(r"```[a-zA-Z]*", "", raw).replace("```", "").strip()
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and "score" in data:
+                return data
+        except Exception:
+            pass
+        start = text.find("{")
+        if start >= 0:
+            try:
+                data, _ = json.JSONDecoder().raw_decode(text[start:])
+                if isinstance(data, dict) and "score" in data:
+                    return data
+            except Exception:
+                pass
+        return {"score": 0.0, "comment": f"судья вернул не-JSON: {text[:120]}"}
+    return {"score": 0.0, "comment": "пустой вердикт судьи"}
 
 
 async def main() -> None:

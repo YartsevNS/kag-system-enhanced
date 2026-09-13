@@ -65,11 +65,16 @@ def main() -> None:
             "notes": note,
         })
 
-    # исторический блок и сравнительные с контролем берём из v2 (там уже починены эталоны)
-    legacy = [q for q in v2["questions"][: int(v2.get("legacy_count") or 7)]]
-    comparatives = [q for q in v2["questions"]
+    # исторический блок и сравнительные с контролем берём из v2 (там уже починены эталоны).
+    # ВАЖНО: сравнительные и контрольные ищем ТОЛЬКО после исторического блока, иначе
+    # исторические вопросы с двумя эталонами (и переведённый в контрольные №3) попадают
+    # в набор второй раз — было 35 вопросов с двумя дублями вместо 33.
+    _legacy_n = int(v2.get("legacy_count") or 7)
+    legacy = list(v2["questions"][:_legacy_n])
+    _rest = list(v2["questions"][_legacy_n:])
+    comparatives = [q for q in _rest
                     if len(q.get("relevant_document_ids") or []) > 1 and not q.get("control")]
-    controls = [q for q in v2["questions"] if q.get("control")]
+    controls = [q for q in _rest if q.get("control")]
 
     doc = {
         "description": (

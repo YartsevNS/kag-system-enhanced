@@ -197,6 +197,58 @@ class ChatService:
         "accounting", "financial", "universal", "general", "other",
     ]
 
+    async def _comparison_context(self, query: str, group_ids=None, is_admin: bool = False,
+                                  user_id=None):
+        """Контекст для СРАВНИТЕЛЬНОГО вопроса: по документу на каждую сторону.
+
+        Зачем: при обычном поиске фрагменты двух документов приходят вперемешку, и модель
+        отвечает без привязки «что к какому документу относится». Здесь на каждую сторону
+        сравнения берём карточку документа (level=document) и её фрагменты (фильтр по
+        document_id) — получается структура «объект 1 / объект 2», по которой модель может
+        дать сравнение по пунктам.
+
+        Возвращает (текст_контекста, список_документов). Пусто, если вопрос не сравнительный
+        или режим выключен настройкой chat/comparison.
+        """
+        try:
+            from src.indexing.comparison import (
+                build_comparison_context, comparison_enabled, comparison_entities,
+                is_comparison_question,
+            )
+            if not comparison_enabled() or not is_comparison_question(query):
+                return "", []
+            subs = await self._decompose_query(query)
+            sides_q = comparison_entities(query, subs)
+            if not sides_q:
+                return "", []
+            from src.indexing.embeddings_service import embeddings_service
+            sides = []
+            for sub in sides_q:
+                docs = await embeddings_service.search_documents(
+                    sub, limit=1, user_id=user_id, group_ids=group_ids
+                )
+                if not docs:
+                    continue
+                card = docs[0]
+                doc_id = card.get("document_id")
+                chunks = []
+                if doc_id:
+                    chunks = await embeddings_service.search(
+                        query=sub, limit=4, filters={"document_id": doc_id},
+                        group_ids=group_ids, is_admin=is_admin, user_id=user_id,
+                    )
+                sides.append({"query": sub, "card": card, "chunks": chunks})
+            if len(sides) < 2:
+                return "", sides
+            logger.info(
+                f"[rag] сравнительный контекст: сторон {len(sides)}, "
+                f"документы {[str(s['card'].get('document_id'))[:8] for s in sides]}"
+            )
+            return build_comparison_context(sides), [s["card"] for s in sides]
+        except Exception as e:
+            logger.debug(f"[rag] сравнительный контекст не собран: {e}")
+            return "", []
+
     async def _decompose_query(self, query: str) -> List[str]:
         """Query Decomposition: разбить сложный вопрос на простые подвопросы.
 
@@ -575,6 +627,17 @@ class ChatService:
                 "Мета-запрос (list): RAG пропущен, использую список из БД (25)"
             )
 
+        # Сравнительный вопрос: заранее собираем структурированный контекст по сторонам.
+        # Дешевле сделать это до обычного поиска: если вопрос не сравнительный, метод
+        # вернёт пусто без лишних вызовов LLM.
+        _comparison_block = ""
+        try:
+            _comparison_block, _cmp_docs = await self._comparison_context(
+                user_message, group_ids=group_ids, is_admin=is_admin, user_id=user_id
+            )
+        except Exception as _e:
+            logger.debug(f"[rag] сравнительный режим не сработал: {_e}")
+
         # Шаг 2: RAG поиск если включен
         if use_rag and intent is None:
             try:
@@ -626,6 +689,10 @@ class ChatService:
                             f"[Источник {i}] «{filename or doc_id[:12]}» ({score_info}):\n{result['content']}"
                         )
                     context = "\n\n".join(context_parts)
+                    if _comparison_block:
+                        # Структура «объект 1 / объект 2» идёт ПЕРВОЙ, дальше обычные
+                        # фрагменты — так модель видит привязку к документам до деталей.
+                        context = _comparison_block + "\n\n" + context
                     sources = search_results
 
                     # ── Query Decomposition: сложный вопрос → подзапросы ────
@@ -736,6 +803,11 @@ class ChatService:
         except Exception:
             total_docs = None
             stats_line = ""
+
+        # Инструкция к сравнительному ответу — только когда контекст сравнения собран
+        if _comparison_block:
+            from src.indexing.comparison import COMPARISON_INSTRUCTION
+            system_prompt = f"{system_prompt}\n\n{COMPARISON_INSTRUCTION}"
 
         # Системный промпт (из function_map, с контекстом RAG)
         if context or meta_context:
