@@ -121,6 +121,21 @@ def evaluate_question(base_url: str, q: Dict[str, Any], k_values: List[int],
     query = q["query"]
     rel_docs = {str(x) for x in (q.get("relevant_document_ids") or [])}
     rel_chunks = {str(x) for x in (q.get("relevant_chunk_ids") or [])}
+
+    # Контрольный вопрос: ответа в корпусе нет. Смысл не в попадании, а в том, насколько
+    # уверенно система отвечает на неотвечаемое (высокий top-1 score = риск выдумки).
+    if q.get("control"):
+        hits = search(base_url, query, search_limit, token, insecure, filters)
+        top = hits[0] if hits else {}
+        return {
+            "query": query,
+            "control": True,
+            "returned": len(hits),
+            "top_score": round(float(top.get("score") or 0.0), 4),
+            "top_document_id": top.get("document_id"),
+            "metrics": {},
+        }
+
     if not rel_docs and not rel_chunks:
         raise SystemExit(f"Вопрос без разметки релевантности: {query!r}")
 
@@ -244,6 +259,11 @@ def main() -> int:
                for q in questions]
 
     for r in results:
+        if r.get("control"):
+            print(f"[контроль] {r['query'][:60]}")
+            print(f"        top-1 score={r.get('top_score')}, вернулось: {r['returned']}, "
+                  f"документ: {str(r.get('top_document_id'))[:8]}")
+            continue
         m = r["metrics"]
         miss = "ПРОМАХ" if m.get("hit@10", m.get("hit@3", 1.0)) == 0.0 else "ok"
         print(f"[{miss}] {r['query'][:70]}")
@@ -254,6 +274,18 @@ def main() -> int:
     print("\n=== СРЕДНИЕ МЕТРИКИ ===")
     for k, v in sorted(agg.items()):
         print(f"  {k:16s} {v:.4f}")
+
+    controls = [r for r in results if r.get("control")]
+    if controls:
+        scores = [float(r.get("top_score") or 0.0) for r in controls]
+        print("\n=== КОНТРОЛЬНЫЕ (ответа в корпусе нет) ===")
+        print(f"  top-1 score: средний {statistics.fmean(scores):.4f}, "
+              f"максимум {max(scores):.4f}")
+        # Грубая граница: если система выдаёт на неотвечаемый вопрос фрагмент с высокой
+        # близостью, это сигнал риска выдумки, а не «нашлось».
+        risky = [r["query"] for r, s in zip(controls, scores) if s >= 0.60]
+        print(f"  подозрительно уверенных: {len(risky)}"
+              + (f" → {risky}" if risky else ""))
 
     report = {"url": args.url, "questions_file": str(path), "top_k": args.top_k,
               "count": len(results), "aggregate": agg, "results": results}
