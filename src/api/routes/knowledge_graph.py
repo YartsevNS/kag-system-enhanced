@@ -3,12 +3,21 @@ API-роуты для Knowledge Graph (Neo4j).
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Body
-from typing import Optional, List
+from typing import Literal, Optional, List
 from loguru import logger
 
 from src.api.middleware.auth_v2 import get_current_user_optional, get_current_admin
+from src.indexing.knowledge_graph import kg_service
 from src.indexing.ids import display_filename
 from src.database.user_models import User
+
+def _clamp(value, low: int = 1, high: int = 1000) -> int:
+    """Ограничить лимит сверху: limit=100000 не должен тянуть весь граф."""
+    try:
+        return max(low, min(int(value), high))
+    except (TypeError, ValueError):
+        return low
+
 
 router = APIRouter()
 
@@ -20,12 +29,11 @@ async def execute_cypher(
 ):
     """Выполнение произвольного Cypher-запроса (только чтение)."""
     try:
-        from src.indexing.knowledge_graph import kg_service
         q = query.get("query", "").strip()
         if not q:
             raise HTTPException(status_code=400, detail="Пустой запрос")
         limit = int(query.get("limit", 100))
-        results = kg_service.execute_cypher(q, limit)
+        results = await asyncio.to_thread(kg_service.execute_cypher, q, _clamp(limit))
         return {"query": q, "results": results, "total": len(results)}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -38,24 +46,25 @@ async def execute_cypher(
 async def kg_stats(current_user: Optional[User] = Depends(get_current_user_optional)):
     """Статистика: количество документов, чанков, сущностей, связей."""
     try:
-        from src.indexing.knowledge_graph import kg_service
-        return kg_service.get_stats()
+        return await asyncio.to_thread(kg_service.get_stats)
     except Exception as e:
         logger.error(f"Ошибка статистики графа: {e}")
-        return {"documents": 0, "chunks": 0, "entities": 0, "relations": 0}
+        # Нули вводили в заблуждение: админ видел «граф пуст» и мог запустить
+        # перестроение. Отдаём явную ошибку.
+        raise HTTPException(status_code=503, detail=f"Статистика графа недоступна: {e}")
 
 
 @router.get("/entities/search", summary="Поиск сущностей")
 async def search_entities(
     q: str, 
-    type: Optional[str] = None, 
+    entity_type: Optional[str] = None, 
     limit: int = 20,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Поиск сущностей по имени и типу."""
     try:
-        from src.indexing.knowledge_graph import kg_service
-        return {"results": kg_service.search_entities(q, type, limit)}
+        found = await asyncio.to_thread(kg_service.search_entities, q, entity_type, _clamp(limit, 1, 200))
+        return {"results": found}
     except Exception as e:
         return {"results": [], "error": str(e)}
 
@@ -67,8 +76,7 @@ async def document_entities(
 ):
     """Все сущности, извлечённые из документа."""
     try:
-        from src.indexing.knowledge_graph import kg_service
-        entities = kg_service.get_document_entities(document_id)
+        entities = await asyncio.to_thread(kg_service.get_document_entities, document_id)
         return {"document_id": document_id, "entities": entities, "total": len(entities)}
     except Exception as e:
         return {"document_id": document_id, "entities": [], "total": 0, "error": str(e)}
@@ -82,8 +90,8 @@ async def entity_graph(
 ):
     """Подграф вокруг сущности (узлы + связи)."""
     try:
-        from src.indexing.knowledge_graph import kg_service
-        return {"entity": entity_name, "graph": kg_service.get_entity_graph(entity_name, depth)}
+        graph = await asyncio.to_thread(kg_service.get_entity_graph, entity_name, depth)
+        return {"entity": entity_name, "graph": graph}
     except Exception as e:
         return {"entity": entity_name, "graph": [], "error": str(e)}
 
@@ -126,10 +134,11 @@ async def entity_chunks(
     /kg, чтобы от сущности перейти к фрагменту и к файлу.
     """
     try:
-        from src.indexing.knowledge_graph import kg_service
         from src.indexing.embeddings_service import embeddings_service
 
-        rows = kg_service.entity_chunks(entity_name, limit, doc_id or "")
+        rows = await asyncio.to_thread(
+            kg_service.entity_chunks, entity_name, _clamp(limit, 1, 50), doc_id or ""
+        )
         point_ids = [r.get("point_id") for r in rows if r.get("point_id")]
         payloads = await embeddings_service.get_points_payload(point_ids) if point_ids else {}
         for r in rows:
@@ -161,8 +170,9 @@ async def search_chunks(
     Затем в браузер уходит только эта выборка — не весь документ.
     """
     try:
-        from src.indexing.knowledge_graph import kg_service
-        result = kg_service.search_chunks(q, doc_id or "", level, limit)
+        result = await asyncio.to_thread(
+            kg_service.search_chunks, q, doc_id or "", level, _clamp(limit, 1, 60)
+        )
         if not result:
             return {"query": q, "nodes": [], "edges": [], "hits": 0, "chunks_shown": 0}
         result["query"] = q
@@ -187,8 +197,8 @@ async def document_graph(
     with_chunks=false — без узлов-фрагментов (для очень крупных документов).
     """
     try:
-        from src.indexing.knowledge_graph import kg_service
-        graph = kg_service.get_document_graph(document_id, with_chunks,
+        graph = await asyncio.to_thread(
+            kg_service.get_document_graph, document_id, with_chunks,
                                               limit_chunks, limit_entities)
         if not graph:
             return {"document_id": document_id, "graph": [],
@@ -206,10 +216,9 @@ async def chunk_details(
 ):
     """Один чанк по id — текст (из Qdrant, если есть) и страница для перехода."""
     try:
-        from src.indexing.knowledge_graph import kg_service
         from src.indexing.embeddings_service import embeddings_service
 
-        info = kg_service.chunk_info(chunk_id)
+        info = await asyncio.to_thread(kg_service.chunk_info, chunk_id)
         if not info:
             return {"chunk_id": chunk_id, "found": False}
         point_id = info.get("point_id")
@@ -233,7 +242,7 @@ async def chunk_details(
 async def hybrid_search(
     q: str, 
     doc_id: Optional[str] = None,
-    scope: Optional[str] = "both",
+    scope: Literal["both", "neo4j", "qdrant"] = "both",
     relevance_score: Optional[float] = 0.4,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -243,7 +252,6 @@ async def hybrid_search(
     relevance_score: минимальный score для Qdrant-результатов (0 = без фильтра)
     """
     try:
-        from src.indexing.knowledge_graph import kg_service, CHUNK_TEXT_PREVIEW_CHARS
         from src.indexing.embeddings_service import embeddings_service
         
         entities = [e.strip() for e in q.split(",") if e.strip()]
@@ -252,12 +260,15 @@ async def hybrid_search(
         
         # 1. Поиск в графе Neo4j
         if scope != "qdrant":
-            results = kg_service.hybrid_search(entities, doc_ids) if entities else []
+            results = await asyncio.to_thread(kg_service.hybrid_search, entities, doc_ids) if entities else []
         
         # 2. Если граф ничего не нашёл или scope=qdrant — ищем через Qdrant
         if not results or scope == "qdrant":
             try:
-                await embeddings_service.initialize()
+                # initialize() создаёт клиент и проверяет коллекцию — на каждый запрос это
+                # лишний сетевой круг. Инициализируем, только если клиента ещё нет.
+                if getattr(embeddings_service, "_embedding_client", None) is None:
+                    await embeddings_service.initialize()
                 qdrant_results = await embeddings_service.search(q, limit=20)
                 seen_texts = set()
                 for point in (qdrant_results or []):
@@ -273,7 +284,8 @@ async def hybrid_search(
                     if text_key in seen_texts:
                         continue
                     # Буст: если query встречается в тексте
-                    if q.lower() in content.lower():
+                    q_lower = q.lower()
+                    if q_lower in content.lower():
                         score += 0.3
                     seen_texts.add(text_key)
                     results.append({
@@ -318,7 +330,11 @@ async def rebuild_graph(
     """
     from src.api.services.config_store import config_store
 
+    # Гонка check-then-act: два параллельных запроса оба видели «не running» и
+    # запускали задачу дважды. Флаг захватываем атомарно (compare-and-set).
     status = config_store.get("kg_config", "rebuild_status") or "idle"
+    if not config_store.compare_and_set("kg_config", "rebuild_status", "running", status):
+        raise HTTPException(status_code=409, detail="Перестроение графа уже запущено")
     if status == "running":
         raise HTTPException(status_code=409, detail="Перестроение графа уже идёт")
 
@@ -356,7 +372,9 @@ async def rebuild_status(current_user: Optional[User] = Depends(get_current_user
             "finished_at": progress.get("finished_at", ""),
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        # Отличаем сбой чтения статуса от падения самой задачи перестроения
+        return {"status": "error", "transport_error": True,
+                "message": f"не удалось прочитать статус: {e}"}
 
 
 # ============================================================
@@ -374,10 +392,9 @@ async def post_process_graph(
     Опционально: только для одного документа.
     """
     try:
-        from src.indexing.knowledge_graph import kg_service
-        result = kg_service.post_process_entities(document_id)
+        result = await asyncio.to_thread(kg_service.post_process_entities, document_id)
         # Также простой dedup для Community Edition
-        dedup_count = kg_service.deduplicate_entities_by_name()
+        dedup_count = await asyncio.to_thread(kg_service.deduplicate_entities_by_name)
         result["dedup_count"] = dedup_count
         return {"status": "ok", **result}
     except Exception as e:
@@ -399,15 +416,14 @@ async def stop_rebuild(current_user: User = Depends(get_current_admin)):
 async def validate_document_entities(document_id: str, current_user: User = Depends(get_current_admin)):
     """Проверить качество извлечённых сущностей (admin-only)."""
     try:
-        from src.indexing.knowledge_graph import kg_service
-        result = kg_service.validate_entities(document_id)
+        result = await asyncio.to_thread(kg_service.validate_entities, document_id)
         return result
     except Exception as e:
         return {"valid": False, "error": str(e)}
 
 
 @router.get("/domain-schema", summary="Доменная схема сущностей")
-async def get_domain_schema():
+async def get_domain_schema(current_user: Optional[User] = Depends(get_current_user_optional)):
     """Получить текущую доменную схему + список доступных пресетов."""
     try:
         from src.indexing.entity_extractor import entity_extractor
@@ -435,7 +451,6 @@ async def update_domain_schema(
     """
     try:
         from src.indexing.entity_extractor import entity_extractor, EntityExtractor
-        from src.indexing.knowledge_graph import kg_service
         from src.api.services.config_store import config_store
         
         # Режим 1: переключение пресета
@@ -445,13 +460,18 @@ async def update_domain_schema(
             if "error" in result:
                 return {"status": "error", "message": result["error"]}
             # Обновляем активную схему в экстракторе
-            entity_extractor._domain_config = dict(EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"])
-            kg_service.set_domain_schema(EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"].get("core", {}))
+            entity_extractor.set_domain_schema(
+                dict(EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"])
+            )
+            await asyncio.to_thread(
+                kg_service.set_domain_schema,
+                EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"].get("core", {}),
+            )
             return {"status": "ok", "preset": preset_name, "message": f"Пресет переключён на «{EntityExtractor.SCHEMA_PRESETS[preset_name]['name']}»"}
         
         # Режим 2: ручная схема
         entity_extractor.set_domain_schema(data)
-        kg_service.set_domain_schema(data.get("core", {}))
+        await asyncio.to_thread(kg_service.set_domain_schema, data.get("core", {}))
         config_store.set("kg_config", "domain_schema", data)
         return {"status": "ok", "message": "Доменная схема обновлена вручную"}
     except Exception as e:
@@ -464,7 +484,7 @@ async def update_domain_schema(
 # ============================================================
 
 @router.get("/watchdog/status", summary="Статус сторожа")
-async def watchdog_status():
+async def watchdog_status(current_user: Optional[User] = Depends(get_current_user_optional)):
     try:
         from src.api.services.config_store import config_store
         status = config_store.get("kg_config", "rebuild_status") or "idle"
@@ -487,7 +507,7 @@ async def watchdog_status():
 # ============================================================
 
 @router.post("/type-watchdog/start", summary="Запустить сторожа типизации")
-async def start_type_watchdog():
+async def start_type_watchdog(current_user: User = Depends(get_current_admin)):
     try:
         from src.indexing.type_watchdog import type_watchdog
         type_watchdog.start()
@@ -497,7 +517,7 @@ async def start_type_watchdog():
 
 
 @router.get("/type-watchdog/status", summary="Статус типизации")
-async def type_watchdog_status():
+async def type_watchdog_status(current_user: Optional[User] = Depends(get_current_user_optional)):
     try:
         from src.api.services.config_store import config_store
         status_raw = config_store.get("kg_config", "type_watch_status") or {}
@@ -505,7 +525,7 @@ async def type_watchdog_status():
         progress = config_store.get("kg_config", "type_watch_progress") or {}
         # Count docs without type
         from src.api.services.document_repository import get_doc_repo
-        docs = get_doc_repo().get_all() or {}
+        docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
         total = sum(1 for d in docs.values() if isinstance(d, dict) and d.get('status') == 'completed')
         with_type = sum(1 for d in docs.values() 
                        if isinstance(d, dict) and d.get('document_type') 

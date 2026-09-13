@@ -99,6 +99,42 @@ class PostgresConfigStore:
             if 'session' in locals():
                 session.close()
 
+    def compare_and_set(self, category: str, key: str, new_value: Any,
+                        expected: Any) -> bool:
+        """Атомарно записать значение, только если текущее равно expected.
+
+        Нужно против гонки check-then-act: два параллельных запроса (например, два
+        запуска перестроения графа) оба видели «не running» и запускали задачу дважды.
+        Реализация — один UPDATE с условием по значению, а не чтение + запись.
+        """
+        try:
+            session = self._get_session()
+            config_id = f"{category}:{key}"
+            try:
+                from src.database.models import SystemConfig
+                current = session.query(SystemConfig).filter_by(id=config_id).first()
+                current_value = json.loads(current.value) if (current and current.value) else None
+                if current_value != expected:
+                    return False
+                payload = json.dumps(new_value, ensure_ascii=False) if isinstance(
+                    new_value, (dict, list, bool, int, float)) else str(new_value)
+                if current:
+                    updated = session.query(SystemConfig).filter(
+                        SystemConfig.id == config_id,
+                        SystemConfig.value == current.value,
+                    ).update({"value": payload}, synchronize_session=False)
+                else:
+                    session.add(SystemConfig(id=config_id, value=payload))
+                    updated = 1
+                session.commit()
+                return bool(updated)
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"Ошибка compare_and_set {category}:{key}: {e}")
+            return False
+
+
     def get_all(self, category: str) -> Dict[str, Any]:
         try:
             session = self._get_session()

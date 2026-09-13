@@ -296,7 +296,7 @@ async function searchEntities() {
   const div = document.getElementById('entity-results');
   div.innerHTML = '<div style="color:var(--text4);padding:12px">⏳ Поиск...</div>';
   try {
-    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&type=' + type : '') + '&limit=30', { headers: authHeaders() });
+    const r = await fetch(API + '/entities/search?q=' + encodeURIComponent(q) + (type ? '&entity_type=' + type : '') + '&limit=30', { headers: authHeaders() });
     const d = await r.json();
     if (!d.results.length) {
       div.innerHTML = '<div class="empty">🔍 Сущности не найдены</div>';

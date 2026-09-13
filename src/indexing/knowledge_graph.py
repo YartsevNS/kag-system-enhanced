@@ -2249,11 +2249,24 @@ class KnowledgeGraphService:
         if not self.driver:
             return []
         try:
-            query_upper = query.upper().strip()
-            forbidden = ["CREATE ", "MERGE ", "SET ", "DELETE ", "REMOVE ", "DROP ", "CALL "]
+            query_upper = " ".join(query.upper().split())
+            # Разрешаем только чтение: запрос обязан НАЧИНАТЬСЯ с одного из этих слов.
+            allowed_start = ("MATCH", "RETURN", "WITH", "UNWIND", "OPTIONAL", "EXPLAIN")
+            if not query_upper.startswith(allowed_start):
+                raise ValueError(
+                    "Разрешены только читающие запросы (MATCH/RETURN/WITH/UNWIND). " +
+                    "Запрос должен начинаться с одного из этих слов."
+                )
+            # Запрещаем мутации, вызовы процедур и выгрузку файлов/сети.
+            forbidden = ["CREATE ", "MERGE ", "SET ", "DELETE ", "REMOVE ", "DROP ",
+                         "CALL ", "LOAD CSV", "FOREACH", "APOC.", "DBMS.", "DETACH"]
             for f in forbidden:
                 if f in query_upper:
-                    raise ValueError(f"Запрещённая операция: {f.strip()}. Разрешены только MATCH, RETURN.")
+                    raise ValueError(
+                        f"Запрещённая операция: {f.strip()}. Разрешены только запросы на чтение."
+                    )
+            # Лимит строк жёстко ограничен сверху, чтобы запрос не вытянул весь граф.
+            limit = max(1, min(int(limit or 100), 1000))
             
             with self.driver.session() as session:
                 result = session.run(query)
