@@ -14,7 +14,7 @@
 - Репозиторий (ноутбук): `C:\VSCODE_PROJECT\kag-system-enhanced`, ветка **PREPROD**,
   последний коммит **0cd9950**, дерево чистое.
 - Сервер 18 (`yartsevn@192.168.50.18`, `/home/yartsevn/kag-system`): `kag-api`,
-  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.42**.
+  `kag-system_worker_1`, `worker-maintenance` на образе **2026.09.13.44**.
 - Загрузка новых документов на стенде заблокирована галочкой (`UPLOADS_BLOCKED`);
   документов 47, все `completed`.
 - Тесты: `test_warm_init_invalidation` (5), `test_config_store_cache` (5),
@@ -52,6 +52,25 @@ SLA по замерам: **`/health` под нагрузкой чата ≤ 10 �
 - `HTTPException` внутри `try` не должна попадать в широкий `except`;
 - решать по замеру: `config_store.get` 10.4 мс, `repo.get` 1.3 мс, `repo.upsert` 5.0 мс;
 - при правках файлов скриптом нормализовать окончания строк (якоря CRLF/LF).
+
+## Сессия 2026-09-13 (продолжение): тесты, folder_watcher, скилл
+
+- **`src/monitoring/folder_watcher.py` — реальная ошибка, найденная тестом:**
+  `Observer.unschedule()` требует `ObservedWatch` (объект от `schedule()`), а код передавал
+  `FolderWatcherHandler` → `KeyError` из watchdog → **500** при снятии папки с наблюдения
+  (`DELETE /api/v1/watchers/folders/{id}`). Исправлено: `_watches` хранит watch по папке;
+  `start()` больше не хардкодит `recursive=True`. Проверено живьём: добавление и снятие
+  папки → 200, список пуст.
+- **Тесты починены, набор зелёный:** `tests/test_api.py` 7 падений → 16 passed,
+  `tests/test_monitoring.py` 18 → 32 passed. Причины были не «в коде»: тесты писались до
+  auth-middleware (ждали 200 без токена), патчили несуществующие атрибуты, а тестовая
+  SQLite была пустой (in-memory живёт НА СОЕДИНЕНИЕ — нужен `StaticPool`, плюс импорт
+  `monitoring_models`, иначе таблиц нет в схеме) и SetupCheck уводил запросы на `/setup`.
+- **Скилл `kag-admin-debug-deploy` разбит**: SKILL.md 98 890 → 27 496 символов (упёрся в
+  лимит 100k, правки не проходили). История вынесена в `references/`:
+  `setup-wizard-and-secrets.md`, `deploy-recipes.md`, `history-incidents-2026-06-07.md`,
+  `hybrid-search.md` (дословно), `nginx-upstream-resolver.md`. Бэкап:
+  `SKILL.md.before-split-2026-09-13`. Указатель переписан, в архиве ~191 файл.
 
 ## Инцидент 2026-09-13 (сайт лежал): nginx держал старый IP api
 
