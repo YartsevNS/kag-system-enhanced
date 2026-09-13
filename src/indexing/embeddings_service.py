@@ -203,7 +203,9 @@ class EmbeddingsService:
     async def _ensure_collection(self):
         """Создать коллекцию если не существует (dense + sparse)"""
         try:
-            collections = await asyncio.to_thread(self._qdrant_client.get_collections).collections
+            collections = (await asyncio.to_thread(
+                self._qdrant_client.get_collections
+            )).collections
             exists = any(c.name == self.collection_name for c in collections)
 
             if not exists:
