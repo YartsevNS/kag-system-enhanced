@@ -73,14 +73,17 @@ class Settings(BaseSettings):
     KEYCLOAK_URL: str = "http://keycloak:8080"
     KEYCLOAK_REALM: str = "kag"
     KEYCLOAK_CLIENT_ID: str = "kag-api"
-    KEYCLOAK_CLIENT_SECRET: str = "change_me"
+    # Секреты приходят ТОЛЬКО из окружения (.env, генерирует deploy.sh).
+    # Пустая строка = «не задано»: compose требует их через "${VAR:?…}",
+    # а умолчание-литерал означало бы пароль, известный из репозитория.
+    KEYCLOAK_CLIENT_SECRET: str = ""
     # Admin-креды Keycloak (для просмотра/управления пользователями realm)
     KEYCLOAK_ADMIN: str = "admin"
-    KEYCLOAK_ADMIN_PASSWORD: str = "admin"
+    KEYCLOAK_ADMIN_PASSWORD: str = ""
 
     # Keycloak DB (PostgreSQL)
     KC_DB_USERNAME: str = "keycloak"
-    KC_DB_PASSWORD: str = "keycloak_password"
+    KC_DB_PASSWORD: str = ""
     KC_DB_HOST: str = "keycloak-db"
     KC_DB_PORT: int = 5432
     KC_DB_NAME: str = "keycloak"
@@ -182,7 +185,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "*"
 
     # JWT
-    JWT_SECRET: str = "kag-system-secret-change-in-production"
+    JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 

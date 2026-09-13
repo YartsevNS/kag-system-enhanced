@@ -175,7 +175,7 @@ async def initialize_all():
             port=5432,
             dbname="keycloak",
             user=os.environ.get("KC_DB_USERNAME", "keycloak"),
-            password=os.environ.get("KC_DB_PASSWORD", "keycloak_password"),
+            password=os.environ.get("KC_DB_PASSWORD", ""),
             connect_timeout=10,
         )
         conn.autocommit = True
@@ -288,38 +288,27 @@ async def initialize_all():
         # Пароль Neo4j задаётся NEO4J_AUTH=neo4j/<NEO4J_PASSWORD> в docker-compose
         # при первом старте контейнера. Здесь НЕ генерируем и НЕ меняем —
         # просто подключаемся с паролем из env и создаём индексы.
-        ne_password = os.environ.get("NEO4J_PASSWORD", "") or "kagneo4j2026"
+        ne_password = os.environ.get("NEO4J_PASSWORD", "")
+        if not ne_password:
+            raise RuntimeError(
+                "NEO4J_PASSWORD не задан в .env — подключение к графу невозможно. "
+                "Пароль задаётся при первом старте контейнера: NEO4J_AUTH=neo4j/<пароль>."
+            )
 
+        # Подключаемся ТОЛЬКО с паролем из окружения. Перебора известных паролей
+        # здесь больше нет: раньше код пробовал литеральные значения из
+        # репозитория и «синхронизировал» пароль запросом, склеенным f-строкой.
+        # Если пароль не подошёл (например, volume перенесён с другим паролем) —
+        # это задача администратора, а не повод подбирать пароль из кода.
         drv = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", ne_password))
         try:
             drv.verify_connectivity()
         except Exception as connect_err:
-            # Если пароль не подошёл (перенос volume с другим паролем) —
-            # пробуем сбросить через старый дефолт, чтобы не блокировать установку.
             drv.close()
-            logger.warning(f"SETUP: Neo4j не подключается с env-паролем: {connect_err}")
-            # Пробуем дефолты (для обратной совместимости со старыми volume)
-            drv = None
-            for fallback in ("kagneo4j2026", "neo4j"):
-                try:
-                    d = GraphDatabase.driver("bolt://neo4j:7687", auth=("neo4j", fallback))
-                    d.verify_connectivity()
-                    drv = d
-                    # Меняем пароль на env-значение (синхронизация)
-                    with d.session() as s:
-                        s.run(f"ALTER CURRENT USER SET PASSWORD FROM '{fallback}' TO '{ne_password}'")
-                    logger.info("SETUP: Neo4j пароль синхронизирован с env")
-                    break
-                except Exception:
-                    try:
-                        d.close()
-                    except Exception:
-                        pass
-
-        if drv is None:
             raise RuntimeError(
-                "Не удалось подключиться к Neo4j. Проверьте NEO4J_PASSWORD в .env "
-                "(пароль из docker-compose: NEO4J_AUTH=neo4j/<пароль>)"
+                f"Neo4j не подключается с паролем из .env: {connect_err}. "
+                "Проверьте NEO4J_PASSWORD (он должен совпадать с паролем пользователя "
+                "neo4j в базе; при переносе volume пароль менять через neo4j-admin)."
             )
 
         # Создаём индексы

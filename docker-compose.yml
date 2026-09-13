@@ -12,7 +12,7 @@ services:
     #          docker push kre44et/kag-api:<tag>
     # DEV-режим (живой код без пересборки): docker-compose.dev.yml
     # (docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d).
-    image: kre44et/kag-api:2026.09.13.23
+    image: kre44et/kag-api:2026.09.13.24
     container_name: kag-api
     ports:
       # НЕ публикуем api наружу — единственная точка входа nginx (80/443).
@@ -22,7 +22,7 @@ services:
       - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
-      - JWT_SECRET=${JWT_SECRET:-supersecretkey}
+      - JWT_SECRET=${JWT_SECRET:?не задан JWT_SECRET — он в .env, генерируется deploy.sh}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
@@ -33,18 +33,18 @@ services:
       - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-kag}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-kag-api}
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-change_me}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:?не задан KEYCLOAK_CLIENT_SECRET (.env)}
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:?не задан KEYCLOAK_ADMIN_PASSWORD (.env)}
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
       # Keycloak DB (PostgreSQL для конфигов)
       - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}
-      - KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
+      - KC_DB_PASSWORD=${KC_DB_PASSWORD:?не задан KC_DB_PASSWORD (.env)}
       - KC_DB_HOST=kag-db
       - KC_DB_PORT=5432
       - KC_DB_NAME=keycloak
       # KAG собственная PostgreSQL (НЕ Keycloak!)
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:?не задан KAG_DB_URL (.env)}
       - KAG_DB_PASSWORD=${KAG_DB_PASSWORD:-}
       # Admin (веб-интерфейс KAG)
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
@@ -115,7 +115,7 @@ services:
 
   worker:
     # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.worker).
-    image: kre44et/kag-worker:2026.09.13.23
+    image: kre44et/kag-worker:2026.09.13.24
     # МАСШТАБИРОВАНИЕ (500+ пользователей): для запуска нескольких worker'ов
     # выполнить: docker compose up -d --scale worker=N
     # (N — количество, см. админку → «Масштабирование»). QueueGuard
@@ -132,7 +132,7 @@ services:
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://192.168.50.42:8090/v1}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:?не задан KAG_DB_URL (.env)}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
       # HF_HOME НЕ задаём: веса OCR вшиты в kag-base (/app/.cache/huggingface).
       # Переопределение на bind-mount (/app/data/hf_cache) ломало ОФЛАЙН-работу —
@@ -184,7 +184,7 @@ services:
   # НЕ блокировал очередь documents: у worker solo-пул — одна задача за раз.
   # Без -B (beat запускается только в основном worker).
   worker-maintenance:
-    image: kre44et/kag-worker:2026.09.13.23
+    image: kre44et/kag-worker:2026.09.13.24
     command: ["celery", "-A", "src.indexing.celery_app", "worker", "--loglevel=info", "--pool=solo", "-Q", "maintenance"]
     environment:
       - QDRANT_HOST=qdrant
@@ -194,7 +194,7 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - KAG_DB_URL=${KAG_DB_URL:-postgresql://kag:***@kag-db:5432/kag}
+      - KAG_DB_URL=${KAG_DB_URL:?не задан KAG_DB_URL (.env)}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
     volumes:
       - ./data:/app/data
@@ -223,7 +223,7 @@ services:
   
   mcp-server:
     # Готовый образ с Docker Hub (код ЗАШИТ: COPY src в Dockerfile.mcp).
-    image: kre44et/kag-mcp:2026.09.13.23
+    image: kre44et/kag-mcp:2026.09.13.24
     container_name: kag-mcp
     ports:
       - "8001:8001"
@@ -324,11 +324,11 @@ services:
       - "8080:8080"
     environment:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:?не задан KEYCLOAK_ADMIN_PASSWORD (.env)}
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://kag-db:5432/keycloak
       - KC_DB_USERNAME=${KC_DB_USERNAME:-keycloak}
-      - KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
+      - KC_DB_PASSWORD=${KC_DB_PASSWORD:?не задан KC_DB_PASSWORD (.env)}
       # Hostname не фиксируем: Keycloak берёт Host из запроса (IP:8080 из
       # подсети) или X-Forwarded-Host от nginx (внешний адрес). Иначе при
       # обращении по 192.168.50.18:8080 консоль получала issuer=localhost
@@ -365,7 +365,7 @@ services:
     environment:
       - POSTGRES_DB=keycloak
       - POSTGRES_USER=${KC_DB_USERNAME:-keycloak}
-      - POSTGRES_PASSWORD=${KC_DB_PASSWORD:-keycloak_password}
+      - POSTGRES_PASSWORD=${KC_DB_PASSWORD:?не задан KC_DB_PASSWORD (.env)}
     volumes:
       - kag_db_data:/var/lib/postgresql/data
     networks:
@@ -444,7 +444,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?не задан GRAFANA_ADMIN_PASSWORD (.env)}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
@@ -514,7 +514,7 @@ services:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-kagneo4j2026}
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:?не задан NEO4J_PASSWORD (.env)}
       # apoc.* разрешён в самом образе (ENV в Dockerfile). gds.* в коде
       # не используется, open-gds не ставим.
       # Память Neo4j — при росте графа (500+ пользователей) увеличить:

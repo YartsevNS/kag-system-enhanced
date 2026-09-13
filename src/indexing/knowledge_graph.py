@@ -154,8 +154,12 @@ class KnowledgeGraphService:
         import os
         self._uri = uri
         self._user = user
-        # Пароль из env NEO4J_PASSWORD (генерируется deploy.sh). Fallback — старый дефолт.
-        self._password = password or os.environ.get("NEO4J_PASSWORD", "") or "kagneo4j2026"
+        # Пароль ТОЛЬКО из окружения: NEO4J_PASSWORD генерирует deploy.sh и
+        # передаёт compose. Раньше здесь был фолбэк на литеральный пароль —
+        # то есть на значение, опубликованное в репозитории.
+        self._password = password or os.environ.get("NEO4J_PASSWORD", "")
+        if not self._password:
+            logger.warning("[Neo4j] NEO4J_PASSWORD не задан — подключение к графу не удастся (см. .env)")
         self._driver = None
         self._initialized = False
         self._domain_schema = dict(self.DEFAULT_DOMAIN_SCHEMA)
