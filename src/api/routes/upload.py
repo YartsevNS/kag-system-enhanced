@@ -1363,7 +1363,9 @@ async def process_all_mine(current_user: Optional[User] = Depends(get_current_us
         )
 
     from src.api.services.document_repository import get_doc_repo
-    docs = get_doc_repo().get_all() or {}
+    # Полное чтение таблицы — в поток: на большом корпусе это заметная блокировка
+    # event loop (по замеру get_all на 47 документах ~10 мс, растёт линейно).
+    docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
     is_admin = bool(getattr(current_user, "is_admin", False))
 
     targets = []
@@ -1737,7 +1739,7 @@ async def reanalyze_all_documents(
         from src.api.services.document_repository import get_doc_repo
         from src.api.services.document_service import document_service
         
-        all_docs = get_doc_repo().get_all() or {}
+        all_docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
         to_analyze = []
         for did, doc in all_docs.items():
             if not isinstance(doc, dict) or doc.get("status") != "completed":
@@ -1785,7 +1787,7 @@ async def reindex_all_documents(
     try:
         from src.api.services.document_repository import get_doc_repo
 
-        all_docs = get_doc_repo().get_all() or {}
+        all_docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
         ids = [
             did for did, doc in all_docs.items()
             if isinstance(doc, dict) and doc.get("status") == "completed"
@@ -1936,7 +1938,7 @@ async def reprocess_pending_documents(
             detail=f"Обработка заблокирована администратором: {msg}. Обратитесь к администратору.",
         )
 
-    docs = get_doc_repo().get_all() or {}
+    docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
     pending = [(did, doc) for did, doc in docs.items() 
                if isinstance(doc, dict) and doc.get('status') == 'pending']
     

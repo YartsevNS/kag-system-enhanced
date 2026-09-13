@@ -88,8 +88,28 @@ def find_sync_io(path: Path, async_defs: set):
     for node in ast.walk(tree):
         if not isinstance(node, ast.AsyncFunctionDef):
             continue
+        # Вложенные синхронные функции, переданные в to_thread/run_in_executor:
+        # их тело исполняется в потоке, поэтому вызовы внутри — НЕ находки
+        # (например queue_status → _inspect() → celery control.inspect).
+        safe_nested = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call) and any(w in ast.unparse(sub.func) for w in SAFE_WRAPPERS):
+                for arg in sub.args:
+                    if isinstance(arg, ast.Name):
+                        safe_nested.add(arg.id)
+                    elif isinstance(arg, ast.Attribute):
+                        safe_nested.add(arg.attr)
+        skipped_calls = set()
+        if safe_nested:
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.FunctionDef) and sub.name in safe_nested:
+                    for inner in ast.walk(sub):
+                        if isinstance(inner, ast.Call):
+                            skipped_calls.add(id(inner))
         for sub in ast.walk(node):
             if not isinstance(sub, ast.Call):
+                continue
+            if id(sub) in skipped_calls:
                 continue
             src = ast.unparse(sub.func)
             if any(p.search(src) for p in PATTERNS):
