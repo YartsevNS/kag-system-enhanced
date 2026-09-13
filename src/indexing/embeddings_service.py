@@ -7,6 +7,7 @@
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+import asyncio
 import uuid
 import traceback
 from loguru import logger
@@ -144,7 +145,7 @@ class EmbeddingsService:
 
         # Проверяем подключение
         try:
-            collections = self._qdrant_client.get_collections()
+            collections = await asyncio.to_thread(self._qdrant_client.get_collections)
             logger.info(f"Подключено к Qdrant: {len(collections.collections)} коллекций")
         except Exception as e:
             logger.error(f"Ошибка подключения к Qdrant: {e}")
@@ -202,7 +203,7 @@ class EmbeddingsService:
     async def _ensure_collection(self):
         """Создать коллекцию если не существует (dense + sparse)"""
         try:
-            collections = self._qdrant_client.get_collections().collections
+            collections = await asyncio.to_thread(self._qdrant_client.get_collections).collections
             exists = any(c.name == self.collection_name for c in collections)
 
             if not exists:
@@ -219,8 +220,7 @@ class EmbeddingsService:
                 except Exception:
                     pass
 
-                self._qdrant_client.create_collection(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_collection, collection_name=self.collection_name,
                     vectors_config={
                         "dense": VectorParams(
                             size=dim,
@@ -233,39 +233,28 @@ class EmbeddingsService:
                                 on_disk=False,
                             )
                         ),
-                    },
-                )
+                    },)
 
                 # Создаем индексы для payload полей
-                self._qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="document_id",
-                    field_schema=PayloadSchemaType.KEYWORD
-                )
+                    field_schema=PayloadSchemaType.KEYWORD)
 
-                self._qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="chunk_id",
-                    field_schema=PayloadSchemaType.KEYWORD
-                )
+                    field_schema=PayloadSchemaType.KEYWORD)
 
-                self._qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="file_type",
-                    field_schema=PayloadSchemaType.KEYWORD
-                )
+                    field_schema=PayloadSchemaType.KEYWORD)
 
-                self._qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="filename",
-                    field_schema=PayloadSchemaType.KEYWORD
-                )
+                    field_schema=PayloadSchemaType.KEYWORD)
 
-                self._qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="group_ids",
-                    field_schema=PayloadSchemaType.KEYWORD
-                )
+                    field_schema=PayloadSchemaType.KEYWORD)
 
                 logger.info(f"Коллекция создана: {self.collection_name}")
             else:
@@ -273,7 +262,7 @@ class EmbeddingsService:
                 # Если модель сменилась (например 768→1024), пересоздаём коллекцию,
                 # иначе вставка векторов падает с "dimension error".
                 try:
-                    _info = self._qdrant_client.get_collection(self.collection_name)
+                    _info = await asyncio.to_thread(self._qdrant_client.get_collection, self.collection_name)
                     _existing_dim = None
                     _vc = _info.config.params.vectors
                     if isinstance(_vc, dict) and "dense" in _vc:
@@ -293,7 +282,7 @@ class EmbeddingsService:
                         logger.warning(
                             f"Размерность коллекции ({_existing_dim}) != модели ({_dim}) — пересоздаю коллекцию"
                         )
-                        self._qdrant_client.delete_collection(self.collection_name)
+                        await asyncio.to_thread(self._qdrant_client.delete_collection, self.collection_name)
                         return await self._ensure_collection()
                     logger.info(f"Коллекция существует: {self.collection_name} (dim={_existing_dim})")
                 except Exception:
@@ -411,10 +400,8 @@ class EmbeddingsService:
         total_saved = 0
         for i in range(0, len(points), self._batch_size):
             batch = points[i:i + self._batch_size]
-            self._qdrant_client.upsert(
-                collection_name=self.collection_name,
-                points=batch
-            )
+            await asyncio.to_thread(self._qdrant_client.upsert, collection_name=self.collection_name,
+                points=batch)
             total_saved += len(batch)
 
         logger.info(f"Сохранено {total_saved} векторов в Qdrant")
@@ -425,8 +412,7 @@ class EmbeddingsService:
         try:
             # Находим все точки документа
             from qdrant_client.http import models as qmodels
-            scroll_result = self._qdrant_client.scroll(
-                collection_name=self.collection_name,
+            scroll_result = await asyncio.to_thread(self._qdrant_client.scroll, collection_name=self.collection_name,
                 scroll_filter=qmodels.Filter(
                     must=[
                         qmodels.FieldCondition(
@@ -437,8 +423,7 @@ class EmbeddingsService:
                 ),
                 limit=1000,
                 with_payload=True,
-                with_vectors=False
-            )
+                with_vectors=False)
             points, _ = scroll_result
             if not points:
                 logger.debug(f"Нет чанков для обновления типа {document_id}")
@@ -448,11 +433,9 @@ class EmbeddingsService:
             # получены с with_vectors=False — vector=None, PointStruct
             # падал бы с «validation errors»).
             point_ids = [p.id for p in points]
-            self._qdrant_client.set_payload(
-                collection_name=self.collection_name,
+            await asyncio.to_thread(self._qdrant_client.set_payload, collection_name=self.collection_name,
                 payload={"document_type": document_type},
-                points=point_ids,
-            )
+                points=point_ids,)
             logger.info(f"Обновлён document_type={document_type} для {len(point_ids)} чанков {document_id}")
             return True
         except Exception as e:
@@ -579,13 +562,11 @@ class EmbeddingsService:
                 "allow_user_ids": access.get("allow_user_ids", []),
                 "deny_user_ids": access.get("deny_user_ids", []),
             }
-            self._qdrant_client.set_payload(
-                collection_name=self.collection_name,
+            await asyncio.to_thread(self._qdrant_client.set_payload, collection_name=self.collection_name,
                 payload=payload,
                 points=Filter(
                     must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-                ),
-            )
+                ),)
             logger.info(f"ACL: payload обновлён для {document_id[:12]}")
         except Exception as e:
             logger.warning(f"ACL: не удалось обновить payload {document_id[:12]}: {e}")
@@ -748,8 +729,7 @@ class EmbeddingsService:
                 )
                 try:
                     query_sparse = self._sparse_vec(query)
-                    resp = self._qdrant_client.query_points(
-                        collection_name=self.collection_name,
+                    resp = await asyncio.to_thread(self._qdrant_client.query_points, collection_name=self.collection_name,
                         prefetch=[
                             Prefetch(query=query_embedding, using="dense",
                                      filter=query_filter, limit=limit * 3),
@@ -758,8 +738,7 @@ class EmbeddingsService:
                         ],
                         query=FusionQuery(fusion=Fusion.RRF),
                         limit=limit,
-                        with_payload=True,
-                    )
+                        with_payload=True,)
                     hits = resp.points
                 except Exception as e:
                     logger.error(
@@ -767,21 +746,17 @@ class EmbeddingsService:
                         f"({type(e).__name__}): {e} — возвращаюсь к dense-поиску"
                     )
                     logger.debug(traceback.format_exc())
-                    hits = self._qdrant_client.search(
-                        collection_name=self.collection_name,
+                    hits = await asyncio.to_thread(self._qdrant_client.search, collection_name=self.collection_name,
                         query_vector=("dense", query_embedding),
                         limit=limit,
                         query_filter=query_filter,
-                        with_payload=True,
-                    )
+                        with_payload=True,)
             else:
-                hits = self._qdrant_client.search(
-                    collection_name=self.collection_name,
+                hits = await asyncio.to_thread(self._qdrant_client.search, collection_name=self.collection_name,
                     query_vector=("dense", query_embedding),
                     limit=limit,
                     query_filter=query_filter,
-                    with_payload=True,
-                )
+                    with_payload=True,)
 
             for hit in hits:
                 payload = hit.payload or {}
@@ -827,12 +802,10 @@ class EmbeddingsService:
         if not ids or not self._qdrant_client:
             return {}
         try:
-            points = self._qdrant_client.retrieve(
-                collection_name=self.collection_name,
+            points = await asyncio.to_thread(self._qdrant_client.retrieve, collection_name=self.collection_name,
                 ids=ids,
                 with_payload=True,
-                with_vectors=False,
-            )
+                with_vectors=False,)
         except Exception as e:
             logger.warning(f"Не удалось прочитать payload точек Qdrant ({len(ids)}): {e}")
             return {}
@@ -849,14 +822,12 @@ class EmbeddingsService:
         """
         if self._qdrant_client is None:
             await self.initialize()
-        result = self._qdrant_client.count(
-            collection_name=self.collection_name,
+        result = await asyncio.to_thread(self._qdrant_client.count, collection_name=self.collection_name,
             count_filter=Filter(
                 must=[FieldCondition(key="document_id",
                                      match=MatchValue(value=document_id))]
             ),
-            exact=True,
-        )
+            exact=True,)
         return int(getattr(result, "count", 0) or 0)
 
     async def delete_document(self, document_id: str) -> bool:
@@ -870,8 +841,7 @@ class EmbeddingsService:
             True если успешно
         """
         try:
-            self._qdrant_client.delete(
-                collection_name=self.collection_name,
+            await asyncio.to_thread(self._qdrant_client.delete, collection_name=self.collection_name,
                 points_selector=Filter(
                     must=[
                         FieldCondition(
@@ -879,8 +849,7 @@ class EmbeddingsService:
                             match=MatchValue(value=document_id)
                         )
                     ]
-                )
-            )
+                ))
 
             logger.info(f"Документ удален из Qdrant: {document_id}")
             return True
@@ -891,10 +860,8 @@ class EmbeddingsService:
     async def delete_all(self) -> bool:
         """Удалить все чанки из Qdrant"""
         try:
-            self._qdrant_client.delete(
-                collection_name=self.collection_name,
-                points_selector=Filter(must=[])
-            )
+            await asyncio.to_thread(self._qdrant_client.delete, collection_name=self.collection_name,
+                points_selector=Filter(must=[]))
             logger.info("Все документы удалены из Qdrant")
             return True
         except Exception as e:
@@ -909,7 +876,7 @@ class EmbeddingsService:
             Словарь со статистикой
         """
         try:
-            info = self._qdrant_client.get_collection(self.collection_name)
+            info = await asyncio.to_thread(self._qdrant_client.get_collection, self.collection_name)
 
             return {
                 "collection_name": self.collection_name,
@@ -940,8 +907,7 @@ class EmbeddingsService:
         try:
             if self._qdrant_client is None:
                 await self.initialize()
-            results, _ = self._qdrant_client.scroll(
-                collection_name=self.collection_name,
+            results, _ = await asyncio.to_thread(self._qdrant_client.scroll, collection_name=self.collection_name,
                 scroll_filter=Filter(
                     must=[
                         FieldCondition(
@@ -950,8 +916,7 @@ class EmbeddingsService:
                         )
                     ]
                 ),
-                limit=1000
-            )
+                limit=1000)
 
             chunks = []
             for point in results:
