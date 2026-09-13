@@ -2,6 +2,8 @@
 API-роуты для Knowledge Graph (Neo4j).
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import Literal, Optional, List
 from loguru import logger
