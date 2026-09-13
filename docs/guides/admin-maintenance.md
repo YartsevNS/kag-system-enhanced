@@ -499,7 +499,7 @@ Neo4j, HTTP, subprocess, docker SDK, celery `inspect`), не обёрнутые 
 | 2026-09-13 | 258 | — | 56 | первый скан (по вызовам, Path одним видом) |
 | 2026-09-13 | 236 | 197 | 34 | правки upload.py: 29 обёрток `to_thread`, `find_file` вместо `iterdir`, лимит scroll с флагом `truncated` |
 | 2026-09-13 | 233 | 194 | 32 | второй порядок: chat_service (список документов), chunks.py (scroll), upload (`_save_document_to_db`, `_find_by_hash`) |
-| 2026-09-13 | см. скан | см. скан | 32 | процесс API: HotFolderWatcher (ФС в цикле опроса), страницы (`_html_response`), watchers (`db.query` в async) |
+| 2026-09-13 | 225 | 186 | 32 | процесс API: HotFolderWatcher (ФС в цикле опроса), страницы (`_html_response`), watchers (`db.query` в async) |
 
 Читать карту так: `config_store` 100 и «Path: проверка (дёшево)» 39 — это не 139
 проблем, а 139 вызовов; оборачивать имеет смысл то, где есть реальное ожидание
