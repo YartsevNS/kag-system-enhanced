@@ -49,3 +49,43 @@ def test_resolution_flag_exists_and_skips_merges():
     assert "auto_merge: bool = True" in KG
     assert "if merge_plan and auto_merge:" in KG
     assert "if merge_plan and not auto_merge:" in KG
+
+
+def test_task_body_runs_without_name_errors(monkeypatch):
+    """Тело задачи должно выполняться: ловит NameError/ошибки области видимости.
+
+    Живой случай (поймано на стенде): в первой версии задачи были `time.monotonic()`
+    (в tasks.py нет `import time`), `now_iso()` (локальная лямбда внутри другой задачи)
+    и `config_store` без импорта — задача падала с NameError, хотя импорт модуля и
+    синтаксис были в порядке. Здесь тело исполняется с подменёнными источниками.
+    """
+    # ВАЖНО: importlib, а не `import ... as cs_mod`: пакеты реэкспортируют инстансы
+    # (src.api.services.config_store — это ИНСТАНС config_store, не модуль), и форма
+    # `import a.b as x` вернула бы инстанс, из-за чего подмена не сработала бы.
+    import importlib
+
+    cs_mod = importlib.import_module("src.api.services.config_store")
+    kg_mod = importlib.import_module("src.indexing.knowledge_graph")
+    tasks = importlib.import_module("src.indexing.tasks")
+
+    written = {}
+
+    class _FakeCS:
+        def set(self, cat, key, value):
+            written[(cat, key)] = value
+            return True
+
+    class _FakeKG:
+        @staticmethod
+        def resolve_duplicate_entities(threshold=0.90, auto_merge=True):
+            assert auto_merge is False, "задача не должна сливать сущности сама"
+            return {"merged": 0, "aliased": 7}
+
+    monkeypatch.setattr(cs_mod, "config_store", _FakeCS())
+    monkeypatch.setattr(kg_mod, "kg_service", _FakeKG())
+
+    res = tasks.resolve_entity_candidates.run(threshold=0.9)
+
+    assert res["status"] == "ok", res
+    assert res["aliased"] == 7
+    assert written[("kg_config", "entity_candidates_last")]["candidates"] == 7

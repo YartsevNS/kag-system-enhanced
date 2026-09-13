@@ -353,14 +353,17 @@ def resolve_entity_candidates(self, threshold: float = 0.90) -> Dict[str, Any]:
     (source='pending') для ручного ревью в админке («Словарь алиасов»). Слияние графа
     не меняется — это необратимая операция, её выполняет человек.
     """
+    from src.api.services.config_store import config_store
     from src.indexing.knowledge_graph import kg_service
 
-    started = time.monotonic()
+    # datetime, а не time/now_iso: в модуле нет `import time`, а `now_iso` — локальная
+    # лямбда внутри rebuild_graph_task (обнаружено smoke-тестом на стенде: NameError).
+    started = datetime.now(timezone.utc)
     try:
         result = kg_service.resolve_duplicate_entities(threshold=threshold, auto_merge=False)
-        elapsed = round(time.monotonic() - started, 1)
+        elapsed = round((datetime.now(timezone.utc) - started).total_seconds(), 1)
         config_store.set("kg_config", "entity_candidates_last", {
-            "at": now_iso(), "elapsed_s": elapsed,
+            "at": datetime.now(timezone.utc).isoformat(), "elapsed_s": elapsed,
             "candidates": result.get("aliased", 0),
             "threshold": threshold,
         })
