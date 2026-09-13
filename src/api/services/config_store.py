@@ -99,6 +99,22 @@ class PostgresConfigStore:
             if 'session' in locals():
                 session.close()
 
+    @staticmethod
+    def _decode_value(raw: str) -> Any:
+        """Разобрать значение из БД так же, как его пишет set().
+
+        set() кладёт dict/list/bool/int/float через json.dumps, а строки — как есть
+        (без кавычек), поэтому json.loads на «idle» падает: пробуем JSON, затем
+        возвращаем строку.
+        """
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return raw
+
+
     def compare_and_set(self, category: str, key: str, new_value: Any,
                         expected: Any) -> bool:
         """Атомарно записать значение, только если текущее равно expected.
@@ -113,7 +129,7 @@ class PostgresConfigStore:
             try:
                 from src.database.models import SystemConfig
                 current = session.query(SystemConfig).filter_by(id=config_id).first()
-                current_value = json.loads(current.value) if (current and current.value) else None
+                current_value = self._decode_value(current.value) if current else None
                 if current_value != expected:
                     return False
                 payload = json.dumps(new_value, ensure_ascii=False) if isinstance(
