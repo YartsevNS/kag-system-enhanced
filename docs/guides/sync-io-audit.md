@@ -120,12 +120,12 @@ async-роутах `process_all_mine`, `reprocess_pending_documents`, `reanalyze
 | Эндпоинт | `get` (строка) | `set` (строка) | Замер | Решение |
 |---|---|---|---|---|
 | `GET /chunking-config + POST /chunking-config` | 496 | 513 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `GET /llm-config` | 730 | — | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `POST /switch-llm` | — | 764 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
+| `GET /llm-config` | 730 | — | get 0.001–0.007 мс | не оборачивать |
+| `POST /switch-llm` | — | 764 | set 3.8 мс | не оборачивать |
 | `POST /switch-embedding (читает конфиг перед записью)` | 793 | 795 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `POST /ext-llm` | — | 898 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `POST /graph` | — | 1215 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `POST /upload-config` | — | 1411 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
+| `POST /ext-llm` | — | 898 | set 3.8 мс | не оборачивать |
+| `POST /graph` | — | 1215 | set 3.8 мс | не оборачивать |
+| `POST /upload-config` | — | 1411 | set 3.8 мс | не оборачивать |
 | `GET/POST /chat-prompt` | 1425, 1438 | 1440 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
 | `GET/POST /branding-config` | 1861, 1877 | 1886 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
 | `GET/POST /processing-config` | 1900, 1916 | 1924 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
@@ -137,7 +137,7 @@ async-роутах `process_all_mine`, `reprocess_pending_documents`, `reanalyze
 | `GET /ocr-settings + POST /ocr-settings` | 2178 | 2184 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
 | `GET/PUT /system-config` | 2311, 2338 | 2352 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
 | `GET/PUT /scaling` | 2395, 2423 | 2437 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
-| `PUT /worker-resources` | — | 2578 | get 0.001–0.007 мс · set 3.8 мс | не оборачивать |
+| `PUT /worker-resources` | — | 2578 | set 3.8 мс | не оборачивать |
 
 **Замеры:** `get` — 0.001–0.007 мс из кэша чтения (до кэша было 10.4 мс; проверено и на
 крупных конфигах, и на отсутствующих ключах — см. ниже). `set` — 3.8 мс (запись + commit,
