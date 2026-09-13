@@ -222,9 +222,13 @@ async def triage_chunks(document_id: str, chunks: List[Dict[str, Any]], *,
         if neighbors is None:
             async def neighbors(vector, limit):  # type: ignore[misc]
                 def _query():
+                    # ВАЖНО: коллекция с ИМЕНОВАННЫМИ векторами (dense + sparse),
+                    # поэтому имя вектора обязательно: без using="dense" Qdrant
+                    # отвечает 400 «Vector params for  are not specified in config»
+                    # (живой случай: 558 неудачных ANN-запросов, триаж дал 0 находок).
                     resp = embed_service._qdrant_client.query_points(
                         collection_name=embed_service.collection_name,
-                        query=vector, limit=limit,
+                        query=vector, using="dense", limit=limit,
                         with_payload=["document_id"], with_vectors=False,
                     )
                     out = []
