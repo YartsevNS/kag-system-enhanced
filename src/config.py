@@ -184,7 +184,9 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 1024 * 1024 * 1024                  # на один файл, ГБ
     MAX_ARCHIVE_ENTRIES: int = 1000                          # файлов в архиве
     MAX_ARCHIVE_UNCOMPRESSED: int = 2 * 1024 * 1024 * 1024   # распакованного, 2 ГБ
-    UPLOAD_TEMP_DIR: str = "/tmp"                            # распаковка архивов
+    UPLOAD_TEMP_DIR: str = "/tmp"                            # распаковка архивов и TUS-сессии
+    TUS_DIR: str = "/tmp/tus_uploads"                        # сессии докачки (TUS)
+    THUMBNAILS_DIR: str = "/app/data/thumbnails"             # кэш миниатюр
 
     # Безопасность
     AUTH_ENABLED: bool = False

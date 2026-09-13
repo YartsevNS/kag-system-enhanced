@@ -13,12 +13,35 @@
 Обработка асинхронная, не блокирует upload.
 """
 import time
-from typing import Dict, Any, Callable
 
 import os
 import io
 import uuid
 import json as _json
+
+
+async def _read_bytes(path) -> bytes:
+    """Прочитать файл в отдельном потоке (в async-роуте синхронное чтение блокирует loop)."""
+    def _read():
+        with open(path, "rb") as f:
+            return f.read()
+    return await asyncio.to_thread(_read)
+
+
+async def _append_bytes(path, chunk: bytes) -> None:
+    """Дописать чанк в файл в отдельном потоке."""
+    def _append():
+        with open(path, "ab") as f:
+            f.write(chunk)
+    await asyncio.to_thread(_append)
+
+
+async def _write_meta(path, meta: dict) -> None:
+    """Записать метаданные сессии (TUS) в отдельном потоке."""
+    def _write():
+        with open(path, "w") as f:
+            json.dump(meta, f)
+    await asyncio.to_thread(_write)
 
 
 def _parse_id_list(raw) -> list:
@@ -89,9 +112,11 @@ router = APIRouter()
 # Лимиты берём из настроек, а не держим литералами в роутере.
 _settings = get_settings()
 MAX_FILE_SIZE = _settings.MAX_FILE_SIZE
+# Сколько чанков документа тянем из Qdrant за раз (scroll, не пагинация):
+# при достижении лимита в ответе будет truncated=True, чтобы это не было тихой потерей.
+CHUNKS_SCROLL_LIMIT = 10000
 
 # Rate limiter: не более N запросов в минуту на upload
-import time
 from collections import defaultdict
 _RATE_STORE: dict = defaultdict(list)
 _RATE_LIMIT = 10       # запросов
@@ -127,7 +152,7 @@ def _deny_if_uploads_blocked():
         })
 
 # Директория для TUS чанков (временные файлы)
-TUS_DIR = Path("/tmp/tus_uploads")
+TUS_DIR = Path(_settings.TUS_DIR)
 
 
 # ============================================================
@@ -269,11 +294,10 @@ async def tus_create(
         "created_at": datetime.utcnow().isoformat(),
         "uploaded_by": str(current_user.id) if current_user else None,
     }
-    with open(_tus_meta_path(upload_id), "w") as f:
-        json.dump(meta, f)
+    await _write_meta(_tus_meta_path(upload_id), meta)
 
     # Создаём пустой файл для чанков (pre-allocate не обязателен)
-    _tus_file_path(upload_id).touch()
+    await asyncio.to_thread(_tus_file_path(upload_id).touch)
 
     logger.info(f"[TUS] Сессия создана: {upload_id}, файл: {filename}, размер: {total_size}")
 
@@ -294,17 +318,17 @@ async def tus_head(
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """TUS: получить текущий статус загрузки (сколько байт уже получено)."""
-    meta_path = _tus_meta_path(upload_id)
-    if not meta_path.exists():
+    meta = await asyncio.to_thread(_tus_read_meta, upload_id)
+    if not meta:
         raise HTTPException(status_code=404, detail="Upload session not found")
-
-    with open(meta_path) as f:
-        meta = json.load(f)
 
     _tus_check_owner(meta, current_user)
 
-    file_path = _tus_file_path(upload_id)
-    offset = file_path.stat().st_size if file_path.exists() else 0
+    def _offset() -> int:
+        file_path = _tus_file_path(upload_id)
+        return file_path.stat().st_size if file_path.exists() else 0
+
+    offset = await asyncio.to_thread(_offset)
 
     return Response(
         headers={
@@ -331,17 +355,18 @@ async def tus_patch(
     if request.headers.get("Tus-Resumable") != "1.0.0":
         raise HTTPException(status_code=412, detail="Tus-Resumable: 1.0.0 required")
 
-    meta_path = _tus_meta_path(upload_id)
-    if not meta_path.exists():
+    meta = await asyncio.to_thread(_tus_read_meta, upload_id)
+    if not meta:
         raise HTTPException(status_code=404, detail="Upload session not found")
-
-    with open(meta_path) as f:
-        meta = json.load(f)
 
     _tus_check_owner(meta, current_user)
 
     file_path = _tus_file_path(upload_id)
-    current_offset = file_path.stat().st_size if file_path.exists() else 0
+
+    def _offset() -> int:
+        return file_path.stat().st_size if file_path.exists() else 0
+
+    current_offset = await asyncio.to_thread(_offset)
 
     # Проверка Upload-Offset из заголовка
     try:
@@ -360,10 +385,8 @@ async def tus_patch(
     if not chunk:
         raise HTTPException(status_code=400, detail="Empty chunk")
 
-    with open(file_path, "ab") as f:
-        f.write(chunk)
-
-    new_offset = file_path.stat().st_size
+    await _append_bytes(file_path, chunk)
+    new_offset = await asyncio.to_thread(lambda: file_path.stat().st_size)
     logger.debug(f"[TUS] Чанк получен: {upload_id}, offset: {current_offset}→{new_offset}")
 
     # Если всё загружено — завершаем сессию
@@ -372,8 +395,7 @@ async def tus_patch(
 
         # Собираем файл и отправляем в document_service
         try:
-            with open(file_path, "rb") as f:
-                file_content = f.read()
+            file_content = await _read_bytes(file_path)
 
             uploaded_by = current_user.id if current_user else meta.get("uploaded_by")
             group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
@@ -405,7 +427,7 @@ async def tus_patch(
             raise HTTPException(status_code=500, detail=str(e))
         finally:
             # Очищаем временные файлы
-            _cleanup_tus(upload_id)
+            await asyncio.to_thread(_cleanup_tus, upload_id)
 
     return Response(
         headers={
@@ -421,10 +443,11 @@ async def tus_delete(
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """TUS: отменить и удалить сессию загрузки (только своей сессии)."""
-    meta = _tus_read_meta(upload_id)
+    meta = await asyncio.to_thread(_tus_read_meta, upload_id)
     _tus_check_owner(meta, current_user)
-    _cleanup_tus(upload_id)
-    return Response()
+    await asyncio.to_thread(_cleanup_tus, upload_id)
+    # Явно: декоратор объявляет 204, но Response() по умолчанию отдаёт 200.
+    return Response(status_code=204)
 
 
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
@@ -687,7 +710,7 @@ async def upload_bulk(
         if ext in (".zip",):
             import zipfile
             with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
-                infos = zf.infolist()
+                infos = await asyncio.to_thread(zf.infolist)
                 # Лимиты и имена проверяем ДО распаковки: иначе ZIP-бомба
                 # (тысячи файлов или гигабайты нулей) успеет лечь на диск.
                 check_limits(
@@ -707,7 +730,7 @@ async def upload_bulk(
                     if target is None:
                         continue
                     # Извлекаем во временную папку (имя проверено выше)
-                    zf.extract(info, extract_dir)
+                    await asyncio.to_thread(zf.extract, info, extract_dir)
                     extracted_path = target
                     if not extracted_path.is_file():
                         continue
@@ -723,7 +746,7 @@ async def upload_bulk(
                     # tarfile.open режим определяется по расширению
             mode = "r:gz" if ext in (".gz", ".tgz") else "r:"
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode=mode) as tf:
-                members = tf.getmembers()
+                members = await asyncio.to_thread(tf.getmembers)
                 # tarfile.extract НЕ защищён от «../» (в отличие от zipfile с
                 # Python 3.6) и позволяет symlink-атаку: проверяем имена, ссылки
                 # и спецфайлы; лимиты — по суммарному размеру.
@@ -743,7 +766,7 @@ async def upload_bulk(
                     target = safe_target(extract_dir, member.name)
                     if target is None:
                         continue
-                    tf.extract(member, extract_dir)
+                    await asyncio.to_thread(tf.extract, member, extract_dir)
                     extracted_path = target
                     if not extracted_path.is_file():
                         continue
@@ -783,8 +806,7 @@ async def _process_bulk_file(
 ):
     """Загрузить один файл из архива в document_service."""
     try:
-        with open(file_path, "rb") as f:
-            content = f.read()
+        content = await _read_bytes(file_path)
 
         if len(content) == 0:
             results.append({"filename": file_path.name, "status": "error", "error": "Empty file"})
@@ -1394,13 +1416,16 @@ async def get_document_chunks(
     
     try:
         # Получаем ВСЕ чанки документа (Qdrant scroll возвращает неупорядоченно)
-        all_results = qdrant_service.scroll_points(
+        # Qdrant-клиент синхронный: вызов в потоке, иначе loop ждёт сеть.
+        all_results = await asyncio.to_thread(
+            qdrant_service.scroll_points,
             filter={
                 "must": [{"key": "document_id", "match": {"value": document_id}}]
             },
-            limit=10000
+            limit=CHUNKS_SCROLL_LIMIT,
         )
         
+        truncated = len(all_results) >= CHUNKS_SCROLL_LIMIT
         all_chunks = []
         for r in all_results:
             payload = r.get("payload", {})
@@ -1423,7 +1448,12 @@ async def get_document_chunks(
         total = len(all_chunks)
         chunks = all_chunks[offset:offset + limit]
         
-        return {"chunks": chunks, "total": total, "offset": offset, "limit": limit}
+        return {
+            "chunks": chunks, "total": total, "offset": offset, "limit": limit,
+            # truncated: в Qdrant за один scroll взяли CHUNKS_SCROLL_LIMIT
+            # записей — если документ больше, это видно клиенту, а не молча теряется.
+            "truncated": truncated, "scroll_limit": CHUNKS_SCROLL_LIMIT,
+        }
     except Exception as e:
         logger.error(f"Ошибка получения чанков: {e}")
         return {"chunks": [], "total": 0, "error": str(e)}
@@ -1445,7 +1475,8 @@ async def get_document_details(
     # Получаем запись из SQL (DocumentRepository)
     record_data = None
     try:
-        record_data = get_doc_repo().get_dict(document_id)
+        # Чтение из БД — в потоке: в async-роуте это блокирует event loop.
+        record_data = await asyncio.to_thread(get_doc_repo().get_dict, document_id)
     except Exception:
         record_data = None
     
@@ -1620,35 +1651,24 @@ async def get_document_thumbnail(
     from pathlib import Path
     from fastapi.responses import FileResponse, Response
     
-    thumb_dir = Path("/app/data/thumbnails")
+    thumb_dir = Path(_settings.THUMBNAILS_DIR)
     thumb_path = thumb_dir / f"{document_id}.webp"
-    
-    # Если миниатюра уже есть в кэше — отдаём сразу
-    if thumb_path.exists():
+
+    # ФС-операции — в потоке (см. also find_file: без перебора каталога).
+    if await asyncio.to_thread(thumb_path.exists):
         return FileResponse(thumb_path, media_type="image/webp",
             headers={"Cache-Control": "public, max-age=86400"})
     
     # Пробуем сгенерировать на лету
     try:
-        # Ищем файл документа по всем возможным директориям
-        file_path = None
-        for upload_dir in [
-            Path("/app/data/uploads"),
-            Path("/app/user_data/uploads"),
-            Path("/tmp/kag_uploads"),
-        ]:
-            if not upload_dir.exists():
-                continue
-            for f in upload_dir.iterdir():
-                if f.is_file() and f.name.startswith(document_id):
-                    file_path = f
-                    break
-            if file_path:
-                break
-        
-        if file_path and file_path.exists():
-            # Генерируем через document_service
-            thumb = document_service._generate_thumbnail(document_id, file_path)
+        # Точный путь по <document_id>_<имя>; перебор каталогов остался внутри
+        # find_file только как fallback для старых имён.
+        file_path = await asyncio.to_thread(document_service.find_file, document_id)
+        if file_path:
+            # Генерация миниатюры синхронная (Pillow/PyMuPDF) — в поток.
+            thumb = await asyncio.to_thread(
+                document_service._generate_thumbnail, document_id, file_path
+            )
             if thumb and thumb.exists():
                 return FileResponse(thumb, media_type="image/webp",
                     headers={"Cache-Control": "public, max-age=86400"})
@@ -1676,17 +1696,16 @@ async def get_document_preview(
     from pathlib import Path
     from fastapi.responses import FileResponse
     
-    # Ищем файл по всем возможным директориям
-    for upload_dir in [Path("/app/data/uploads"), Path("/app/user_data/uploads"), Path("/tmp/kag_uploads")]:
-        if not upload_dir.exists():
-            continue
-        for f in upload_dir.iterdir():
-            if f.is_file() and f.name.startswith(document_id):
-                mime = "application/pdf" if f.suffix.lower() == '.pdf' else "application/octet-stream"
-                return FileResponse(f, media_type=mime,
-                    headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"})
-    
-    raise HTTPException(status_code=404, detail="Файл не найден")
+    # Точный путь по <document_id>_<имя> вместо перебора каталога
+    file_path = await asyncio.to_thread(document_service.find_file, document_id)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    # MIME по расширению, а не «pdf или octet-stream»
+    import mimetypes
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type,
+        headers={"Content-Disposition": "inline", "Cache-Control": "public, max-age=3600"})
 
 
 @router.post("/reanalyze-all", summary="Переанализировать все документы")
@@ -1943,10 +1962,12 @@ async def queue_status():
         from src.indexing.celery_app import celery_app
         
         # Получаем инспекцию воркеров
-        i = celery_app.control.inspect()
-        active_tasks = i.active() or {}
-        reserved_tasks = i.reserved() or {}
-        scheduled_tasks = i.scheduled() or {}
+        # inspect() — блокирующий вызов с сетевым таймаутом (секунды).
+        def _inspect():
+            i = celery_app.control.inspect()
+            return i.active() or {}, i.reserved() or {}, i.scheduled() or {}
+
+        active_tasks, reserved_tasks, scheduled_tasks = await asyncio.to_thread(_inspect)
         
         workers = []
         total_active = 0

@@ -74,7 +74,16 @@ def process_document(
         
         # Получаем метаданные из SQL (DocumentRepository)
         doc_data = get_doc_repo().get_dict(document_id)
-        
+
+        if not doc_data:
+            # Гонка «документ удалили между постановкой в очередь и стартом
+            # задачи»: раньше код шёл дальше и падал в document_service —
+            # в логе было «Ошибка обработки», по которой причина не читалась.
+            logger.warning(f"[Celery] {document_id}: документа нет в БД — задача пропущена")
+            from src.indexing.queue_guard import release_lock
+            release_lock(document_id)
+            return {"status": "not_found", "document_id": document_id}
+
         if isinstance(doc_data, str):
             raise ValueError(f"Документ повреждён в БД (строка вместо dict): {document_id}")
         

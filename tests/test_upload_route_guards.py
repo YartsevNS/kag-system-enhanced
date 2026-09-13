@@ -126,3 +126,49 @@ def test_bulk_uses_archive_guard():
 def test_limits_come_from_settings():
     assert "MAX_FILE_SIZE = _settings.MAX_FILE_SIZE" in SRC, "лимит файла снова хардкод"
     assert "UPLOAD_TEMP_DIR" in SRC, "каталог распаковки снова хардкод /tmp"
+
+
+# ── вторая половина аудита: блокирующий I/O, iterdir, лимит чанков ─────────
+
+HOT_ASYNC = [
+    "get_document_details", "get_document_chunks", "get_document_thumbnail",
+    "get_document_preview", "queue_status", "tus_head", "tus_patch",
+    "tus_delete", "upload_bulk", "tus_create",
+]
+
+
+def test_blocking_io_moved_to_thread():
+    """В async-обработчиках ФС/БД/Qdrant/celery не должны блокировать event loop."""
+    missing = [n for n in HOT_ASYNC if "asyncio.to_thread" not in _body(n)]
+    assert not missing, f"синхронный I/O в async без to_thread: {missing}"
+
+
+def test_routes_do_not_scan_uploads_dir():
+    """Поиск файла перебором каталога (iterdir по всем документам) убран."""
+    assert "upload_dir.iterdir" not in SRC, "вернулся перебор каталога при поиске файла"
+    assert "find_file" in SRC, "роуты должны искать файл через document_service.find_file"
+
+
+def test_chunks_report_truncation():
+    assert "CHUNKS_SCROLL_LIMIT" in SRC
+    body = _body("get_document_chunks")
+    assert "truncated" in body, "лимит scroll должен отражаться в ответе, а не теряться молча"
+
+
+def test_tus_delete_returns_204_explicitly():
+    body = _body("tus_delete")
+    assert "Response(status_code=204)" in body, (
+        "Response() отдаёт 200 и перебивает объявленный в декораторе 204"
+    )
+
+
+def test_dirs_taken_from_settings():
+    assert "_settings.TUS_DIR" in SRC, "TUS_DIR снова литерал"
+    assert "_settings.THUMBNAILS_DIR" in SRC, "каталог миниатюр снова литерал"
+
+
+def test_model_returns_explicit_status_for_deleted_document():
+    tasks_src = (ROOT / "src/indexing/tasks.py").read_text(encoding="utf-8")
+    assert '{"status": "not_found"' in tasks_src, (
+        "задача на удалённый документ должна завершаться явно, а не падать в document_service"
+    )

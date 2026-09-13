@@ -819,6 +819,47 @@ class DocumentService:
             
             raise
 
+    def find_file(self, document_id: str, filename: Optional[str] = None) -> Optional[Path]:
+        """Путь к исходному файлу документа (без перебора каталога).
+
+        Файлы сохраняются как `<document_id>_<имя>` (см. upload_document),
+        поэтому путь вычисляется точно: раньше роуты искали файл через
+        `iterdir()` по трём каталогам на каждый показ превью/миниатюры — при
+        10 000 документов это 10 000 системных вызовов на запрос.
+        Перебор оставлен fallback'ом для файлов со старым именем.
+        """
+        dirs = [self._upload_dir, Path("/app/user_data/uploads"), Path("/tmp/kag_uploads")]
+        name = filename
+        if not name:
+            try:
+                from src.api.services.document_repository import get_doc_repo
+                meta = get_doc_repo().get_dict(document_id) or {}
+                name = meta.get("filename") or ""
+            except Exception:
+                name = ""
+        if name:
+            for d in dirs:
+                try:
+                    candidate = d / f"{document_id}_{name}"
+                    if candidate.is_file():
+                        return candidate
+                except OSError:
+                    continue
+        # fallback: файлы, сохранённые старым кодом (имя = <id>_…)
+        # Требуем разделитель: без него `doc-1` совпал бы с `doc-10_other.pdf`
+        # и документу отдался бы ЧУЖОЙ файл (классический префиксный баг).
+        prefix = f"{document_id}_"
+        for d in dirs:
+            try:
+                if not d.exists():
+                    continue
+                for f in d.iterdir():
+                    if f.is_file() and f.name.startswith(prefix):
+                        return f
+            except OSError:
+                continue
+        return None
+
     def get_document_status(self, document_id: str) -> Optional[DocumentRecord]:
         """Получить статус обработки документа.
 
