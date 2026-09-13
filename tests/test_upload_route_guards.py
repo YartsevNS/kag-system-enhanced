@@ -77,3 +77,17 @@ def test_cache_key_has_no_model_objects():
         "ключ кэша должен брать у объектов стабильный id, а не адрес памяти"
     )
     assert "_CACHE_MAX" in SRC, "кэш не ограничен по размеру"
+
+
+def test_dependency_names_are_imported():
+    """Страховка от NameError на старте: имя из Depends(…) должно быть импортировано.
+
+    На этих граблях уже стояли: добавили get_current_admin в подписи, но не в
+    импорт — api ушёл в crash-loop, а статические проверки этого не видят.
+    """
+    import re
+
+    header = SRC.split("@router.")[0]
+    used = set(re.findall(r"Depends\((\w+)", SRC))
+    missing = sorted(n for n in used if n not in header)
+    assert not missing, f"не импортированы зависимости: {missing}"

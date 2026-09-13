@@ -113,7 +113,7 @@ from src.models import DocumentStatus
 from src.api.services.document_service import document_service
 from src.api.services.chunk_order import chunk_seq_of
 from src.security.validator import SecurityValidator, SecurityValidationError
-from src.api.middleware.auth_v2 import get_current_user_optional
+from src.api.middleware.auth_v2 import get_current_admin, get_current_user_optional
 from src.database.user_models import User
 
 # Celery задача обработки документов (вместо asyncio.Queue)
