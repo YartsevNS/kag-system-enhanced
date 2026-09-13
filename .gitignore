@@ -82,3 +82,6 @@ graphify-out/
 # Оценка retrieval: рабочий набор и отчёты — личные данные, не в git
 scripts/eval_questions.json
 reports/
+
+# локальное состояние сессии (файл-передача перед сжатием контекста)
+.hermes/handoff.md
