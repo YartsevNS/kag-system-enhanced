@@ -12,6 +12,7 @@ from src.api.middleware.auth_v2 import get_current_user_optional, get_current_ad
 from src.indexing.knowledge_graph import kg_service
 from src.indexing.ids import display_filename
 from src.database.user_models import User
+from neo4j.exceptions import ClientError as Neo4jClientError
 
 def _clamp(value, low: int = 1, high: int = 1000) -> int:
     """Ограничить лимит сверху: limit=100000 не должен тянуть весь граф."""
@@ -36,12 +37,17 @@ async def execute_cypher(
             raise HTTPException(status_code=400, detail="Пустой запрос")
         limit = int(query.get("limit", 100))
         results = await asyncio.to_thread(kg_service.execute_cypher, q, _clamp(limit))
+        logger.info(f"[cypher] {getattr(current_user, 'username', '?')}: {q[:200]}")
         return {"query": q, "results": results, "total": len(results)}
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
+    except Neo4jClientError as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка запроса: {e}")
     except Exception as e:
         logger.error(f"Ошибка Cypher: {e}")
-        return {"query": query.get("query"), "results": [], "error": str(e)}
+        raise HTTPException(status_code=502, detail=f"Ошибка выполнения в Neo4j: {e}")
 
 
 @router.get("/stats", summary="Статистика графа знаний")
@@ -84,7 +90,7 @@ async def document_entities(
         return {"document_id": document_id, "entities": [], "total": 0, "error": str(e)}
 
 
-@router.get("/graph/{entity_name}", summary="Подграф сущности")
+@router.get("/graph/{entity_name:path}", summary="Подграф сущности")
 async def entity_graph(
     entity_name: str, 
     depth: int = 2,
@@ -121,7 +127,7 @@ def _page_of(payload: dict):
     return None
 
 
-@router.get("/entity/{entity_name}/chunks",
+@router.get("/entity/{entity_name:path}/chunks",
             summary="Чанки, где упоминается сущность (текст и страница из Qdrant)")
 async def entity_chunks(
     entity_name: str,
