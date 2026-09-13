@@ -8,6 +8,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import asyncio
+import time
 import uuid
 import traceback
 from loguru import logger
@@ -95,13 +96,28 @@ class EmbeddingsService:
         # батч ~12с, надёжно укладывается в EMBEDDING_TIMEOUT.
         self._batch_size = 8
 
+        # Тёплая инициализация. initialize() зовётся на каждый запрос (search в
+        # чате, /meta, /access, сторож), а внутри был пробный эмбеддинг — замер
+        # 2026-09-13: 163 мс на вызов. Размерность запоминаем на процесс, а
+        # состояние коллекции перепроверяем не чаще INIT_CHECK_INTERVAL секунд.
+        self.INIT_CHECK_INTERVAL = 60.0
+        self._ready_at = 0.0
+        self._probed_dim = None
+
         logger.info(
             f"EmbeddingsService инициализирован: "
             f"qdrant={self.qdrant_url}, collection={self.collection_name}"
         )
 
     async def initialize(self):
-        """Инициализировать подключения и создать коллекцию при необходимости"""
+        """Инициализировать подключения и создать коллекцию при необходимости.
+
+        Дешёвый повторный вызов: если инициализация выполнялась меньше
+        INIT_CHECK_INTERVAL секунд назад, работа не повторяется (иначе каждый
+        запрос чата платил за пробный эмбеддинг ~163 мс).
+        """
+        if self._ready_at and (time.monotonic() - self._ready_at) < self.INIT_CHECK_INTERVAL:
+            return True
         # Создаем embedding клиент если не передан
         if self._embedding_client is None:
             settings = get_settings()
@@ -154,7 +170,16 @@ class EmbeddingsService:
         # Создаем коллекцию если не существует
         await self._ensure_collection()
 
+        self._ready_at = time.monotonic()
         logger.info("EmbeddingsService инициализирован успешно")
+
+    def invalidate_initialization(self) -> None:
+        """Заставить следующий initialize() выполнить работу заново.
+
+        Нужно после пересоздания/удаления коллекции: иначе тёплое состояние
+        удержится до INIT_CHECK_INTERVAL и обращение уйдёт в удалённую коллекцию.
+        """
+        self._ready_at = 0.0
 
     def is_initialized(self) -> bool:
         """Готов ли клиент эмбеддингов.
@@ -273,12 +298,16 @@ class EmbeddingsService:
                     elif hasattr(_vc, "size"):
                         _existing_dim = _vc.size
 
-                    _dim = self._embedding_dimensions
-                    try:
-                        _test = await self._embedding_client.generate("test")
-                        _dim = len(_test)
-                    except Exception:
-                        pass
+                    _dim = self._probed_dim or self._embedding_dimensions
+                    if self._probed_dim is None:
+                        # Один раз на процесс: размерность модели не меняется без
+                        # пересоздания коллекции.
+                        try:
+                            _test = await self._embedding_client.generate("test")
+                            self._probed_dim = len(_test)
+                            _dim = self._probed_dim
+                        except Exception:
+                            pass
 
                     if _existing_dim is not None and _existing_dim != _dim:
                         logger.warning(
