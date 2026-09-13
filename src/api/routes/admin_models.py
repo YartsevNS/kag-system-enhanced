@@ -2477,15 +2477,56 @@ async def backup_documents():
     tmp.close()
 
     files_added = 0
+    skipped = []
+
+    # Индекс файлов: один проход по каталогу, ключ — document_id (первые 36
+    # символов до «_»). Так мы не собираем имена вида «<doc_id>_<полное название>»:
+    # у части документов название в БД длинное (до 205 символов), и такая сборка
+    # выходит за лимит имени ФС (255 байт) — path.exists() падал с Errno 36 и
+    # ломал весь бэкап.
+    files_by_doc = {}
+    try:
+        for entry in upload_dir.iterdir():
+            if not entry.is_file():
+                continue
+            name = entry.name
+            doc_key = name[:36] if len(name) > 36 else name
+            files_by_doc.setdefault(doc_key, entry)
+    except Exception as e:
+        logger.warning(f"[backup] не удалось прочитать каталог {upload_dir}: {e}")
+
+    def _safe_arcname(doc_id: str, src_path) -> str:
+        """Имя внутри архива: id + укороченное исходное имя (лимит 180 байт)."""
+        base = src_path.name
+        base = base[37:] if base.startswith(doc_id + "_") else base
+        stem, dot, ext = base.rpartition(".")
+        limit = 120
+        if stem:
+            short = stem[:limit]
+            base = f"{short}.{ext}" if dot else short
+        else:
+            base = f"{doc_id}{'.' + ext if dot else ''}"
+        return f"documents/{doc_id}_{base}"
+
     try:
         with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for doc_id, meta in docs.items():
-                filename = meta.get("filename") or doc_id
-                fname = f"{doc_id}_{filename}"
-                path = upload_dir / fname
-                if path.exists():
-                    zf.write(path, arcname=f"documents/{fname}")
+                src_path = files_by_doc.get(doc_id)
+                if src_path is None:
+                    skipped.append({"document_id": doc_id, "reason": "файл не найден в uploads"})
+                    continue
+                arcname = _safe_arcname(doc_id, src_path)
+                try:
+                    zf.write(src_path, arcname=arcname)
                     files_added += 1
+                except Exception as e:
+                    skipped.append({"document_id": doc_id, "file": src_path.name,
+                                    "reason": f"{type(e).__name__}: {e}"[:200]})
+            if skipped:
+                zf.writestr(
+                    "backup_warnings.json",
+                    json.dumps({"files_skipped": skipped}, ensure_ascii=False, indent=1, default=str),
+                )
             zf.writestr(
                 "documents_meta.json",
                 json.dumps(docs, ensure_ascii=False, indent=1, default=str),
@@ -2538,9 +2579,17 @@ async def backup_documents():
             os.unlink(tmp_path)
         except Exception:
             pass
-        return {"status": "error", "message": f"Ошибка формирования ZIP: {e}"}
+        logger.error(f"[backup] ZIP документов не сформирован: {e}")
+        # 500, а не 200: раньше браузер сохранял этот JSON как «zip»
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Ошибка формирования ZIP: {e}"},
+        )
 
-    logger.info(f"[backup] ZIP готов: {len(docs)} документов, файлов: {files_added}, {os.path.getsize(tmp_path)} байт")
+    logger.info(
+        f"[backup] ZIP готов: документов {len(docs)}, файлов {files_added}, "
+        f"пропущено {len(skipped)}, {os.path.getsize(tmp_path)} байт"
+    )
     return FileResponse(
         tmp_path,
         media_type="application/zip",

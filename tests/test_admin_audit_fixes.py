@@ -171,6 +171,23 @@ def test_backup_categories_are_dynamic_only():
     assert "503" in src, "при нечитаемых категориях бэкап должен отвечать ошибкой"
 
 
+def test_documents_backup_survives_long_filenames():
+    """Бэкап документов не должен падать на именах длиннее лимита ФС (Errno 36).
+
+    Живой случай: filename в БД до 205 символов, код собирал «<doc_id>_<filename>»
+    и path.exists() бросал ENAMETOOLONG → архив не формировался вовсе.
+    Теперь файлы ищутся по индексу каталога, имя внутри архива обрезается,
+    а ошибка отвечает 500, а не 200 с «error».
+    """
+    src = ROUTES_FILE.read_text(encoding="utf-8")
+    assert "files_by_doc" in src, "файлы должны искаться по индексу каталога"
+    assert "_safe_arcname" in src, "имя в архиве должно обрезаться"
+    assert "backup_warnings.json" in src, "пропущенные файлы должны попадать в отчёт"
+    assert 'status_code=500' in src, "неудачный ZIP должен отдавать 500"
+    # запрещённая конструкция, из-за которой падало: имя из полного названия
+    assert 'f"{doc_id}_{filename}"' not in src
+
+
 def test_restart_ollama_keeps_admin_contract():
     """Страница админки проверяет result.status — контракт不能被 ломать."""
     src = ROUTES_FILE.read_text(encoding="utf-8")
