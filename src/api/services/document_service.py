@@ -25,6 +25,10 @@ from pydantic import BaseModel, Field
 
 from src.indexing.parsers import document_parser
 from src.indexing.embeddings_service import embeddings_service
+# Карточка документа: контекстуальный префикс эмбеддинга + точка level=document.
+from src.indexing.document_card import (
+    build_card_prefix, build_card_source, card_from_record, upsert_card_point,
+)
 from src.indexing.indexing_guards import (
     POINTS_EMPTY, POINTS_MISMATCH, check_points_written, points_verdict_message,
 )
@@ -677,6 +681,48 @@ class DocumentService:
             except Exception as e:
                 logger.debug(f"domain документа не определён: {e}")
 
+            # ── Шаг 3а: карточка документа (ДО векторизации) ────────────────
+            # Анализ документа (title/type/summary/topics) раньше шёл ПОСЛЕ
+            # векторизации, поэтому контекст документа не мог влиять на эмбеддинг
+            # чанков. Теперь он выполняется до неё: из карточки собирается короткий
+            # префикс, и чанк эмбеддится как «<название>. <тип>. темы: … · п. 5.2.1:
+            # <текст>». Дополнительных LLM-вызовов нет — это тот же один анализ
+            # документа, что был и раньше.
+            card_prefix = ""
+            if chunks:
+                try:
+                    _t_analyze = time.monotonic()
+                    await self._analyze_document_async(
+                        document_id, build_card_source(chunks), record.filename
+                    )
+                    plog.log("analyze", {
+                        "duration_ms": round((time.monotonic() - _t_analyze) * 1000, 1)
+                    })
+                    _doc_fresh = get_doc_repo().get_dict(document_id) or {}
+                    _card = card_from_record(_doc_fresh)
+                    card_prefix = build_card_prefix(_card)
+                    if card_prefix:
+                        for _c in chunks:
+                            _md = _c.get("metadata")
+                            if isinstance(_md, dict):
+                                _md["card_prefix"] = card_prefix
+                    plog.log("card", {
+                        "title": _card.get("title", ""),
+                        "type": _card.get("document_type", ""),
+                        "topics": _card.get("topics", []),
+                        "prefix_chars": len(card_prefix),
+                    })
+                    # В record (SQLAlchemy-объект конвейера) поля ещё старые: анализ
+                    # писал в БД через отдельный объект. Обновляем, иначе в payload
+                    # уйдёт document_type="unknown" (регрессия против прежнего порядка).
+                    for _f in ("document_type", "recognized_title", "summary", "topics"):
+                        if _doc_fresh.get(_f) is not None:
+                            try:
+                                setattr(record, _f, _doc_fresh[_f])
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.warning(f"[card] карточка не собрана, эмбеддинг без префикса: {e}")
             vectors_count = await embeddings_service.embed_and_store(
                 document_id=document_id,
                 chunks=chunks,
@@ -742,26 +788,23 @@ class DocumentService:
             except Exception as e:
                 logger.warning(f"Миниатюра не создана: {e}")
 
-            # Шаг 4: Анализ первого чанка (типизация, title, summary).
+            # Шаг 4: Анализ документа перенесён ВЫШЕ векторизации (шаг 3а): он даёт
+            # карточку, из которой собирается контекстуальный префикс эмбеддинга.
             # ВАЖНО: await, а не create_task — в Celery process_document выполняется
             # внутри asyncio.run(), и create_task-задачи отменяются при его завершении,
             # поэтому типизация молча не выполнялась.
-            # Метка тайминга: plog.log("analyze", ...) фиксирует длительность LLM-вызова
-            # типизации — это один из кандидатов на «медленное» место (внешний Ollama).
-            # Перенесён ПЕРЕД plog.log("completed")/plog.save(), чтобы метка успела
-            # попасть в сохранённый лог (иначе save() вызвался бы раньше analyze).
-            if chunks and len(chunks) > 0:
-                try:
-                    first_text = chunks[0].get("content", "")
-                    _t_analyze = time.monotonic()
-                    await self._analyze_document_async(
-                        document_id, first_text, record.filename
-                    )
-                    plog.log("analyze", {
-                        "duration_ms": round((time.monotonic() - _t_analyze) * 1000, 1)
-                    })
-                except Exception as e:
-                    logger.debug(f"Не удалось выполнить анализ: {e}")
+
+            # ── Точка документа (level=document) ───────────────────────────
+            # Карточка отдельной точкой: для «поиска по документам» и как основа
+            # сравнений (вопросы «сравни A и B» решаются по карточкам). Поиск
+            # фрагментов эту точку исключает (must_not level=document).
+            try:
+                _card_ok = await upsert_card_point(
+                    document_id, get_doc_repo().get_dict(document_id) or {}
+                )
+                plog.log("card_point", {"stored": bool(_card_ok)})
+            except Exception as e:
+                logger.warning(f"[card] точка документа не записана: {e}")
 
             # Шаг 5: Граф знаний — документ + чанки + извлечение сущностей.
             # ВАЖНО: await, а не create_task — в Celery process_document выполняется

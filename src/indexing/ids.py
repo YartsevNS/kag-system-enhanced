@@ -59,9 +59,19 @@ def build_embedding_text(content: str, metadata: dict | None = None) -> str:
     elif section:
         parts.append(f"раздел {section}")
 
+    # Контекст документа (карточка: название/тип/темы) — только для passage.
+    # Значение кладёт конвейер в metadata чанка ДО векторизации (см.
+    # src/indexing/document_card.py). Пусто = префикса нет (fail-open).
+    card_prefix = str(meta.get("card_prefix") or "").strip()
+
+    structural = ", ".join(parts)
+    if card_prefix and structural:
+        return f"{card_prefix} · {structural}: {content}"
+    if card_prefix:
+        return f"{card_prefix}: {content}"
     if not parts:
         return content
-    return ", ".join(parts) + ": " + content
+    return structural + ": " + content
 
 
 # Префикс, под которым файл лежит на диске: "<document_id>_"

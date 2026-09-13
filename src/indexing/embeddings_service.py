@@ -754,7 +754,13 @@ class EmbeddingsService:
         try:
             from qdrant_client.models import Filter as QFilter
 
-            query_filter = None
+            # Карточки документов (level=document) — НЕ фрагменты: исключаем всегда,
+            # иначе карточка попадает в выдачу чата как «фрагмент документа».
+            from qdrant_client.models import FieldCondition as _FCL, MatchValue as _MAL
+            level_must_not = [_FCL(key="level", match=_MAL(value="document"))]
+            deny_must_not = list(level_must_not) + list(acl_must_not)
+
+            query_filter = QFilter(must_not=deny_must_not)
             if conditions:
                 from qdrant_client.models import FieldCondition as _FC, Filter as _QF2
                 must = []
@@ -772,7 +778,7 @@ class EmbeddingsService:
                         elif hasattr(m, "any"):
                             must.append(_FC(key=c.key, match=MatchAny(any=m.any)))
                 if must:
-                    query_filter = QFilter(must=must, must_not=acl_must_not if acl_must_not else None)
+                    query_filter = QFilter(must=must, must_not=deny_must_not)
 
             if self._sparse_enabled() and (self._sparse_mode() == "always"
                                            or self._query_prefers_lexical(query)):
@@ -873,6 +879,48 @@ class EmbeddingsService:
         out: Dict[str, Dict[str, Any]] = {}
         for p in points or []:
             out[str(p.id)] = p.payload or {}
+        return out
+
+    async def search_documents(
+        self, query: str, limit: int = 5,
+        user_id: Optional[str] = None, group_ids: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Поиск по КАРТОЧКАМ документов (level=document).
+
+        Зачем отдельно от search(): вопросы «в каких документах есть X» и сравнения
+        («сравни требования в A и B») решаются по карточкам, а не по 2000 чанков.
+        Права доступа — те же поля, что у чанков (visibility/allow_*/deny_*).
+        """
+        await self.initialize()
+        await self.ensure_model()
+        if not query.strip() or self._embedding_client is None:
+            return []
+        vectors = await self._embedding_client.generate_batch([query])
+        if not vectors:
+            return []
+
+        from qdrant_client.models import (
+            FieldCondition as _FC, MatchValue as _MA, Filter as _QF,
+        )
+        must = [_FC(key="level", match=_MA(value="document"))]
+        must_not = []
+        if user_id or group_ids:
+            if group_ids:
+                must_not.append(_FC(key="deny_group_ids", match=_MA(any=list(group_ids))))
+            must_not.append(_FC(key="deny_user_ids", match=_MA(any=[user_id] if user_id else [])))
+        flt = _QF(must=must, must_not=must_not or None)
+
+        resp = await asyncio.to_thread(
+            self._qdrant_client.query_points,
+            collection_name=self.collection_name, query=list(vectors[0]), using="dense",
+            query_filter=flt, limit=limit, with_payload=True,
+        )
+        out: List[Dict[str, Any]] = []
+        for hit in resp.points:
+            pl = dict(hit.payload or {})
+            pl["score"] = hit.score
+            pl["id"] = hit.id
+            out.append(pl)
         return out
 
     async def count_document_points(self, document_id: str) -> int:
