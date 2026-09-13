@@ -20,6 +20,21 @@ def _set_doc_type_in_graph(document_id: str, doc_type: str) -> None:
         )
 
 
+def is_registrable_doc_type(dtype) -> bool:
+    """Стоит ли регистрировать тип, который вернула LLM.
+
+    «unknown», «other», «неизвестно», «-» — это ОТКАЗ модели, а не новый тип
+    документа: раньше такой ответ попадал в список типов (в логе «Новый тип:
+    unknown») и мусорил в настройках.
+    """
+    if not dtype or not isinstance(dtype, str):
+        return False
+    text = dtype.strip()
+    if not text or len(text) >= 40:
+        return False
+    return text.lower() not in ("unknown", "other", "неизвестно", "-", "n/a")
+
+
 class TypeWatchdog:
     """Сторож определения типов документов."""
 
@@ -174,11 +189,7 @@ class TypeWatchdog:
                     final_type = t["key"]
                     break
 
-            # «unknown»/«other» — это НЕ новый тип документа: LLM так отвечает,
-            # когда не уверена. Раньше такой ответ регистрировался в списке типов
-            # (в логе «Новый тип: unknown») и мусорил в настройках.
-            if (final_type == "other" and dtype and len(dtype) < 40
-                    and dtype.strip().lower() not in ("unknown", "other", "неизвестно", "-")):
+            if final_type == "other" and is_registrable_doc_type(dtype):
                 new_key = dtype.lower().replace(' ', '_')[:20]
                 known_types.append({"key": new_key, "label": dtype})
                 await asyncio.to_thread(

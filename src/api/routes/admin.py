@@ -2,6 +2,7 @@
 Административные маршруты
 """
 
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
@@ -219,17 +220,32 @@ def _keycloak_admin_token() -> str:
     return token
 
 
+def _kc_fetch(url: str, token: str, method: str = "GET", timeout: int = 10):
+    """Синхронный запрос к admin API Keycloak (вызывается через to_thread).
+
+    urlopen — блокирующий вызов с таймаутом: в async-роуте он держал бы event
+    loop до timeout секунд (а при медленном Keycloak это как раз то, что давало
+    502 на страницах админки).
+    """
+    import json as _json
+    import urllib.request
+
+    req = urllib.request.Request(url, method=method,
+                                 headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8")
+        return _json.loads(raw) if raw else {}
+
+
 @router.get("/keycloak/status", summary="Статус Keycloak (admin API)")
 async def keycloak_status():
     """Проверить доступность admin API Keycloak и realm."""
     import urllib.request, json as _json
     settings = get_settings()
     try:
-        token = _keycloak_admin_token()
+        token = await asyncio.to_thread(_keycloak_admin_token)
         url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            realm = _json.loads(resp.read().decode("utf-8"))
+        realm = await asyncio.to_thread(_kc_fetch, url, token, "GET", 8)
         return {
             "ok": True,
             "realm": settings.KEYCLOAK_REALM,
@@ -247,12 +263,10 @@ async def keycloak_users():
     """Список пользователей realm kag через admin API Keycloak."""
     import urllib.request, json as _json
     settings = get_settings()
-    token = _keycloak_admin_token()
+    token = await asyncio.to_thread(_keycloak_admin_token)
     url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users?max=200"
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            users = _json.loads(resp.read().decode("utf-8"))
+        users = await asyncio.to_thread(_kc_fetch, url, token)
     except HTTPException:
         raise
     except Exception as e:
@@ -299,7 +313,7 @@ async def keycloak_create_user(data: dict):
     if not email:
         raise HTTPException(status_code=400, detail="Email обязателен (профиль realm требует его)")
 
-    token = _keycloak_admin_token()
+    token = await asyncio.to_thread(_keycloak_admin_token)
     base = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}"
 
     def _req(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
@@ -334,16 +348,15 @@ async def keycloak_create_user(data: dict):
         "lastName": lastName,
         "requiredActions": [],
     }
-    status, _ = _req("POST", "/users", user_body)
+    status, _ = await asyncio.to_thread(_req, "POST", "/users", user_body)
     if status not in (200, 201, 204):
         raise HTTPException(status_code=400, detail=f"Не удалось создать пользователя (status {status})")
 
     # 2. Найти id созданного пользователя
     try:
-        with urllib.request.urlopen(urllib.request.Request(
-                f"{base}/users?username={urllib.parse.quote(username)}",
-                headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
-            found = _json.loads(resp.read().decode("utf-8"))
+        found = await asyncio.to_thread(
+            _kc_fetch, f"{base}/users?username={urllib.parse.quote(username)}", token
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -353,20 +366,24 @@ async def keycloak_create_user(data: dict):
     user_id = found[0]["id"]
 
     # 3. Установить пароль (не временный)
-    _req("PUT", f"/users/{user_id}/reset-password",
-         {"type": "password", "value": password, "temporary": False})
+    await asyncio.to_thread(
+        _req, "PUT", f"/users/{user_id}/reset-password",
+        {"type": "password", "value": password, "temporary": False},
+    )
 
     # 4. Назначить роль (realm role: user | admin)
     try:
-        with urllib.request.urlopen(urllib.request.Request(
-                f"{base}/roles/{urllib.parse.quote(role)}",
-                headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
-            role_obj = _json.loads(resp.read().decode("utf-8"))
+        role_obj = await asyncio.to_thread(
+            _kc_fetch, f"{base}/roles/{urllib.parse.quote(role)}", token
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Keycloak role '{role}' not found: {e}")
-    _req("POST", f"/users/{user_id}/role-mappings/realm", [{"id": role_obj["id"], "name": role_obj["name"]}])
+    await asyncio.to_thread(
+        _req, "POST", f"/users/{user_id}/role-mappings/realm",
+        [{"id": role_obj["id"], "name": role_obj["name"]}],
+    )
 
     return {"status": "ok", "username": username, "id": user_id, "role": role}
 
@@ -570,7 +587,11 @@ async def get_disk_usage():
     
     # df -h
     try:
-        out = subprocess.check_output(["df", "-h", "--type=ext4", "--type=xfs", "--type=btrfs", "--type=overlay"], timeout=5).decode()
+        out = (await asyncio.to_thread(
+            subprocess.check_output,
+            ["df", "-h", "--type=ext4", "--type=xfs", "--type=btrfs", "--type=overlay"],
+            timeout=5,
+        )).decode()
         for line in out.strip().split("\n")[1:]:
             parts = line.split()
             if len(parts) >= 6:
@@ -590,7 +611,10 @@ async def get_disk_usage():
     for d in dirs_to_check:
         try:
             if os.path.exists(d):
-                out = subprocess.check_output(["du", "-sh", d], timeout=10, stderr=subprocess.DEVNULL).decode()
+                out = (await asyncio.to_thread(
+                    subprocess.check_output, ["du", "-sh", d],
+                    timeout=10, stderr=subprocess.DEVNULL,
+                )).decode()
                 size = out.split()[0] if out else "?"
                 result["directories"].append({"path": d, "size": size})
         except Exception:
@@ -599,7 +623,10 @@ async def get_disk_usage():
     # Подробно по /app/data
     if os.path.exists("/app/data"):
         try:
-            out = subprocess.check_output(["du", "-sh", "/app/data/*"], timeout=10, stderr=subprocess.DEVNULL, shell=True).decode()
+            out = (await asyncio.to_thread(
+                subprocess.check_output, ["du", "-sh", "/app/data/*"],
+                timeout=10, stderr=subprocess.DEVNULL, shell=True,
+            )).decode()
             for line in out.strip().split("\n"):
                 if line.strip():
                     parts = line.split()
@@ -610,7 +637,10 @@ async def get_disk_usage():
     
     # Docker volumes через docker (если доступен)
     try:
-        out = subprocess.check_output(["docker", "system", "df", "-v"], timeout=5, stderr=subprocess.DEVNULL).decode()
+        out = (await asyncio.to_thread(
+            subprocess.check_output, ["docker", "system", "df", "-v"],
+            timeout=5, stderr=subprocess.DEVNULL,
+        )).decode()
         # Парсим вывод docker system df
         result["docker_raw"] = out[:2000]
     except Exception:
@@ -693,13 +723,10 @@ async def delete_keycloak_user(user_id: str):
     """Удалить пользователя в Keycloak realm kag (только admin)."""
     import urllib.request
     settings = get_settings()
-    token = _keycloak_admin_token()
+    token = await asyncio.to_thread(_keycloak_admin_token)
     url = f"{settings.KEYCLOAK_URL}/admin/realms/{settings.KEYCLOAK_REALM}/users/{user_id}"
-    req = urllib.request.Request(url, method="DELETE",
-                                 headers={"Authorization": f"Bearer {token}"})
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            pass
+        await asyncio.to_thread(_kc_fetch, url, token, "DELETE")
     except HTTPException:
         raise
     except urllib.error.HTTPError as e:

@@ -8,8 +8,11 @@ PostgreSQL Config Store для KAG
 не падая — это позволяет стартовать до прохождения setup wizard.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
+import copy
 import json
+import threading
+import time
 from datetime import datetime
 from loguru import logger
 
@@ -24,9 +27,41 @@ class PostgresConfigStore:
     Ключи хранятся в формате ID: {category}:{key}
     """
 
+    # Короткий кэш чтения. Замер 2026-09-13: config_store.get = ~10 мс
+    # (сеанс SQLAlchemy + запрос + разбор JSON), а вызывается он десятками мест
+    # в async-коде. Две секунды убирают эти 10 мс с повторных чтений и при этом
+    # оставляют изменения, сделанные другим процессом, видимыми почти сразу.
+    CACHE_TTL_SECONDS = 2.0
+
     def __init__(self):
         # Ленивое подключение через единый engine (src.database.session).
         self._db_available = None  # None = не проверяли
+        self._cache: Dict[str, Tuple[float, Any]] = {}
+        self._cache_lock = threading.Lock()
+
+    # ── Кэш чтения ──────────────────────────────────────────────────────
+
+    def _cache_get(self, config_id: str):
+        with self._cache_lock:
+            hit = self._cache.get(config_id)
+        if not hit:
+            return False, None
+        expires_at, value = hit
+        if expires_at < time.monotonic():
+            with self._cache_lock:
+                self._cache.pop(config_id, None)
+            return False, None
+        # Копия: вызывающий код не должен менять закэшированное значение.
+        return True, copy.deepcopy(value)
+
+    def _cache_put(self, config_id: str, value: Any) -> None:
+        with self._cache_lock:
+            self._cache[config_id] = (time.monotonic() + self.CACHE_TTL_SECONDS, value)
+
+    def invalidate(self, category: str, key: str = "default") -> None:
+        """Сбросить кэш по ключу (зовётся из set/delete/compare_and_set)."""
+        with self._cache_lock:
+            self._cache.pop(f"{category}:{key}", None)
 
     def _get_session(self):
         """Вернуть SQLAlchemy-сессию. Бросает исключение, если БД недоступна."""
@@ -36,6 +71,10 @@ class PostgresConfigStore:
     # ── Чтение ──────────────────────────────────────────────────────────
 
     def get(self, category: str, key: str = "default", default: Any = None) -> Any:
+        config_id = f"{category}:{key}"
+        cached, value = self._cache_get(config_id)
+        if cached:
+            return value
         try:
             session = self._get_session()
             config_id = f"{category}:{key}"
@@ -45,7 +84,9 @@ class PostgresConfigStore:
                     # _decode_value: JSON, а если не разбирается — сырая строка
                     # (так лежат значения, записанные до 2026-09-13: «idle»,
                     # «running»). Прямой json.loads на них падал и отдавал None.
-                    return self._decode_value(record.value)
+                    value = self._decode_value(record.value)
+                    self._cache_put(config_id, value)
+                    return value
                 return default
             finally:
                 session.close()
@@ -82,6 +123,7 @@ class PostgresConfigStore:
                 session.add(record)
 
             session.commit()
+            self.invalidate(category, key)
             logger.debug(f"Сохранено в Postgres: {config_id}")
             return True
         except Exception as e:
@@ -97,6 +139,7 @@ class PostgresConfigStore:
             config_id = f"{category}:{key}"
             count = session.query(SystemConfig).filter_by(id=config_id).delete()
             session.commit()
+            self.invalidate(category, key)
             return count > 0
         except Exception as e:
             logger.error(f"Ошибка удаления {category}:{key}: {e}")
@@ -149,6 +192,7 @@ class PostgresConfigStore:
                     session.add(SystemConfig(id=config_id, value=payload))
                     updated = 1
                 session.commit()
+                self.invalidate(category, key)
                 return bool(updated)
             finally:
                 session.close()
