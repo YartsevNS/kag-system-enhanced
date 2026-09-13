@@ -44,15 +44,11 @@ class DocumentAnalyzer:
         filename: str
     ) -> Dict[str, Any]:
         """
-        Анализирует первый чанк и возвращает метаданные.
-        
-        Args:
-            document_id: ID документа
-            first_chunk_text: Текст первого чанка
-            filename: Исходное имя файла
-            
-        Returns:
-            Dict с recognized_title, document_type, summary, topics
+        Анализирует начало документа и возвращает метаданные (title/type/summary/topics).
+
+        Две попытки: живой случай — модель иногда отвечает не-JSON-ом, а прежняя версия
+        делала ОДНУ попытку и возвращала {} (следствие: у 0 из 51 документа был
+        recognized_title, а карточка документа выходила пустой).
         """
         if not first_chunk_text or len(first_chunk_text.strip()) < 10:
             logger.debug(f"Слишком короткий чанк для анализа: {document_id}")
@@ -69,8 +65,6 @@ class DocumentAnalyzer:
         api_key = cfg.get("api_key", "")
         provider = cfg.get("provider", "ollama")
 
-        # Системный промпт из админки (function_map:doc_analysis → doc_analysis.txt):
-        # маркеры типов + {type_labels}. Подставляем актуальный список типов.
         from src.indexing.auto_tagger import DocumentType
         type_labels = ", ".join(t.value for t in DocumentType)
         system_prompt = (cfg.get("system_prompt") or "").replace("{type_labels}", type_labels)
@@ -78,65 +72,80 @@ class DocumentAnalyzer:
             system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
         prompt = self._build_prompt(first_chunk_text, filename, type_labels)
 
-        try:
-            import aiohttp
+        last_error = ""
+        for attempt in (1, 2):
+            try:
+                import aiohttp
 
-            async with aiohttp.ClientSession() as session:
-                if provider in ("openai", "deepseek", "openrouter", "gigachat"):
-                    # OpenAI-совместимый API (chat/completions)
-                    headers = {"Content-Type": "application/json"}
-                    if api_key:
-                        headers["Authorization"] = f"Bearer {api_key}"
-                    payload = {
-                        "model": model,
-                        "messages": [
+                async with aiohttp.ClientSession() as session:
+                    if provider in ("openai", "deepseek", "openrouter", "gigachat"):
+                        headers = {"Content-Type": "application/json"}
+                        if api_key:
+                            headers["Authorization"] = f"Bearer {api_key}"
+                        messages = [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt},
-                        ],
-                        "temperature": 0.1,
-                        "max_tokens": 300,
-                        "stream": False,
-                    }
-                    async with session.post(
-                        f"{llm_url}/v1/chat/completions",
-                        json=payload,
-                        headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=120),
-                    ) as resp:
-                        if resp.status != 200:
-                            logger.warning(f"LLM недоступен для анализа: {resp.status}")
-                            return {}
-                        data = await resp.json()
-                        response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                else:
-                    # Ollama API (/api/generate) — system-промпт встраиваем в prompt
-                    ollama_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-                    async with session.post(
-                        f"{llm_url}/api/generate",
-                        json={
+                        ]
+                        if attempt > 1:
+                            # Вторая попытка: тот же запрос, но с явным требованием формата
+                            # и запасом по токенам (обрыв ответа = невалидный JSON).
+                            messages.append({
+                                "role": "user",
+                                "content": "ВАЖНО: ответ — ТОЛЬКО валидный JSON без пояснений, "
+                                           "markdown и текста вокруг.",
+                            })
+                        payload = {
                             "model": model,
-                            "prompt": ollama_prompt,
+                            "messages": messages,
+                            "temperature": 0.1 if attempt == 1 else 0.0,
+                            "max_tokens": 300 if attempt == 1 else 500,
                             "stream": False,
-                            "options": {"temperature": 0.1, "max_tokens": 300},
-                        },
-                        timeout=aiohttp.ClientTimeout(total=120),
-                    ) as resp:
-                        if resp.status != 200:
-                            logger.warning(f"LLM недоступен для анализа: {resp.status}")
-                            return {}
-                        data = await resp.json()
-                        response = data.get("response", "")
-                
-                # Парсим ответ (общий путь для всех провайдеров)
-                result = self._parse_response(response, filename)
-                if not result:
-                    logger.warning(f"Анализ {document_id}: LLM вернул невалидный JSON, ответ: {response[:200]}")
-                return result
-                    
-        except Exception as e:
-            logger.warning(f"Ошибка анализа документа {document_id}: {type(e).__name__}: {e}")
-            return {}
+                        }
+                        async with session.post(
+                            f"{llm_url}/v1/chat/completions",
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=120),
+                        ) as resp:
+                            if resp.status != 200:
+                                last_error = f"HTTP {resp.status}"
+                                logger.warning(f"LLM недоступен для анализа: {resp.status}")
+                                continue
+                            data = await resp.json()
+                            response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    else:
+                        ollama_prompt = f"{system_prompt}{LF}{LF}{prompt}" if system_prompt else prompt
+                        async with session.post(
+                            f"{llm_url}/api/generate",
+                            json={
+                                "model": model,
+                                "prompt": ollama_prompt,
+                                "stream": False,
+                                "options": {"temperature": 0.1, "max_tokens": 300},
+                            },
+                            timeout=aiohttp.ClientTimeout(total=120),
+                        ) as resp:
+                            if resp.status != 200:
+                                last_error = f"HTTP {resp.status}"
+                                logger.warning(f"LLM недоступен для анализа: {resp.status}")
+                                continue
+                            data = await resp.json()
+                            response = data.get("response", "")
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {e}"
+                logger.warning(f"Ошибка анализа документа {document_id} (попытка {attempt}): {last_error}")
+                continue
 
+            result = self._parse_response(response, filename)
+            if result:
+                return result
+            last_error = "невалидный JSON"
+            logger.warning(
+                f"Анализ {document_id}: невалидный JSON (попытка {attempt}), ответ: {response[:200]!r}"
+            )
+
+        logger.warning(f"Анализ {document_id}: результат не получен ({last_error})")
+        return {}
     def _build_prompt(self, text: str, filename: str, type_labels: str = "") -> str:
         """Строит промпт для LLM."""
         # Берём первые ~2000 символов
@@ -161,46 +170,57 @@ class DocumentAnalyzer:
 Если непонятно — поставь "other".
 Пиши на русском."""
 
+    @staticmethod
+    def _extract_json(response: str) -> Optional[Dict[str, Any]]:
+        """Достать JSON из ответа модели: markdown, пояснения, вложенные скобки.
+
+        Старый разбор брал регексп \\{[^}]+\\} — он рвался на вложенных объектах и
+        возвращал {} при обычной для моделей обёртке ```json.
+        """
+        import json
+        import re
+
+        if not response:
+            return None
+        text = response.strip()
+        text = re.sub(r"```[a-zA-Z]*", "", text).replace("```", "").strip()
+
+        try:
+            obj = json.loads(text)
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            pass
+
+        start = text.find("{")
+        if start >= 0:
+            try:
+                obj, _ = json.JSONDecoder().raw_decode(text[start:])
+                if isinstance(obj, dict):
+                    return obj
+            except json.JSONDecodeError:
+                pass
+        return None
+
     def _parse_response(self, response: str, filename: str) -> Dict[str, Any]:
         """Парсит ответ LLM в структуру."""
-        import json
-        
-        # Очищаем от markdown-кода
-        text = response.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:]) if len(lines) > 1 else text
-        if text.endswith("```"):
-            text = text[:-3].strip()
-        
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            # Пробуем найти JSON в тексте
-            import re
-            match = re.search(r'\{[^}]+\}', text)
-            if match:
-                try:
-                    data = json.loads(match.group())
-                except json.JSONDecodeError:
-                    return {}
-            else:
-                return {}
-        
+        data = self._extract_json(response)
+        if not isinstance(data, dict):
+            return {}
+
         # Валидируем типы — полный список из DocumentType (auto_tagger)
         from src.indexing.auto_tagger import DocumentType
         valid_types = {t.value for t in DocumentType}
-        
+
         result = {}
-        if "title" in data and data["title"]:
+        if data.get("title"):
             result["recognized_title"] = str(data["title"])[:200]
-        if "type" in data and data["type"] in valid_types:
+        if data.get("type") in valid_types:
             result["document_type"] = data["type"]
-        if "summary" in data and data["summary"]:
+        if data.get("summary"):
             result["summary"] = str(data["summary"])[:500]
-        if "topics" in data and isinstance(data["topics"], list):
+        if isinstance(data.get("topics"), list):
             result["topics"] = [str(t)[:50] for t in data["topics"][:5]]
-        
+
         return result
 
     async def analyze_and_save(self, document_id: str, first_chunk_text: str, filename: str):
