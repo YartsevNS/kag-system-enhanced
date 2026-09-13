@@ -770,27 +770,38 @@ class DocumentService:
             # Внутри _build_knowledge_graph_async есть свой try/except — ошибка
             # графа не уронит завершение документа.
             try:
-                await self._build_knowledge_graph_async(
-                    document_id, record.filename, chunks
-                )
-                # Entity Resolution: слияние дубликатов сущностей после построения
-                # графа (lexical + embedding + топология). Снижает дубли на 30-40%,
-                # улучшает точность связей. См. docs/guides/graph-precision-architecture.md
-                try:
-                    from src.indexing.knowledge_graph import kg_service
-                    await asyncio.to_thread(kg_service.resolve_duplicate_entities)
-                    # Известные пары алиасов из таблицы entity_aliases (детерминированно).
-                    # Применяем пары домена документа + universal (общие).
-                    # document_type (standard/policy/order/technical/certificate/news)
-                    # используется как домен словаря — админ задаёт domain пар
-                    # в админке («Словарь алиасов»), universal применяется всегда.
-                    _doc_domain = (record.document_type or "").strip() or "universal"
-                    await asyncio.to_thread(kg_service.apply_alias_pairs, _doc_domain)
-                    # Версии документов: связываем цепочкой SUPERSEDED_BY
-                    # (старые редакции → новые), актуальная помечается is_current.
-                    await asyncio.to_thread(kg_service.link_document_versions)
-                except Exception as e:
-                    logger.debug(f"Entity resolution пропущен: {e}")
+                from src.indexing.processing_guard import graph_skip_requested
+                _skip_graph, _skip_msg = graph_skip_requested()
+                if _skip_graph:
+                    # Граф отключён в админке (system/graph.skip) — это самая дорогая
+                    # часть обработки (замер: 136 из 147 секунд на документе в 13 чанков).
+                    # Документ завершается БЕЗ графа: поиск по тексту и RAG работают,
+                    # а граф строится позже — кнопкой «Построить граф» у документа или
+                    # «Перестроить граф» на странице /kg.
+                    plog.log("graph_skipped", {"reason": _skip_msg or "отключено в админке"})
+                    logger.info(f"[graph] пропущен по настройке админки: {document_id}")
+                else:
+                    await self._build_knowledge_graph_async(
+                        document_id, record.filename, chunks
+                    )
+                    # Entity Resolution: слияние дубликатов сущностей после построения
+                    # графа (lexical + embedding + топология). Снижает дубли на 30-40%,
+                    # улучшает точность связей. См. docs/guides/graph-precision-architecture.md
+                    try:
+                        from src.indexing.knowledge_graph import kg_service
+                        await asyncio.to_thread(kg_service.resolve_duplicate_entities)
+                        # Известные пары алиасов из таблицы entity_aliases (детерминированно).
+                        # Применяем пары домена документа + universal (общие).
+                        # document_type (standard/policy/order/technical/certificate/news)
+                        # используется как домен словаря — админ задаёт domain пар
+                        # в админке («Словарь алиасов»), universal применяется всегда.
+                        _doc_domain = (record.document_type or "").strip() or "universal"
+                        await asyncio.to_thread(kg_service.apply_alias_pairs, _doc_domain)
+                        # Версии документов: связываем цепочкой SUPERSEDED_BY
+                        # (старые редакции → новые), актуальная помечается is_current.
+                        await asyncio.to_thread(kg_service.link_document_versions)
+                    except Exception as e:
+                        logger.debug(f"Entity resolution пропущен: {e}")
             except Exception as e:
                 logger.debug(f"Не удалось построить граф знаний: {e}")
 

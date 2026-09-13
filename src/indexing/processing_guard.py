@@ -50,3 +50,32 @@ def processing_blocked() -> tuple[bool, str]:
     except Exception as e:  # pragma: no cover - зависит от внешней БД
         logger.warning(f"[processing_guard] настройку system/processing прочитать не удалось: {e}")
     return False, ""
+
+def _load_graph_cfg():
+    """Прочитать настройку system/graph из config_store.
+
+    Отдельная функция — чтобы подменять её в тестах (config_store тянет БД).
+    """
+    from src.api.services.config_store import config_store
+    return config_store.get("system", "graph")
+
+
+def graph_skip_requested() -> tuple[bool, str]:
+    """Нужно ли ПРОПУСТИТЬ построение графа при обработке (system/graph.skip).
+
+    Граф — самая дорогая часть обработки: на замере 2026-09-13 документ в 13 чанков
+    обрабатывался 147 с, из них 135.7 с ушло на граф (LLM-извлечение по чанкам,
+    1585 векторов сущностей, дедупликация пар). Разбор и эмбеддинги документа — <12 с.
+    Поэтому граф можно не строить сразу, а построить позже отдельным действием
+    («Перестроить граф» на /kg или кнопкой у документа на странице «Документы»).
+
+    Возвращает (skip, message). При сбое чтения — (False, ""): недоступная БД не
+    должна менять поведение обработки (fail-open, граф строится как обычно).
+    """
+    try:
+        cfg = _load_graph_cfg() or {}
+        if isinstance(cfg, dict) and cfg.get("skip"):
+            return True, str(cfg.get("message", "") or "").strip()
+    except Exception as e:  # pragma: no cover - зависит от внешней БД
+        logger.warning(f"[processing_guard] настройку system/graph прочитать не удалось: {e}")
+    return False, ""

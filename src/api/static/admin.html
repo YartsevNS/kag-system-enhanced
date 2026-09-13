@@ -626,6 +626,27 @@
             </div>
         </div>
 
+        <!-- Граф знаний -->
+        <div class="section">
+            <h2 class="section-title">🧠 Граф знаний</h2>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <input type="checkbox" id="graph-skip" onchange="saveGraphConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                <label for="graph-skip" style="font-size:14px;font-weight:600;cursor:pointer">Не строить граф при обработке документов (построю позже)</label>
+            </div>
+            <button class="btn btn-primary" onclick="saveGraphConfig()">💾 Сохранить</button>
+            <span id="graph-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span>
+            <button class="btn" style="margin-left:12px" onclick="rebuildAllGraphs()" title="Построить граф для всех обработанных документов">🔨 Построить граф сейчас (для всех)</button>
+            <span id="graph-rebuild-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span>
+            <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
+                <strong>Что это.</strong> Граф знаний (сущности и связи в Neo4j) — самая дорогая часть обработки: на замере
+                2026-09-13 документ в 13 чанков обрабатывался 147 с, из них <strong>135.7 с — граф</strong>
+                (LLM-извлечение по каждому чанку, ~1585 векторов сущностей, дедупликация пар), тогда как разбор PDF и векторы
+                документа — меньше 12 с. При включённой галочке документ обрабатывается БЕЗ графа: поиск по тексту и RAG
+                работают как обычно, а граф строится позже — кнопкой «🔨 Построить граф сейчас» здесь (для всех обработанных),
+                кнопкой «🧠 Граф» у конкретного документа на странице «Документы» или «Перестроить граф» на странице /kg.
+            </div>
+        </div>
+
         <!-- Настройки поиска -->
         <div class="section">
             <h2 class="section-title">🔍 Настройки поиска</h2>
@@ -1238,6 +1259,46 @@
                 });
                 const d = await r.json();
                 if (st) st.textContent = d.status === 'ok' ? '✅ Сохранено' : ('❌ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+
+        // ── Граф знаний: строить при обработке или отложить ─────────────
+        async function loadGraphConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/graph-build-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const cb = document.getElementById('graph-skip');
+                if (cb && typeof d.skip === 'boolean') cb.checked = d.skip;
+            } catch (e) { console.error('graph-build-config load:', e); }
+        }
+        async function saveGraphConfig() {
+            const st = document.getElementById('graph-status');
+            if (st) st.textContent = '⏳ Сохранение...';
+            try {
+                const r = await apiFetch(`${API_URL}/graph-build-config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({skip: document.getElementById('graph-skip').checked})
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok'
+                    ? (d.skip ? '✅ Граф строится позже' : '✅ Граф строится при обработке')
+                    : ('❌ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+        // «Построить позже» для всех обработанных документов (задача Celery, ответ сразу)
+        async function rebuildAllGraphs() {
+            const st = document.getElementById('graph-rebuild-status');
+            if (st) st.textContent = '⏳ Запуск...';
+            try {
+                const r = await apiFetch(`${API_URL.replace('/admin/models', '')}/kg/rebuild-graph`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+                });
+                const d = await r.json().catch(() => ({}));
+                if (r.status === 409) { if (st) st.textContent = 'ℹ️ ' + (d.detail || 'перестроение уже идёт'); return; }
+                if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : 'ошибка запуска');
+                if (st) st.textContent = '✅ Запущено (прогресс — на странице /kg)';
             } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
 
@@ -2607,6 +2668,7 @@
         loadNeo4jConfig();
         loadBrandingConfig();
         loadProcessingConfig();
+        loadGraphConfig();
         loadUploadConfig();
 
         loadAll();

@@ -84,6 +84,15 @@ class ProcessingBlockConfig(BaseModel):
     message: Optional[str] = None
 
 
+class GraphBuildConfig(BaseModel):
+    """Построение графа знаний при обработке (частичное обновление).
+
+    skip=True — обрабатывать БЕЗ графа, построить позже отдельным действием.
+    """
+
+    skip: Optional[bool] = None
+    message: Optional[str] = None
+
 class IngestBlockConfig(BaseModel):
     """Блокировка загрузки документов (частичное обновление)."""
 
@@ -1946,6 +1955,51 @@ async def save_processing_config(payload: ProcessingBlockConfig):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+# ═══════════════════════════════════════
+# Граф знаний: строить при обработке или отложить
+# ═══════════════════════════════════════
+
+@router.get("/graph-build-config", summary="Строить ли граф при обработке")
+async def get_graph_build_config():
+    """Вернуть {skip, message}: пропускать ли построение графа при обработке.
+
+    Граф — самая дорогая часть обработки (замер 2026-09-13: 135.7 с из 147 с на
+    документе в 13 чанков: LLM-извлечение по каждому чанку, ~1585 векторов
+    сущностей, дедупликация пар). При skip=true документ завершается без графа —
+    поиск по тексту и RAG работают, — а граф строится позже: «Перестроить граф»
+    на странице /kg (для всех completed) либо кнопкой «Построить граф» у документа.
+    """
+    try:
+        cfg = config_store.get("system", "graph") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {
+            "skip": bool(cfg.get("skip", False)),
+            "message": str(cfg.get("message", "")),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/graph-build-config", summary="Сохранить пропуск построения графа")
+async def save_graph_build_config(payload: GraphBuildConfig):
+    data = payload.model_dump(exclude_unset=True)
+    """Админ решает, строить граф во время обработки или отложить его."""
+    try:
+        cfg = config_store.get("system", "graph") or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        if "skip" in data:
+            cfg["skip"] = bool(data["skip"])
+        if "message" in data:
+            cfg["message"] = str(data["message"]).strip()[:200]
+        config_store.set("system", "graph", cfg)
+        skip_now = bool(cfg.get("skip", False))
+        logger.info(f"[graph] построение графа при обработке: {'отключено' if skip_now else 'включено'}")
+        return {"status": "ok", "skip": skip_now, "message": str(cfg.get("message", ""))}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @router.get("/ingest-config", summary="Статус загрузки документов (блокировка поступления)")
 async def get_ingest_config():
