@@ -221,11 +221,12 @@ async def rerank_search_results(
     if not cfg["enabled"]:
         return results[:top_k]
 
-    ranker = get_default_reranker()
-    if ranker is None:
-        return results[:top_k]
-
+    # Реранкер — УЛУЧШЕНИЕ, а не критический путь: любая его ошибка (загрузка модели,
+    # инференс, приведение типов) не должна ломать ответ пользователю.
     try:
+        ranker = get_default_reranker()
+        if ranker is None:
+            return results[:top_k]
         if hasattr(ranker, "rerank") and not isinstance(ranker, _BM25_Reranker):
             from flashrank import RerankRequest
 
@@ -238,7 +239,14 @@ async def rerank_search_results(
             reranked = []
             for r in ranked:
                 item = r.get("metadata", {})
-                item["rerank_score"] = r.get("score", r.get("rerank_score", 0))
+                # ВАЖНО: только float, а не numpy.float32. Живой случай 2026-09-13: реранкер
+                # работал, клал numpy-оценку в результат, и ответ чата падал на сериализации
+                # (PydanticSerializationError: Unable to serialize unknown type: numpy.float32) —
+                # все ответы приходили пустыми, что выглядело как «качество ответа 0».
+                try:
+                    item["rerank_score"] = float(r.get("score", r.get("rerank_score", 0)) or 0.0)
+                except (TypeError, ValueError):
+                    item["rerank_score"] = 0.0
                 reranked.append(item)
             return reranked[:top_k]
         return ranker.rerank(query, results, top_k)

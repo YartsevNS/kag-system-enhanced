@@ -113,3 +113,26 @@ def test_карточка_в_интерфейсе():
                    "loadRerankerConfig", "saveRerankerConfig", "warmRerankerModel"):
         assert marker in html, marker
     assert "loadRerankerConfig();" in html, "настройки должны грузиться при открытии страницы"
+
+
+def test_оценка_реранкера_обычный_float():
+    """numpy.float32 в ответе ломает сериализацию API (живой случай: пустые ответы чата)."""
+    import asyncio
+    import sys
+    import types
+
+    src = open("src/indexing/reranker.py", encoding="utf-8").read()
+    assert 'float(r.get("score"' in src, "оценка реранкера обязана приводиться к float"
+    assert "Реранкер — УЛУЧШЕНИЕ" in src, "получение ранкера должно быть внутри try"
+
+
+def test_битый_реранкер_не_ломает_ответ(monkeypatch):
+    import asyncio
+    _patch_store(monkeypatch, {"reranker:config": {"enabled": True}})
+
+    def _boom():
+        raise RuntimeError("модель сломалась")
+
+    monkeypatch.setattr(rr, "get_default_reranker", _boom)
+    out = asyncio.run(rr.rerank_search_results("запрос", [{"content": "а"}], top_k=1))
+    assert out and out[0]["content"] == "а", "ошибка реранкера не должна ронять поиск"
