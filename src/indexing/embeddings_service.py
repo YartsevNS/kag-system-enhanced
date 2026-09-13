@@ -468,6 +468,24 @@ class EmbeddingsService:
         logger.info(f"Сохранено {total_saved} векторов в Qdrant")
         return total_saved
 
+    async def update_document_payload(self, document_id: str, payload: Dict[str, Any]) -> int:
+        """Обновить payload ВСЕХ точек документа (метаданные анализа: тип, summary, темы).
+
+        Возвращает число обновлённых точек. Sync-клиент Qdrant — через to_thread.
+        """
+        if not payload:
+            return 0
+        await self.initialize()
+        from qdrant_client.models import (
+            FieldCondition as _FC, MatchValue as _MA, Filter as _QF,
+        )
+        flt = _QF(must=[_FC(key="document_id", match=_MA(value=document_id))])
+        res = await asyncio.to_thread(
+            self._qdrant_client.set_payload,
+            collection_name=self.collection_name, payload=dict(payload), points=flt,
+        )
+        return int(getattr(res, "operation_id", 0) or 0)
+
     async def update_document_type_payload(self, document_id: str, document_type: str):
         """Обновить document_type в payload всех чанков документа в Qdrant."""
         try:

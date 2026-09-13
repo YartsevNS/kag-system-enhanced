@@ -194,7 +194,18 @@ class DocumentService:
             if not record:
                 return
             data = record.model_dump()
-            get_doc_repo().upsert(document_id, data)
+            repo = get_doc_repo()
+            # НЕ затирать поля, которые пишет анализ документа (document_analyzer):
+            # in-memory запись загружена ДО анализа, и её пустые значения перетирали
+            # уже сохранённые title/summary/topics/type. Живой случай: у 0 из 51
+            # документа был recognized_title, хотя анализатор его сохранял —
+            # финальное сохранение конвейера затирало результат пустыми полями
+            # (то же сбивало типизацию: document_type откатывался на "unknown").
+            _fresh = repo.get_dict(document_id) or {}
+            for _k in ("recognized_title", "summary", "topics", "document_type"):
+                if not data.get(_k) and _fresh.get(_k):
+                    data[_k] = _fresh[_k]
+            repo.upsert(document_id, data)
         except Exception as e:
             logger.debug(f"БД недоступна, пропускаю сохранение: {e}")
 
@@ -691,6 +702,9 @@ class DocumentService:
             card_prefix = ""
             if chunks:
                 try:
+                    # Репозиторий в этом модуле импортируется ЛОКАЛЬНО внутри функций
+                    # (иначе NameError: get_doc_repo — поймано на стенде).
+                    from src.api.services.document_repository import get_doc_repo
                     _t_analyze = time.monotonic()
                     await self._analyze_document_async(
                         document_id, build_card_source(chunks), record.filename

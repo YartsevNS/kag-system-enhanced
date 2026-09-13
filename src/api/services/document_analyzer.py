@@ -227,12 +227,12 @@ class DocumentAnalyzer:
                 get_doc_repo().upsert(document_id, doc_data)
                 logger.info(f"Метаданные обновлены для {document_id}: {result.get('document_type', '?')} — {result.get('recognized_title', '?')}")
             
-            # Также обновляем payload в Qdrant (для поиска)
+            # Также обновляем payload в Qdrant (для поиска и фильтров)
+            # Раньше здесь звался qdrant.set_payload — такого метода у QdrantService
+            # нет, ошибка тонула в debug, и document_type/summary/topics в payload
+            # НИКОГДА не попадали. Обновляем через embeddings_service.
             try:
-                from src.indexing.qdrant_service import get_qdrant_service
-                qdrant = get_qdrant_service()
-                
-                # Обновляем все точки этого документа
+                from src.indexing.embeddings_service import embeddings_service
                 payload_update = {}
                 if "document_type" in result:
                     payload_update["document_type"] = result["document_type"]
@@ -240,15 +240,11 @@ class DocumentAnalyzer:
                     payload_update["summary"] = result["summary"]
                 if "topics" in result:
                     payload_update["topics"] = result["topics"]
-                
                 if payload_update:
-                    qdrant.set_payload(
-                        filter={"must": [{"key": "document_id", "match": {"value": document_id}}]},
-                        payload=payload_update
-                    )
-                    logger.debug(f"Qdrant payload обновлён для {document_id}")
+                    _n = await embeddings_service.update_document_payload(document_id, payload_update)
+                    logger.info(f"Qdrant payload обновлён для {document_id}: точек {_n}")
             except Exception as e:
-                logger.debug(f"Не удалось обновить Qdrant payload: {e}")
+                logger.warning(f"Не удалось обновить Qdrant payload: {e}")
                 
         except Exception as e:
             logger.error(f"Критическая ошибка анализа: {e}")
