@@ -103,20 +103,49 @@ class EmbeddingsService:
         self.INIT_CHECK_INTERVAL = 60.0
         self._ready_at = 0.0
         self._probed_dim = None
+        self._model_signature = None
 
         logger.info(
             f"EmbeddingsService инициализирован: "
             f"qdrant={self.qdrant_url}, collection={self.collection_name}"
         )
 
+    @staticmethod
+    def _current_model_signature() -> str:
+        """Подпись настроенной модели эмбеддингов — дёшево (config_store кэширован).
+
+        Нужна, чтобы смена модели в админке была видна СРАЗУ, а не через окно
+        INIT_CHECK_INTERVAL: при смене модели коллекция другой размерности, и
+        поиск в старой был бы ошибкой. Провайдера здесь не запрашиваем
+        (get_provider_with_key ходит в БД) — provider_id + имя модели достаточно.
+        """
+        settings = get_settings()
+        provider_id, model = "", settings.EMBEDDING_MODEL
+        try:
+            from src.api.services.config_store import config_store
+            fm = config_store.get("function_map", "embedding") or {}
+            if fm and fm.get("provider_id") and fm.get("model"):
+                provider_id, model = fm["provider_id"], fm["model"]
+        except Exception:
+            pass
+        return f"{provider_id}|{model}|{settings.EMBEDDING_MODEL}|{settings.EMBEDDING_BASE_URL}"
+
+    def _needs_reinit(self) -> bool:
+        """Нужна ли полная инициализация прямо сейчас."""
+        if not self._ready_at:
+            return True
+        if (time.monotonic() - self._ready_at) >= self.INIT_CHECK_INTERVAL:
+            return True
+        return self._model_signature != self._current_model_signature()
+
     async def initialize(self):
         """Инициализировать подключения и создать коллекцию при необходимости.
 
         Дешёвый повторный вызов: если инициализация выполнялась меньше
-        INIT_CHECK_INTERVAL секунд назад, работа не повторяется (иначе каждый
-        запрос чата платил за пробный эмбеддинг ~163 мс).
+        INIT_CHECK_INTERVAL секунд назад И настройка модели не менялась, работа не
+        повторяется (иначе каждый запрос чата платил за пробный эмбеддинг ~163 мс).
         """
-        if self._ready_at and (time.monotonic() - self._ready_at) < self.INIT_CHECK_INTERVAL:
+        if not self._needs_reinit():
             return True
         # Создаем embedding клиент если не передан
         if self._embedding_client is None:
@@ -171,6 +200,7 @@ class EmbeddingsService:
         await self._ensure_collection()
 
         self._ready_at = time.monotonic()
+        self._model_signature = self._current_model_signature()
         logger.info("EmbeddingsService инициализирован успешно")
 
     def invalidate_initialization(self) -> None:

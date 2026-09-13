@@ -797,6 +797,14 @@ async def switch_embedding_model(request: SwitchEmbeddingRequest):
             logger.warning(f"Не удалось сохранить embedding модель в config_store: {e}")
         
         if success:
+            # Смена модели = другая размерность: коллекция будет пересоздана при
+            # следующей инициализации. Сбрасываем тёплое состояние, иначе до
+            # INIT_CHECK_INTERVAL поиск шёл бы в коллекцию старой модели.
+            try:
+                from src.indexing.embeddings_service import embeddings_service
+                embeddings_service.invalidate_initialization()
+            except Exception as e:
+                logger.warning(f"Не удалось сбросить инициализацию эмбеддингов: {e}")
             return {
                 "status": "success",
                 "message": f"Embedding модель переключена на {request.model_name}"
