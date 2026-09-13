@@ -735,6 +735,25 @@ JSON:
             entities = result.get("entities", [])
             relations = result.get("relations", [])
 
+            # ── Самообозначения документа отбрасываем ───────────────────
+            # Обозначение документа стоит в колонтитуле каждой страницы → попадает в
+            # КАЖДЫЙ чанк → получает максимум упоминаний и становится крупнейшим узлом
+            # графа, вытесняя смысловые сущности (замер 2026-09-13: 81% узлов графа —
+            # справочные типы, самые частые обозначения — «34.10—2012», «бфбо-1.9-2024»).
+            # Ссылки на ДРУГИЕ документы не трогаются: сравнение по точным вариантам
+            # имени файла и по «свой номер + год», а не по произвольной подстроке.
+            try:
+                from src.indexing.entity_selfref import filter_self_references
+                entities, relations, _dropped = filter_self_references(
+                    entities, relations, filename
+                )
+                if _dropped:
+                    logger.debug(
+                        f"[graph] {document_id[:8]}/{chunk_id}: отброшены самообозначения: {_dropped[:5]}"
+                    )
+            except Exception as e:
+                logger.warning(f"[graph] фильтр самообозначений не применён: {e}")
+
             if not entities:
                 return
 

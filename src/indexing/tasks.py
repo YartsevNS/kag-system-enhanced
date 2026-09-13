@@ -461,28 +461,64 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
             # в 23 чанка получал граф на 10 узлов (43% текста), документ в 212 чанков —
             # на 4.7%, и это молча портило и /kg, и поиск по графу. В конвейере
             # (document_service._build_knowledge_graph_async) лимит убрали, здесь — нет.
-            chunks_done = 0
-            for i, chunk in enumerate(chunks):
+            # ── Параллельное извлечение ────────────────────────────────────
+            # Цикл был ПОСЛЕДОВАТЕЛЬНЫМ: 2 LLM-вызова на чанк ≈ 3 с на чанк, то есть
+            # ~3 часа на корпус из 3761 чанка. В конвейере обработки то же извлечение
+            # уже идёт с семафором (MAX_PARALLEL_LLM=6); здесь ограничение осталось
+            # от старой версии. Держим 4 одновременных запроса: выше — риск упереться
+            # в rate-limit GigaChat и в конфликты параллельной записи Neo4j (их гасит
+            # run_with_transient_retry, но лишний конфликт не нужен).
+            _par = 4
+            _sem = asyncio.Semaphore(_par)
+            _state = {"done": 0, "stopped": False}
+
+            async def _one(i: int, chunk: dict):
                 # Остановку проверяем на каждом чанке: перестроение большого документа
                 # длится минутами, админ должен иметь возможность прервать его сразу.
+                if _state["stopped"]:
+                    return
                 if config_store.get("kg_config", "rebuild_stop"):
-                    logger.info(f"[rebuild] остановлено администратором на {filename}, чанков сделано: {chunks_done}/{len(chunks)}")
-                    break
+                    _state["stopped"] = True
+                    logger.info(
+                        f"[rebuild] остановлено администратором на {filename}, "
+                        f"чанков сделано: {_state['done']}/{len(chunks)}"
+                    )
+                    return
                 chunk_id = chunk.get("chunk_id", f"chunk_{i}")
                 chunk_text = chunk.get("content", "")
                 chunk_seq = chunk.get("metadata", {}).get("chunk_seq", i + 1)
-                kg_service.create_chunk_node(chunk_id, doc_id, chunk_text, chunk_seq)
-                try:
-                    await entity_extractor.extract_and_store(doc_id, chunk_id, chunk_text, chunk_seq, filename)
-                except Exception as e:
-                    logger.debug(f"[rebuild] Ошибка извлечения {filename}: {e}")
-                chunks_done += 1
+                async with _sem:
+                    # Синхронный драйвер Neo4j — только через to_thread (иначе блокируем loop
+                    # при параллельной работе, см. карту синхронного I/O).
+                    await asyncio.to_thread(
+                        kg_service.create_chunk_node, chunk_id, doc_id, chunk_text, chunk_seq
+                    )
+                    try:
+                        await entity_extractor.extract_and_store(
+                            doc_id, chunk_id, chunk_text, chunk_seq, filename
+                        )
+                    except Exception as e:
+                        logger.debug(f"[rebuild] Ошибка извлечения {filename}: {e}")
+                _state["done"] += 1
+
+            await asyncio.gather(*[_one(i, c) for i, c in enumerate(chunks)])
+            chunks_done = _state["done"]
+
+            # Самообозначения документа (колонтитул) отвязываем от чанков — иначе обозначение
+            # становится крупнейшим узлом графа и перевешивает смысловые сущности
+            # (см. kg_service.drop_ubiquitous_reference_entities, замер 2026-09-13).
+            _drop_self = 0
+            try:
+                _drop_self = kg_service.drop_ubiquitous_reference_entities(doc_id).get("dropped", 0)
+            except Exception as e:
+                logger.warning(f"[rebuild] отсев самообозначений не сработал для {filename}: {e}")
 
             results.append({
                 "document_id": doc_id,
                 "filename": filename,
                 "chunks_processed": chunks_done,
                 "chunks_total": len(chunks),
+                "self_refs_dropped": _drop_self,
             })
             processed += 1
 

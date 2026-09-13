@@ -844,10 +844,33 @@ class DocumentService:
                     # «Перестроить граф» на странице /kg.
                     plog.log("graph_skipped", {"reason": _skip_msg or "отключено в админке"})
                     logger.info(f"[graph] пропущен по настройке админки: {document_id}")
+                    # «Построить позже» — это НЕ «не строить никогда». При force-переиндексации
+                    # конвейер УЖЕ удалил граф документа (clear_document), поэтому без постановки
+                    # задачи граф терялся молча: замер 2026-09-13 — reindex-all с этой галочкой
+                    # обнулил весь граф (8506 сущностей, 37923 связи → 0).
+                    try:
+                        from src.indexing.tasks import rebuild_graph_task
+                        rebuild_graph_task.apply_async(args=[[document_id]], queue="maintenance")
+                        plog.log("graph_queued", {"queue": "maintenance"})
+                        logger.info(
+                            f"[graph] граф документа поставлен в maintenance-очередь: {document_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[graph] не удалось поставить граф в очередь: {e}")
                 else:
                     await self._build_knowledge_graph_async(
                         document_id, record.filename, chunks, plog=plog
-                    )
+                    )                    # Самообозначения документа (колонтитул) отвязываем от чанков: иначе
+                    # обозначение становится крупнейшим узлом и перевешивает граф (замер
+                    # 2026-09-13: 81% узлов графа — справочные типы).
+                    try:
+                        from src.indexing.knowledge_graph import kg_service
+                        _drop = await asyncio.to_thread(
+                            kg_service.drop_ubiquitous_reference_entities, document_id
+                        )
+                        plog.log("self_refs_dropped", {"count": _drop.get("dropped", 0)})
+                    except Exception as e:
+                        logger.warning(f"[graph] отсев самообозначений не выполнен: {e}")
                     # Entity Resolution здесь БОЛЬШЕ НЕ ВЫПОЛНЯЕТСЯ (убрано 2026-09-13).
                     # Причина: это самый дорогой шаг обработки — эмбеддинг ВСЕХ имён графа
                     # и косинусы O(n²) на каждом документе: замер дал ~44 с на документ

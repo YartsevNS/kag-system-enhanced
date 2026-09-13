@@ -1643,7 +1643,10 @@ class KnowledgeGraphService:
                         WHERE toLower(e.name) CONTAINS toLower("{safe_query}") AND e.type = "{safe_type}"
                         RETURN e.name as name, e.type as type, e.confidence as confidence,
                         size(coalesce(e.source_docs, [])) as doc_count
-                        ORDER BY e.confidence DESC
+                        // Вес — по числу ДОКУМЕНТОВ, затем confidence: строка, повторённая
+                        // 200 раз в одном документе (колонтитул), не должна перевешивать
+                        // сущность, которая встречается в 20 документах.
+                        ORDER BY doc_count DESC, e.confidence DESC
                         LIMIT {limit}
                     """
                 else:
@@ -1652,7 +1655,10 @@ class KnowledgeGraphService:
                         WHERE toLower(e.name) CONTAINS toLower("{safe_query}")
                         RETURN e.name as name, e.type as type, e.confidence as confidence,
                         size(coalesce(e.source_docs, [])) as doc_count
-                        ORDER BY e.confidence DESC
+                        // Вес — по числу ДОКУМЕНТОВ, затем confidence: строка, повторённая
+                        // 200 раз в одном документе (колонтитул), не должна перевешивать
+                        // сущность, которая встречается в 20 документах.
+                        ORDER BY doc_count DESC, e.confidence DESC
                         LIMIT {limit}
                     """
                 result = session.run(cypher)
@@ -2037,7 +2043,8 @@ class KnowledgeGraphService:
                     ekey = f"e:{e['name']}"
                     nodes.setdefault(ekey, {"key": ekey, "name": e["name"], "kind": "entity",
                                             "type": e["type"] or "Entity",
-                                            "entity_type": e["type"], "mentions": e["mentions"]})
+                                            "entity_type": e["type"], "mentions": e["mentions"],
+                                            "doc_count": e.get("doc_count")})
                 if chunk_ids and ents:
                     pairs = list(session.run(
                         "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) "
@@ -2108,7 +2115,8 @@ class KnowledgeGraphService:
                     "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)"
                     "-[:MENTIONS]->(e:Entity) "
                     "RETURN e.name AS name, e.type AS type, "
-                    "count(DISTINCT c) AS mentions "
+                    "count(DISTINCT c) AS mentions, "
+                    "size(coalesce(e.source_docs, [])) AS doc_count "
                     "ORDER BY mentions DESC, name LIMIT $le",
                     doc=document_id, le=limit_entities,
                 ))
@@ -2374,6 +2382,68 @@ class KnowledgeGraphService:
                 """)
         except Exception as e:
             logger.warning(f"Ошибка удаления документа из графа: {e}")
+
+    # Сущность «похожа на обозначение документа»: есть цифры и разделители
+    # (34.10—2012, 1323565.1.004—2017, 57580.1-2017). Общие слова
+    # («защита информации») под правило не попадают — их отсев был бы вреден.
+    _DESIGNATION_RE = __import__("re").compile(r"\d.*\d")
+
+    @classmethod
+    def _looks_like_designation(cls, name: str, entity_type: str = "") -> bool:
+        if (entity_type or "").lower() == "document_ref":
+            return True
+        n = (name or "").strip()
+        if len(n) < 5 or not cls._DESIGNATION_RE.search(n):
+            return False
+        return ("-" in n) or ("." in n) or ("—" in n) or (" " in n and sum(c.isdigit() for c in n) >= 4)
+
+    def drop_ubiquitous_reference_entities(self, document_id: str,
+                                           min_ratio: float = 0.8) -> Dict[str, Any]:
+        """Отвязать от чанков документа самообозначения (колонтитул).
+
+        Замер 2026-09-13: обозначение документа стоит в колонтитуле почти каждой страницы,
+        поэтому попадает в КАЖДЫЙ чанк и становится крупнейшим узлом графа (81% узлов —
+        справочные типы: legal_term 4401 + document_ref 2528 из 8506).
+
+        Критерий: сущность, похожая на обозначение (или тип document_ref), встречающаяся
+        минимум в min_ratio чанков документа. Связи MENTIONS удаляются ТОЛЬКО у чанков этого
+        документа; узел остаётся, если его упоминают другие документы (меж-документные ссылки
+        не теряются), и удаляется, если осиротел.
+        """
+        if not self.driver:
+            return {"dropped": 0, "names": []}
+        try:
+            with self.driver.session() as session:
+                rows = list(session.run("""
+                    MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)
+                    WITH d, count(DISTINCT c) AS total
+                    MATCH (d)-[:HAS_CHUNK]->(c2:Chunk)-[:MENTIONS]->(e:Entity)
+                    WITH e, total, count(DISTINCT c2) AS c_count
+                    WHERE total > 0 AND c_count >= toFloat(total) * $ratio
+                    RETURN e.name AS name, e.type AS type, c_count AS c_count, total AS total
+                """, doc=document_id, ratio=float(min_ratio)))
+
+                candidates = [r["name"] for r in rows
+                              if self._looks_like_designation(r["name"], r.get("type"))]
+                if not candidates:
+                    return {"dropped": 0, "names": []}
+
+                session.run("""
+                    MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk)-[m:MENTIONS]->(e:Entity)
+                    WHERE e.name IN $names
+                    DELETE m
+                """, doc=document_id, names=candidates)
+                session.run("""
+                    MATCH (e:Entity) WHERE NOT (()-[:MENTIONS]->(e)) DETACH DELETE e
+                """)
+                logger.info(
+                    f"[graph] самообозначения документа {document_id[:8]} отвязаны: "
+                    f"{len(candidates)} шт. (порог {min_ratio:.0%} чанков)"
+                )
+                return {"dropped": len(candidates), "names": candidates[:20]}
+        except Exception as e:
+            logger.warning(f"Ошибка отсева самообозначений {document_id}: {e}")
+            return {"dropped": 0, "names": []}
 
     def set_domain_schema(self, schema: Dict[str, Dict[str, str]]):
         """Установить доменную схему сущностей.
