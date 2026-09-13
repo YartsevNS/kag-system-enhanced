@@ -782,7 +782,7 @@ class DocumentService:
                     logger.info(f"[graph] пропущен по настройке админки: {document_id}")
                 else:
                     await self._build_knowledge_graph_async(
-                        document_id, record.filename, chunks
+                        document_id, record.filename, chunks, plog=plog
                     )
                     # Entity Resolution здесь БОЛЬШЕ НЕ ВЫПОЛНЯЕТСЯ (убрано 2026-09-13).
                     # Причина: это самый дорогой шаг обработки — эмбеддинг ВСЕХ имён графа
@@ -1227,7 +1227,14 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
-    async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list):
+    async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list,
+                                           plog=None):
+        """Построить граф документа.
+
+        plog — ProcessLogger вызывающего конвейера: метод отдельный, поэтому имя
+        plog в него не видно (живой случай: NameError, шаг graph_triage не попал в
+        журнал, хотя триаж сработал — fail-open поймал ошибку и замаскировал её
+        сообщением «триаж пропущен»)."""
         """Фоновое построение графа знаний.
         
         Страховка от зависания (документ 10fce2f1 висел на этом этапе >60 мин):
@@ -1307,13 +1314,21 @@ class DocumentService:
                         from src.indexing.chunk_triage import triage_chunks
                         _triage = await triage_chunks(document_id, chunks)
                         _skip_llm = _triage.skip
-                        plog.log("graph_triage", _triage.summary())
-                        if _skip_llm:
-                            logger.info(
-                                f"[graph] триаж {document_id}: {_triage.summary()}"
-                            )
                 except Exception as e:
-                    logger.warning(f"[graph] триаж пропущен: {e}")
+                    logger.warning(f"[graph] триаж не выполнен: {e}")
+
+                # Журналируем ОТДЕЛЬНО от вычисления: сбой записи шага не должен
+                # выглядеть как «триаж пропущен» (поймано на стенде).
+                if _triage is not None:
+                    if _skip_llm:
+                        logger.info(
+                            f"[graph] триаж {document_id}: {_triage.summary()}"
+                        )
+                    if plog is not None:
+                        try:
+                            plog.log("graph_triage", _triage.summary())
+                        except Exception as e:
+                            logger.debug(f"[graph] шаг graph_triage не записан: {e}")
 
                 async def _process_chunk(i: int, chunk: dict):
                     chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
