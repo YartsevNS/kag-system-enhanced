@@ -593,6 +593,19 @@ class ChatService:
                 )
 
                 if search_results:
+                    # Приоритет содержательным фрагментам: титульные листы, оглавления и
+                    # колонтитулы нужны в индексе (по ним ищут номер документа), но в контексте
+                    # ответа занимают место, которое должно достаться содержанию (замер
+                    # 2026-09-13: система честно отвечала «в контексте только титул и
+                    # содержание Р 50.1.112-2016»). Служебные не выбрасываем — ставим в конец,
+                    # чтобы при нехватке содержательных они всё равно попали в ответ.
+                    try:
+                        from src.indexing.service_chunks import order_context
+                        search_results, _moved = order_context(search_results, min_substantive=3)
+                        if _moved:
+                            logger.debug(f"[rag] служебных фрагментов в конец контекста: {_moved}")
+                    except Exception as e:
+                        logger.debug(f"[rag] порядок контекста не перестроен: {e}")
                     # Формируем контекст из результатов поиска
                     context_parts = []
                     for i, result in enumerate(search_results, 1):
@@ -884,6 +897,15 @@ class ChatService:
 
         context = ""
         if search_results:
+            # Служебные фрагменты (титул/оглавление/колонтитул) — в конец контекста,
+            # как и в основном пути ответа (см. src/indexing/service_chunks.py).
+            try:
+                from src.indexing.service_chunks import order_context
+                search_results, _moved = order_context(search_results, min_substantive=3)
+                if _moved:
+                    logger.debug(f"[rag/stream] служебных в конец контекста: {_moved}")
+            except Exception as e:
+                logger.debug(f"[rag/stream] порядок контекста не перестроен: {e}")
             context_parts = []
             for i, result in enumerate(search_results, 1):
                 context_parts.append(
