@@ -291,3 +291,53 @@ UI не отправляет). Делать это нужно по одному 
 
 Контрольный круг после правок: `/backup-documents` → 200, 25.0 МБ, 51 запись;
 `/backup-restore` → `restored: 9, errors: []`, категории до и после совпадают.
+
+## Разбор роутов /kg (2026-09-13, образ 2026.09.13.14)
+
+Проверено сканом роутов: из 20 эндпоинтов `/api/v1/kg` **4 были вообще без
+зависимости прав** (GET `/domain-schema`, GET `/watchdog/status`,
+GET `/type-watchdog/status`, POST `/type-watchdog/start`), остальные уже имели
+admin или «любой авторизованный». Утверждения «/cypher и /rebuild-graph без
+Depends» не подтвердились — они были admin.
+
+Исправлено:
+
+- POST `/type-watchdog/start` → `Depends(get_current_admin)` (была мутация без
+  проверки); три GET получили явный `get_current_user_optional`. Роутов без
+  проверки прав теперь 0 (проверено живьём: аноним → 401, не-админ → 403 на
+  мутациях, чтение разрешено);
+- **все 16 вызовов `kg_service.*`** (синхронный Neo4j) обёрнуты в
+  `asyncio.to_thread`, включая `post_process_entities` и
+  `deduplicate_entities_by_name`;
+- `/rebuild-graph`: гонка check-then-act закрыта — добавлен атомарный
+  `config_store.compare_and_set` (проверено: первый захват True, повторный с тем
+  же ожиданием False, освобождение True);
+- `execute_cypher`: вместо чёрного списка подстрок — требование начинать запрос с
+  MATCH/RETURN/WITH/UNWIND + запрет CREATE/MERGE/SET/DELETE/REMOVE/DROP/CALL/
+  LOAD CSV/FOREACH/APOC./DBMS. и лимит ≤1000. Проверено: чтение работает,
+  CREATE/LOAD CSV/CALL → 400 («должен начинаться с…»), DELETE/SET → 400,
+  limit=100000 → 1000 строк;
+- `/stats`: 503 с текстом ошибки вместо нулей (нули выглядели как «граф пуст»);
+- лимиты клампятся (`_clamp`), `scope` → `Literal` (мусор даёт 422),
+  `type` → `entity_type` (обновлён kg.html), `q.lower()` считается один раз;
+- пресет доменной схемы пишется через публичный `set_domain_schema`, а не в
+  `_domain_config`;
+- `type-watchdog/status`: `get_all` в потоке, один проход по документам;
+- `hybrid-search`: `initialize()` вызывается только если клиента ещё нет (был
+  лишний сетевой круг на каждый запрос);
+- `/rebuild-status`: `transport_error` отличает сбой чтения статуса от падения
+  задачи;
+- импорт `kg_service` перенесён в шапку (цикла импортов нет — проверено).
+
+Две ошибки в моих же правках, пойманные проверкой на стенде:
+
+1. в модуле роутера не был импортирован `asyncio` — ВСЕ новые `to_thread` падали
+   с `name 'asyncio' is not defined`, а эндпоинты отдавали ошибку в теле с кодом
+   200. Добавлен импорт;
+2. `compare_and_set` всегда возвращал False: `config_store.set` хранит строки без
+   JSON-кавычек («idle»), а мой разбор вызывал `json.loads`. Добавлен
+   `_decode_value` (JSON, иначе строка) — выровнено с `set()`.
+
+Не подтвердилось из разбора: «/cypher и /rebuild-graph без проверки прав»
+(уже были admin), «ключи payload как int» (`get_points_payload` нормализует к
+str, поиск по str корректен).
