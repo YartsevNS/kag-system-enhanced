@@ -1296,6 +1296,25 @@ class DocumentService:
                 # одновременно. Neo4j-записи — последовательно (они дёшевы).
                 sem = asyncio.Semaphore(MAX_PARALLEL_LLM)
 
+                # Триаж до LLM: штампы (тот же текст в чужих документах) и дубли внутри
+                # документа не стоят двух LLM-вызовов на чанк. Модуль только
+                # классифицирует, ничего не пишет: src/indexing/chunk_triage.py.
+                _triage = None
+                _skip_llm: set = set()
+                try:
+                    from src.config import get_settings as _get_settings
+                    if _get_settings().GRAPH_TRIAGE_ENABLED:
+                        from src.indexing.chunk_triage import triage_chunks
+                        _triage = await triage_chunks(document_id, chunks)
+                        _skip_llm = _triage.skip
+                        plog.log("graph_triage", _triage.summary())
+                        if _skip_llm:
+                            logger.info(
+                                f"[graph] триаж {document_id}: {_triage.summary()}"
+                            )
+                except Exception as e:
+                    logger.warning(f"[graph] триаж пропущен: {e}")
+
                 async def _process_chunk(i: int, chunk: dict):
                     chunk_id = chunk.get("chunk_id", f"{document_id}_chunk_{i}")
                     chunk_text = chunk.get("content", "")
@@ -1307,6 +1326,11 @@ class DocumentService:
                         chunk_id, document_id, chunk_text, chunk_seq,
                         label="create_chunk_node",
                     )
+
+                    # Отсеянные триажем чанки: узел в графе есть (структура цела),
+                    # а LLM по ним не вызываем — ровно за это и платили временем.
+                    if i in _skip_llm:
+                        return
 
                     # Извлечение сущностей (LLM) — ограничено семафором и таймаутом
                     async with sem:
@@ -1326,6 +1350,15 @@ class DocumentService:
                 # Параллельно обрабатываем все чанки (не только первые 10)
                 tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
                 await asyncio.gather(*tasks)
+
+                # Штампы помечаем в графе: LLM по ним не работал, а флаг нужен, чтобы
+                # позже не показывать колонтитулы в выдаче и не связывать ими чанки.
+                if _triage is not None and _triage.boilerplate:
+                    _bp_ids = [chunks[i].get("chunk_id") for i in _triage.boilerplate
+                               if i < len(chunks) and chunks[i].get("chunk_id")]
+                    if _bp_ids:
+                        marked = await asyncio.to_thread(kg_service.mark_boilerplate, _bp_ids)
+                        logger.info(f"[graph] штампов помечено: {marked}")
 
             # Весь граф — в общий таймаут: если LLM/Neo4j висят суммарно
             # дольше GRAPH_TOTAL_TIMEOUT, граф пропускается, но документ

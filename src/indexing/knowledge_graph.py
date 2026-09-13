@@ -248,6 +248,28 @@ class KnowledgeGraphService:
         except Exception as e:
             logger.warning(f"Ошибка создания узла документа: {e}")
 
+    def mark_boilerplate(self, chunk_ids: list) -> int:
+        """Пометить чанки-штампы (колонтитулы, копирайты, повторы между документами).
+
+        Такие чанки исключаются из LLM-извлечения (см. src/indexing/chunk_triage.py);
+        флаг нужен, чтобы позже не показывать их в выдаче чата и не связывать ими
+        граф. Один батч-запрос, ничего не пересчитывает.
+        """
+        if not self.driver or not chunk_ids:
+            return 0
+        try:
+            with self.driver.session() as session:
+                rec = session.run(
+                    "UNWIND $ids AS cid MATCH (c:Chunk {id: cid}) "
+                    "SET c.is_boilerplate = true RETURN count(c) AS n",
+                    ids=list(chunk_ids),
+                ).single()
+                return int((rec or {}).get("n", 0))
+        except Exception as e:
+            logger.warning(f"[graph] пометка штампов не удалась: {e}")
+            return 0
+
+
     def create_chunk_node(self, chunk_id: str, document_id: str, text: str, chunk_seq: int = 0):
         """Создать/обновить узел чанка и связь HAS_CHUNK с документом.
 
