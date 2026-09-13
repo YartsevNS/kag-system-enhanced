@@ -72,3 +72,48 @@ def test_real_store_ttl_is_small():
     assert 0 < config_store.CACHE_TTL_SECONDS <= 5, (
         "длинный TTL сделает изменения из worker'а незаметными надолго"
     )
+
+
+class _FakeQuery:
+    """Заглушка SQLAlchemy-запроса: всегда «записи нет»."""
+
+    def __init__(self, counter):
+        self.counter = counter
+
+    def filter_by(self, **kwargs):
+        return self
+
+    def first(self):
+        self.counter.append(1)
+        return None
+
+
+class _FakeSession:
+    def __init__(self, counter):
+        self.counter = counter
+
+    def query(self, *args, **kwargs):
+        return _FakeQuery(self.counter)
+
+    def close(self):
+        pass
+
+
+def test_missing_key_is_cached_too(monkeypatch):
+    """Отсутствующий ключ раньше ходил в БД на каждое чтение (замер: 1.1 мс)."""
+    counter = []
+    store = PostgresConfigStore()
+    monkeypatch.setattr(store, "_get_session", lambda: _FakeSession(counter))
+    assert store.get("scaling", "default", default={"x": 1}) == {"x": 1}
+    assert store.get("scaling", "default", default={"x": 1}) == {"x": 1}
+    assert len(counter) == 1, "отрицательный результат тоже должен кэшироваться"
+
+
+def test_missing_key_cache_invalidated_by_set(monkeypatch):
+    counter = []
+    store = PostgresConfigStore()
+    monkeypatch.setattr(store, "_get_session", lambda: _FakeSession(counter))
+    store.get("scaling", "default", default=None)
+    store.invalidate("scaling", "default")
+    store.get("scaling", "default", default=None)
+    assert len(counter) == 2, "после инвалидации чтение обязано идти в источник"
