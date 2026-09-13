@@ -58,6 +58,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Ошибка инициализации: {e}")
 
+    # Доменная схема сущностей: применяем сохранённую. В памяти процесса её нет
+    # (это единственная копия состояния) — без этого после рестарта api пресет
+    # сбрасывался на «universal».
+    try:
+        from src.indexing.entity_extractor import entity_extractor
+        mode = entity_extractor.apply_stored_domain_schema()
+        logger.info(f"Доменная схема сущностей: {mode}")
+    except Exception as e:
+        logger.warning(f"Доменная схема сущностей не применена: {e}")
+
     # Промпты: засеять настройки из prompts/*.txt, если там пусто.
     # Нужно, чтобы на развёрнутом стенде промпты ЖИЛИ в настройках и правились
     # из админки, а файл оставался версионируемым дефолтом (см. provider_service).

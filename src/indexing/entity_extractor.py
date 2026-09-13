@@ -21,6 +21,22 @@ import asyncio
 NEO4J_TIMEOUT = 20
 
 
+# Действующая доменная схема хранится В НАСТРОЙКАХ: {"mode": "preset"|"manual",
+# "preset": имя_или_None, "schema": {...}}. Память процесса обнуляется при
+# рестарте, а worker — отдельный процесс, поэтому единственный источник правды
+# здесь, а не в атрибутах класса.
+DOMAIN_ACTIVE_KEY = "domain_schema_active"
+
+
+def _load_active_domain_config():
+    """Прочитать действующую доменную схему из config_store.
+
+    Отдельная функция — чтобы подменять её в тестах (config_store тянет БД).
+    """
+    from src.api.services.config_store import config_store
+    return config_store.get("kg_config", DOMAIN_ACTIVE_KEY)
+
+
 class EntityExtractor:
     """Извлекает сущности и факты из чанков через LLM.
     
@@ -179,6 +195,11 @@ class EntityExtractor:
     # Активный пресет (по умолчанию — универсальный)
     _active_preset = "universal"
 
+    # Ключ настроек, где лежит ДЕЙСТВУЮЩАЯ схема: {"mode": "preset"|"manual",
+    # "preset": имя_или_None, "schema": {...}}. Единственный источник правды —
+    # память процесса обнуляется при каждом рестарте.
+    DOMAIN_ACTIVE_KEY = DOMAIN_ACTIVE_KEY  # единый ключ настроек (см. выше)
+
     # Доменная схема: группы типов для итеративного извлечения
     # Это — активная схема, получаемая из выбранного пресета
     DOMAIN_SCHEMA = SCHEMA_PRESETS["universal"]["schema"]
@@ -209,9 +230,54 @@ class EntityExtractor:
             pass
         return None
 
-    def set_domain_schema(self, schema: Dict):
-        """Установить пользовательскую доменную схему (словарь)."""
+    def set_domain_schema(self, schema: Dict, mark_manual: bool = False):
+        """Установить пользовательскую доменную схему (словарь).
+
+        mark_manual=True помечает схему как ручную (пресет перестаёт считаться
+        активным) — иначе интерфейс подсвечивал бы пресет, схема которого уже
+        заменена руками.
+        """
         self._domain_config = dict(schema)
+        if mark_manual:
+            EntityExtractor._active_preset = "manual"
+
+    def apply_stored_domain_schema(self) -> str:
+        """Применить сохранённую доменную схему (старт процесса/рестарт api или worker).
+
+        Почему так: схема и пресет хранились ТОЛЬКО в памяти процесса. Настройку
+        писали в config_store, но никто её не читал — после рестарта api пресет
+        сбрасывался на «universal», а worker (в нём идёт извлечение сущностей)
+        выбранный в админке пресет не видел вообще, т.к. это другой процесс.
+
+        Возвращает режим: "preset:<имя>" | "manual" | "default".
+        """
+        try:
+            saved = _load_active_domain_config() or {}
+        except Exception as e:
+            logger.warning(f"[domain] сохранённую доменную схему прочитать не удалось: {e}")
+            return "default"
+        if not isinstance(saved, dict) or not saved:
+            return "default"
+
+        if saved.get("mode") == "preset":
+            name = saved.get("preset")
+            if name in EntityExtractor.SCHEMA_PRESETS:
+                EntityExtractor.switch_preset(name)
+                self._domain_config = dict(EntityExtractor.SCHEMA_PRESETS[name]["schema"])
+                logger.info(f"[domain] применён сохранённый пресет: {name}")
+                return f"preset:{name}"
+            logger.warning(f"[domain] в настройках неизвестный пресет {name!r} — оставляю текущую схему")
+            return "default"
+
+        schema = saved.get("schema")
+        if saved.get("mode") == "manual" and isinstance(schema, dict) and schema:
+            self.set_domain_schema(schema, mark_manual=True)
+            logger.info(
+                f"[domain] применена сохранённая ручная схема: "
+                f"{len(schema.get('core', {}))} базовых типов"
+            )
+            return "manual"
+        return "default"
 
     @classmethod
     def switch_preset(cls, preset_name: str) -> Dict:

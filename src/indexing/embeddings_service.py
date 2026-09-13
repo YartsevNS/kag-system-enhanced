@@ -155,6 +155,17 @@ class EmbeddingsService:
 
         logger.info("EmbeddingsService инициализирован успешно")
 
+    def is_initialized(self) -> bool:
+        """Готов ли клиент эмбеддингов.
+
+        Публичная проверка для роутов: initialize() создаёт клиент и проверяет
+        коллекцию в Qdrant (сетевой круг), поэтому на каждый запрос его звать
+        нельзя. Обращаться снаружи к приватному _embedding_client тоже нельзя:
+        рефакторинг сервиса молча сломает проверку (initialize будет зваться
+        каждый раз или никогда).
+        """
+        return self._embedding_client is not None
+
     async def ensure_model(self):
         """Проверить актуальность embedding модели из настроек. Если модель/провайдер сменились — пересоздать клиент."""
         settings = get_settings()

@@ -37,7 +37,12 @@ async def execute_cypher(
             raise HTTPException(status_code=400, detail="Пустой запрос")
         limit = int(query.get("limit", 100))
         results = await asyncio.to_thread(kg_service.execute_cypher, q, _clamp(limit))
-        logger.info(f"[cypher] {getattr(current_user, 'username', '?')}: {q[:200]}")
+        # Аудит: единственная точка произвольного Cypher. Пишем кто, что и сколько
+        # вернулось (без самих данных — там могут быть тексты документов).
+        logger.info(
+            f"[cypher] user={getattr(current_user, 'username', '?')} "
+            f"limit={_clamp(limit)} rows={len(results)} query={q[:200]!r}"
+        )
         return {"query": q, "results": results, "total": len(results)}
     except HTTPException:
         raise
@@ -51,8 +56,12 @@ async def execute_cypher(
 
 
 @router.get("/stats", summary="Статистика графа знаний")
-async def kg_stats(current_user: Optional[User] = Depends(get_current_user_optional)):
-    """Статистика: количество документов, чанков, сущностей, связей."""
+async def kg_stats():
+    """Статистика: количество документов, чанков, сущностей, связей.
+
+    Параметр current_user не нужен: доступ к /api/v1/kg требует аутентификации
+    на уровне middleware, а значение тут не используется.
+    """
     try:
         return await asyncio.to_thread(kg_service.get_stats)
     except Exception as e:
@@ -207,7 +216,8 @@ async def document_graph(
     try:
         graph = await asyncio.to_thread(
             kg_service.get_document_graph, document_id, with_chunks,
-                                              limit_chunks, limit_entities)
+                                              _clamp(limit_chunks, 1, 500),
+                                              _clamp(limit_entities, 1, 500))
         if not graph:
             return {"document_id": document_id, "graph": [],
                     "error": "документ не найден в графе знаний"}
@@ -275,10 +285,11 @@ async def hybrid_search(
             try:
                 # initialize() создаёт клиент и проверяет коллекцию — на каждый запрос это
                 # лишний сетевой круг. Инициализируем, только если клиента ещё нет.
-                if getattr(embeddings_service, "_embedding_client", None) is None:
+                if not embeddings_service.is_initialized():
                     await embeddings_service.initialize()
                 qdrant_results = await embeddings_service.search(q, limit=20)
                 seen_texts = set()
+                q_lower = q.lower()  # не зависит от итерации — считаем один раз
                 for point in (qdrant_results or []):
                     score = point.get("score", 0)
                     content = (point.get("content", "") or "").strip()
@@ -292,7 +303,6 @@ async def hybrid_search(
                     if text_key in seen_texts:
                         continue
                     # Буст: если query встречается в тексте
-                    q_lower = q.lower()
                     if q_lower in content.lower():
                         score += 0.3
                     seen_texts.add(text_key)
@@ -341,10 +351,18 @@ async def rebuild_graph(
     # Гонка check-then-act: два параллельных запроса оба видели «не running» и
     # запускали задачу дважды. Флаг захватываем атомарно (compare-and-set).
     status = config_store.get("kg_config", "rebuild_status") or "idle"
-    if not config_store.compare_and_set("kg_config", "rebuild_status", "running", status):
-        raise HTTPException(status_code=409, detail="Перестроение графа уже запущено")
+    # Сначала явное «уже идёт» (значение уже running), и только потом «кто-то
+    # опередил» (CAS не прошёл из-за конкурентного запроса). Иначе при status
+    # == "running" CAS(running→running) проходит, и смысл двух сообщений
+    # смазывается.
     if status == "running":
         raise HTTPException(status_code=409, detail="Перестроение графа уже идёт")
+    if not config_store.compare_and_set("kg_config", "rebuild_status", "running", status):
+        raise HTTPException(status_code=409, detail="Перестроение графа уже запущено")
+    logger.info(
+        f"[rebuild] запуск: user={getattr(current_user, 'username', '?')} "
+        f"документов={len(document_ids) if document_ids else 'все completed'}"
+    )
 
     try:
         from src.indexing.tasks import rebuild_graph_task
@@ -436,6 +454,10 @@ async def get_domain_schema(current_user: Optional[User] = Depends(get_current_u
     try:
         from src.indexing.entity_extractor import entity_extractor
         from src.indexing.entity_extractor import EntityExtractor
+        # Отдаём состояние ИЗ НАСТРОЕК: пресет живёт в config_store, память
+        # процесса обнуляется при рестарте, и интерфейс иначе показывал бы
+        # «universal» после каждого перезапуска api.
+        await asyncio.to_thread(entity_extractor.apply_stored_domain_schema)
         return {
             "schema": entity_extractor._domain_config,
             "active_preset": EntityExtractor.get_active_preset(),
@@ -475,12 +497,25 @@ async def update_domain_schema(
                 kg_service.set_domain_schema,
                 EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"].get("core", {}),
             )
+            # Сохраняем ДЕЙСТВУЮЩУЮ схему: память процесса переживает только
+            # сам запрос, worker — другой процесс и без этой записи пресет не увидит.
+            config_store.set("kg_config", EntityExtractor.DOMAIN_ACTIVE_KEY, {
+                "mode": "preset",
+                "preset": preset_name,
+                "schema": EntityExtractor.SCHEMA_PRESETS[preset_name]["schema"],
+            })
+            logger.info(f"[domain] пресет «{preset_name}» сохранён в настройках")
             return {"status": "ok", "preset": preset_name, "message": f"Пресет переключён на «{EntityExtractor.SCHEMA_PRESETS[preset_name]['name']}»"}
         
         # Режим 2: ручная схема
-        entity_extractor.set_domain_schema(data)
+        entity_extractor.set_domain_schema(data, mark_manual=True)
         await asyncio.to_thread(kg_service.set_domain_schema, data.get("core", {}))
+        config_store.set("kg_config", EntityExtractor.DOMAIN_ACTIVE_KEY, {
+            "mode": "manual", "preset": None, "schema": data,
+        })
+        # Прежний ключ оставлен для совместимости (читается внешними скриптами).
         config_store.set("kg_config", "domain_schema", data)
+        logger.info("[domain] ручная схема сохранена в настройках")
         return {"status": "ok", "message": "Доменная схема обновлена вручную"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -534,10 +569,14 @@ async def type_watchdog_status(current_user: Optional[User] = Depends(get_curren
         # Count docs without type
         from src.api.services.document_repository import get_doc_repo
         docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
-        total = sum(1 for d in docs.values() if isinstance(d, dict) and d.get('status') == 'completed')
-        with_type = sum(1 for d in docs.values() 
-                       if isinstance(d, dict) and d.get('document_type') 
-                       and d['document_type'] not in ('unknown', None, ''))
+        total = with_type = 0
+        for d in docs.values():
+            if not isinstance(d, dict) or d.get("status") != "completed":
+                continue
+            total += 1
+            dt = d.get("document_type")
+            if dt and dt not in ("unknown", None, ""):
+                with_type += 1
         return {
             "status": status,
             "total": total,

@@ -56,6 +56,15 @@ def process_document(
         )
         raise self.retry(countdown=PROCESSING_BLOCK_RETRY_S, max_retries=None)
 
+    # Доменная схема сущностей живёт в настройках, а не в памяти процесса:
+    # worker — отдельный процесс, и без этого выбранный в админке пресет не
+    # применился бы к извлечению сущностей (оно идёт здесь).
+    try:
+        from src.indexing.entity_extractor import entity_extractor
+        entity_extractor.apply_stored_domain_schema()
+    except Exception as e:
+        logger.warning(f"[Celery] доменную схему применить не удалось: {e}")
+
     logger.info(f"[Celery] Начало обработки: {document_id}")
     
     try:
