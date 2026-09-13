@@ -17,20 +17,54 @@ from typing import Dict, Any, Callable
 
 _cache: Dict[str, Dict[str, Any]] = {}
 
+_CACHE_MAX = 500
+
+
+def _cache_key(args, kwargs) -> str:
+    """Ключ кэша БЕЗ объектов-моделей.
+
+    Раньше ключ строился как str(args)+str(sorted(kwargs.items())), и в него
+    попадал объект User. У моделей SQLAlchemy нет своего __repr__, поэтому
+    получался адрес памяти: ключи «случайно» различались, а после сборки мусора
+    адрес переиспользуется — то есть один пользователь мог получить ответ,
+    закэшированный для другого. Сейчас в ключ идут только простые значения
+    (id документа, числа, строки), а пользователь — его id.
+    """
+    def norm(value):
+        if isinstance(value, (str, int, float, bool, type(None))):
+            return value
+        if isinstance(value, (list, tuple)):
+            return tuple(norm(v) for v in value)
+        if isinstance(value, dict):
+            return tuple(sorted((k, norm(v)) for k, v in value.items()))
+        for attr in ("id", "username"):
+            got = getattr(value, attr, None)
+            if isinstance(got, (str, int)):
+                return f"{type(value).__name__}:{got}"
+        return type(value).__name__
+
+    return f"{norm(args)!r}|{norm(kwargs)!r}"
+
+
 def _cached(ttl=2.0):
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            key = str(args)+str(sorted(kwargs.items()))
+            key = _cache_key(args, kwargs)
             now = time.monotonic()
             val = _cache.get(key)
             if val and val[1] > now:
                 return val[0]
             res = await func(*args, **kwargs)
             _cache[key] = (res, now + ttl)
+            # Чистим просроченные; если после этого записей всё ещё много —
+            # срезаем самые старые (иначе при потоке запросов с непросроченным
+            # TTL словарь рос бесконечно).
             if len(_cache) > 100:
-                for k in list(_cache):
-                    if _cache[k][1] < now:
-                        del _cache[k]
+                for k in [k for k, v in _cache.items() if v[1] < now]:
+                    _cache.pop(k, None)
+            if len(_cache) > _CACHE_MAX:
+                for k in sorted(_cache, key=lambda k: _cache[k][1])[: len(_cache) - _CACHE_MAX]:
+                    _cache.pop(k, None)
             return res
         return wrapper
     return decorator
@@ -41,30 +75,13 @@ import uuid
 import json as _json
 
 
-def _parse_id_list(raw: str) -> list:
-    """Распарсить JSON-строку списка id (allow/deny) в list[str].
+def _parse_id_list(raw) -> list:
+    """Разобрать список id (allow/deny).
 
-    Поддерживает JSON "[\"id1\",\"id2\"]" и PostgreSQL array-литерал
-    "{id1,id2}" (старые записи, когда ACL-поля не сериализовались в JSON).
+    Единая реализация — document_access.parse_id_list: раньше эта логика была
+    скопирована в трёх местах (список, ACL документа, фильтр прав).
     """
-    if not raw:
-        return []
-    if isinstance(raw, list):
-        return [str(x) for x in raw if x]
-    try:
-        v = _json.loads(raw)
-        if isinstance(v, list):
-            return [str(x) for x in v if x]
-    except Exception:
-        pass
-    # PostgreSQL array literal: {id1,id2}
-    if isinstance(raw, str) and raw.startswith("{") and raw.endswith("}"):
-        inner = raw[1:-1].strip()
-        if inner:
-            return [x.strip().strip('"') for x in inner.split(",") if x.strip()]
-        return []
-    # fallback: CSV
-    return [x.strip() for x in raw.split(",") if x.strip()]
+    return parse_id_list(raw)
 
 
 def _json_parse_source(raw) -> str:
@@ -106,6 +123,12 @@ from src.indexing.tasks import process_document as celery_process_document
 # enqueue_document() (Redis-замок + проверка статуса), а не через
 # process_document.delay() напрямую — иначе возможны дубли задач.
 from src.indexing.queue_guard import enqueue_document
+from src.api.services.document_access import (
+    ensure_can_read,
+    ensure_owner_or_admin,
+    is_owner_or_admin,
+    parse_id_list,
+)
 
 router = APIRouter()
 
@@ -170,6 +193,50 @@ def _tus_file_path(upload_id: str) -> Path:
     return TUS_DIR / f"{upload_id}.bin"
 
 
+def _tus_read_meta(upload_id: str) -> dict:
+    """Метаданные TUS-сессии (пустой dict, если сессии нет)."""
+    meta_path = _tus_meta_path(upload_id)
+    if not meta_path.exists():
+        return {}
+    try:
+        with open(meta_path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _tus_check_owner(meta: dict, current_user) -> None:
+    """HEAD/PATCH/DELETE — только для своей сессии (или админу).
+
+    Без этой проверки любой авторизованный пользователь, зная upload_id
+    (он приходит в Location и попадает в логи), мог узнать offset чужой
+    загрузки и удалить чужую сессию.
+    """
+    if not meta:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    owner = str(meta.get("uploaded_by") or "")
+    if bool(getattr(current_user, "is_admin", False)):
+        return
+    if not current_user or not owner or owner != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Чужая сессия загрузки")
+
+
+def _cleanup_tus(upload_id: str):
+    """Удалить временные файлы TUS-сессии."""
+    for p in [_tus_meta_path(upload_id), _tus_file_path(upload_id)]:
+        try:
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+
+
+# ============================================================
+# Simple multipart upload (без TUS)
+# ============================================================
+
+
+
 @router.options("/tus")
 async def tus_options():
     """TUS: вернуть поддерживаемые опции протокола."""
@@ -195,6 +262,10 @@ async def tus_create(
     - Upload-Length: общий размер файла в байтах
     - Upload-Metadata: base64(filename, content_type)
     """
+    # Заблокирована ли загрузка администратором: раньше TUS это игнорировал
+    # (документ можно было загрузить в обход галочки «запретить загрузку»).
+    _deny_if_uploads_blocked()
+
     # Проверка протокола
     if request.headers.get("Tus-Resumable") != "1.0.0":
         raise HTTPException(status_code=412, detail="Tus-Resumable: 1.0.0 required")
@@ -263,7 +334,10 @@ async def tus_create(
 
 
 @router.head("/tus/{upload_id}")
-async def tus_head(upload_id: str):
+async def tus_head(
+    upload_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """TUS: получить текущий статус загрузки (сколько байт уже получено)."""
     meta_path = _tus_meta_path(upload_id)
     if not meta_path.exists():
@@ -271,6 +345,8 @@ async def tus_head(upload_id: str):
 
     with open(meta_path) as f:
         meta = json.load(f)
+
+    _tus_check_owner(meta, current_user)
 
     file_path = _tus_file_path(upload_id)
     offset = file_path.stat().st_size if file_path.exists() else 0
@@ -306,6 +382,8 @@ async def tus_patch(
 
     with open(meta_path) as f:
         meta = json.load(f)
+
+    _tus_check_owner(meta, current_user)
 
     file_path = _tus_file_path(upload_id)
     current_offset = file_path.stat().st_size if file_path.exists() else 0
@@ -383,25 +461,15 @@ async def tus_patch(
 
 
 @router.delete("/tus/{upload_id}", status_code=204)
-async def tus_delete(upload_id: str):
-    """TUS: отменить и удалить сессию загрузки."""
+async def tus_delete(
+    upload_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """TUS: отменить и удалить сессию загрузки (только своей сессии)."""
+    meta = _tus_read_meta(upload_id)
+    _tus_check_owner(meta, current_user)
     _cleanup_tus(upload_id)
     return Response()
-
-
-def _cleanup_tus(upload_id: str):
-    """Удалить временные файлы TUS-сессии."""
-    for p in [_tus_meta_path(upload_id), _tus_file_path(upload_id)]:
-        try:
-            if p.exists():
-                p.unlink()
-        except OSError:
-            pass
-
-
-# ============================================================
-# Simple multipart upload (без TUS)
-# ============================================================
 
 
 @router.post("/", response_model=DocumentStatus, summary="Загрузить документ")
@@ -764,7 +832,10 @@ async def _process_bulk_file(
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatus, summary="Статус документа")
-async def get_document_status(document_id: str):
+async def get_document_status(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """
     Получить статус обработки документа.
 
@@ -776,6 +847,7 @@ async def get_document_status(document_id: str):
     - completed: Обработка завершена
     - failed: Ошибка обработки
     """
+    ensure_can_read(document_id, current_user)
     record = document_service.get_document_status(document_id)
     
     if not record:
@@ -968,8 +1040,12 @@ async def get_access_options():
 
 
 @router.get("/{document_id}/access", summary="Права доступа документа")
-async def get_document_access(document_id: str):
+async def get_document_access(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     from src.api.services.document_repository import get_doc_repo
+    ensure_can_read(document_id, current_user)
     doc = get_doc_repo().get(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
@@ -1040,11 +1116,16 @@ async def update_document_access(document_id: str, data: dict, current_user: Opt
 
 
 @router.get("/{document_id}/tables", summary="Таблицы документа (структурно)")
-async def get_document_tables(document_id: str, limit: int = 100):
+async def get_document_tables(
+    document_id: str,
+    limit: int = 100,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Список таблиц документа из document_tables (rows, headers, markdown, html).
 
     Для точных запросов («что в таблице по ОКВЭД 61.10.1») и рендера в чате.
     """
+    ensure_can_read(document_id, current_user)
     try:
         from src.database.session import get_session_local
         from src.database.document_table_models import DocumentTable
@@ -1062,12 +1143,18 @@ async def get_document_tables(document_id: str, limit: int = 100):
 
 
 @router.post("/{document_id}/tables/search", summary="Поиск по таблицам документа")
-async def search_document_tables(document_id: str, query: str = "", column: str = ""):
+async def search_document_tables(
+    document_id: str,
+    query: str = "",
+    column: str = "",
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Поиск значения в таблицах документа (точный, по ячейкам).
 
     query — искомый текст в ячейках; column — фильтр по заголовку колонки.
     Возвращает найденные строки (целиком) — для точных ответов в чате.
     """
+    ensure_can_read(document_id, current_user)
     try:
         import json
         from src.database.session import get_session_local
@@ -1113,7 +1200,10 @@ async def search_document_tables(document_id: str, query: str = "", column: str 
 
 
 @router.post("/{document_id}/reindex", summary="Переиндексировать документ")
-async def reindex_document(document_id: str):
+async def reindex_document(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Поставить документ на переиндексацию (заново создать вектора).
 
     Работа ставится в очередь Celery, а не выполняется в запросе: раньше здесь
@@ -1127,11 +1217,12 @@ async def reindex_document(document_id: str):
     добавляются рядом и в поиске появляются дубли (баг 2026-09-12: два point_id
     на один chunk_id).
     """
-    from src.api.services.document_repository import get_doc_repo
     from src.indexing.queue_guard import enqueue_document
 
-    if not get_doc_repo().get(document_id):
-        raise HTTPException(status_code=404, detail="Документ не найден")
+    # Переиндексация — тяжёлая операция над конкретным документом: как и
+    # /{id}/process, её может запускать владелец или админ (раньше — любой
+    # авторизованный, то есть чужой документ можно было переиндексировать).
+    ensure_owner_or_admin(document_id, current_user)
 
     # False = задача для документа уже стоит (QueueGuard). Отвечаем честно,
     # а не «ok», как раньше с task_id="duplicate_skipped".
@@ -1178,10 +1269,19 @@ async def process_document_now(
         raise HTTPException(status_code=404, detail="Документ не найден")
     owner = getattr(doc, "uploaded_by", None)
     is_admin = bool(current_user and getattr(current_user, "is_admin", False))
-    if owner and (not current_user or str(owner) != str(current_user.id)) and not is_admin:
+    if not current_user and not is_admin:
+        # Раньше при owner=None проверка «коротко замыкалась» и пропускала
+        # не-админа к системному документу: выполняем требование явно.
+        raise HTTPException(status_code=401, detail="Требуется аутентификация")
+    if owner and str(owner) != str(current_user.id) and not is_admin:
         raise HTTPException(
             status_code=403,
             detail="Недостаточно прав: можно запускать обработку только своих документов",
+        )
+    if not owner and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав: системный документ может обработать только администратор",
         )
 
     try:
@@ -1273,9 +1373,11 @@ async def process_all_mine(current_user: Optional[User] = Depends(get_current_us
 async def get_document_chunks(
     document_id: str,
     offset: int = 0,
-    limit: int = 10
+    limit: int = 10,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Получить чанки конкретного документа из Qdrant."""
+    ensure_can_read(document_id, current_user)
     from src.indexing.qdrant_service import get_qdrant_service
     qdrant_service = get_qdrant_service()
     
@@ -1323,6 +1425,7 @@ async def get_document_details(
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """Получить расширенную информацию о документе с тэгами, типом, пользователем."""
+    ensure_can_read(document_id, current_user)
     from src.api.services.document_repository import get_doc_repo
     from src.indexing.auto_tagger import get_auto_tagger
 
@@ -1505,8 +1608,12 @@ async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
 
 
 @router.get("/{document_id}/thumbnail", summary="Миниатюра документа")
-async def get_document_thumbnail(document_id: str):
+async def get_document_thumbnail(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Вернуть миниатюру документа (WebP/Png), с кэшированием."""
+    ensure_can_read(document_id, current_user)
     from pathlib import Path
     from fastapi.responses import FileResponse, Response
     
@@ -1557,8 +1664,12 @@ async def get_document_thumbnail(document_id: str):
 
 
 @router.get("/{document_id}/preview", summary="Файл документа для просмотра")
-async def get_document_preview(document_id: str):
+async def get_document_preview(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Вернуть файл документа для inline-просмотра в браузере."""
+    ensure_can_read(document_id, current_user)
     from pathlib import Path
     from fastapi.responses import FileResponse
     
@@ -1576,7 +1687,9 @@ async def get_document_preview(document_id: str):
 
 
 @router.post("/reanalyze-all", summary="Переанализировать все документы")
-async def reanalyze_all_documents():
+async def reanalyze_all_documents(
+    current_user: User = Depends(get_current_admin),
+):
     """
     Фоновый переанализ всех completed-документов через LLM.
     Определяет document_type, recognized_title, summary, topics.
@@ -1624,7 +1737,9 @@ async def reanalyze_all_documents():
 
 
 @router.post("/reindex-all", summary="Переиндексировать все документы (пересоздать embeddings)")
-async def reindex_all_documents():
+async def reindex_all_documents(
+    current_user: User = Depends(get_current_admin),
+):
     """
     Переиндексировать ВСЕ completed-документы — заново прогнать парсинг → чанкинг
     → векторизацию. Нужно после смены embedding-модели или исправления схемы Qdrant.
@@ -1666,13 +1781,17 @@ async def reindex_all_documents():
 # ============================================================
 
 @router.get("/{document_id}/versions", summary="История версий документа")
-async def get_document_versions(document_id: str):
+async def get_document_versions(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """
     Получить информацию о версиях документа.
     
     Возвращает текущую версию, хеш, хеш предыдущей версии,
     и флаг has_previous указывающий, есть ли с чем сравнивать.
     """
+    ensure_can_read(document_id, current_user)
     try:
         from src.api.services.document_service import document_service
         from src.api.services.document_repository import get_doc_repo
@@ -1707,13 +1826,17 @@ async def get_document_versions(document_id: str):
 
 
 @router.get("/{document_id}/diff", summary="Сравнение версий документа")
-async def diff_document_versions(document_id: str):
+async def diff_document_versions(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """
     Сравнить текущую версию документа с предыдущей.
     
     Возвращает diff: что изменилось в тексте между версиями.
     Полезно при повторной загрузке обновлённого документа.
     """
+    ensure_can_read(document_id, current_user)
     try:
         from src.api.services.document_service import document_service
         result = document_service.compare_versions(document_id)
@@ -1757,7 +1880,9 @@ async def check_duplicate(hash: str = ""):
 
 
 @router.post("/reprocess-pending", summary="Перезапустить обработку pending-документов")
-async def reprocess_pending_documents():
+async def reprocess_pending_documents(
+    current_user: User = Depends(get_current_admin),
+):
     """
     Найти все документы со статусом 'pending' и запустить их обработку заново.
     Полезно после падения контейнера (OOM) — pending-документы остались без обработки.
@@ -1853,8 +1978,12 @@ async def _process_document_async(document_id: str):
         logger.warning(f"Не удалось запустить Celery задачу для {document_id}: {e}")
 
 @router.get("/{document_id}/ocr", summary="Проверить наличие OCR/Markdown")
-async def check_ocr(document_id: str):
+async def check_ocr(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Проверяет, есть ли распознанный Markdown-файл для документа."""
+    ensure_can_read(document_id, current_user)
     from src.api.services.document_service import document_service
     try:
         record = document_service.get_document_status(document_id)
@@ -1876,8 +2005,12 @@ async def check_ocr(document_id: str):
 
 
 @router.get("/{document_id}/ocr/view", summary="Просмотр распознанного Markdown")
-async def view_ocr_markdown(document_id: str):
+async def view_ocr_markdown(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Возвращает содержимое распознанного Markdown-файла."""
+    ensure_can_read(document_id, current_user)
     from src.api.services.document_service import document_service
     from fastapi.responses import PlainTextResponse
     record = document_service.get_document_status(document_id)
@@ -1891,7 +2024,10 @@ async def view_ocr_markdown(document_id: str):
 
 
 @router.post("/{document_id}/reprocess-ocr", summary="Пересоздать OCR/Markdown для документа")
-async def reprocess_ocr(document_id: str):
+async def reprocess_ocr(
+    document_id: str,
+    current_user: User = Depends(get_current_admin),
+):
     """Принудительно перезапускает OCR и создание Markdown для документа."""
     from src.api.services.document_service import document_service
     from src.indexing.tasks import process_document
