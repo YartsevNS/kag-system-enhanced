@@ -109,21 +109,20 @@ async def _fetch_document_vectors(document_id: str, chunks: List[Dict[str, Any]]
                                   embed_service) -> Dict[int, List[float]]:
     """Вектора чанков документа из Qdrant: {индекс чанка: вектор}.
 
-    Сопоставляем по point_id = uuid5(chunk_id) (см. src/indexing/ids.py) — так же, как
-    это делает embeddings_service при записи.
+    Сопоставляем по payload.chunk_id (он есть у всех точек независимо от схемы id) —
+    это надёжнее, чем вычислять point_id: в корпусе есть чанки, записанные по старой
+    схеме uuid5(document_id-i), и такой расчёт не находит их (живой случай: получено
+    0 векторов из 558, триаж молча отнёс всё в «оставить»). Резервный путь —
+    point_id = uuid5(chunk_id) для точек без payload.chunk_id.
     """
     from src.indexing.ids import point_id_for_chunk
 
-    wanted = {}
-    for i, ch in enumerate(chunks):
-        cid = ch.get("chunk_id")
-        if cid:
-            wanted[str(point_id_for_chunk(cid))] = i
+    by_chunk_id: Dict[str, List[float]] = {}
+    by_point_id: Dict[str, List[float]] = {}
 
     def _scroll():
-        out: Dict[str, Any] = {}
-        offset = None
         flt = {"must": [{"key": "document_id", "match": {"value": document_id}}]}
+        offset = None
         while True:
             points, offset = embed_service._qdrant_client.scroll(
                 collection_name=embed_service.collection_name,
@@ -134,20 +133,28 @@ async def _fetch_document_vectors(document_id: str, chunks: List[Dict[str, Any]]
                 vec = p.vector
                 if isinstance(vec, dict):
                     vec = vec.get("dense")
-                if vec:
-                    out[str(p.id)] = list(vec)
+                if not vec:
+                    continue
+                by_point_id[str(p.id)] = list(vec)
+                cid = (p.payload or {}).get("chunk_id")
+                if cid:
+                    by_chunk_id[str(cid)] = list(vec)
             if offset is None:
                 break
-        return out
 
-    stored = await asyncio.to_thread(_scroll)
+    await asyncio.to_thread(_scroll)
+
     vectors: Dict[int, List[float]] = {}
-    for pid, idx in wanted.items():
-        vec = stored.get(pid)
+    for i, ch in enumerate(chunks):
+        cid = ch.get("chunk_id")
+        vec = by_chunk_id.get(str(cid)) if cid else None
+        if vec is None and cid:
+            vec = by_point_id.get(str(point_id_for_chunk(cid)))
+        if vec is None and ch.get("id"):
+            vec = by_point_id.get(str(ch["id"]))
         if vec:
-            vectors[idx] = vec
+            vectors[i] = vec
     return vectors
-
 
 async def triage_chunks(document_id: str, chunks: List[Dict[str, Any]], *,
                         embed_service=None, neighbors=None,
@@ -180,6 +187,16 @@ async def triage_chunks(document_id: str, chunks: List[Dict[str, Any]], *,
             from src.indexing.embeddings_service import embeddings_service as embed_service  # noqa: F811
 
         vectors = await _fetch_document_vectors(document_id, chunks, embed_service)
+
+        # Если вектора не сопоставились, триаж бессилен — это надо видеть в журнале,
+        # а не принимать за «штампов нет» (живой случай: 0 из 558 из-за старой схемы id).
+        if len(vectors) < len(chunks):
+            missing = len(chunks) - len(vectors)
+            result.error = f"vectors_missing: {missing} из {len(chunks)}"
+            logger.warning(
+                f"[triage] для {document_id} не найдено векторов: {missing} из {len(chunks)} "
+                f"— триаж работает по остатку"
+            )
 
         # ── 1. Внутридокументные дубли (локально, numpy) ────────────────────
         dup_indexes: set[int] = set()
