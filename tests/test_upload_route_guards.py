@@ -172,3 +172,21 @@ def test_model_returns_explicit_status_for_deleted_document():
     assert '{"status": "not_found"' in tasks_src, (
         "задача на удалённый документ должна завершаться явно, а не падать в document_service"
     )
+
+
+def test_queue_cache_timestamp_is_set_after_work():
+    """Метка кэша должна ставиться ПОСЛЕ inspect.
+
+    Иначе при TTL меньше длительности запроса (inspect ждёт воркеров ~2 с × 3)
+    запись успевает просрочиться к следующему вызову и кэш не работает никогда —
+    ровно этот случай поймал живой замер: три вызова подряд по 6 с.
+    """
+    body = _body("queue_status")
+    assert "_QUEUE_CACHE.update(at=time.monotonic()" in body, "метка кэша ставится до работы"
+    assert "QUEUE_INSPECT_TIMEOUT" in SRC and "QUEUE_CACHE_TTL" in SRC
+
+
+def test_document_meta_requires_owner():
+    body = _body("update_document_meta")
+    assert "ensure_owner_or_admin" in body, "правки метаданных доступны без проверки владельца"
+    assert "Depends" in _signature("update_document_meta")

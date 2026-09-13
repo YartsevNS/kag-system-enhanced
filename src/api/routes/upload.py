@@ -116,7 +116,7 @@ MAX_FILE_SIZE = _settings.MAX_FILE_SIZE
 # при достижении лимита в ответе будет truncated=True, чтобы это не было тихой потерей.
 CHUNKS_SCROLL_LIMIT = 10000
 # /queue: сколько ждать ответа воркеров и сколько держать результат в кэше
-QUEUE_INSPECT_TIMEOUT = 2.0
+QUEUE_INSPECT_TIMEOUT = 0.7   # три команды inspect → до ~2 с на холодный запрос
 QUEUE_CACHE_TTL = 5.0
 _QUEUE_CACHE: dict = {"at": 0.0, "inspect": None}
 
@@ -1610,7 +1610,11 @@ class DocumentMetaUpdate(BaseModel):
 
 
 @router.patch("/{document_id}/meta", summary="Обновить название/тип документа")
-async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
+async def update_document_meta(
+    document_id: str,
+    body: DocumentMetaUpdate,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """Обновить filename и/или document_type документа.
 
     - БД: upsert (filename, document_type)
@@ -1621,6 +1625,9 @@ async def update_document_meta(document_id: str, body: DocumentMetaUpdate):
     """
     from src.api.services.document_repository import get_doc_repo
     repo = get_doc_repo()
+    # Правки метаданных — владелец документа или админ (раньше мог любой
+    # авторизованный: переименовать или сменить тип чужого документа).
+    ensure_owner_or_admin(document_id, current_user)
     if not await asyncio.to_thread(repo.get, document_id):
         raise HTTPException(status_code=404, detail="Документ не найден")
 
@@ -1969,9 +1976,8 @@ async def queue_status():
         # inspect() ждёт ответа воркеров (в замере — до 3 с), поэтому:
         # 1) короткий таймаут ответа, 2) кэш на несколько секунд — дашборду
         # точность до секунд не нужна, а воркеров такой опрос не дёргает.
-        now = time.monotonic()
         cached = _QUEUE_CACHE["inspect"]
-        if cached and now - _QUEUE_CACHE["at"] < QUEUE_CACHE_TTL:
+        if cached and time.monotonic() - _QUEUE_CACHE["at"] < QUEUE_CACHE_TTL:
             active_tasks, reserved_tasks, scheduled_tasks = cached
         else:
             def _inspect():
@@ -1979,7 +1985,11 @@ async def queue_status():
                 return i.active() or {}, i.reserved() or {}, i.scheduled() or {}
 
             active_tasks, reserved_tasks, scheduled_tasks = await asyncio.to_thread(_inspect)
-            _QUEUE_CACHE.update(at=now, inspect=(active_tasks, reserved_tasks, scheduled_tasks))
+            # Метку ставим ПОСЛЕ работы: иначе при TTL меньше длительности самого
+            # запроса (inspect ждёт воркеров) запись успевает просрочиться к
+            # следующему вызову, и кэш не работает никогда.
+            _QUEUE_CACHE.update(at=time.monotonic(),
+                                inspect=(active_tasks, reserved_tasks, scheduled_tasks))
         
         workers = []
         total_active = 0
