@@ -319,6 +319,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div id="docs-table" style="display:none">
     <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
       <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
+      <button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px;margin-right:8px" onclick="processSelected()">▶️ Обработать выбранные</button>
       <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
     </div>
     <table>
@@ -849,6 +850,7 @@ function renderCards(docs) {
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${sourceLabel(d)}</div>
         <div class="card-meta" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
+          ${canProcess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶️ Обработать</button>`:''}
           ${canEditAccess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>`:''}
         </div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
@@ -881,7 +883,7 @@ function renderTable(docs) {
       <td>${sourceLabel(d)}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
-      <td><button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
+      <td style="white-space:nowrap">${canProcess(d)?`<button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶️</button>`:''}<button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
     </tr>`).join('');
 }
 
@@ -995,6 +997,26 @@ function updateBulkBar() {
   } else {
     bar.style.display = 'none';
   }
+}
+
+// Обработать выбранные галочками документы (кнопка в панели массовых действий).
+// Раньше такой возможности не было вовсе: processDocument() существовала, но её
+// никто не вызывал — кнопку одного документа потеряли при переделке (коммит a5951c3),
+// поэтому запустить обработку можно было только кнопкой «Обработать все необработанные».
+async function processSelected() {
+  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  const checked = document.querySelectorAll('.doc-check:checked');
+  if (!checked.length) { toast('Отметьте документы галочками', true); return; }
+  let queued = 0, skipped = 0;
+  for (const cb of checked) {
+    try {
+      const r = await fetch(`${API}/upload/${cb.value}/process`, { method: 'POST', credentials: 'include' });
+      if (r.ok) queued++;
+      else skipped++;   // 409 = уже в очереди, 403 = нет прав, 423 = блокировка — всё это «не поставлено»
+    } catch(e) { skipped++; }
+  }
+  toast(`▶️ Поставлено в очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
+  loadAll();
 }
 
 async function bulkDelete() {
