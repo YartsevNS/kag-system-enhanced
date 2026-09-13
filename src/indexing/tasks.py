@@ -504,6 +504,23 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
             await asyncio.gather(*[_one(i, c) for i, c in enumerate(chunks)])
             chunks_done = _state["done"]
 
+            # Слой разделов: узлы Section + section_id/breadcrumb на чанках.
+            try:
+                from src.indexing.section_parser import (
+                    build_breadcrumb as _bc, parse_sections as _ps,
+                )
+                _label = str((doc.get("recognized_title") or "") or filename or "")
+                _secs = _ps(chunks, filename)
+                _crumbs = {
+                    f"{doc_id}:sec:{s['section_index']}":
+                        _bc(_label, s.get("number", ""), s.get("title", "")),
+                    for s in _secs
+                }
+                if _secs:
+                    kg_service.create_sections(doc_id, _secs, _crumbs)
+            except Exception as e:
+                logger.warning(f"[rebuild] разделы не записаны для {filename}: {e}")
+
             # Самообозначения документа (колонтитул) отвязываем от чанков — иначе обозначение
             # становится крупнейшим узлом графа и перевешивает смысловые сущности
             # (см. kg_service.drop_ubiquitous_reference_entities, замер 2026-09-13).

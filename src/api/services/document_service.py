@@ -714,6 +714,30 @@ class DocumentService:
                     })
                     _doc_fresh = get_doc_repo().get_dict(document_id) or {}
                     _card = card_from_record(_doc_fresh)
+
+                    # ── Разделы документа (без LLM) ─────────────────────────
+                    # Крошка раздела идёт в текст эмбеддинга и в граф. Разметка нужна ДО
+                    # векторизации, поэтому здесь, вместе с карточкой.
+                    try:
+                        from src.indexing.section_parser import (
+                            build_breadcrumb, parse_sections, sections_for_chunks,
+                        )
+                        _doc_label = _card.get("title") or record.filename or ""
+                        _crumbs = sections_for_chunks(chunks, _doc_label, record.filename or "")
+                        for _i, _crumb in _crumbs.items():
+                            if 0 <= _i < len(chunks):
+                                _md = chunks[_i].get("metadata")
+                                if isinstance(_md, dict):
+                                    _md["section_breadcrumb"] = _crumb
+                        _sections = parse_sections(chunks, record.filename or "")
+                        plog.log("sections", {
+                            "count": len(_sections),
+                            "chunks_marked": len(_crumbs),
+                            "first": (_sections[0]["title"][:40] if _sections else ""),
+                        })
+                    except Exception as e:
+                        _sections = []
+                        logger.warning(f"[sections] разметка разделов не выполнена: {e}")
                     # Длина и включение префикса — из настроек (замер показал, что длинный
                     # префикс меняет баланс top-1/top-k, см. src/config.py).
                     from src.config import get_settings as _get_settings
@@ -860,7 +884,30 @@ class DocumentService:
                 else:
                     await self._build_knowledge_graph_async(
                         document_id, record.filename, chunks, plog=plog
-                    )                    # Самообозначения документа (колонтитул) отвязываем от чанков: иначе
+                    )                    # Слой разделов: узлы Section + section_id/breadcrumb на чанках.
+                    # Делаем ДО отсева самообозначений, чтобы крошка и структура были
+                    # на месте независимо от результата отсева.
+                    try:
+                        from src.indexing.section_parser import build_breadcrumb as _bc
+                        # ВНИМАНИЕ: в dict comprehension запятая после значения перед for —
+                        # синтаксическая ошибка ({k: v, for x in y}). Поймано компиляцией.
+                        _crumbs_map = {
+                            f"{document_id}:sec:{s['section_index']}": _bc(
+                                card_prefix or (record.filename or ""),
+                                s.get("number", ""), s.get("title", ""),
+                            )
+                            for s in (_sections or [])
+                        }
+                        from src.indexing.knowledge_graph import kg_service
+                        _sec_stat = await asyncio.to_thread(
+                            kg_service.create_sections, document_id, _sections or [], _crumbs_map
+                        )
+                        if _sec_stat.get("sections"):
+                            plog.log("sections_graph", _sec_stat)
+                    except Exception as e:
+                        logger.warning(f"[sections] запись разделов в граф не выполнена: {e}")
+
+                    # Самообозначения документа (колонтитул) отвязываем от чанков: иначе
                     # обозначение становится крупнейшим узлом и перевешивает граф (замер
                     # 2026-09-13: 81% узлов графа — справочные типы).
                     try:

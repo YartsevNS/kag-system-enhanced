@@ -2397,6 +2397,57 @@ class KnowledgeGraphService:
             return False
         return ("-" in n) or ("." in n) or ("—" in n) or (" " in n and sum(c.isdigit() for c in n) >= 4)
 
+    def create_sections(self, document_id: str, sections: List[Dict[str, Any]],
+                         breadcrumbs: Dict[str, str] = None) -> Dict[str, int]:
+        """Создать узлы Section и связать с чанками (идемпотентно, MERGE).
+
+        Структура: (Document)-[:HAS_SECTION]->(Section)-[:SECTION_CHUNK]->(Chunk).
+        ВАЖНО: связь Section→Chunk названа SECTION_CHUNK, а НЕ HAS_CHUNK: HAS_CHUNK уже
+        занят связью Document→Chunk, и переиспользование типа сломало бы существующие
+        запросы вида (d:Document)-[:HAS_CHUNK]->(c) — они начали бы находить и разделы.
+
+        На чанк дополнительно пишутся section_id и breadcrumb — для выдачи в интерфейсе
+        и для будущих саммари по разделам (одна суммаризация на раздел вместо чанка).
+        """
+        if not self.driver or not sections:
+            return {"sections": 0, "chunks": 0}
+        breadcrumbs = breadcrumbs or {}
+        rows = []
+        for sec in sections:
+            sid = f"{document_id}:sec:{sec.get('section_index')}"
+            crumb = breadcrumbs.get(sid) or ""
+            rows.append({
+                "sid": sid,
+                "number": sec.get("number") or "",
+                "title": sec.get("title") or "",
+                "path": crumb,
+                "chunk_ids": [c for c in (sec.get("chunk_ids") or []) if c],
+            })
+        try:
+            with self.driver.session() as session:
+                session.run("""
+                    UNWIND $rows AS row
+                    MERGE (d:Document {id: $doc})
+                    MERGE (s:Section {id: row.sid})
+                    SET s.number = row.number, s.title = row.title, s.path = row.path,
+                        s.document_id = $doc, s.updated_at = datetime()
+                    MERGE (d)-[:HAS_SECTION]->(s)
+                    WITH s, row
+                    UNWIND row.chunk_ids AS cid
+                    MATCH (c:Chunk {id: cid})
+                    SET c.section_id = row.sid, c.breadcrumb = row.path
+                    MERGE (s)-[:SECTION_CHUNK]->(c)
+                """, doc=document_id, rows=rows)
+            n_chunks = sum(len(r["chunk_ids"]) for r in rows)
+            logger.info(
+                f"[graph] разделы документа {document_id[:8]}: {len(rows)} шт., "
+                f"чанков размечено {n_chunks}"
+            )
+            return {"sections": len(rows), "chunks": n_chunks}
+        except Exception as e:
+            logger.warning(f"Ошибка создания разделов {document_id}: {e}")
+            return {"sections": 0, "chunks": 0}
+
     def drop_ubiquitous_reference_entities(self, document_id: str,
                                            min_ratio: float = 0.8) -> Dict[str, Any]:
         """Отвязать от чанков документа самообозначения (колонтитул).

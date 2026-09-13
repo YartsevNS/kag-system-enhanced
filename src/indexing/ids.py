@@ -59,16 +59,21 @@ def build_embedding_text(content: str, metadata: dict | None = None) -> str:
     elif section:
         parts.append(f"раздел {section}")
 
-    # Контекст документа (карточка: название/тип/темы) — только для passage.
-    # Значение кладёт конвейер в metadata чанка ДО векторизации (см.
-    # src/indexing/document_card.py). Пусто = префикса нет (fail-open).
+    # Контекст документа (карточка: название/тип) и раздел — только для passage.
+    # Значения кладёт конвейер в metadata чанка ДО векторизации (см.
+    # src/indexing/document_card.py и section_parser.py). Пусто = префикса нет (fail-open).
     card_prefix = str(meta.get("card_prefix") or "").strip()
+    # Крошка раздела РАЗНАЯ у чанков одного документа (в отличие от карточки), поэтому
+    # она не сближает чанки между собой, а различает их — замер префикса карточки показал,
+    # что вреден именно одинаковый для всего документа префикс (темы).
+    section_crumb = str(meta.get("section_breadcrumb") or "").strip()
 
+    context = " · ".join([p for p in (card_prefix, section_crumb) if p])
     structural = ", ".join(parts)
-    if card_prefix and structural:
-        return f"{card_prefix} · {structural}: {content}"
-    if card_prefix:
-        return f"{card_prefix}: {content}"
+    if context and structural:
+        return f"{context} · {structural}: {content}"
+    if context:
+        return f"{context}: {content}"
     if not parts:
         return content
     return structural + ": " + content
