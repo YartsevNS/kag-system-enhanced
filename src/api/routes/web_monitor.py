@@ -455,6 +455,8 @@ async def get_monitor_stats():
         from src.api.services.web_monitor import web_monitor
         stats = web_monitor.get_stats()
         return stats
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения статистики: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -485,6 +487,8 @@ async def get_download_history(
             "total": len(downloads),
             "downloads": downloads,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения истории: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -506,5 +510,7 @@ async def clear_history():
         from src.api.services.config_store import config_store
         config_store.set("web_monitor", "history", [])
         return {"status": "ok", "message": "История проверок очищена"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

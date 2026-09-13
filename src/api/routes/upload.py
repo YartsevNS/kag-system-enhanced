@@ -439,6 +439,8 @@ async def upload_document(
     # Читаем файл целиком
     try:
         content = await file.read()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[{upload_id}] ❌ Ошибка чтения файла: {e}")
         raise HTTPException(status_code=400, detail={
@@ -511,6 +513,8 @@ async def upload_document(
             updated_at=record.updated_at
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[{upload_id}] ❌ Ошибка сохранения: {e}")
         raise HTTPException(status_code=500, detail={
@@ -638,6 +642,8 @@ async def upload_bulk(
     # Читаем архив в память
     try:
         archive_bytes = await file.read()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка чтения архива: {e}")
 
@@ -698,6 +704,8 @@ async def upload_bulk(
         else:
             raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат архива: {ext}")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[{upload_id}] Ошибка распаковки архива: {e}")
         raise HTTPException(status_code=400, detail=f"Ошибка распаковки: {e}")
@@ -1189,6 +1197,8 @@ async def process_document_now(
             )
         return {"status": "queued", "document_id": document_id,
                 "message": "Документ поставлен в очередь обработки"}
+    except HTTPException:
+        raise
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Файл документа не найден")
     except Exception as e:

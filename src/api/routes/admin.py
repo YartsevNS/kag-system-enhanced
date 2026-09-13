@@ -209,6 +209,8 @@ def _keycloak_admin_token() -> str:
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
             body = _json.loads(resp.read().decode("utf-8"))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Keycloak admin token failed: {e}")
     token = body.get("access_token")
@@ -310,6 +312,8 @@ async def keycloak_create_user(data: dict):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 raw = resp.read().decode("utf-8")
                 return resp.status, (_json.loads(raw) if raw else {})
+        except HTTPException:
+            raise
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8", errors="replace")
             try:
@@ -340,6 +344,8 @@ async def keycloak_create_user(data: dict):
                 f"{base}/users?username={urllib.parse.quote(username)}",
                 headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
             found = _json.loads(resp.read().decode("utf-8"))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Keycloak find user failed: {e}")
     if not found:
@@ -356,6 +362,8 @@ async def keycloak_create_user(data: dict):
                 f"{base}/roles/{urllib.parse.quote(role)}",
                 headers={"Authorization": f"Bearer {token}"}), timeout=10) as resp:
             role_obj = _json.loads(resp.read().decode("utf-8"))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Keycloak role '{role}' not found: {e}")
     _req("POST", f"/users/{user_id}/role-mappings/realm", [{"id": role_obj["id"], "name": role_obj["name"]}])
@@ -692,6 +700,8 @@ async def delete_keycloak_user(user_id: str):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             pass
+    except HTTPException:
+        raise
     except urllib.error.HTTPError as e:
         if e.code == 404:
             raise HTTPException(status_code=404, detail="Пользователь Keycloak не найден")

@@ -139,6 +139,8 @@ async def get_ssh_config(connection_id: str = "default"):
             "has_password": bool(config.password),
             "has_sudo_password": bool(config.sudo_password)
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения SSH конфигурации: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -222,6 +224,8 @@ async def get_docker_stats():
     try:
         stats = await asyncio.to_thread(docker_monitor.get_detailed_stats)
         return stats
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения Docker статистики: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -235,6 +239,8 @@ async def get_docker_system_info():
     try:
         info = await asyncio.to_thread(docker_monitor.get_system_info)
         return info
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения информации о Docker: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -303,6 +309,8 @@ async def get_container_logs(container_name: str, lines: int = 100):
     try:
         logs = await asyncio.to_thread(docker_monitor.get_container_logs, container_name, lines)
         return {"logs": logs}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения логов: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -321,6 +329,8 @@ async def get_system_info():
     """
     try:
         return await asyncio.to_thread(system_monitor.get_system_info)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения информации о системе: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -331,6 +341,8 @@ async def get_cpu_info():
     """Информация о CPU"""
     try:
         return await asyncio.to_thread(system_monitor.get_cpu_info)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения CPU info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -341,6 +353,8 @@ async def get_memory_info():
     """Информация о памяти"""
     try:
         return await asyncio.to_thread(system_monitor.get_memory_info)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения memory info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -351,6 +365,8 @@ async def get_disk_info():
     """Информация о дисках"""
     try:
         return await asyncio.to_thread(system_monitor.get_disk_info)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения disk info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -361,6 +377,8 @@ async def get_network_info():
     """Информация о сети"""
     try:
         return await asyncio.to_thread(system_monitor.get_network_info)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения network info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -386,6 +404,8 @@ async def get_qdrant_info(collection_name: str = "kag_documents"):
     """
     try:
         return await asyncio.to_thread(qdrant_monitor.get_full_info, collection_name)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения Qdrant info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -396,6 +416,8 @@ async def get_qdrant_collections():
     """Получить список всех коллекций"""
     try:
         return await asyncio.to_thread(qdrant_monitor.get_collections_list)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения коллекций: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -406,6 +428,8 @@ async def get_collection_info(collection_name: str):
     """Детальная информация о коллекции"""
     try:
         return await asyncio.to_thread(qdrant_monitor.get_collection_info, collection_name)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения информации о коллекции: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -417,6 +441,8 @@ async def get_collection_points(collection_name: str, limit: int = 20):
     try:
         points = await asyncio.to_thread(qdrant_monitor.get_points_sample, collection_name, limit)
         return {"points": points}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения точек: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -427,6 +453,8 @@ async def get_payload_stats(collection_name: str):
     """Статистика по метаданным (payload)"""
     try:
         return await asyncio.to_thread(qdrant_monitor.get_payload_stats, collection_name)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения статистики payload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -442,6 +470,8 @@ async def get_collection_chunks(
     """Получить чанки из коллекции с пагинацией"""
     try:
         return await asyncio.to_thread(qdrant_monitor.get_chunks, collection_name, limit, offset, document_id)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения чанков: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -645,6 +675,8 @@ async def get_models_status():
     try:
         status = await model_manager.get_status()
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения статуса: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -656,6 +688,8 @@ async def list_llm_models():
     try:
         models = await model_manager.list_llm_models()
         return [m.model_dump() for m in models]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения LLM моделей: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -667,6 +701,8 @@ async def list_embedding_models():
     try:
         models = await model_manager.list_embedding_models()
         return [m.model_dump() for m in models]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения embedding моделей: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -678,6 +714,8 @@ async def list_ollama_models():
     try:
         models = await model_manager.get_ollama_models_detailed()
         return models
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка получения моделей Ollama: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -782,6 +820,8 @@ async def pull_model(request: PullModelRequest):
     try:
         result = await model_manager.pull_model(request.model_name)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка загрузки модели: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2227,6 +2267,8 @@ async def restore_backup(file: UploadFile = File(...)):
     try:
         content = await file.read()
         data = json.loads(content)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
     
@@ -2489,6 +2531,8 @@ async def get_worker_resources():
     """Читает текущие cpus/memory из docker-compose.yml для worker."""
     try:
         return await asyncio.to_thread(_docker_worker_resources)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

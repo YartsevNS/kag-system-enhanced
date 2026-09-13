@@ -65,6 +65,8 @@ async def kg_stats():
     """
     try:
         return await asyncio.to_thread(kg_service.get_stats)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка статистики графа: {e}")
         # Нули вводили в заблуждение: админ видел «граф пуст» и мог запустить
@@ -377,6 +379,8 @@ async def rebuild_graph(
         logger.info(f"Перестроение графа поставлено в очередь (документов: {len(document_ids) if document_ids else 'все completed'})")
         return {"status": "ok", "started": True,
                 "message": "Перестроение запущено в фоне"}
+    except HTTPException:
+        raise
     except Exception as e:
         config_store.set("kg_config", "rebuild_status", "error")
         logger.error(f"Ошибка запуска перестроения графа: {e}")

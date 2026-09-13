@@ -235,6 +235,8 @@ async def send_message(
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка генерации ответа: {e}")
         import traceback
@@ -294,6 +296,8 @@ async def stream_message(
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка потоковой генерации: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -342,6 +346,8 @@ async def search_chunks(
             group_ids=group_ids, is_admin=is_admin, user_id=user_id,
         )
         return {"chunks": chunks, "total": len(chunks), "filters": filters or None}
+    except HTTPException:
+        raise
     except Exception as e:
         # Отказ модели эмбеддингов — это НЕ «ничего не найдено», а сбой сервиса:
         # отдаём 503, иначе клиент видит пустой результат и считает, что
@@ -418,6 +424,8 @@ async def export_session(
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ошибка экспорта: {e}")
         raise HTTPException(status_code=500, detail=str(e))

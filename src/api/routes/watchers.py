@@ -153,6 +153,8 @@ async def check_all_urls(
     try:
         changes = await web_watcher.check_all(db)
         return [ChangeInfo(**c) for c in changes]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error checking URLs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -177,6 +179,8 @@ async def check_single_url(
         if change:
             return ChangeInfo(**change)
         return None
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error checking {record.url}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
