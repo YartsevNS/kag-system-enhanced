@@ -10,6 +10,16 @@ import asyncio
 from loguru import logger
 
 
+def _set_doc_type_in_graph(document_id: str, doc_type: str) -> None:
+    """Проставить тип документа в графе (синхронно, зовётся через to_thread)."""
+    from src.indexing.knowledge_graph import kg_service
+    with kg_service.driver.session() as s:
+        s.run(
+            "MATCH (d:Document {id: $did}) SET d.doc_type = $dtype",
+            did=document_id, dtype=doc_type,
+        )
+
+
 class TypeWatchdog:
     """Сторож определения типов документов."""
 
@@ -18,12 +28,19 @@ class TypeWatchdog:
         self._processed = 0
         self._total = 0
 
-    def start(self):
+    async def start(self):
+        """Запустить сторож.
+
+        async, потому что: (1) запись статуса в БД уводим в поток, (2) create_task
+        требует работающего event loop — в отдельном потоке он бы упал.
+        """
         if self._task and not self._task.done():
             logger.info("TypeWatchdog уже запущен")
             return
         from src.api.services.config_store import config_store
-        config_store.set("kg_config", "type_watch_status", {"state": "running"})
+        await asyncio.to_thread(
+            config_store.set, "kg_config", "type_watch_status", {"state": "running"}
+        )
         self._task = asyncio.create_task(self._run())
         logger.info("🏷️ TypeWatchdog запущен — определяю типы документов")
 
@@ -36,10 +53,13 @@ class TypeWatchdog:
             await embeddings_service.initialize()
         except Exception as e:
             logger.warning(f"TypeWatchdog: Qdrant недоступен: {e}")
-            config_store.set("kg_config", "type_watch_status", {"state": "error", "error": str(e)})
+            await asyncio.to_thread(
+                config_store.set, "kg_config", "type_watch_status",
+                {"state": "error", "error": str(e)},
+            )
             return
 
-        docs = get_doc_repo().get_all() or {}
+        docs = await asyncio.to_thread(get_doc_repo().get_all) or {}
         candidates = []
         for did, doc in docs.items():
             if not isinstance(doc, dict) or doc.get('status') != 'completed':
@@ -53,14 +73,18 @@ class TypeWatchdog:
         self._processed = 0
 
         if not candidates:
-            config_store.set("kg_config", "type_watch_status", {"state": "completed"})
+            await asyncio.to_thread(
+                config_store.set, "kg_config", "type_watch_status", {"state": "completed"}
+            )
             return
 
         logger.info(f"🏷️ TypeWatchdog: {self._total} документов без типа")
-        config_store.set("kg_config", "type_watch_status", {"state": "running"})
+        await asyncio.to_thread(
+            config_store.set, "kg_config", "type_watch_status", {"state": "running"}
+        )
 
         # База — известные типы
-        type_list = config_store.get("kg_config", "doc_types") or {}
+        type_list = await asyncio.to_thread(config_store.get, "kg_config", "doc_types") or {}
         if isinstance(type_list, dict):
             known_types = type_list.get("types", [])
         else:
@@ -89,13 +113,18 @@ class TypeWatchdog:
 
         # Последовательная обработка батчей — без пауз, один за другим
         for i in range(0, len(candidates), BATCH_SIZE):
-            if config_store.get("kg_config", "rebuild_stop"):
+            if await asyncio.to_thread(config_store.get, "kg_config", "rebuild_stop"):
                 break
             batch = candidates[i:i + BATCH_SIZE]
             await self._process_batch(batch, known_types, config_store, embeddings_service)
 
-        config_store.set("kg_config", "type_watch_status", {"state": "completed"})
-        config_store.set("kg_config", "type_watch_progress", {"processed": self._processed, "total": self._total})
+        await asyncio.to_thread(
+            config_store.set, "kg_config", "type_watch_status", {"state": "completed"}
+        )
+        await asyncio.to_thread(
+            config_store.set, "kg_config", "type_watch_progress",
+            {"processed": self._processed, "total": self._total},
+        )
         logger.info(f"🏷️ TypeWatchdog завершён: {self._processed}/{self._total}")
 
     async def _process_batch(self, batch, known_types, config_store, embeddings_service):
@@ -148,15 +177,17 @@ class TypeWatchdog:
             if final_type == "other" and dtype and len(dtype) < 40:
                 new_key = dtype.lower().replace(' ', '_')[:20]
                 known_types.append({"key": new_key, "label": dtype})
-                config_store.set("kg_config", "doc_types", {"types": known_types})
+                await asyncio.to_thread(
+                    config_store.set, "kg_config", "doc_types", {"types": known_types}
+                )
                 final_type = new_key
                 logger.info(f"🏷️ Новый тип: {dtype}")
 
             from src.api.services.document_repository import get_doc_repo
-            doc_data = get_doc_repo().get_dict(did) or {}
+            doc_data = await asyncio.to_thread(get_doc_repo().get_dict, did) or {}
             if isinstance(doc_data, dict):
                 doc_data["document_type"] = final_type
-                get_doc_repo().upsert(did, doc_data)
+                await asyncio.to_thread(get_doc_repo().upsert, did, doc_data)
 
             # Qdrant
             try:
@@ -164,11 +195,10 @@ class TypeWatchdog:
             except Exception:
                 pass
 
-            # Neo4j
+            # Neo4j — синхронный драйвер: вызов в потоке (сторож работает
+            # в процессе API, блокировать event loop нельзя).
             try:
-                from src.indexing.knowledge_graph import kg_service
-                with kg_service.driver.session() as s:
-                    s.run("MATCH (d:Document {id: $did}) SET d.doc_type = $dtype", did=did, dtype=final_type)
+                await asyncio.to_thread(_set_doc_type_in_graph, did, final_type)
             except Exception:
                 pass
 
@@ -176,7 +206,10 @@ class TypeWatchdog:
 
         self._processed += len(items)
         if self._processed % 10 == 0 or self._processed == self._total:
-            config_store.set("kg_config", "type_watch_progress", {"processed": self._processed, "total": self._total})
+            await asyncio.to_thread(
+                config_store.set, "kg_config", "type_watch_progress",
+                {"processed": self._processed, "total": self._total},
+            )
 
     async def _detect_types_batch(self, items: list, known_types: list) -> dict:
         """Определить типы для пачки документов одним LLM-вызовом (батч: до 5)."""

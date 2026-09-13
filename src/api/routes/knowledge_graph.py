@@ -392,8 +392,14 @@ async def rebuild_status(current_user: Optional[User] = Depends(get_current_user
     """Статус фонового перестроения графа (для страницы /kg)."""
     try:
         from src.api.services.config_store import config_store
-        status = config_store.get("kg_config", "rebuild_status") or "idle"
-        progress = config_store.get("kg_config", "rebuild_progress") or {}
+        # Страница /kg поллит эти статусы — чтения уводим в поток, чтобы
+        # опрос не блокировал event loop на время запроса к БД.
+        status = await asyncio.to_thread(
+            config_store.get, "kg_config", "rebuild_status"
+        ) or "idle"
+        progress = await asyncio.to_thread(
+            config_store.get, "kg_config", "rebuild_progress"
+        ) or {}
         return {
             "status": status,
             "processed": progress.get("processed", 0),
@@ -558,8 +564,12 @@ async def update_domain_schema(
 async def watchdog_status(current_user: Optional[User] = Depends(get_current_user_optional)):
     try:
         from src.api.services.config_store import config_store
-        status = config_store.get("kg_config", "rebuild_status") or "idle"
-        stats = config_store.get("kg_config", "rebuild_stats") or {}
+        status = await asyncio.to_thread(
+            config_store.get, "kg_config", "rebuild_status"
+        ) or "idle"
+        stats = await asyncio.to_thread(
+            config_store.get, "kg_config", "rebuild_stats"
+        ) or {}
         return {
             "status": status,
             "entities": stats.get("entities", 0),
@@ -581,7 +591,7 @@ async def watchdog_status(current_user: Optional[User] = Depends(get_current_use
 async def start_type_watchdog(current_user: User = Depends(get_current_admin)):
     try:
         from src.indexing.type_watchdog import type_watchdog
-        type_watchdog.start()
+        await type_watchdog.start()
         return {"status": "ok", "message": "TypeWatchdog запущен"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -591,9 +601,13 @@ async def start_type_watchdog(current_user: User = Depends(get_current_admin)):
 async def type_watchdog_status(current_user: Optional[User] = Depends(get_current_user_optional)):
     try:
         from src.api.services.config_store import config_store
-        status_raw = config_store.get("kg_config", "type_watch_status") or {}
+        status_raw = await asyncio.to_thread(
+            config_store.get, "kg_config", "type_watch_status"
+        ) or {}
         status = status_raw.get("state", "idle") if isinstance(status_raw, dict) else "idle"
-        progress = config_store.get("kg_config", "type_watch_progress") or {}
+        progress = await asyncio.to_thread(
+            config_store.get, "kg_config", "type_watch_progress"
+        ) or {}
         # Count docs without type
         from src.api.services.document_repository import get_doc_repo
         docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})

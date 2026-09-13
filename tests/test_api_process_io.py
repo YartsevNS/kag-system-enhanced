@@ -64,3 +64,36 @@ def test_watchers_only_async_route_uses_to_thread():
     assert "async def remove_watched_url" not in src, (
         "remove_watched_url был синхронным — ему to_thread не нужен"
     )
+
+
+def test_type_watchdog_does_not_block_loop():
+    """Сторож типизации запускается из роута → живёт в процессе API."""
+    import ast as _ast
+    src = _src("src/indexing/type_watchdog.py")
+    tree = _ast.parse(src)
+    bad = []
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.AsyncFunctionDef):
+            continue
+        body = _ast.unparse(node)
+        for name in ("config_store.get", "config_store.set", "get_doc_repo()", "driver.session"):
+            if name in body and "to_thread" not in body:
+                bad.append(f"{node.name}() → {name}")
+    assert not bad, f"синхронные вызовы в async сторожa: {bad}"
+    assert "async def start(self)" in src, (
+        "start() должен быть async: create_task требует работающего loop, "
+        "а запись статуса — в потоке"
+    )
+
+
+def test_kg_status_endpoints_use_to_thread():
+    """Страница /kg поллит эти статусы — чтения не должны блокировать loop."""
+    import ast as _ast
+    src = _src("src/api/routes/knowledge_graph.py")
+    tree = _ast.parse(src)
+    for fn in ("rebuild_status", "watchdog_status", "type_watchdog_status"):
+        node = next(n for n in _ast.walk(tree)
+                    if isinstance(n, _ast.AsyncFunctionDef) and n.name == fn)
+        body = _ast.unparse(node)
+        assert "config_store.get" in body
+        assert "asyncio.to_thread" in body, f"{fn}: config_store читается прямо в async"
