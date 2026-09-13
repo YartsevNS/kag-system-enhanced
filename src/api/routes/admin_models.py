@@ -10,6 +10,7 @@
 """
 
 import os
+import subprocess
 import traceback
 import asyncio
 from typing import Optional, List, Dict, Any
@@ -492,7 +493,6 @@ async def restart_ollama(connection_id: str = "default"):
     поэтому вариант sudo -n во второй команде ненадёжен.
     """
     import asyncio
-    import subprocess
     import httpx
 
     try:
@@ -1116,7 +1116,6 @@ async def deploy_action(req: DeployRequest):
     - git_pull: выполнить git pull в /home/yartsevn/kag-system
     - restart: перезапустить Docker-контейнер api
     """
-    import subprocess
     import os
     import base64
 
@@ -1147,18 +1146,22 @@ async def deploy_action(req: DeployRequest):
             if encoding not in ("auto", "utf8", "base64"):
                 return {"status": "error", "message": f"Неизвестная кодировка: {encoding}"}
             if encoding == "base64":
+                # Переносы строк и пробелы в base64 — обычное дело при копировании
+                # из терминала: убираем их, проверку строгости сохраняем.
+                payload = "".join((req.file_content or "").split())
                 try:
-                    content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
+                    content = base64.b64decode(payload, validate=True).decode("utf-8")
                 except Exception as e:
                     return {"status": "error", "message": f"Некорректный base64: {e}"}
             elif encoding == "auto":
                 # Декодируем base64 ТОЛЬКО если строка действительно на него похожа
                 # (иначе литерал вида "aGVsbG8=" тихо превращался в "hello").
                 import re as _re
-                looks_b64 = bool(_re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", req.file_content or ""))
-                if looks_b64 and len(req.file_content) % 4 == 0:
+                payload = "".join((req.file_content or "").split())
+                looks_b64 = bool(_re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", payload))
+                if looks_b64 and len(payload) % 4 == 0:
                     try:
-                        content = base64.b64decode(req.file_content, validate=True).decode("utf-8")
+                        content = base64.b64decode(payload, validate=True).decode("utf-8")
                     except Exception:
                         content = req.file_content
                 else:
@@ -2101,8 +2104,20 @@ async def get_backup(include_caches: bool = False):
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     headers = {"Content-Disposition": f"attachment; filename=kag-backup-{ts}.json"}
     return JSONResponse(content=backup, headers=headers)
-import json, traceback
+import json
 from fastapi import UploadFile, File
+
+def _restore_namespace(namespace: str, values: dict) -> int:
+    """Записать namespace настроек одним вызовом (выполняется в отдельном потоке).
+
+    Один проход по ключам вместо отдельного to_thread на каждый ключ: для бэкапа
+    с тысячей настроек это тысяча переключений контекста и столько же отдельных
+    транзакций.
+    """
+    for key, value in values.items():
+        config_store.set(namespace, key, value)
+    return len(values)
+
 
 @router.post("/backup-restore", summary="Восстановить настройки из backup JSON")
 async def restore_backup(file: UploadFile = File(...)):
@@ -2121,14 +2136,8 @@ async def restore_backup(file: UploadFile = File(...)):
     for ns, ns_data in data["data"].items():
         if not isinstance(ns_data, dict):
             continue
-        def _restore_ns(namespace: str, values: dict) -> int:
-            """Записать namespace настроек (один переключение в поток, не по ключу)."""
-            for k, v in values.items():
-                config_store.set(namespace, k, v)
-            return len(values)
-
         try:
-            await asyncio.to_thread(_restore_ns, ns, ns_data)
+            await asyncio.to_thread(_restore_namespace, ns, ns_data)
             restored += 1
         except Exception as e:
             errors.append(f"{ns}: {e}")
@@ -2596,6 +2605,7 @@ async def backup_documents(include_caches: bool = False):
 
     from src.api.services.document_repository import get_doc_repo
     from src.api.services.document_service import document_service
+    from src.database.session import get_session_local  # нужен и в блоке чатов
 
     # репозиторий ходит в БД синхронно — читаем в потоке
     docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
@@ -2665,8 +2675,6 @@ async def backup_documents(include_caches: bool = False):
 
             # ── Настройки (config_store: все категории из system_configs) ──
             try:
-                from src.database.session import get_session_local
-                from sqlalchemy import text as _text
                 # тот же источник, что и в /backup; кэши (entity_cache) по
                 # умолчанию не кладём — архив растёт, а кэш пересчитывается
                 categories = _all_config_categories()

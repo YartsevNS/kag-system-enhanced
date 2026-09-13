@@ -208,7 +208,7 @@ def test_deploy_write_file_is_hardened():
     """write_file: только разрешённые расширения, строгий base64, лимит размера."""
     src = ROUTES_FILE.read_text(encoding="utf-8")
     assert "allowed_ext" in src and ".py" in src
-    assert "base64.b64decode(req.file_content, validate=True)" in src
+    assert "base64.b64decode(payload, validate=True)" in src
     assert "DEPLOY_MAX_FILE_BYTES" in src
     assert "DEPLOY_SRC_PATH" in src and "DEPLOY_REPO_PATH" in src
     cfg = Path("src/config.py").read_text(encoding="utf-8")
@@ -226,7 +226,9 @@ def test_sync_services_wrapped_in_alias_and_backup():
     assert "_index_uploads" in src, "индексация каталога uploads должна идти в потоке"
     assert "await asyncio.to_thread(config_store.get_all, ns)" in src
     # восстановление настроек — один поток на namespace, а не на каждый ключ
-    assert "_restore_ns" in src and "await asyncio.to_thread(_restore_ns, ns, ns_data)" in src
+    assert "_restore_namespace" in src
+    assert "await asyncio.to_thread(_restore_namespace, ns, ns_data)" in src
+    assert "def _restore_name" not in src[src.index("for ns, ns_data"):src.index("for ns, ns_data")+400]
     # метаданные и история чатов тоже уходят в поток
     assert src.count("to_thread(zf.writestr") >= 5
 
@@ -248,7 +250,7 @@ def test_deploy_rejects_broken_base64_and_python():
     assert "looks_b64" in src
     assert "Неизвестная кодировка" in src
     assert 'if ext == ".py":' in src and "compile(content, req.file_path" in src
-    assert 'base64.b64decode(req.file_content, validate=True)' in src
+    assert 'base64.b64decode(payload, validate=True)' in src
 
 
 def test_backup_arcname_truncates_by_bytes():
