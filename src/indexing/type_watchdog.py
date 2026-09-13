@@ -174,7 +174,11 @@ class TypeWatchdog:
                     final_type = t["key"]
                     break
 
-            if final_type == "other" and dtype and len(dtype) < 40:
+            # «unknown»/«other» — это НЕ новый тип документа: LLM так отвечает,
+            # когда не уверена. Раньше такой ответ регистрировался в списке типов
+            # (в логе «Новый тип: unknown») и мусорил в настройках.
+            if (final_type == "other" and dtype and len(dtype) < 40
+                    and dtype.strip().lower() not in ("unknown", "other", "неизвестно", "-")):
                 new_key = dtype.lower().replace(' ', '_')[:20]
                 known_types.append({"key": new_key, "label": dtype})
                 await asyncio.to_thread(
