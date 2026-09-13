@@ -784,12 +784,15 @@ class DocumentService:
                     await self._build_knowledge_graph_async(
                         document_id, record.filename, chunks
                     )
-                    # Entity Resolution: слияние дубликатов сущностей после построения
-                    # графа (lexical + embedding + топология). Снижает дубли на 30-40%,
-                    # улучшает точность связей. См. docs/guides/graph-precision-architecture.md
+                    # Entity Resolution здесь БОЛЬШЕ НЕ ВЫПОЛНЯЕТСЯ (убрано 2026-09-13).
+                    # Причина: это самый дорогой шаг обработки — эмбеддинг ВСЕХ имён графа
+                    # и косинусы O(n²) на каждом документе: замер дал ~44 с на документ
+                    # (1580 обрабатываемых сущностей / 8 в батче × 225 мс) при ~0.6%
+                    # кандидатов от состава графа, а слияния >=0.95 применялись без ревью
+                    # (риск ложных склеек). Кандидаты теперь формирует ночная задача
+                    # resolve_entity_candidates в maintenance-очереди, слияние — по ревью.
                     try:
                         from src.indexing.knowledge_graph import kg_service
-                        await asyncio.to_thread(kg_service.resolve_duplicate_entities)
                         # Известные пары алиасов из таблицы entity_aliases (детерминированно).
                         # Применяем пары домена документа + universal (общие).
                         # document_type (standard/policy/order/technical/certificate/news)

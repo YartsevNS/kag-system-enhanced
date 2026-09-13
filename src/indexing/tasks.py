@@ -341,6 +341,41 @@ def batch_process_documents(
     queue="maintenance",
     max_retries=1,
 )
+def resolve_entity_candidates(self, threshold: float = 0.90) -> Dict[str, Any]:
+    """Кандидаты на слияние сущностей — раз в сутки, без автослияний.
+
+    Раньше эта работа шла в конвейере КАЖДОГО документа: эмбеддинг всех имён графа
+    (1580 сущностей при 8506 узлах) + косинусы O(n²) = ~44 с на документ, при том что
+    кандидатов находилось ~0.6% от графа. Ещё и слияния при сходстве >=0.95 применялись
+    автоматически, без ревью.
+
+    Теперь: раз в сутки, в maintenance-очереди, только ФОРМИРУЕМ пары-кандидаты
+    (source='pending') для ручного ревью в админке («Словарь алиасов»). Слияние графа
+    не меняется — это необратимая операция, её выполняет человек.
+    """
+    from src.indexing.knowledge_graph import kg_service
+
+    started = time.monotonic()
+    try:
+        result = kg_service.resolve_duplicate_entities(threshold=threshold, auto_merge=False)
+        elapsed = round(time.monotonic() - started, 1)
+        config_store.set("kg_config", "entity_candidates_last", {
+            "at": now_iso(), "elapsed_s": elapsed,
+            "candidates": result.get("aliased", 0),
+            "threshold": threshold,
+        })
+        logger.info(f"[resolution] кандидаты обновлены за {elapsed}с: {result}")
+        return {"status": "ok", "elapsed_s": elapsed, **result}
+    except Exception as e:
+        logger.error(f"[resolution] формирование кандидатов не удалось: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(
+    bind=True,
+    queue="maintenance",
+    max_retries=1,
+)
 def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, Any]:
     """Фоновая задача: перестроение графа знаний для документов.
 

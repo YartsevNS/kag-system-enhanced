@@ -48,6 +48,13 @@ celery_app.conf.update(
             'schedule': 21600.0,  # каждые 6 часов
             'options': {'queue': 'maintenance'},
         },
+        # Кандидаты на слияние сущностей: раз в сутки, без автослияний.
+        # Раньше эта работа шла в конвейере каждого документа (~44 с на документ).
+        'resolve-entity-candidates': {
+            'task': 'src.indexing.tasks.resolve_entity_candidates',
+            'schedule': 86400.0,  # раз в сутки
+            'options': {'queue': 'maintenance'},
+        },
     },
 
     # Маршрутизация задач

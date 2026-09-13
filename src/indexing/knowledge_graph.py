@@ -618,8 +618,16 @@ class KnowledgeGraphService:
             return None
         return m.group(1).strip(), year
 
-    def resolve_duplicate_entities(self, threshold: float = 0.90) -> Dict[str, int]:
+    def resolve_duplicate_entities(self, threshold: float = 0.90,
+                                  auto_merge: bool = True) -> Dict[str, int]:
         """Entity Resolution: слияние сущностей, ссылающихся на один реальный объект.
+
+        auto_merge=False — ТОЛЬКО формирование кандидатов (пары в entity_aliases со
+        source='pending' для ручного ревью), без слияний. Так делает ночная задача
+        maintenance: слияние меняет граф необратимо, а качество кандидатов по сходству
+        имён низкое, поэтому решение остаётся за человеком. В конвейере документа эта
+        функция больше не вызывается: она стоит ~44 с на документ (эмбеддинг всех имён
+        графа) при ~0.6% кандидатов от состава графа.
 
         Исследование (2025-2026): LLM извлекает surface forms — «Банк России»,
         «ЦБ», «ЦБ РФ», «регулятор» — как разные узлы (34% дублей в типичном
@@ -752,7 +760,13 @@ class KnowledgeGraphService:
                 self._resolution_candidates = []
 
             # ── 4. Применяем слияния в Neo4j ──────────────────────────────────
-            if merge_plan:
+            # При auto_merge=False пропускаем: кандидаты уже сохранены выше
+            # (source='pending'), решение о слиянии принимает человек в админке.
+            if merge_plan and not auto_merge:
+                logger.info(
+                    f"[resolution] только кандидаты: {len(merge_plan)} пар ждут ревью, слияния не применялись"
+                )
+            if merge_plan and auto_merge:
                 # Transitive closure: если keeper сам в merge_plan как dup
                 # (цепочка «ЦБ» → «ЦБ РФ» → «Банк России»), перенаправляем
                 # на корневого канонического.
