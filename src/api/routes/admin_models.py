@@ -2552,6 +2552,31 @@ async def delete_alias(pair_id: str):
         return {"status": "error", "message": str(e)}
 
 
+def _truncate_bytes(text: str, max_bytes: int) -> str:
+    """Обрезать строку по БАЙТАМ UTF-8 (не по символам!).
+
+    Для кириллицы 1 символ = 2 байта, для CJK — 3: обрезка по символам давала
+    имя длиннее лимита ФС и снова Errno 36 на записи в архив.
+    """
+    raw = text.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text
+    return raw[:max_bytes].decode("utf-8", errors="ignore")
+
+def _safe_arcname(doc_id: str, src_path) -> str:
+    """Имя внутри архива: id + укороченное имя (180 байт, с расширением)."""
+    base = src_path.name
+    base = base[37:] if base.startswith(doc_id + "_") else base
+    stem, dot, ext = base.rpartition(".")
+    if stem:
+        # оставляем запас на "documents/", id (37) и расширение
+        short = _truncate_bytes(stem, 150)
+        base = f"{short}.{ext}" if dot else short
+    else:
+        base = f"{doc_id}{'.' + ext if dot else ''}"
+    return f"documents/{doc_id}_{base}"
+
+
 # ═══════════════════════════════════════
 # Бэкап документов (ZIP: файлы + метаданные)
 # ═══════════════════════════════════════
@@ -2605,29 +2630,6 @@ async def backup_documents(include_caches: bool = False):
     except Exception as e:
         logger.warning(f"[backup] не удалось прочитать каталог {upload_dir}: {e}")
 
-    def _truncate_bytes(text: str, max_bytes: int) -> str:
-        """Обрезать строку по БАЙТАМ UTF-8 (не по символам!).
-
-        Для кириллицы 1 символ = 2 байта, для CJK — 3: обрезка по символам давала
-        имя длиннее лимита ФС и снова Errno 36 на записи в архив.
-        """
-        raw = text.encode("utf-8")
-        if len(raw) <= max_bytes:
-            return text
-        return raw[:max_bytes].decode("utf-8", errors="ignore")
-
-    def _safe_arcname(doc_id: str, src_path) -> str:
-        """Имя внутри архива: id + укороченное имя (180 байт, с расширением)."""
-        base = src_path.name
-        base = base[37:] if base.startswith(doc_id + "_") else base
-        stem, dot, ext = base.rpartition(".")
-        if stem:
-            # оставляем запас на "documents/", id (37) и расширение
-            short = _truncate_bytes(stem, 150)
-            base = f"{short}.{ext}" if dot else short
-        else:
-            base = f"{doc_id}{'.' + ext if dot else ''}"
-        return f"documents/{doc_id}_{base}"
 
     try:
         with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
