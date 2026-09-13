@@ -1106,27 +1106,38 @@ async def search_document_tables(document_id: str, query: str = "", column: str 
 
 @router.post("/{document_id}/reindex", summary="Переиндексировать документ")
 async def reindex_document(document_id: str):
+    """Поставить документ на переиндексацию (заново создать вектора).
+
+    Работа ставится в очередь Celery, а не выполняется в запросе: раньше здесь
+    был синхронный `document_service.process_document(..., force=True)`, и на
+    большом документе это минуты удержания HTTP-соединения. Клиентский таймаут
+    обрывал работу на середине (документ оставался в статусе processing), а если
+    параллельно работала задача worker'а, граф Neo4j писали два процесса сразу
+    (дедлок — известный питфолл проекта).
+
+    force=True обязателен: без него старые чанки остаются в Qdrant/Neo4j, новые
+    добавляются рядом и в поиске появляются дубли (баг 2026-09-12: два point_id
+    на один chunk_id).
     """
-    Переиндексировать документ (заново создать вектора).
-    """
-    from src.indexing.embeddings_service import embeddings_service
-    await embeddings_service.initialize()
-    
-    try:
-        # force=True обязателен: иначе старые чанки остаются в Qdrant/Neo4j,
-        # а новые добавляются рядом — в поиске появляются дубли (баг найден
-        # 2026-09-12: два point_id на один chunk_id).
-        await document_service.process_document(document_id, force=True)
-        record = document_service.get_document_status(document_id)
+    from src.api.services.document_repository import get_doc_repo
+    from src.indexing.queue_guard import enqueue_document
+
+    if not get_doc_repo().get(document_id):
+        raise HTTPException(status_code=404, detail="Документ не найден")
+
+    # False = задача для документа уже стоит (QueueGuard). Отвечаем честно,
+    # а не «ok», как раньше с task_id="duplicate_skipped".
+    if not enqueue_document(document_id, force=True):
         return {
-            "status": "ok",
+            "status": "already_queued",
             "document_id": document_id,
-            "chunks_count": record.chunks_count if record else 0
+            "message": "Документ уже в очереди обработки — переиндексация не запускалась",
         }
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Файл документа не найден")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "status": "queued",
+        "document_id": document_id,
+        "message": "Переиндексация поставлена в очередь",
+    }
 
 
 @router.post("/{document_id}/process", summary="Запустить обработку документа (кнопка «Обработать»)")
