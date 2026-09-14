@@ -340,11 +340,43 @@ class HybridDocumentParser:
             total_tables = 0
             code_heavy = False
 
+            broken_pages = 0
+            repaired_pages = 0
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 text = (page.get_text() or "").strip()
                 layout = []
                 tables = []
+
+                # ── Битый текстовый слой (cp1251, прочитанный как latin-1) ──────
+                # Такой текст выглядит нормальным по длине, поэтому критерий «текста
+                # достаточно» его пропускал: искажённые чанки уходили в индекс и по русским
+                # запросам не находились. Замер: 5 документов из 61, 43 чанка; у 892c0e3b —
+                # 27 из 34 чанков, у 7465c83e — 11 из 11 (вопрос про S3G давал 0.00).
+                if text:
+                    try:
+                        from src.indexing.text_repair import (
+                            cyrillic_share, looks_like_mojibake, repair_mojibake,
+                        )
+                        if looks_like_mojibake(text):
+                            _fixed = repair_mojibake(text)
+                            if cyrillic_share(_fixed) > cyrillic_share(text) + 0.3:
+                                logger.info(
+                                    f"PyMuPDF: стр. {page_num + 1} — восстановлена кодировка "
+                                    f"текстового слоя ({len(text)} символов)"
+                                )
+                                text = _fixed
+                                repaired_pages += 1
+                            else:
+                                logger.warning(
+                                    f"PyMuPDF: стр. {page_num + 1} — текстовый слой битый и не "
+                                    f"восстанавливается, страница уйдёт на OCR"
+                                )
+                                text = ""
+                                broken_pages += 1
+                    except Exception as _e:
+                        logger.debug(f"PyMuPDF: проверка кодировки стр. {page_num + 1}: {_e}")
 
                 # ── Таблицы: fitz.find_tables → структурированные ячейки ──
                 # Иначе таблицы «склеятся» в плоский текст без структуры.
@@ -424,9 +456,14 @@ class HybridDocumentParser:
             if total_text < 500 or pages_with_text < max(1, len(pages) // 2):
                 logger.info(
                     f"PyMuPDF: мало текстового слоя ({total_text} симв, "
-                    f"{pages_with_text}/{len(pages)} стр) — скан, нужен OCR"
+                    f"{pages_with_text}/{len(pages)} стр, битых страниц: {broken_pages}) — "
+                    f"скан или битая кодировка, нужен OCR"
                 )
                 return None
+            if repaired_pages:
+                logger.info(
+                    f"PyMuPDF: кодировка восстановлена на {repaired_pages} страницах"
+                )
 
             full_text = "\n\n".join(p.text for p in pages if p.text)
             logger.info(

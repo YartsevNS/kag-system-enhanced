@@ -576,14 +576,17 @@ class DocumentService:
                     raise ValueError("Парсер вернул пустой результат")
                 plog.log("parse", {"segments": len(segments), "parser": parser_name})
                 # Сохраняем полный текст
-                ocr_path = self._ocr_dir / record.filename
+                # Имя с document_id: у разных документов бывают одинаковые имена файлов
+                # (в корпусе пять «r-1323565.1.pdf»), и они перезаписывали результат разбора
+                # друг друга — файл ocr_results был один на всех.
+                ocr_path = self._ocr_dir / f"{document_id}_{record.filename}"
                 ocr_path.write_text(parsed.full_text, encoding="utf-8")
                 logger.info(f"OCR сохранён: {ocr_path}")
                 
                 # Сохраняем Markdown-версию (с таблицами и структурой)
                 try:
                     md_text = parsed.to_markdown()
-                    md_path = self._ocr_dir / f"{record.filename}.md"
+                    md_path = self._ocr_dir / f"{document_id}_{record.filename}.md"
                     md_path.write_text(md_text, encoding="utf-8")
                     logger.info(f"Markdown сохранён: {md_path} ({len(md_text)} симв)")
                 except Exception as e:
