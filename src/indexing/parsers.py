@@ -138,9 +138,38 @@ class DocumentParser:
             }
 
             # Извлечение текста по страницам
+            # OCR всего документа выполняем ОДИН раз: раньше он вызывался внутри цикла
+            # по страницам, то есть каждая страница запускала распознавание всего файла.
+            _ocr_pages_cache = None
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 text = page.get_text()
+
+                # ── Битый текстовый слой (cp1251 прочитан как latin-1) ──────────
+                # Такой текст выглядит нормальным по длине, поэтому OCR не включался,
+                # а искажённые чанки уходили в индекс: по русским запросам они не
+                # находятся. Живой случай: 892c0e3b (27 из 34 чанков), 7465c83e (11 из 11).
+                try:
+                    from src.indexing.text_repair import (
+                        cyrillic_share, looks_like_mojibake, repair_mojibake,
+                    )
+                    if text and looks_like_mojibake(text):
+                        _fixed = repair_mojibake(text)
+                        if cyrillic_share(_fixed) > cyrillic_share(text) + 0.3:
+                            logger.info(
+                                f"Страница {page_num + 1}: восстановлена кодировка текстового "
+                                f"слоя ({len(text)} символов)"
+                            )
+                            text = _fixed
+                        else:
+                            logger.warning(
+                                f"Страница {page_num + 1}: текстовый слой битый и не "
+                                f"восстанавливается — отдаю на OCR"
+                            )
+                            text = ""
+                except Exception as _e:
+                    logger.debug(f"Проверка кодировки слоя не выполнена: {_e}")
 
                 # Если текст пустой или слишком короткий — используем OCR
                 if not text or len(text.strip()) < 50:
@@ -154,7 +183,9 @@ class DocumentParser:
                     from src.indexing.ocr_engine import ocr_engine
                     if ocr_engine.is_available:
                         try:
-                            ocr_result = ocr_engine.extract_text_from_pdf(str(path))
+                            if _ocr_pages_cache is None:
+                                _ocr_pages_cache = ocr_engine.extract_text_from_pdf(str(path)) or {}
+                            ocr_result = _ocr_pages_cache
                             if ocr_result.get("pages") and page_num < len(ocr_result["pages"]):
                                 page_data = ocr_result["pages"][page_num]
                                 text = page_data.get("text", "")
