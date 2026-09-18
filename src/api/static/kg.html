@@ -815,6 +815,18 @@ function matchedChunkIds(){
   return out;
 }
 
+// Все фрагменты, которые сейчас нарисованы в графе. Панель сущности показывает
+// именно их первыми: иначе список начинается с «фрагмент 1» разных документов и
+// не совпадает с тем, что человек видит на схеме.
+function graphChunkIds(){
+  const out = {};
+  if (typeof cy === 'undefined' || !cy) return out;
+  cy.nodes().forEach(function(n){
+    if (n.data('kind') === 'chunk' && n.data('chunk_id')) out[n.data('chunk_id')] = true;
+  });
+  return out;
+}
+
 // Страница для узла-документа: берём страницу первого найденного фрагмента
 // этого документа в графе (сначала совпадения), чтобы файл открывался не с
 // первой страницы, а там, где есть информация.
@@ -895,19 +907,27 @@ async function loadEntityChunks(name){
     }
     const terms = queryTerms(name);
     const hit = matchedChunkIds();
-    // Сначала фрагменты, помеченные совпадением в текущем графе, затем по порядку
-    // в документе: иначе нужный фрагмент теряется среди соседних («выстроены по
-    // порядку без указания, где именно информация»).
+    const drawn = graphChunkIds();
+    // Порядок: сначала совпадения текущего поиска, затем фрагменты, которые
+    // нарисованы в графе (их человек и видит на схеме), только потом остальные по
+    // номеру в документе. Иначе список открывается «фрагментом 1» разных файлов и
+    // не имеет отношения к тому, что на экране.
     rows.sort(function(a, b){
-      const ha = (a.chunk_id && hit[a.chunk_id]) ? 0 : 1;
-      const hb = (b.chunk_id && hit[b.chunk_id]) ? 0 : 1;
-      if (ha !== hb) return ha - hb;
+      const rank = function(c){
+        if (c.chunk_id && hit[c.chunk_id]) return 0;
+        if (c.chunk_id && drawn[c.chunk_id]) return 1;
+        return 2;
+      };
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
       return (a.chunk_seq == null ? 0 : a.chunk_seq) - (b.chunk_seq == null ? 0 : b.chunk_seq);
     });
     const found = rows.filter(function(c){ return c.chunk_id && hit[c.chunk_id]; }).length;
+    const inGraph = rows.filter(function(c){ return c.chunk_id && drawn[c.chunk_id]; }).length;
     const scope = docFilterName ? ' в документе «' + esc(docFilterName) + '»' : '';
     body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность' + scope +
-      ' (' + rows.length + ')' + (found ? ' · совпадений по текущему поиску: ' + found : '') + ':' +
+      ' (' + rows.length + ')' + (found ? ' · совпадений по текущему поиску: ' + found : '') +
+      (inGraph ? ' · из них на схеме: ' + inGraph : '') + ':' +
       '<div style="font-size:11px;color:var(--text4)">переход открывает файл на странице фрагмента, ' +
       'термины поиска подсвечены в тексте</div></div>' +
       rows.map(function(c){

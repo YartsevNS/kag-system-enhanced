@@ -82,7 +82,7 @@ async def main() -> int:
         )
         await page.wait_for_timeout(5000)
         panel = str(await page.evaluate("document.getElementById('kg-info').innerText"))
-        result["в панели пометка совпадения"] = "совпадение по поиску" in panel
+        result["в панели пометка совпадения"] = "совпадение по запросу" in panel or "совпадение по поиску" in panel
         result["фрагмент панели"] = panel[:160]
 
         # важное: в графе не весь документ, а выборка
