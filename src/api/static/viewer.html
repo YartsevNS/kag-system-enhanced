@@ -196,6 +196,12 @@ body {
 .textLayer br::selection {
   background: rgba(62, 207, 142, 0.35);
 }
+/* Подсветка терминов запроса в текстовом слое (переход из /kg): видно, где на
+   странице лежит найденный фрагмент. */
+.textLayer span.hl-term {
+  background: rgba(245, 166, 35, 0.45);
+  border-radius: 2px;
+}
 .textLayer .endOfContent {
   display: block;
   position: absolute;
@@ -322,6 +328,7 @@ body {
   </div>
 
   <div class="meta-bar" id="meta-bar"></div>
+  <div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div>
 
   <div class="viewer" id="viewer">
     <div class="state-overlay" id="loading-overlay">
@@ -372,6 +379,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/pdf.worker.min.js';
 const API = '/api/v1';
 const params = new URLSearchParams(location.search);
 const docId = params.get('id');
+// Термины запроса, по которым пришли из /kg: подсвечиваем их в текстовом слое,
+// чтобы было видно, ГДЕ на странице лежит найденный фрагмент.
+const hlRaw = params.get('q') || '';
+const hlTerms = hlRaw.toLowerCase().split(/[^0-9a-zа-яё\-]+/i)
+  .map(function(t){ return t.replace(/^-+|-+$/g, ''); })
+  .filter(function(t){ return t.length >= 4; })
+  .slice(0, 8);
 
 let pdfDoc = null, pageNum = 1, scale = 1.5, currentDoc = null;
 
@@ -546,7 +560,65 @@ async function renderPage(num) {
   document.getElementById('btn-next').disabled = num >= pdfDoc.numPages;
   document.getElementById('zoom-label').textContent = Math.round(scale * 100) + '%';
 
+  // Подсветка терминов запроса (переход из /kg). Вызывается ПОСЛЕ текстового
+  // слоя и не блокирует страницу: слой рисуется асинхронно, поэтому пробуем
+  // несколько раз и молча выходим, если его нет.
+  scheduleHighlight(pageWrap.querySelector('.textLayer'));
+
   viewer.scrollTop = 0;
+}
+
+// ── Подсветка найденного по запросу ────────────────────────────────────────
+function scheduleHighlight(layer, attempts){
+  attempts = (attempts === undefined) ? 8 : attempts;
+  if (!layer || !hlTerms.length) return;
+  if (layer.querySelector('span')) { applyHighlight(layer); return; }
+  if (attempts <= 0) return;
+  setTimeout(function(){ scheduleHighlight(layer, attempts - 1); }, 250);
+}
+
+function applyHighlight(layer){
+  const note = document.getElementById('hl-note');
+  try {
+    const spans = Array.prototype.slice.call(layer.querySelectorAll('span'));
+    if (!spans.length) return;
+    // Склеиваем текст спанов и держим смещения: pdf.js режет строку на куски,
+    // и термин может пересекать два спана.
+    let stream = '';
+    const starts = [];
+    spans.forEach(function(s, i){ starts.push(stream.length); stream += (s.textContent || ''); });
+    const low = stream.toLowerCase();
+    const marks = {};
+    let first = null;
+    hlTerms.forEach(function(t){
+      let from = 0, idx = low.indexOf(t, from);
+      while (idx >= 0) {
+        const end = idx + t.length;
+        for (let i = 0; i < spans.length; i++) {
+          const s0 = starts[i], s1 = s0 + (spans[i].textContent || '').length;
+          if (s1 <= idx || s0 >= end) continue;
+          marks[i] = true;
+          if (first === null) first = i;
+        }
+        from = idx + t.length;
+        idx = low.indexOf(t, from);
+      }
+    });
+    const n = Object.keys(marks).length;
+    Object.keys(marks).forEach(function(i){ spans[i].classList.add('hl-term'); });
+    if (note) {
+      note.style.display = 'block';
+      if (n && first !== null) {
+        note.textContent = 'На этой странице подсвечены совпадения по запросу «' + hlRaw + '».';
+        try { spans[first].scrollIntoView({ block: 'center' }); } catch (e) {}
+      } else {
+        note.textContent = 'На странице ' + pageNum + ' совпадений по запросу «' + hlRaw +
+          '» не видно — нужный фрагмент, возможно, на соседней странице.';
+      }
+    }
+  } catch (e) {
+    console.warn('Подсветка терминов не выполнена:', e);
+  }
 }
 
 // Navigation

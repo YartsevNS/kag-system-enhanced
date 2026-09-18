@@ -58,6 +58,17 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 .btn:hover{opacity:0.85}
 .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2);padding:9px 18px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:all 0.15s}
 .btn-outline:hover{border-color:var(--text4)}
+/* Кнопки-действия в панели по узлу: одинаково выглядят и как <button>, и как <a>
+   (ссылка «открыть на странице» — настоящий переход, его не глушит блокировка
+   всплывающих окон, в отличие от window.open). */
+.btn-sm{display:inline-flex;align-items:center;gap:4px;background:var(--elevated);color:var(--text3);border:1px solid var(--border);padding:4px 10px;border-radius:var(--radius-pill);cursor:pointer;font-size:11px;text-decoration:none}
+.btn-sm:hover{color:var(--text);border-color:var(--text4)}
+/* Подсветка терминов запроса: в панели /kg — по тексту фрагмента. */
+.kg-hit{background:rgba(245,166,35,0.30);color:inherit;border-radius:2px}
+.kg-badge{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:var(--radius-pill);font-size:10px;border:1px solid var(--border);color:var(--text3)}
+.kg-badge-hit{background:rgba(245,166,35,0.18);color:var(--amber);border-color:rgba(245,166,35,0.45)}
+.kg-row{border-left:2px solid var(--border);padding:4px 8px;margin:4px 0}
+.kg-row-hit{border-left-color:var(--amber)}
 .entities-table{width:100%;border-collapse:collapse;font-size:13px}
 .entities-table th{text-align:left;padding:10px 14px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid var(--border-s);background:var(--panel)}
 .entities-table td{padding:10px 14px;color:var(--text2);border-bottom:1px solid var(--border-s)}
@@ -140,7 +151,7 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
     <div id="cy" style="width:100%;height:560px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
     <style>#cy:fullscreen{width:100vw;height:100vh;border-radius:0}</style>
     <div id="kg-info" style="font-size:13px;margin-top:8px;min-height:22px"></div>
-    <div style="font-size:11px;color:var(--text4);margin-top:6px">Клик по узлу — информация; кнопка «+ соседи» — развернуть связи; колесо — зум; перетаскивание — перемещение.</div>
+    <div style="font-size:11px;color:var(--text4);margin-top:6px">Клик по узлу — информация; кнопка «+ соседи» — развернуть связи; колесо — зум; перетаскивание — перемещение. Оранжевая обводка — фрагменты с совпадением по запросу; переход «открыть на странице N» откроет файл там, где найден фрагмент.</div>
   </div>
 
   <!-- Перестроение графа -->
@@ -743,11 +754,92 @@ function attrStr(s){ return esc(s).replace(/'/g, "\\'"); }
 
 function openDoc(docId, page){
   if (!docId) return;
-  window.open('/viewer?id=' + encodeURIComponent(docId) + (page ? '&page=' + encodeURIComponent(page) : ''), '_blank');
+  window.open(docHref(docId, page, lastQueryText), '_blank');
 }
-function openDocChunks(docId){
-  if (!docId) return;
-  window.open('/chunks?doc_id=' + encodeURIComponent(docId), '_blank');
+// Ссылка на просмотрщик: страница фрагмента + термины запроса для подсветки.
+// Ссылка (а не window.open) — переход не зависит от блокировки всплывающих окон
+// и работает средней кнопкой мыши.
+function docHref(docId, page, q){
+  let href = '/viewer?id=' + encodeURIComponent(docId);
+  if (page !== undefined && page !== null && String(page) !== '') {
+    href += '&page=' + encodeURIComponent(String(page));
+  }
+  if (q) href += '&q=' + encodeURIComponent(String(q));
+  return href;
+}
+function docLink(docId, page, label, q){
+  if (!docId) return '';
+  return '<a class="btn-sm" href="' + esc(docHref(docId, page, q)) +
+         '" target="_blank" rel="noopener">' + esc(label) + '</a>';
+}
+function chunksLink(docId, label){
+  if (!docId) return '';
+  return '<a class="btn-sm" href="/chunks?doc_id=' + encodeURIComponent(docId) +
+         '" target="_blank" rel="noopener">' + esc(label || 'все чанки документа') + '</a>';
+}
+
+// Термины текущего поиска — для подсветки найденного в тексте фрагмента.
+// Слишком короткие слова и служебные пропускаем: подсвечивать «для» и «как»
+// бессмысленно, а частые предлоги дают подсветку на каждой строке.
+let lastQueryText = '';
+const KG_STOP = ['для','или','как','что','это','при','все','его','её','их','the','and','этот','если'];
+function queryTerms(text){
+  const seen = [];
+  String(text || '').toLowerCase().split(/[^0-9a-zа-яё\-]+/i).forEach(function(t){
+    t = t.replace(/^-+|-+$/g, '');
+    if (t.length >= 4 && KG_STOP.indexOf(t) < 0 && seen.indexOf(t) < 0) seen.push(t);
+  });
+  return seen.slice(0, 8);
+}
+// Безопасная подсветка: сначала экранируем текст, только потом оборачиваем
+// совпадения в <mark> (иначе HTML из текста фрагмента исполнится).
+function markTerms(text, terms){
+  let html = esc(String(text == null ? '' : text));
+  (terms || []).forEach(function(t){
+    if (!t || t.length < 4) return;
+    const safe = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    html = html.replace(new RegExp('(' + safe + ')', 'gi'), '<mark class="kg-hit">$1</mark>');
+  });
+  return html;
+}
+
+// Фрагменты, помеченные как совпадение в ТЕКУЩЕМ графе (поиск по тексту).
+function matchedChunkIds(){
+  const out = {};
+  if (typeof cy === 'undefined' || !cy) return out;
+  cy.nodes().forEach(function(n){
+    if (n.data('kind') === 'chunk' && n.data('matched') && n.data('chunk_id')) {
+      out[n.data('chunk_id')] = true;
+    }
+  });
+  return out;
+}
+
+// Страница для узла-документа: берём страницу первого найденного фрагмента
+// этого документа в графе (сначала совпадения), чтобы файл открывался не с
+// первой страницы, а там, где есть информация.
+function firstDocPage(docId){
+  if (typeof cy === 'undefined' || !cy || !docId) return '';
+  let best = null;
+  cy.nodes().forEach(function(n){
+    const d = n.data();
+    if (d.kind !== 'chunk' || d.document_id !== docId) return;
+    const page = pageNumOf(d.page);
+    if (page === null) return;
+    if (best === null || (d.matched && !best.matched) || (!!d.matched === !!best.matched && page < best.page)) {
+      best = { page: page, matched: !!d.matched };
+    }
+  });
+  return best ? best.page : '';
+}
+// «12-14» и «12» → 12 (просмотрщик открывается на первой странице диапазона).
+function pageNumOf(page){
+  if (page === undefined || page === null || String(page) === '') return null;
+  const n = parseInt(String(page), 10);
+  return isNaN(n) ? null : n;
+}
+function pageSuffix(page){
+  return (page === undefined || page === null || String(page) === '') ? '' : ', стр. ' + esc(page);
 }
 
 function showNodeInfo(n){
@@ -756,17 +848,30 @@ function showNodeInfo(n){
   let html = '<b style="color:#fff">' + esc(d.label || d.name || '') + '</b>' +
              ' <span style="color:var(--text4)">' + esc(kindName) + '</span>';
   if (d.kind === 'entity') {
+    // Клик по сущности в режиме «сущность» задаёт термин подсветки: в панели
+    // фрагментов будет подсвечено имя самой сущности.
+    if (kgMode === 'entity' && d.name) lastQueryText = d.name;
     html += ' <button class="btn-sm" onclick="expandNode(\'' + attrStr(d.name) + '\')" style="margin-left:8px">+ соседи</button>' +
             '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">⏳ ищу фрагменты…</div>';
   } else if (d.kind === 'chunk') {
+    const page = pageNumOf(d.page);
+    html += ' <span style="color:var(--text4)">' + esc(d.filename || '') +
+            (d.chunk_seq != null ? ' · фрагмент ' + esc(d.chunk_seq) : '') + pageSuffix(page) + '</span>' +
+            (d.matched ? ' <span class="kg-badge kg-badge-hit">совпадение по запросу</span>'
+                       : ' <span class="kg-badge">соседний фрагмент</span>');
     if (d.document_id) {
-      html += ' <button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + '\')" style="margin-left:8px">открыть документ</button>';
+      html += ' ' + docLink(d.document_id, d.page,
+                            page ? 'открыть на странице ' + page : 'открыть документ', lastQueryText);
     }
     html += '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">⏳ читаю текст…</div>';
   } else if (d.kind === 'document') {
-    html += ' <button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + '\')" style="margin-left:8px">открыть документ</button>' +
-            ' <button class="btn-sm" onclick="openDocChunks(\'' + attrStr(d.document_id) + '\')">чанки</button>' +
-            '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">файл откроется в просмотрщике</div>';
+    const page = firstDocPage(d.document_id);
+    html += ' ' + docLink(d.document_id, page,
+                          page ? 'открыть на странице ' + page : 'открыть документ', lastQueryText) +
+            ' ' + chunksLink(d.document_id, 'чанки документа') +
+            '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">' +
+            (page ? 'файл откроется на странице ' + esc(page) + ' — там найден фрагмент по текущему поиску'
+                  : 'файл откроется в просмотрщике с первой страницы') + '</div>';
   } else {
     html += ' <button class="btn-sm" onclick="expandNode(\'' + attrStr(d.name) + '\')" style="margin-left:8px">+ соседи</button>';
   }
@@ -788,19 +893,36 @@ async function loadEntityChunks(name){
       body.innerHTML = 'фрагменты не найдены (сущность есть только в связях с другими сущностями)';
       return;
     }
+    const terms = queryTerms(name);
+    const hit = matchedChunkIds();
+    // Сначала фрагменты, помеченные совпадением в текущем графе, затем по порядку
+    // в документе: иначе нужный фрагмент теряется среди соседних («выстроены по
+    // порядку без указания, где именно информация»).
+    rows.sort(function(a, b){
+      const ha = (a.chunk_id && hit[a.chunk_id]) ? 0 : 1;
+      const hb = (b.chunk_id && hit[b.chunk_id]) ? 0 : 1;
+      if (ha !== hb) return ha - hb;
+      return (a.chunk_seq == null ? 0 : a.chunk_seq) - (b.chunk_seq == null ? 0 : b.chunk_seq);
+    });
+    const found = rows.filter(function(c){ return c.chunk_id && hit[c.chunk_id]; }).length;
     const scope = docFilterName ? ' в документе «' + esc(docFilterName) + '»' : '';
-    body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность' + scope + ' (' + rows.length + '):</div>' +
+    body.innerHTML = '<div style="margin-bottom:4px">Фрагменты, где встречается сущность' + scope +
+      ' (' + rows.length + ')' + (found ? ' · совпадений по текущему поиску: ' + found : '') + ':' +
+      '<div style="font-size:11px;color:var(--text4)">переход открывает файл на странице фрагмента, ' +
+      'термины поиска подсвечены в тексте</div></div>' +
       rows.map(function(c){
         const fname = esc(c.filename || String(c.document_id || '').slice(0, 8));
-        const sub = 'фрагмент ' + esc(c.chunk_seq != null ? c.chunk_seq : '?') + (c.page ? ', стр. ' + esc(c.page) : '');
-        const text = esc(String(c.content || c.preview || '').slice(0, 300));
-        const pageArg = (c.page != null && c.page !== '') ? "', '" + attrStr(c.page) : "'";
-        return '<div style="border-left:2px solid var(--border);padding:4px 8px;margin:4px 0">' +
-          '<div style="font-size:11px;color:var(--text4)">' + fname + ' · ' + sub + '</div>' +
+        const isHit = !!(c.chunk_id && hit[c.chunk_id]);
+        const sub = 'фрагмент ' + esc(c.chunk_seq != null ? c.chunk_seq : '?') + pageSuffix(c.page);
+        const text = markTerms(String(c.content || c.preview || '').slice(0, 400), terms);
+        return '<div class="kg-row' + (isHit ? ' kg-row-hit' : '') + '">' +
+          '<div style="font-size:11px;color:var(--text4)">' + fname + ' · ' + sub +
+            (isHit ? ' <span class="kg-badge kg-badge-hit">совпадение по запросу</span>' : '') + '</div>' +
           '<div style="font-size:12px;color:var(--text2)">' + text + '</div>' +
           '<div style="margin-top:4px">' +
-            (c.document_id ? '<button class="btn-sm" onclick="openDoc(\'' + attrStr(c.document_id) + pageArg + ')">открыть на странице</button> ' : '') +
-            (c.document_id ? '<button class="btn-sm" onclick="openDocChunks(\'' + attrStr(c.document_id) + '\')">все чанки документа</button>' : '') +
+            docLink(c.document_id, c.page,
+                    c.page ? 'открыть на странице ' + pageNumOf(c.page) : 'открыть документ', name) + ' ' +
+            chunksLink(c.document_id) +
           '</div></div>';
       }).join('');
   } catch(e) {
@@ -818,12 +940,21 @@ async function loadChunkText(chunkId){
     const node = (typeof cy !== 'undefined' && cy)
       ? cy.nodes().filter(function(n){ return n.data('chunk_id') === chunkId; })[0] : null;
     d.matched = node ? !!node.data('matched') : false;
+    const page = pageNumOf(d.page);
+    const terms = queryTerms(lastQueryText);
+    const badge = d.matched
+      ? ' <span class="kg-badge kg-badge-hit">' +
+        (lastQueryText ? 'совпадение по запросу «' + esc(lastQueryText) + '»' : 'совпадение по запросу') + '</span>'
+      : ' <span class="kg-badge">соседний фрагмент</span>';
     const head = esc(d.filename || '') + (d.chunk_seq != null ? ' · фрагмент ' + esc(d.chunk_seq) : '') +
-                 (d.page ? ', стр. ' + esc(d.page) : '') + (d.matched ? ' · совпадение по поиску' : '');
-    body.innerHTML = '<div style="font-size:11px;color:var(--text4)">' + head + '</div>' +
-      '<div style="font-size:12px;color:var(--text2);max-height:260px;overflow:auto;white-space:pre-wrap">' +
-      esc(String(d.content || '').slice(0, 2000)) + '</div>' +
-      (d.document_id ? '<div style="margin-top:4px"><button class="btn-sm" onclick="openDoc(\'' + attrStr(d.document_id) + "', '" + attrStr(d.page || '') + '\')">открыть на странице</button></div>' : '');
+                 pageSuffix(d.page);
+    body.innerHTML = '<div style="font-size:11px;color:var(--text4)">' + head + badge + '</div>' +
+      '<div style="font-size:12px;color:var(--text2);max-height:320px;overflow:auto;white-space:pre-wrap">' +
+      markTerms(String(d.content || '').slice(0, 4000), terms) + '</div>' +
+      (d.document_id ? '<div style="margin-top:4px">' +
+        docLink(d.document_id, d.page,
+                page !== null ? 'открыть на странице ' + page : 'открыть документ', lastQueryText) +
+        '</div>' : '');
   } catch(e) {
     body.innerHTML = 'ошибка загрузки фрагмента: ' + esc(e.message || e);
   }
@@ -854,7 +985,9 @@ function addGraphData(g){
     if (!c.getElementById(id).length){
       c.add({ data:{ id:id, key:key, name:n.name, kind:n.kind || 'entity',
                      chunk_id:n.chunk_id || '', document_id:n.document_id || '',
-                     chunk_seq:n.chunk_seq, matched:!!n.matched, label:shortLabel(n.name),
+                     chunk_seq:n.chunk_seq, matched:!!n.matched,
+                     page:(n.page === undefined ? '' : n.page),
+                     label:shortLabel(n.name),
                      type:n.type, color:typeColor(n.type), weight:1 } });
     }
   });
@@ -1004,6 +1137,7 @@ async function searchChunksFromInput(){
         (docId ? ' в выбранном документе' : '');
       return;
     }
+    lastQueryText = q;
     const c = ensureCy();
     c.elements().remove();
     Object.keys(nodeMap).forEach(function(k){ delete nodeMap[k]; });
@@ -1041,6 +1175,7 @@ async function loadDocGraph(docId, docName){
     c.fit(undefined, 40);
     docFilterId = docId;
     docFilterName = docName || '';
+    lastQueryText = '';
     document.getElementById('kg-doc').value = docName || '';
     renderDocChip();
     const kinds = {};
@@ -1066,6 +1201,7 @@ function clearDocFilter(){
 
 async function loadGraph(name, depth){
   if (docFilterId){ docFilterId = ''; docFilterName = ''; renderDocChip(); }
+  lastQueryText = name;
   document.getElementById('kg-msg').textContent = '⏳ Загрузка...';
   try {
     const r = await fetch(API + '/graph/' + encodeURIComponent(name) + '?depth=' + depth, { headers: authHeaders() });

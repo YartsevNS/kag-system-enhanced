@@ -111,6 +111,8 @@ async def entity_graph(
     """Подграф вокруг сущности (узлы + связи)."""
     try:
         graph = await asyncio.to_thread(kg_service.get_entity_graph, entity_name, depth)
+        for part in graph or []:
+            await _attach_pages(part.get("nodes"))
         return {"entity": entity_name, "graph": graph}
     except Exception as e:
         return {"entity": entity_name, "graph": [], "error": str(e)}
@@ -137,6 +139,39 @@ def _page_of(payload: dict):
         except Exception:
             return pages[0]
     return None
+
+
+async def _attach_pages(nodes: list) -> None:
+    """Добавить узлам-фрагментам номер СТРАНИЦЫ (в графе его нет — он в Qdrant).
+
+    Зачем: из /kg файл должен открываться сразу на странице, где лежит найденный
+    фрагмент, а не с первой. Один запрос payload'ов на весь граф; ошибка Qdrant
+    граф не ломает — у узла просто не будет поля `page`.
+    """
+    if not nodes:
+        return
+    ids = []
+    for n in nodes:
+        if isinstance(n, dict) and n.get("kind") == "chunk":
+            pid = str(n.get("qdrant_point_id") or "")
+            if pid and pid not in ids:
+                ids.append(pid)
+    if not ids:
+        return
+    try:
+        from src.indexing.embeddings_service import embeddings_service
+
+        payloads = await embeddings_service.get_points_payload(ids[:500])
+    except Exception as e:
+        logger.warning(f"Номера страниц фрагментов не получены: {e}")
+        return
+    for n in nodes:
+        if not isinstance(n, dict) or n.get("kind") != "chunk":
+            continue
+        pl = payloads.get(str(n.get("qdrant_point_id") or "")) or {}
+        page = _page_of(pl)
+        if page is not None:
+            n["page"] = page
 
 
 @router.get("/entity/{entity_name:path}/chunks",
@@ -196,6 +231,9 @@ async def search_chunks(
         if not result:
             return {"query": q, "nodes": [], "edges": [], "hits": 0, "chunks_shown": 0}
         result["query"] = q
+        # Номер страницы для каждого показанного фрагмента: по нему /kg открывает
+        # файл сразу на нужной странице (в графе страницы нет).
+        await _attach_pages(result.get("nodes"))
         return result
     except Exception as e:
         logger.warning(f"Ошибка поиска фрагментов «{q}»: {e}")
@@ -224,6 +262,8 @@ async def document_graph(
         if not graph:
             return {"document_id": document_id, "graph": [],
                     "error": "документ не найден в графе знаний"}
+        for part in graph or []:
+            await _attach_pages(part.get("nodes"))
         return {"document_id": document_id, "graph": graph}
     except Exception as e:
         logger.warning(f"Ошибка подграфа документа {document_id}: {e}")

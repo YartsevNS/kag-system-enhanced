@@ -2003,6 +2003,10 @@ class KnowledgeGraphService:
                         "chunk_id": cid, "chunk_seq": c["seq"],
                         "document_id": c["did"], "filename": fname,
                         "matched": matched,
+                        # id точки Qdrant нужен, чтобы роут подтянул НОМЕР СТРАНИЦЫ
+                        # (в графе страницы нет): из /kg открываем файл сразу на
+                        # странице, где лежит фрагмент.
+                        "qdrant_point_id": c["pid"] or "",
                     }
                     dkey = f"d:{c['did']}"
                     nodes.setdefault(dkey, {"key": dkey, "name": fname or c["did"],
@@ -2124,7 +2128,8 @@ class KnowledgeGraphService:
                 if with_chunks:
                     chunks = list(session.run(
                         "MATCH (d:Document {id: $doc})-[:HAS_CHUNK]->(c:Chunk) "
-                        "RETURN c.id AS cid, c.chunk_seq AS seq "
+                        "RETURN c.id AS cid, c.chunk_seq AS seq, "
+                        "coalesce(c.qdrant_point_id, '') AS pid "
                         "ORDER BY seq LIMIT $lc",
                         doc=document_id, lc=limit_chunks,
                     ))
@@ -2140,6 +2145,8 @@ class KnowledgeGraphService:
                             "kind": "chunk", "type": "Chunk",
                             "chunk_id": cid, "chunk_seq": seq,
                             "document_id": doc["id"], "filename": doc_name,
+                            # для номера страницы (роут добирает его из Qdrant)
+                            "qdrant_point_id": c["pid"] or "",
                         }
                         edges.append({"source": doc_key, "target": ckey,
                                       "source_name": doc_name,
