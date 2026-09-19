@@ -682,18 +682,43 @@ class DocumentService:
             await embeddings_service.initialize()
 
             # ── Домен документа (для фильтра RAG по домену) ───────────────
-            # Определяется мелкой моделью query_analysis (qwen) по названию +
-            # началу текста; пишется в Qdrant payload (domain) при векторизации.
+            # Считается мелкой моделью query_analysis. Пробу берём ОСМЫСЛЕННУЮ: раньше
+            # это было «имя файла + первые 400 символов», и по именам вида «r-1323565.1.pdf»
+            # классификатор не понимал тему — у части документов домен оставался пустым
+            # навсегда (замер 19.09.2026: 1093 чанка из 5025 без домена, а в режиме hard
+            # они выпадали из выдачи чата). Теперь в пробу идут распознанный заголовок,
+            # тип, темы и начало текста; при пустом ответе — повтор, затем явное
+            # 'universal': пустого домена быть не должно.
             domain = ""
             try:
                 if chunks:
-                    _probe = (record.filename or "") + ". " + (chunks[0].get("content", "") or "")[:400]
+                    _parts = [
+                        (record.recognized_title or "").strip(),
+                        f"Тип документа: {record.document_type}" if record.document_type else "",
+                        f"Темы: {', '.join(record.topics or [])}" if record.topics else "",
+                        (record.filename or ""),
+                        (chunks[0].get("content", "") or "")[:400],
+                    ]
+                    _probe = " ".join(p for p in _parts if p)[:1500]
                     from src.api.services.chat_service import chat_service
-                    _qa = await chat_service._detect_query_analysis(_probe)
-                    if _qa and _qa.get("domain"):
-                        domain = _qa["domain"]
+                    for _attempt in (1, 2):
+                        _qa = await chat_service._detect_query_analysis(_probe)
+                        if _qa and _qa.get("domain"):
+                            domain = str(_qa["domain"]).strip().lower()
+                            break
+                    if not domain:
+                        domain = "universal"
+                        logger.warning(f"[domain] классификатор не ответил, ставлю universal: {document_id}")
             except Exception as e:
-                logger.debug(f"domain документа не определён: {e}")
+                domain = "universal"
+                logger.warning(f"[domain] не определён ({type(e).__name__}: {e}), ставлю universal: {document_id}")
+            # Домен идёт и в payload чанков, и в запись документа — чтобы его было
+            # видно в админке и можно было поправить без переиндексации.
+            try:
+                setattr(record, "domain", domain)
+                get_doc_repo().upsert(document_id, {"domain": domain})
+            except Exception as e:
+                logger.debug(f"[domain] в базу записать не удалось: {e}")
 
             # ── Шаг 3а: карточка документа (ДО векторизации) ────────────────
             # Анализ документа (title/type/summary/topics) раньше шёл ПОСЛЕ
@@ -717,6 +742,35 @@ class DocumentService:
                     })
                     _doc_fresh = get_doc_repo().get_dict(document_id) or {}
                     _card = card_from_record(_doc_fresh)
+
+                    # ── Домен по КАРТОЧКЕ: уточнение ────────────────────────
+                    # Первый расчёт идёт ДО анализа документа, когда заголовка ещё нет
+                    # (проба = имя файла + начало текста) — именно поэтому у документов
+                    # с именами вида «r-1323565.1.pdf» домен оставался пустым. Здесь
+                    # карточка уже собрана, поэтому домен уточняется по ней, и только
+                    # после этого пишутся векторы: домен попадает в payload чанков.
+                    if domain in ("", "universal"):
+                        try:
+                            from src.api.services.chat_service import chat_service as _cs
+                            _probe_card = " ".join(p for p in (
+                                _card.get("title") or "",
+                                f"Тип: {_card.get('document_type') or ''}",
+                                f"Темы: {', '.join(_card.get('topics') or [])}",
+                                (_card.get("summary") or "")[:300],
+                                (chunks[0].get("content", "") or "")[:400],
+                            ) if p)[:1500]
+                            for _att in (1, 2):
+                                _qa2 = await _cs._detect_query_analysis(_probe_card)
+                                if _qa2 and _qa2.get("domain"):
+                                    domain = str(_qa2["domain"]).strip().lower()
+                                    break
+                            if domain and domain != "universal":
+                                setattr(record, "domain", domain)
+                                get_doc_repo().upsert(document_id, {"domain": domain})
+                                plog.log("domain_refined", {"domain": domain})
+                                logger.info(f"[domain] уточнён по карточке: {document_id} -> {domain}")
+                        except Exception as e:
+                            logger.debug(f"[domain] уточнение по карточке не удалось: {e}")
 
                     # ── Разделы документа (без LLM) ─────────────────────────
                     # Крошка раздела идёт в текст эмбеддинга и в граф. Разметка нужна ДО

@@ -42,6 +42,7 @@ class Document(Base):
     recognized_title = Column(String, default="")
     summary = Column(Text, default="")
     topics = Column(Text, default="[]")  # JSON list
+    domain = Column(String(32), default="")  # домен документа (infosec/accounting/legal/universal)
     # Версионность и контекст
     previous_hash = Column(String, default="")
     original_text = Column(Text, default=None)

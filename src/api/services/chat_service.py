@@ -69,6 +69,43 @@ class ChatService:
             return {"domain": None}
         return {"domain": domain, "domain_include_empty": mode == "safe"}
 
+    async def _search_with_widening(self, query: str, limit: int, *, group_ids=None,
+                                    is_admin: bool = False, user_id=None,
+                                    domain: Optional[str] = None) -> list:
+        """Поиск с фильтром по домену и расширением, если фильтр обеднил выдачу.
+
+        Зачем расширение. Домен вопроса определяет классификатор, и он может не совпасть
+        с доменом документа, где лежит ответ (или документ помечен universal/пустым).
+        Тогда жёсткий фильтр отдаёт пустоту, и чат честно отвечает «информация не найдена»,
+        хотя документ в корпусе есть. Замер 19.09.2026: у вопросов с нулевым баллом
+        ВСЕ топовые фрагменты имели пустой домен и отсекались фильтром, а без фильтра
+        правильный документ стоял на первом месте со score 0.915.
+
+        Порядок: строгий поиск → если он пуст или явно слабый, повтор без фильтра
+        и дополнение выдачи (дубли по id отбрасываются, итог пересортировывается по score).
+        """
+        from src.indexing.embeddings_service import embeddings_service
+
+        kwargs = self._domain_kwargs(domain if domain else None)
+        strict = await embeddings_service.search(
+            query=query, limit=limit, group_ids=group_ids,
+            is_admin=is_admin, user_id=user_id, **kwargs)
+        if kwargs.get("domain"):
+            _best = max((float(c.get("score") or 0) for c in strict), default=0.0)
+            if len(strict) < max(3, limit // 2) or _best < 0.5:
+                wide = await embeddings_service.search(
+                    query=query, limit=limit, group_ids=group_ids,
+                    is_admin=is_admin, user_id=user_id)
+                _seen = {c.get("id") for c in strict if c.get("id")}
+                _added = [c for c in wide if c.get("id") not in _seen]
+                if _added:
+                    logger.info(
+                        f"[rag] домен «{kwargs.get('domain')}» обеднил выдачу: "
+                        f"было {len(strict)}, добавлено {len(_added)} без фильтра")
+                strict = strict + _added
+        strict.sort(key=lambda c: -float(c.get("score") or 0))
+        return strict
+
     def _get_chat_provider(self) -> tuple:
         """
         Получить провайдера и function_map для чата из Provider Architecture.
@@ -678,15 +715,10 @@ class ChatService:
                 logger.debug("Выполняю RAG поиск...")
                 from src.indexing.embeddings_service import embeddings_service
                 # Поиск релевантных чанков
-                search_results = await embeddings_service.search(
-                    query=user_message,
-                    limit=self._search_limit,  # Количество чанков для контекста
-                    group_ids=group_ids,
-                    is_admin=is_admin,
-                    # Домен определяется по вопросу, а как он участвует в поиске —
-                    # настройка chat/domain (hard|safe|off), см. _domain_kwargs
-                    user_id=user_id,
-                    **self._domain_kwargs(domain if domain else None),
+                search_results = await self._search_with_widening(
+                    user_message, self._search_limit,
+                    group_ids=group_ids, is_admin=is_admin, user_id=user_id,
+                    domain=domain,
                 )
 
                 if search_results:

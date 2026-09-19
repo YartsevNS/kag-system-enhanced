@@ -194,6 +194,11 @@ async def upsert_card_point(document_id: str, doc: Optional[Dict[str, Any]]) -> 
         "document_type": card.get("document_type") or "",
         "summary": card.get("summary") or "",
         "topics": card.get("topics") or [],
+        # Домен обязателен и в карточке: без него точка level=document оставалась
+        # единственной без домена у каждого документа (найдено 19.09.2026: ровно
+        # 1 такая точка на документ), и в режиме hard она выпадала из поиска
+        # по документам/сравнений.
+        "domain": (doc or {}).get("domain") or "",
     }
     payload.update(acl_payload(doc))
 

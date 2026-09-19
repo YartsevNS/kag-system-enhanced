@@ -1656,7 +1656,42 @@ async def update_document_meta(
         except Exception as e:
             logger.warning(f"Qdrant document_type не обновлён: {e}")
 
-    return {"status": "ok", "document_id": document_id, **data}
+    # ── Пересчёт домена после правки метаданных ──────────────────────────────
+    # Домен определяется по названию и типу документа, поэтому переименование или
+    # смена типа его меняют. Раньше домен НЕ пересчитывался: правишь название — а
+    # в поиске документ остаётся в старом домене (и, если домен совпадал с вопросом
+    # хуже, выпадает из выдачи). Пишем и в базу, и в payload всех чанков.
+    new_domain = None
+    try:
+        from src.api.services.document_repository import get_doc_repo as _gdr
+        doc_now = await asyncio.to_thread(_gdr().get_dict, document_id) or {}
+        probe = " ".join(p for p in (
+            (doc_now.get("recognized_title") or "").strip(),
+            f"Тип: {doc_now.get('document_type') or ''}",
+            f"Имя файла: {doc_now.get('filename') or ''}",
+        ) if p)[:600]
+        from src.api.services.chat_service import chat_service
+        for _attempt in (1, 2):
+            _qa = await chat_service._detect_query_analysis(probe)
+            if _qa and _qa.get("domain"):
+                new_domain = str(_qa["domain"]).strip().lower()
+                break
+        if new_domain and new_domain != (doc_now.get("domain") or ""):
+            await asyncio.to_thread(repo.upsert, document_id, {"domain": new_domain})
+            try:
+                from src.indexing.embeddings_service import embeddings_service
+                await embeddings_service.initialize()
+                await embeddings_service.update_document_payload(document_id, {"domain": new_domain})
+            except Exception as e:
+                logger.warning(f"Qdrant domain не обновлён: {e}")
+            logger.info(f"[domain] пересчитан после правки метаданных: {document_id} -> {new_domain}")
+    except Exception as e:
+        logger.warning(f"[domain] пересчёт после правки метаданных не удался: {e}")
+
+    result = {"status": "ok", "document_id": document_id, **data}
+    if new_domain:
+        result["domain"] = new_domain
+    return result
 
 
 @router.get("/{document_id}/thumbnail", summary="Миниатюра документа")

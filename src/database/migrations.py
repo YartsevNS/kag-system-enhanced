@@ -30,6 +30,9 @@ _COLUMN_MIGRATIONS = [
     ("documents", "recognized_title", "VARCHAR DEFAULT ''"),
     ("documents", "summary", "TEXT DEFAULT ''"),
     ("documents", "topics", "TEXT DEFAULT '[]'"),
+    # домен документа: нужен и для фильтра RAG, и чтобы его было видно в админке
+    # (раньше жил только в payload Qdrant и правился лишь переиндексацией).
+    ("documents", "domain", "VARCHAR(32) DEFAULT ''"),
     ("documents", "previous_hash", "VARCHAR DEFAULT ''"),
     ("documents", "original_text", "TEXT"),
     ("documents", "source_metadata", "TEXT"),
