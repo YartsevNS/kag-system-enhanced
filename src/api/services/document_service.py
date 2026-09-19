@@ -106,7 +106,7 @@ class DocumentService:
         
         # Используем /app/data/uploads (принадлежит kag, persistent)
         upload_base = Path("/app/data")
-        self._upload_dir = upload_base / "uploads"
+        self._upload_dir = Path(upload_dir) if upload_dir else (upload_base / "uploads")
         self._ocr_dir = upload_base / "ocr_results"
         self._thumb_dir = upload_base / "thumbnails"
 
@@ -141,21 +141,44 @@ class DocumentService:
     def _cleanup_stale_records(self):
         """Удалить записи в БД, для которых нет файлов на диске."""
         try:
+            if not self._documents:
+                return
+            # Каталог недоступен или пуст → это признак сбоя монтирования, а не пропажи файлов.
+            # Инцидент 19.09.2026: при недоступном /app/data/uploads сервис уходил в fallback
+            # /tmp/kag_uploads, список «существующих» файлов получался пустым и удалялись ВСЕ
+            # документы из БД (векторы и файлы при этом оставались целы).
+            if not self._upload_dir.exists():
+                logger.warning(f"Автоочистка пропущена: каталог uploads недоступен ({self._upload_dir})")
+                return
             existing = set()
-            if self._upload_dir.exists():
-                for f in self._upload_dir.iterdir():
-                    if f.is_file():
-                        existing.add(f.name[:36])
-            
+            for f in self._upload_dir.iterdir():
+                if f.is_file():
+                    existing.add(f.name[:36])
+            if not existing:
+                logger.warning(
+                    f"Автоочистка пропущена: каталог uploads пуст ({self._upload_dir}), "
+                    f"документов в БД: {len(self._documents)}"
+                )
+                return
+
             from src.api.services.document_repository import get_doc_repo
             stale = [did for did in self._documents if did not in existing]
+            # Массовое удаление — тоже признак сбоя, а не реальных пропаж: чистим только
+            # мелкие расхождения (единицы записей).
+            if len(stale) > max(5, len(self._documents) // 2):
+                logger.warning(
+                    f"Автоочистка пропущена: под удаление попадает {len(stale)} из "
+                    f"{len(self._documents)} записей — похоже на сбой, требуется решение админа"
+                )
+                return
             for did in stale:
                 fname = self._documents[did].filename if did in self._documents else '?'
+                logger.warning(f"Автоочистка: удаляю запись без файла на диске: {did} ({fname})")
                 get_doc_repo().delete(did)
                 del self._documents[did]
-            
+
             if stale:
-                logger.info(f"Автоочистка: удалено {len(stale)} stale-записей без файлов")
+                logger.warning(f"Автоочистка: удалено {len(stale)} записей без файлов на диске")
         except Exception as e:
             logger.warning(f"Автоочистка не выполнена: {e}")
 

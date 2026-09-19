@@ -654,6 +654,20 @@ class ChatService:
         temp = temperature if temperature is not None else 0.7
         tokens = max_tokens or 4096
 
+        # Отключение размышлений у reasoning-моделей — галочка «Отключить размышления
+        # модели (no think)» в привязке функции (Админка → Модели LLM).
+        # Замер на стенде 19.09.2026: без этого параметра модель уходила в reasoning до
+        # всего лимита и возвращала пустой content (при 200–700 токенах ответ был 0 символов).
+        # У deepseek/openai/openrouter-совместимых работает thinking.type=disabled.
+        extra_payload = None
+        try:
+            _fm_params = getattr(func_map, "parameters", None) or {}
+            if bool(_fm_params.get("no_think", True)) and provider.type in ("deepseek", "openai", "openrouter"):
+                extra_payload = {"thinking": {"type": "disabled"}}
+                logger.debug("Чат: размышления модели отключены (no_think)")
+        except Exception as _e:
+            logger.debug(f"no_think для чата не применён: {_e}")
+
         # ── Маршрутизация интента (мета-запросы о базе vs семантика) ──────
         # Зачем: «покажи все документы» — это вопрос о КАТАЛОГЕ. RAG вернул бы
         # топ-N похожих чанков, а не список. Определяем тип запроса ДО RAG:
@@ -922,6 +936,7 @@ class ChatService:
             temperature=temp,
             max_tokens=tokens,
             provider=provider,
+            extra_payload=extra_payload,
         )
 
         # Шаг 5: Логируем запрос (в audit — реальный пользователь, не session_id)
