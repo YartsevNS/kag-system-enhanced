@@ -588,7 +588,10 @@
                         <div class="chat-title" id="chat-title">Новый чат</div>
                         <div class="chat-status">
                             <span class="status-indicator"></span>
-                            <span id="model-name">Загрузка...</span>
+                            <span id="model-name" onclick="openModelPicker(event)"
+                                  title="Нажмите, чтобы выбрать провайдера и модель для своих вопросов"
+                                  style="cursor:pointer;border-bottom:1px dotted var(--text4)">Загрузка...</span>
+                            <div id="model-picker" style="display:none;position:absolute;top:38px;right:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;min-width:280px;max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
                         </div>
                     </div>
                 </div>
@@ -744,18 +747,122 @@
                 const fm = await fmResp.json();
                 const modelName = fm.model || '—';
                 const providerName = fm.provider_name || '';
-                
-                if (modelEl) modelEl.textContent = providerName ? `${modelName} (${providerName})` : modelName;
+
+                // Значение по умолчанию запоминаем: по нему показываем «как в настройках»
+                // и подпись выбранной пользователем модели (см. openModelPicker).
+                window.__defaultModel = fm;
                 if (indicator) {
                     indicator.style.background = fm.configured ? 'var(--green)' : 'var(--red)';
                     indicator.title = fm.configured ? 'Модель активна' : 'Модель не настроена';
                 }
+                updateModelLabel();
             } catch (error) {
                 console.error('Ошибка загрузки модели:', error);
                 if (modelEl) modelEl.textContent = 'Не настроена';
                 if (indicator) indicator.style.background = 'var(--red)';
             }
         }
+
+        // ── Выбор модели: клик по названию модели в шапке чата ───────────────────
+        // Пользователь может работать не той моделью, что стоит в привязке функции
+        // (Админка → Модели LLM). Выбор хранится в браузере и уходит в каждый запрос
+        // (provider_id/model); сервер проверяет, что провайдер включён, и добавляет
+        // резерв из привязки функции. «Как в настройках» = убрать выбор.
+        function modelChoice() {
+            try {
+                const raw = localStorage.getItem('kag_chat_model');
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+
+        function saveModelChoice(choice) {
+            try {
+                if (choice && choice.provider_id) {
+                    localStorage.setItem('kag_chat_model', JSON.stringify(choice));
+                } else {
+                    localStorage.removeItem('kag_chat_model');
+                }
+            } catch (e) { /* приватный режим — просто не запоминаем */ }
+            updateModelLabel();
+        }
+
+        function updateModelLabel() {
+            const el = document.getElementById('model-name');
+            const def = window.__defaultModel;
+            if (!el || !def) return;
+            const choice = modelChoice();
+            if (choice) {
+                el.textContent = `${choice.model} (${choice.provider_name || choice.provider_id}) — выбрано вами`;
+            } else {
+                el.textContent = def.provider_name ? `${def.model} (${def.provider_name})` : (def.model || '—');
+            }
+        }
+
+        function closeModelPicker() {
+            const picker = document.getElementById('model-picker');
+            if (picker) picker.style.display = 'none';
+        }
+
+        function chooseModel(choice) {
+            saveModelChoice(choice);
+            closeModelPicker();
+        }
+
+        async function openModelPicker(ev) {
+            if (ev) ev.stopPropagation();
+            const picker = document.getElementById('model-picker');
+            if (!picker) return;
+            if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+            picker.innerHTML = '<div class="muted" style="font-size:12px">Загрузка...</div>';
+            picker.style.display = 'block';
+            try {
+                const resp = await apiFetch(`${API_URL}/chat/providers`);
+                const data = await resp.json();
+                const current = modelChoice();
+                const def = window.__defaultModel || {};
+                const reserve = def.fallback_provider_name
+                    ? ` · резерв: ${def.fallback_model || ''} (${def.fallback_provider_name})`
+                    : ' · резерва нет';
+                picker.innerHTML = '';
+                const head = document.createElement('div');
+                head.id = 'model-opt-default';
+                head.style.cssText = 'cursor:pointer;padding:6px 8px;border-radius:6px';
+                head.innerHTML = `<b>Как в настройках</b><div class="muted" style="font-size:11px">` +
+                    `${def.model || '—'}${def.provider_name ? ' (' + def.provider_name + ')' : ''}${reserve}</div>`;
+                head.onclick = () => chooseModel(null);
+                picker.appendChild(head);
+
+                for (const p of (data.providers || [])) {
+                    const block = document.createElement('div');
+                    block.style.marginTop = '8px';
+                    const title = document.createElement('div');
+                    title.className = 'muted';
+                    title.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:0.04em';
+                    title.textContent = `${p.name} (${p.type})`;
+                    block.appendChild(title);
+                    for (const m of (p.models || [])) {
+                        const row = document.createElement('div');
+                        const active = current && current.provider_id === p.id && current.model === m;
+                        row.style.cssText = 'cursor:pointer;padding:5px 8px;border-radius:6px' +
+                            (active ? ';background:var(--elevated)' : '');
+                        row.textContent = m + (active ? ' ✓' : '');
+                        row.onclick = () => chooseModel({ provider_id: p.id, model: m, provider_name: p.name });
+                        block.appendChild(row);
+                    }
+                    picker.appendChild(block);
+                }
+                if (!(data.providers || []).length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'muted';
+                    empty.style.fontSize = '12px';
+                    empty.textContent = 'Включённых провайдеров нет — список ведётся в админке';
+                    picker.appendChild(empty);
+                }
+            } catch (e) {
+                picker.innerHTML = '<div class="muted" style="font-size:12px">Не удалось загрузить список провайдеров</div>';
+            }
+        }
+        document.addEventListener('click', closeModelPicker);
         
         // Авторизован ли пользователь (есть токен). Если да — сессии храним
         // на СЕРВЕРЕ (chat_storage): нет гонки localStorage между вкладками,
@@ -976,7 +1083,8 @@
                             messages: apiMessages,
                             session_id: currentSessionId
                         },
-                        contextDepth() ? { context_limit: contextDepth() } : {}
+                        contextDepth() ? { context_limit: contextDepth() } : {},
+                        modelChoice() ? { provider_id: modelChoice().provider_id, model: modelChoice().model } : {}
                     ))
                 });
                 

@@ -607,6 +607,8 @@ class ChatService:
         is_admin: bool = False,
         user_id: Optional[str] = None,
         context_limit: Optional[int] = None,
+        provider_id: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Сгенерировать ответ с RAG.
@@ -1001,11 +1003,14 @@ class ChatService:
         # ошибка, таймаут), пробуем резервный из привязки функции (Админка → Модели LLM).
         chain = []
         try:
-            chain = provider_service.get_function_provider_chain("chat")
+            # provider_id/model — выбор пользователя в чате (клик по названию модели):
+            # если он выбрал другого провайдера, работаем с ним, а резерв берём из привязки.
+            chain = provider_service.get_function_provider_chain(
+                "chat", provider_id or "", model or "")
         except Exception as _e:
             logger.debug(f"цепочка провайдеров чата не получена: {_e}")
         if not chain:
-            chain = [(provider, model_name)]
+            chain = [(provider, model or model_name)]
 
         def _extra_for(prov) -> Optional[dict]:
             """Доп. параметры под конкретного провайдера (отключение размышлений)."""

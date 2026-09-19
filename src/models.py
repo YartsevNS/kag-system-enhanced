@@ -47,6 +47,10 @@ class ChatRequest(BaseModel):
     # Больше фрагментов — полнее ответ, но дороже и медленнее; меньше — быстрее, но выше риск
     # потерять норму. Дефолт подобран замером (docs/guides/reranker-and-answer-quality.md).
     context_limit: Optional[int] = None
+    # Выбор модели в чате (клик по названию модели): пользователь может работать не с той
+    # моделью, что стоит в привязке функции. Пусто = привязка функции (админка).
+    provider_id: Optional[str] = None
+    model: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

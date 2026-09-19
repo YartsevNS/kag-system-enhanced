@@ -33,7 +33,8 @@ def _service(monkeypatch, chain, behaviours):
     service = cs.ChatService()
     monkeypatch.setattr(service, "_get_chat_provider", lambda: (chain[0][0], _func_map()))
     monkeypatch.setattr(service, "_get_total_docs", lambda: 0)
-    monkeypatch.setattr(cs.provider_service, "get_function_provider_chain", lambda _f: list(chain))
+    monkeypatch.setattr(cs.provider_service, "get_function_provider_chain",
+                        lambda _f, pid="", model="": list(chain))
 
     calls = []
 

@@ -42,15 +42,47 @@ async def get_chat_model():
         if not fm or not fm.get("model"):
             return {"model": "", "provider_id": "", "provider_name": "", "configured": False}
         provider = provider_service.get_provider(fm.get("provider_id") or "")
+        # Резерв (если настроен в привязке функции) — фронтенд показывает его рядом с основным.
+        fb_id = fm.get("fallback_provider_id") or ""
+        fb_provider = provider_service.get_provider(fb_id) if fb_id else None
         return {
             "model": fm.get("model", ""),
             "provider_id": fm.get("provider_id", ""),
             "provider_name": (provider or {}).get("name", fm.get("provider_id", "")),
+            "fallback_provider_id": fb_id,
+            "fallback_provider_name": (fb_provider or {}).get("name", "") if fb_id else "",
+            "fallback_model": fm.get("fallback_model", "") if fb_id else "",
             "configured": True,
         }
     except Exception as e:
         logger.warning(f"Не удалось получить модель чата: {e}")
         return {"model": "", "provider_id": "", "provider_name": "", "configured": False}
+
+
+@router.get("/providers", summary="Провайдеры и модели для выбора в чате")
+async def list_chat_providers():
+    """Список включённых провайдеров с моделями — для выбора модели в чате.
+
+    Доступно любому авторизованному пользователю: ключи не отдаются, только названия.
+    Пользователь может работать выбранной моделью (provider_id/model в запросе чата);
+    сервер проверяет, что провайдер включён, и добавляет резерв из привязки функции.
+    """
+    from src.api.services.provider_service import provider_service
+    try:
+        result = []
+        for p in provider_service.list_providers():
+            if not p.get("enabled"):
+                continue
+            result.append({
+                "id": p.get("id"),
+                "name": p.get("name"),
+                "type": p.get("type"),
+                "models": [m for m in (p.get("models") or []) if m],
+            })
+        return {"providers": result}
+    except Exception as e:
+        logger.warning(f"Не удалось получить список провайдеров для чата: {e}")
+        return {"providers": []}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -194,6 +226,10 @@ async def send_message(
             # Глубина контекста: клиент может задать своё число фрагментов на запрос
             # (сервер зажимает 3..20); None → значение из привязки функции chat.
             context_limit=getattr(request, "context_limit", None),
+            # Выбор модели в чате: клиент может указать провайдера/модель на запрос
+            # (UI чата — клик по названию модели). Недоступный провайдер игнорируется.
+            provider_id=getattr(request, "provider_id", None),
+            model=getattr(request, "model", None),
         )
 
         # Сохраняем сообщения на сервере (если пользователь авторизован).

@@ -451,21 +451,41 @@ class ProviderService:
 
         return (provider, fm)
 
-    def get_function_provider_chain(self, function_name: str) -> List[tuple[ProviderConfig, str]]:
-        """Цепочка «основной → резервный» для функции: [(провайдер, модель), ...].
+    def get_function_provider_chain(self, function_name: str,
+                                    provider_id: str = "", model: str = "") -> List[tuple[ProviderConfig, str]]:
+        """Цепочка «выбранный/основной → резервный» для функции: [(провайдер, модель), ...].
 
         Зачем: у одного провайдера может быть несколько одновременных потребителей (чат,
         обработка документов, тесты) на один ключ — при лимитах или сбое на его стороне
         запрос висит до таймаута, и пользователь видит ошибку. Резерв задаётся в привязке
         функции (Админка → Модели LLM): fallback_provider_id + fallback_model.
+
+        provider_id/model — необязательное переопределение от клиента (в чате пользователь
+        может работать не с той моделью, что стоит по умолчанию). Резервом в этом случае
+        становится резерв функции, если он не совпадает с выбранным провайдером.
         """
         pair = self.get_function_provider(function_name)
         if not pair:
             return []
         provider, fm = pair
-        chain = [(provider, fm.model)]
+        chosen = provider
+        chosen_model = fm.model
+        override = (provider_id or "").strip()
+        if override and override != provider.id:
+            alt = self._provider_cache.get(override)
+            if alt and alt.enabled:
+                chosen, chosen_model = alt, (model or "").strip()
+                if not chosen_model:
+                    chosen_model = alt.models[0] if alt.models else fm.model
+            else:
+                logger.warning(f"Запрошенный провайдер {override} не найден или выключен — "
+                               f"используем привязку функции {function_name}")
+        elif (model or "").strip():
+            chosen_model = model.strip()
+
+        chain = [(chosen, chosen_model)]
         fb_id = (getattr(fm, "fallback_provider_id", "") or "").strip()
-        if fb_id and fb_id != provider.id:
+        if fb_id and fb_id != chosen.id:
             fb_provider = self._provider_cache.get(fb_id)
             if fb_provider and fb_provider.enabled:
                 fb_model = (getattr(fm, "fallback_model", "") or "").strip()
