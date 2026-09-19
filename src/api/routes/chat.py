@@ -230,11 +230,11 @@ async def send_message(
                 "model": response["model"],
                 "backend": response["backend"],
                 "usage": response["usage"],
-                "rag_used": response["metadata"]["rag_used"],
-                "sources_count": response["metadata"]["sources_count"],
-                "total_docs": response["metadata"]["total_docs"],
-                "graph_used": response["metadata"]["graph_used"],
-                "intent": response["metadata"].get("intent", "semantic"),
+                # Всё, что посчитал сервис: rag_used, sources_count, total_docs, graph_used,
+                # intent, domain, provider, fallback_used, refused_low_score и т.п.
+                # Раньше перечислялись только 5 полей, и флаги (например fallback_used или
+                # отказ по порогу score) до клиента не доходили.
+                **(response.get("metadata") or {}),
             }
         )
 
