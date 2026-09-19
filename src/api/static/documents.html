@@ -884,8 +884,8 @@ function renderCards(docs) {
     const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
     return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
       <div class="thumb-wrap">
-        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy" 
-             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}"
+        <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy"
+             onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}'"
              style="object-fit:cover">
         <span class="type-badge tag ${typeBadgeClass(type)}">${typeLabel(type)}</span>
       </div>

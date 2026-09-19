@@ -58,14 +58,26 @@ async def main():
         browser = await p.chromium.launch()
         page = await browser.new_page()
         errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)[:200]))
+        page.on("pageerror", lambda e: errors.append(f"{e} | stack={str(getattr(e, 'stack', ''))[:300]}"))
         console_errors = []
-        page.on("console", lambda m: console_errors.append(m.text[:200]) if m.type == "error" else None)
+        page.on("console", lambda m: console_errors.append(
+            f"{m.text[:200]} @ {getattr(m, 'location', {})}") if m.type == "error" else None)
+        failed_reqs = []
+        page.on("requestfailed", lambda r: failed_reqs.append(f"{r.url} — {r.failure}"))
+        unauthorized = []
+        # Миниатюры грузятся тегом <img>, а не fetch: на статической странице без сессии
+        # сервер отдаёт по ним 401 — это особенность проверки, а не дефект страницы.
+        # Остальные 401/403 в ходе прогона считаем провалом.
+        page.on("response", lambda r: unauthorized.append(f"{r.status} {r.url}")
+                if r.status in (401, 403) and "/thumbnail" not in r.url else None)
 
         await page.add_init_script(INIT)
         await page.goto(PAGE_URL, wait_until="domcontentloaded")
-        await page.wait_for_selector("#table-body .doc-check", timeout=15000)
+        # Сначала переключаем на таблицу: по умолчанию открывается вид «Карточки»,
+        # и в нём строки таблицы есть в DOM, но не видны — клик по ним невозможен
+        # (первый прогон падал именно на этом: «resolved to 3 elements», но не visible).
         await page.evaluate("window.setView('table')")
+        await page.wait_for_selector("#table-body .doc-check", state="visible", timeout=15000)
 
         # отметить три файла настоящими кликами по чекбоксам
         boxes = await page.query_selector_all("#table-body .doc-check")
@@ -99,8 +111,39 @@ async def main():
 
         dialogs = await page.evaluate("window.__dialogs")
         check("системный диалог не вызывался", dialogs == 0, f"вызовов: {dialogs}")
-        check("ошибок страницы нет", not errors, "; ".join(errors))
-        check("ошибок в консоли нет", not console_errors, "; ".join(console_errors))
+
+        # Inline-обработчики должны компилироваться: несобранный onerror/onclick
+        # молча ничего не делает (найдено этим прогоном: у миниатюр карточек
+        # в onerror не хватало закрывающей кавычки — «Invalid or unexpected token»).
+        bad_handlers = await page.evaluate("""() => {
+          const out = [];
+          for (const el of document.querySelectorAll('*')) {
+            for (const attr of ['onerror', 'onclick', 'onchange']) {
+              const v = el.getAttribute && el.getAttribute(attr);
+              if (!v) continue;
+              try { new Function(v); } catch (e) { out.push(el.tagName + ' ' + attr + ': ' + e.message); }
+            }
+          }
+          return out;
+        }""")
+        check("все inline-обработчики страницы компилируются", not bad_handlers,
+              "; ".join(bad_handlers)[:200])
+        # Ошибки страницы и ответы 401 не должны быть вызваны самой проверкой:
+        # печатаем подробности (файл, строка, URL), иначе «есть ошибки» неисправимо.
+        if errors:
+            print("   подробности ошибок страницы:")
+            for e in errors:
+                print("     - " + e)
+        if unauthorized:
+            print("   ответы 401/403:")
+            for u in unauthorized[:5]:
+                print("     - " + u)
+        if failed_reqs:
+            print("   не удались запросы:")
+            for f in failed_reqs[:5]:
+                print("     - " + f)
+        check("ошибок страницы нет", not errors, "; ".join(errors)[:200])
+        check("доступов 401/403 в ходе проверки нет", not unauthorized, "; ".join(unauthorized)[:200])
 
         await browser.close()
 
