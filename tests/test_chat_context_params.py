@@ -129,3 +129,39 @@ def test_threshold_passes_when_top_score_is_high(monkeypatch):
     response = _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True))
     assert response["response"] == "ответ"
     assert captured.get("called") == 1
+
+
+# ── глубина контекста из запроса клиента (перебивает привязку функции) ──────────
+
+def test_request_context_limit_wins_over_binding(monkeypatch):
+    captured = {}
+    service = _service(monkeypatch, {"context_limit": 10}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True, context_limit=3))
+    assert captured["limit"] == 3, f"клиент просил 3, поиск вызван с {captured['limit']}"
+
+
+def test_request_context_limit_is_clamped(monkeypatch):
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True, context_limit=99))
+    assert captured["limit"] == 20, "сервер обязан зажимать границы, а не доверять клиенту"
+
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True, context_limit=1))
+    assert captured["limit"] == 3
+
+
+def test_request_context_limit_none_uses_binding(monkeypatch):
+    captured = {}
+    service = _service(monkeypatch, {"context_limit": 7}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True))
+    assert captured["limit"] == 7, "без запроса клиента действует привязка функции"
+
+
+def test_broken_request_context_limit_ignored(monkeypatch):
+    captured = {}
+    service = _service(monkeypatch, {"context_limit": 7}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True,
+                                   context_limit="abc"))
+    assert captured["limit"] == 7, "мусор в поле не должен ломать поиск"

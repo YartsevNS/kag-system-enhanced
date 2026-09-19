@@ -606,6 +606,7 @@ class ChatService:
         group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
         user_id: Optional[str] = None,
+        context_limit: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Сгенерировать ответ с RAG.
@@ -677,6 +678,15 @@ class ChatService:
         except (TypeError, ValueError):
             ctx_limit = 10
         ctx_limit = max(3, min(20, ctx_limit))
+        # Клиент может переопределить глубину на конкретный запрос (3..20, границы зажимаем
+        # на сервере, а не только в UI). Приоритет: запрос → привязка функции → дефолт 10.
+        _ctx_source = "привязка функции"
+        if context_limit is not None:
+            try:
+                ctx_limit = max(3, min(20, int(context_limit)))
+                _ctx_source = "запрос"
+            except (TypeError, ValueError):
+                pass
         # mark_best — пометить первый (лучший по score) фрагмент: модель опирается на него раньше.
         mark_best = bool(_fm_params.get("mark_best", False))
         # min_top_score — честный отказ без вызова LLM, если лучший фрагмент слишком далёк
@@ -758,6 +768,9 @@ class ChatService:
         if use_rag and intent is None:
             try:
                 logger.debug("Выполняю RAG поиск...")
+                # Логируем эффективную глубину: по этим строкам собирается статистика для
+                # подбора дефолта (какое k реально используется и откуда оно взялось).
+                logger.info(f"[rag] глубина контекста: {ctx_limit} фрагментов (источник: {_ctx_source})")
                 from src.indexing.embeddings_service import embeddings_service
                 # Поиск релевантных чанков
                 search_results = await self._search_with_widening(
@@ -1065,6 +1078,7 @@ class ChatService:
         group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
         user_id: Optional[str] = None,
+        context_limit: Optional[int] = None,
     ):
         """
         Потоковая генерация ответа.
@@ -1095,6 +1109,11 @@ class ChatService:
             ctx_limit = max(3, min(20, int(_fm_params.get("context_limit", 10) or 10)))
         except (TypeError, ValueError):
             ctx_limit = 10
+        if context_limit is not None:
+            try:  # клиент может задать глубину на запрос; границы зажимаем на сервере
+                ctx_limit = max(3, min(20, int(context_limit)))
+            except (TypeError, ValueError):
+                pass
         mark_best = bool(_fm_params.get("mark_best", False))
 
         # RAG поиск

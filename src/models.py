@@ -42,6 +42,11 @@ class ChatRequest(BaseModel):
     # настройки админки не применялись никогда.
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    # Сколько найденных фрагментов уходит в промпт. Клиент может задать своё число на запрос
+    # (3..20, сервер зажимает границы); None → значение из привязки функции chat (по умолчанию 10).
+    # Больше фрагментов — полнее ответ, но дороже и медленнее; меньше — быстрее, но выше риск
+    # потерять норму. Дефолт подобран замером (docs/guides/reranker-and-answer-quality.md).
+    context_limit: Optional[int] = None
 
 
 class ChatResponse(BaseModel):

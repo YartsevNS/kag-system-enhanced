@@ -644,6 +644,20 @@
                 </div>
                 <div class="input-hint">
                     Enter - отправить • Shift+Enter - новая строка
+                    <span style="margin-left:10px">
+                        Контекст:
+                        <select id="context-depth" onchange="saveContextDepth()"
+                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px">
+                            <option value="">как в настройках</option>
+                            <option value="3">3 фрагмента (быстро)</option>
+                            <option value="5">5 фрагментов</option>
+                            <option value="8">8 фрагментов</option>
+                            <option value="10">10 фрагментов</option>
+                            <option value="15">15 фрагментов</option>
+                            <option value="20">20 фрагментов (полно)</option>
+                        </select>
+                        <span title="Сколько найденных фрагментов уходит модели. Меньше — быстрее и дешевле, но выше риск потерять нужную норму; больше — полнее ответ, но медленнее. «Как в настройках» — значение из админки (привязка функции chat).">?</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -685,8 +699,36 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadSessions();
             loadCurrentModel();
+            restoreContextDepth();
             document.getElementById('message-input').focus();
         });
+
+        // ── Глубина контекста: сколько фрагментов уходит модели ──────────────────
+        // Пользователь может выбрать число на свой запрос (сервер зажимает 3..20);
+        // пустое значение = «как в настройках» → значение из привязки функции chat.
+        function contextDepth() {
+            const sel = document.getElementById('context-depth');
+            return sel && sel.value ? parseInt(sel.value, 10) : null;
+        }
+
+        function saveContextDepth() {
+            const value = contextDepth();
+            try {
+                if (value) {
+                    localStorage.setItem('kag_context_depth', String(value));
+                } else {
+                    localStorage.removeItem('kag_context_depth');
+                }
+            } catch (e) { /* приватный режим — просто не запоминаем */ }
+        }
+
+        function restoreContextDepth() {
+            try {
+                const saved = localStorage.getItem('kag_context_depth');
+                const sel = document.getElementById('context-depth');
+                if (saved && sel) sel.value = saved;
+            } catch (e) { /* ignore */ }
+        }
         
         // Загрузка текущей модели из Provider Architecture
         async function loadCurrentModel() {
@@ -928,10 +970,14 @@
                     // temperature и max_tokens НЕ передаём: значения по умолчанию берутся из
                     // привязки функции chat (Админка → Модели LLM). Раньше здесь был хардкод
                     // 0.7/2048, из-за которого настройки админки не действовали.
-                    body: JSON.stringify({
-                        messages: apiMessages,
-                        session_id: currentSessionId
-                    })
+                    // context_limit передаём, только если пользователь выбрал его вручную.
+                    body: JSON.stringify(Object.assign(
+                        {
+                            messages: apiMessages,
+                            session_id: currentSessionId
+                        },
+                        contextDepth() ? { context_limit: contextDepth() } : {}
+                    ))
                 });
                 
                 if (!response.ok) {

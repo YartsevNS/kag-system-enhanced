@@ -191,6 +191,9 @@ async def send_message(
             # Реальный пользователь для audit-лога (username); раньше писался
             # session_id — в логах появлялись «user: test» вместо имён.
             user_id=current_user.username if current_user else None,
+            # Глубина контекста: клиент может задать своё число фрагментов на запрос
+            # (сервер зажимает 3..20); None → значение из привязки функции chat.
+            context_limit=getattr(request, "context_limit", None),
         )
 
         # Сохраняем сообщения на сервере (если пользователь авторизован).
@@ -282,7 +285,8 @@ async def stream_message(
                 session_id=request.session_id,
                 history=history,
                 group_ids=group_ids,
-                is_admin=is_admin
+                is_admin=is_admin,
+                context_limit=getattr(request, "context_limit", None),
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
