@@ -50,6 +50,16 @@ Critical Warning 0x04, износ **99 %**, 88.5 ТБ записи, 44 ошиб�
   (`/etc/sudoers.d/hermes-agent`, откат — `rm` этого файла); это фактически полный root;
 - Docker на 18 — пакеты Debian (docker.io 20.10.24, compose 1.29.2); переезд на docker-ce 28.x —
   отдельный шаг с правкой деплой-скриптов под `docker compose`;
+- ВЫКАЧЕНО 19.09: образы **2026.09.19.3** (api + worker; собраны и запушены со стенда), пересозданы
+  по одному api → worker → worker-maintenance, все healthy, api 200, 81 документ, чат отвечает;
+- чат: reasoning-модель тратила весь лимит токенов на размышления и отдавала пустой content
+  (при 200–700 токенах — 0 символов). Галочка «Отключить размышления модели (no think)» в привязке
+  функции (Админка → Модели LLM) раньше действовала только на извлечение графа; теперь chat_service
+  читает parameters.no_think и для deepseek/openai/openrouter-совместимых шлёт
+  `thinking.type=disabled`. Проверено живьём: с max_tokens=200 ответ 653 символа (было 0).
+  Замер параметров: `thinking:{type:disabled}` и `reasoning_effort:none` работают, `no_think:true`
+  и `chat_template_kwargs` — нет;
+- диск ВМ 107 переведён с `cache=writeback` на `cache=none` (durability при жёстких сбросах).
 - тяжёлые замеры по 18 не гонять, пока железо не вылечено (для тяжёлого есть 41 или локальная машина).
 
 ## Где мы сейчас
