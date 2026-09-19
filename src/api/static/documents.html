@@ -344,9 +344,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div id="docs-table" style="display:none">
     <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
       <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
+      <span id="bulk-status" style="font-size:12px;margin-right:10px"></span>
       <button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✖ Снять выбор</button>
       <button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px;margin-right:8px" onclick="processSelected()">▶️ Обработать выбранные</button>
-      <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
+      <button id="btn-bulk-delete" class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
     </div>
     <table>
       <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead>
@@ -371,6 +372,13 @@ let allDocs = [];
 // (жалоба 20.09.2026). Выбор переносится через перерисовку и не сбрасывается
 // фильтрами и пагинацией: снимается только у документов, которых больше нет.
 let selectedDocs = new Set();
+
+// Не даём ошибкам молча ломать кнопки: любая необработанная ошибка страницы
+// показывается тостом. Молча не работающая кнопка — та самая жалоба 20.09.2026,
+// поэтому «ничего не произошло» в этом интерфейсе больше быть не должно.
+window.addEventListener('error', (e) => {
+  try { toast('Ошибка на странице: ' + (e.message || 'подробности в консоли, F12'), true); } catch (_) {}
+});
 let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1100,41 +1108,95 @@ async function processSelected() {
   const ids = [...selectedDocs];
   if (!ids.length) { toast('Отметьте документы галочками', true); return; }
   let queued = 0, skipped = 0, i = 0;
-  for (const id of ids) {
-    i++;
-    const cnt = document.getElementById('bulk-count');
-    if (cnt) cnt.textContent = `Ставлю в очередь: ${i} из ${ids.length}`;
-    try {
-      const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
-      if (r.ok) queued++;
-      else skipped++;   // 409 = уже в очереди, 403 = нет прав, 423 = блокировка — всё это «не поставлено»
-    } catch(e) { skipped++; }
+  try {
+    for (const id of ids) {
+      i++;
+      setBulkStatus(`Ставлю в очередь: ${i} из ${ids.length}…`);
+      try {
+        const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
+        if (r.ok) queued++;
+        else skipped++;   // 409 = уже в очереди, 403 = нет прав, 423 = блокировка — всё это «не поставлено»
+      } catch(e) { skipped++; }
+    }
+    setBulkStatus(`В очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
+  } catch(e) {
+    setBulkStatus('Ошибка: ' + e.message, true);
   }
   toast(`▶️ Поставлено в очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
   selectedDocs.clear();
   loadAll();
 }
 
+// Строка состояния в панели массовых действий. Любое действие обязано оставлять
+// видимый след: молчаливо не работающая кнопка — это ровно та жалоба, с которой
+// начался этот разбор (20.09.2026).
+function setBulkStatus(text, isError = false) {
+  const el = document.getElementById('bulk-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = isError ? 'var(--red)' : 'var(--text4)';
+}
+
+// Массовое удаление. Подтверждение — ВНУТРИ панели (двумя нажатиями), а не через
+// системный confirm(): браузер умеет глушить confirm() («предотвратить создание
+// дополнительных диалогов» в Chrome), и тогда кнопка молча ничего не делала.
+// 1-е нажатие — «точно удалить N?», 2-е (в течение 15 с, при том же наборе) — удаляет.
+let _bulkArmedKey = '';
 async function bulkDelete() {
   const ids = [...selectedDocs];
-  if (!ids.length) { toast('Отметьте документы галочками', true); return; }
-  if (!confirm('Удалить ' + ids.length + ' документов? Это действие необратимо.')) return;
-  let deleted = 0, failed = 0, i = 0;
-  const failedIds = [];
-  for (const id of ids) {
-    i++;
-    const cnt = document.getElementById('bulk-count');
-    if (cnt) cnt.textContent = `Удаляю: ${i} из ${ids.length}`;
-    try {
-      const r = await fetch(API + '/upload/' + id, { method: 'DELETE', credentials: 'include' });
-      if (r.ok) deleted++; else { failed++; failedIds.push(id); }
-    } catch(e) { failed++; failedIds.push(id); }
+  const key = ids.join(',');
+  if (!ids.length) { setBulkStatus('Ничего не отмечено — отметьте файлы галочками', true); return; }
+  if (_bulkArmedKey !== key) {
+    _bulkArmedKey = key;
+    const btn = document.getElementById('btn-bulk-delete');
+    if (btn) btn.textContent = `⚠️ Точно удалить ${ids.length}? Нажмите ещё раз`;
+    setBulkStatus(`Удаление ${ids.length} документов — нажмите кнопку ещё раз для подтверждения`);
+    clearTimeout(window._bulkDeleteReset);
+    window._bulkDeleteReset = setTimeout(() => {
+      _bulkArmedKey = '';
+      const b = document.getElementById('btn-bulk-delete');
+      if (b) b.textContent = '🗑️ Удалить выбранные';
+      setBulkStatus('');
+    }, 15000);
+    return;
   }
-  // Успешно удалённые уходят из выбора, неудачные остаются отмеченными: можно
-  // нажать «Удалить выбранные» ещё раз и увидеть, что именно не удалилось.
-  selectedDocs = new Set(failedIds);
-  toast('🗑️ Удалено: ' + deleted + (failed ? ', ошибок: ' + failed : ''));
-  loadAll();
+  _bulkArmedKey = '';
+  clearTimeout(window._bulkDeleteReset);
+  const btn0 = document.getElementById('btn-bulk-delete');
+  if (btn0) btn0.disabled = true;
+  let deleted = 0;
+  const failedIds = [], reasons = [];
+  try {
+    for (const [n, id] of ids.entries()) {
+      setBulkStatus(`Удаляю: ${n + 1} из ${ids.length}…`);
+      try {
+        const r = await fetch(`${API}/upload/${id}`, { method: 'DELETE', credentials: 'include' });
+        if (r.ok) { deleted++; selectedDocs.delete(id); }
+        else {
+          const d = await r.json().catch(() => ({}));
+          const msg = typeof d.detail === 'string' ? d.detail : (d.message || (d.detail && d.detail.message) || '');
+          failedIds.push(id);
+          reasons.push(`${id.slice(0, 8)}: ${r.status}${msg ? ' — ' + msg : ''}`);
+        }
+      } catch(e) {
+        failedIds.push(id);
+        reasons.push(`${id.slice(0, 8)}: ${e.message}`);
+      }
+    }
+    selectedDocs = new Set(failedIds);
+    const summary = `Удалено: ${deleted}` + (failedIds.length ? `, не удалось: ${failedIds.length} (${reasons.join('; ')})` : '');
+    setBulkStatus(summary, failedIds.length > 0);
+    toast(`🗑️ Удалено: ${deleted}${failedIds.length ? `, не удалось: ${failedIds.length}` : ''}`);
+    loadAll();
+  } catch(e) {
+    setBulkStatus('Ошибка удаления: ' + e.message, true);
+    toast('❌ ' + e.message, true);
+  } finally {
+    if (btn0) {
+      btn0.disabled = false;
+      btn0.textContent = '🗑️ Удалить выбранные';
+    }
+  }
 }
 
 
