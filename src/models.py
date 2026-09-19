@@ -37,8 +37,11 @@ class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]  # Принимает [{"role": "...", "content": "..."}]
     session_id: Optional[str] = None
     stream: bool = False
-    temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 4096
+    # None = «клиент не задавал» → действуют значения из привязки функции chat (админка),
+    # а если и там пусто — встроенные 0.7 / 4096. Раньше здесь стояли 0.7/4096, из-за чего
+    # настройки админки не применялись никогда.
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
 
 
 class ChatResponse(BaseModel):

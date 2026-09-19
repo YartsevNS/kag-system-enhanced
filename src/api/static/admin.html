@@ -2028,13 +2028,18 @@
                     '</div></div>';
             }
 
-            var tempVal = (fm.parameters && fm.parameters.temperature !== undefined) ? fm.parameters.temperature : 0.7;
+            var params = fm.parameters || {};
+            var tempVal = (params.temperature !== undefined) ? params.temperature : 0.7;
+            var tokensVal = (params.max_tokens !== undefined) ? params.max_tokens : 4096;
             if (functionName !== 'embedding') {
-                html += '<div class="form-group"><label>Temperature</label>' +
+                html += '<div class="form-group"><label>Temperature — «свобода» формулировок</label>' +
                     '<input type="number" id="fm-temp" value="' + tempVal + '" step="0.05" min="0" max="2" style="width:100px">' +
-                    '<div class="muted" style="font-size:11px;margin-top:4px">Применяется к чату и анализу запросов. Для извлечения графа и анализа документов температура фиксирована низкой (0.05–0.1) — высокая вызывает галлюцинации.</div></div>' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">По умолчанию 0.7 — для чата это живой, но не разболтанный ответ. Для извлечения графа и анализа документов температура фиксируется низкой (0.05–0.1): высокая даёт галлюцинации в фактах и ломает JSON. Клиент может переопределить значение в своём запросе.</div></div>' +
+                    '<div class="form-group"><label>Максимум токенов в ответе (max_tokens)</label>' +
+                    '<input type="number" id="fm-tokens" value="' + tokensVal + '" step="256" min="128" max="32768" style="width:110px">' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">По умолчанию 4096. Ориентир: русский текст ≈ 2.5 символа на токен, наши ответы 650–3900 символов ≈ 900–1500 токенов, то есть 4096 даёт запас ~3× на ответ по нескольким документам. Это потолок, а не цель: расход растёт только на фактические токены, поэтому запас ничего не стоит. Ставить меньше ~1500 не стоит — если размышления модели включены, бюджет уходит в них и ответ приходит пустым. Клиент может переопределить значение в своём запросе.</div></div>' +
                     '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fm-nothink" style="width:auto;vertical-align:middle" ' + ((fm.parameters && fm.parameters.no_think === false) ? '' : 'checked') + '> Отключить размышления модели (no think)</label>' +
-                    '<div class="muted" style="font-size:11px;margin-top:4px">Для reasoning-моделей (DeepSeek, Qwen) — иначе модель тратит лимит токенов на «размышления» и может вернуть пустой ответ. Рекомендуется включено для извлечения графа и классификации запросов.</div></div>';
+                    '<div class="muted" style="font-size:11px;margin-top:4px">По умолчанию включено. Замер на нашем стенде 19.09.2026: без этого параметра reasoning-модель уходит в размышления до всего лимита токенов и возвращает ПУСТОЙ ответ (content 0 символов), с ним — нормальный текст. Работает для deepseek/openai/openrouter-совместимых (шлём thinking.type=disabled); у локальных Ollama/llama.cpp ручка другая и здесь не используется.</div></div>';
             }
             html += '<div style="display:flex;gap:10px;margin-top:16px">' +
                 '<button class="btn btn-primary" onclick="saveFunctionMap()">💾 Сохранить</button>' +
@@ -2156,9 +2161,11 @@
                 model: document.getElementById('fm-model').value,
                 system_prompt: document.getElementById('fm-prompt') ? document.getElementById('fm-prompt').value : '',
                 parameters: (function() {
-                    var p = { max_tokens: 4096 };
+                    var p = {};
                     var t = document.getElementById('fm-temp');
                     if (t) p.temperature = parseFloat(t.value) || 0.7;
+                    var tk = document.getElementById('fm-tokens');
+                    if (tk) p.max_tokens = parseInt(tk.value, 10) || 4096;
                     var nt = document.getElementById('fm-nothink');
                     if (nt) p.no_think = nt.checked;
                     return p;

@@ -925,11 +925,12 @@
                 const response = await apiFetch(`${API_URL}/chat/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    // temperature и max_tokens НЕ передаём: значения по умолчанию берутся из
+                    // привязки функции chat (Админка → Модели LLM). Раньше здесь был хардкод
+                    // 0.7/2048, из-за которого настройки админки не действовали.
                     body: JSON.stringify({
                         messages: apiMessages,
-                        session_id: currentSessionId,
-                        temperature: 0.7,
-                        max_tokens: 2048
+                        session_id: currentSessionId
                     })
                 });
                 

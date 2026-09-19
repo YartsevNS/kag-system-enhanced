@@ -651,8 +651,22 @@ class ChatService:
 
         model_name = func_map.model if func_map and func_map.model else ""
         system_prompt = func_map.system_prompt if func_map and func_map.system_prompt else self._get_default_prompt()
-        temp = temperature if temperature is not None else 0.7
-        tokens = max_tokens or 4096
+        # ── Настройки генерации: приоритет «запрос → привязка функции → встроенный дефолт» ──
+        # Зачем: до 19.09.2026 temperature/max_tokens из привязки функции (админка) на чат не
+        # влияли — брались из запроса, а UI чата присылал свои 0.7/2048, и настройка в админке
+        # вводила в заблуждение. Теперь админка задаёт значения по умолчанию, а явные значения
+        # в запросе (скрипты, внешние клиенты) по-прежнему выигрывают.
+        _fm_params = getattr(func_map, "parameters", None) or {}
+        try:
+            _cfg_temperature = float(_fm_params.get("temperature", 0.7))
+        except (TypeError, ValueError):
+            _cfg_temperature = 0.7
+        try:
+            _cfg_max_tokens = int(_fm_params.get("max_tokens", 4096))
+        except (TypeError, ValueError):
+            _cfg_max_tokens = 4096
+        temp = temperature if temperature is not None else _cfg_temperature
+        tokens = max_tokens if max_tokens is not None else _cfg_max_tokens
 
         # Отключение размышлений у reasoning-моделей — галочка «Отключить размышления
         # модели (no think)» в привязке функции (Админка → Модели LLM).
@@ -661,7 +675,6 @@ class ChatService:
         # У deepseek/openai/openrouter-совместимых работает thinking.type=disabled.
         extra_payload = None
         try:
-            _fm_params = getattr(func_map, "parameters", None) or {}
             if bool(_fm_params.get("no_think", True)) and provider.type in ("deepseek", "openai", "openrouter"):
                 extra_payload = {"thinking": {"type": "disabled"}}
                 logger.debug("Чат: размышления модели отключены (no_think)")
