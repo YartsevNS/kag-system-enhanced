@@ -344,6 +344,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div id="docs-table" style="display:none">
     <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
       <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
+      <button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✖ Снять выбор</button>
       <button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px;margin-right:8px" onclick="processSelected()">▶️ Обработать выбранные</button>
       <button class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
     </div>
@@ -364,6 +365,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 <script>
 const API = '/api/v1';
 let allDocs = [];
+// Отмеченные галочками документы. Держим их в переменной, а не только в DOM:
+// таблица перерисовывается автообновлением (15 с, а пока идёт обработка — каждые
+// 5 с), и выбор слетал прямо под руками — удалить пачку было невозможно
+// (жалоба 20.09.2026). Выбор переносится через перерисовку и не сбрасывается
+// фильтрами и пагинацией: снимается только у документов, которых больше нет.
+let selectedDocs = new Set();
 let view = 'cards';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -652,7 +659,11 @@ async function saveAccessModal() {
   } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
 }
 
-async function loadAll() {
+async function loadAll(auto = false) {
+  // Автообновление не перерисовывает таблицу, пока есть отметки: иначе выбор
+  // сбрасывался через 5–15 с и пачку удалить было нельзя. Кнопка «🔄 Обновить»
+  // работает всегда и выбор тоже сохраняет.
+  if (auto && selectedDocs.size > 0) return;
   try {
     // Запрашиваем с большим лимитом — иначе backend отдаёт только 50 и пагинация
     // крутит эти же 50. count-filter (50/100/200/500) пагинирует уже на клиенте.
@@ -890,18 +901,22 @@ function renderTable(docs) {
   if (!docs.length) {
     tbody.innerHTML = '';
     document.getElementById('table-empty').style.display = 'block';
-    document.getElementById('bulk-actions').style.display = 'none';
+    // Панель массовых действий не прячем: выбор мог быть сделан на другой
+    // странице/под другом фильтре и должен остаться доступным.
+    syncSelectionUI();
     return;
   }
   document.getElementById('table-empty').style.display = 'none';
   const statusMap = {completed:'<span class="status-badge s-ready">✅ Готово</span>',processing:'<span class="status-badge s-proc">⚙️ Обработка</span>',pending:'<span class="status-badge s-pend">⏳ Ожидает</span>',failed:'<span class="status-badge s-fail">❌ Ошибка</span>'};
-  // Сброс select-all при перерисовке
-  const sa = document.getElementById('select-all');
-  if (sa) sa.checked = false;
-  document.getElementById('bulk-actions').style.display = 'none';
+  // Выбор переносим через перерисовку: выбрасываем только то, чего больше нет
+  // в списке (документ удалён), остальное восстанавливаем галочками.
+  // ВАЖНО: syncSelectionUI() вызывается ПОСЛЕ сборки tbody — иначе счётчик
+  // «Выбрано: N» читал бы уже удалённые чекбоксы.
+  const presentIds = new Set(allDocs.map(d => d.document_id));
+  for (const id of [...selectedDocs]) if (!presentIds.has(id)) selectedDocs.delete(id);
   tbody.innerHTML = docs.map(d => `
     <tr style="cursor:pointer" onclick="showDetail('${d.document_id}')">
-      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="doc-check" value="${d.document_id}" onchange="updateSelectAll()"></td>
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="doc-check" value="${d.document_id}" ${selectedDocs.has(d.document_id) ? 'checked' : ''} onchange="onDocCheck(this)"></td>
       <td><strong>${d.recognized_title||d.filename}</strong></td>
       <td><span class="tag ${typeBadgeClass(d.document_type||'unknown')}" style="font-size:10px">${typeLabel(d.document_type||'unknown')}</span></td>
       <td>${(d.tags||[]).slice(0,2).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join(' ')||'—'}</td>
@@ -911,6 +926,8 @@ function renderTable(docs) {
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
       <td style="white-space:nowrap">${canProcess(d)?`<button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶️</button>`:''}${currentUser && currentUser.is_admin && d.status === 'completed'?`<button class="tag" style="background:rgba(139,92,246,0.15);color:#a78bfa;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();buildGraph('${d.document_id}')" title="Построить граф знаний">🧠</button>`:''}<button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
     </tr>`).join('');
+  // Теперь, когда таблица собрана, приводим галочки и панель к состоянию выбора
+  syncSelectionUI();
 }
 
 async function showDetail(docId) {
@@ -955,6 +972,7 @@ async function delDoc(id) {
     const r = await fetch(`${API}/upload/${id}`, {method:'DELETE', credentials:'include'});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось удалить'));
+    selectedDocs.delete(id);   // если он был отмечен — убираем из выбора
     toast('✅ Удалён');
     loadAll();
   } catch(e) { toast('❌ '+e.message, true); }
@@ -996,30 +1014,57 @@ async function diffVersions(docId) {
   }
 }
 
-setInterval(loadAll, 15000);
+setInterval(() => loadAll(true), 15000);   // автообновление; при активном выборе пропускается
 
 
-// === Bulk delete ===
+// === Массовые действия: выбор живёт в selectedDocs, а не только в DOM ===
+// Отметка галочкой (клик по чекбоксу строки).
+function onDocCheck(cb) {
+  if (cb.checked) selectedDocs.add(cb.value); else selectedDocs.delete(cb.value);
+  updateSelectAll();
+}
+
+// «Выбрать все на странице» — добавляет/убирает ТЕКУЩУЮ страницу выдачи.
 function toggleAll(cb) {
-  document.querySelectorAll('.doc-check').forEach(c => c.checked = cb.checked);
-  updateBulkBar();
+  document.querySelectorAll('.doc-check').forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) selectedDocs.add(c.value); else selectedDocs.delete(c.value);
+  });
+  updateSelectAll();
+}
+
+// Снять весь выбор (кнопка в панели).
+function clearSelection() {
+  selectedDocs.clear();
+  syncSelectionUI();
+}
+
+// Приводит галочки в таблице к состоянию selectedDocs (вызывается после перерисовки).
+function syncSelectionUI() {
+  document.querySelectorAll('.doc-check').forEach(c => { c.checked = selectedDocs.has(c.value); });
+  updateSelectAll();
 }
 
 function updateSelectAll() {
   const all = document.querySelectorAll('.doc-check');
   const checked = document.querySelectorAll('.doc-check:checked');
   const sa = document.getElementById('select-all');
-  if (sa) sa.checked = all.length > 0 && checked.length === all.length;
+  if (sa) {
+    sa.checked = all.length > 0 && checked.length === all.length;
+    sa.indeterminate = checked.length > 0 && checked.length < all.length;
+  }
   updateBulkBar();
 }
 
 function updateBulkBar() {
-  const checked = document.querySelectorAll('.doc-check:checked');
   const bar = document.getElementById('bulk-actions');
   const cnt = document.getElementById('bulk-count');
-  if (checked.length > 0) {
+  const total = selectedDocs.size;
+  if (total > 0) {
+    const onPage = document.querySelectorAll('.doc-check:checked').length;
     bar.style.display = 'block';
-    cnt.textContent = 'Выбрано: ' + checked.length;
+    cnt.textContent = 'Выбрано: ' + total + (onPage !== total ? ` (на этой странице: ${onPage})` : '') +
+      ' · таблица не обновляется автоматически, пока есть отметки';
   } else {
     bar.style.display = 'none';
   }
@@ -1052,31 +1097,42 @@ async function buildGraph(id) {
 // поэтому запустить обработку можно было только кнопкой «Обработать все необработанные».
 async function processSelected() {
   if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
-  const checked = document.querySelectorAll('.doc-check:checked');
-  if (!checked.length) { toast('Отметьте документы галочками', true); return; }
-  let queued = 0, skipped = 0;
-  for (const cb of checked) {
+  const ids = [...selectedDocs];
+  if (!ids.length) { toast('Отметьте документы галочками', true); return; }
+  let queued = 0, skipped = 0, i = 0;
+  for (const id of ids) {
+    i++;
+    const cnt = document.getElementById('bulk-count');
+    if (cnt) cnt.textContent = `Ставлю в очередь: ${i} из ${ids.length}`;
     try {
-      const r = await fetch(`${API}/upload/${cb.value}/process`, { method: 'POST', credentials: 'include' });
+      const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
       if (r.ok) queued++;
       else skipped++;   // 409 = уже в очереди, 403 = нет прав, 423 = блокировка — всё это «не поставлено»
     } catch(e) { skipped++; }
   }
   toast(`▶️ Поставлено в очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
+  selectedDocs.clear();
   loadAll();
 }
 
 async function bulkDelete() {
-  const checked = document.querySelectorAll('.doc-check:checked');
-  if (!checked.length) return;
-  if (!confirm('Удалить ' + checked.length + ' документов? Это действие необратимо.')) return;
-  let deleted = 0, failed = 0;
-  for (const cb of checked) {
+  const ids = [...selectedDocs];
+  if (!ids.length) { toast('Отметьте документы галочками', true); return; }
+  if (!confirm('Удалить ' + ids.length + ' документов? Это действие необратимо.')) return;
+  let deleted = 0, failed = 0, i = 0;
+  const failedIds = [];
+  for (const id of ids) {
+    i++;
+    const cnt = document.getElementById('bulk-count');
+    if (cnt) cnt.textContent = `Удаляю: ${i} из ${ids.length}`;
     try {
-      const r = await fetch(API + '/upload/' + cb.value, { method: 'DELETE' });
-      if (r.ok) deleted++; else failed++;
-    } catch(e) { failed++; }
+      const r = await fetch(API + '/upload/' + id, { method: 'DELETE', credentials: 'include' });
+      if (r.ok) deleted++; else { failed++; failedIds.push(id); }
+    } catch(e) { failed++; failedIds.push(id); }
   }
+  // Успешно удалённые уходят из выбора, неудачные остаются отмеченными: можно
+  // нажать «Удалить выбранные» ещё раз и увидеть, что именно не удалилось.
+  selectedDocs = new Set(failedIds);
   toast('🗑️ Удалено: ' + deleted + (failed ? ', ошибок: ' + failed : ''));
   loadAll();
 }
