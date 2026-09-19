@@ -39,6 +39,9 @@ def test_endpoints_store_data_in_config_store():
     block = ADMIN[ADMIN.index('@router.post("/experiments"'):]
     assert "model_dump(exclude_unset=True)" in block[:600], "тело — Pydantic, без data: dict"
     assert "class ExperimentsUpdate(BaseModel)" in ADMIN
+    # раздел «железо» рисуется из тех же данных, поэтому поле должно быть в схеме
+    assert "hardware: Optional[List[Dict[str, Any]]]" in ADMIN
+    assert "id=\"hw-table\"" in PAGE and "d.hardware" in PAGE
 
 
 def test_nav_link_visible_only_to_admin():

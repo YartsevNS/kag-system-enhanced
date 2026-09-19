@@ -3018,6 +3018,7 @@ class ExperimentsUpdate(BaseModel):
 
     meta: Optional[List[Dict[str, Any]]] = None
     embedders: Optional[List[Dict[str, Any]]] = None
+    hardware: Optional[List[Dict[str, Any]]] = None
     history: Optional[List[str]] = None
 
 
