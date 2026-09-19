@@ -696,18 +696,11 @@ class ChatService:
         except (TypeError, ValueError):
             min_top_score = 0.0
 
-        # Отключение размышлений у reasoning-моделей — галочка «Отключить размышления
-        # модели (no think)» в привязке функции (Админка → Модели LLM).
+        # Отключение размышлений у reasoning-моделей делается в цикле ниже под каждого
+        # провайдера цепочки (_extra_for): у основного и резервного типы могут отличаться.
         # Замер на стенде 19.09.2026: без этого параметра модель уходила в reasoning до
         # всего лимита и возвращала пустой content (при 200–700 токенах ответ был 0 символов).
-        # У deepseek/openai/openrouter-совместимых работает thinking.type=disabled.
-        extra_payload = None
-        try:
-            if bool(_fm_params.get("no_think", True)) and provider.type in ("deepseek", "openai", "openrouter"):
-                extra_payload = {"thinking": {"type": "disabled"}}
-                logger.debug("Чат: размышления модели отключены (no_think)")
-        except Exception as _e:
-            logger.debug(f"no_think для чата не применён: {_e}")
+        # Работает у deepseek/openai/openrouter/совместимых (thinking.type=disabled).
 
         # ── Маршрутизация интента (мета-запросы о базе vs семантика) ──────
         # Зачем: «покажи все документы» — это вопрос о КАТАЛОГЕ. RAG вернул бы
@@ -1002,16 +995,52 @@ class ChatService:
             "content": user_message
         })
 
-        # Шаг 4: Вызов LLM через провайдера
-        logger.debug(f"Отправляю запрос в LLM: provider={provider.type}, model={model_name}")
-        llm_result = await self._call_llm(
-            messages=api_messages,
-            model=model_name,
-            temperature=temp,
-            max_tokens=tokens,
-            provider=provider,
-            extra_payload=extra_payload,
-        )
+        # Шаг 4: Вызов LLM. Цепочка «основной → резервный»: у одного провайдера могут быть
+        # несколько потребителей на один ключ (чат, обработка документов, тесты) — при сбое
+        # или лимитах запрос висит до таймаута. Если основной не ответил (пустой content,
+        # ошибка, таймаут), пробуем резервный из привязки функции (Админка → Модели LLM).
+        chain = []
+        try:
+            chain = provider_service.get_function_provider_chain("chat")
+        except Exception as _e:
+            logger.debug(f"цепочка провайдеров чата не получена: {_e}")
+        if not chain:
+            chain = [(provider, model_name)]
+
+        def _extra_for(prov) -> Optional[dict]:
+            """Доп. параметры под конкретного провайдера (отключение размышлений)."""
+            try:
+                if bool(_fm_params.get("no_think", True)) and prov.type in (
+                        "deepseek", "openai", "openrouter", "custom"):
+                    return {"thinking": {"type": "disabled"}}
+            except Exception:
+                pass
+            return None
+
+        llm_result = {}
+        fallback_used = False
+        for _idx, (_prov, _model) in enumerate(chain):
+            _model = _model or model_name
+            logger.debug(f"Запрос в LLM: provider={_prov.type}/{_prov.name}, model={_model}")
+            llm_result = await self._call_llm(
+                messages=api_messages,
+                model=_model,
+                temperature=temp,
+                max_tokens=tokens,
+                provider=_prov,
+                extra_payload=_extra_for(_prov),
+            )
+            _content = (llm_result.get("content") or "").strip()
+            _ok = bool(_content) and not llm_result.get("error") and not _content.startswith("❌")
+            if _ok:
+                if _idx > 0:
+                    fallback_used = True
+                    logger.warning(f"Ответ дан РЕЗЕРВНЫМ провайдером: {_prov.name} / {_model}")
+                provider, model_name = _prov, _model
+                break
+            _next = chain[_idx + 1][0].name if _idx + 1 < len(chain) else None
+            logger.warning(f"Провайдер {_prov.name} не ответил ({_content[:60]!r})"
+                           + (f" — пробую резерв {_next}" if _next else " — резерва нет"))
 
         # Шаг 5: Логируем запрос (в audit — реальный пользователь, не session_id)
         from src.security.audit import audit_logger, AuditEventType
@@ -1041,6 +1070,8 @@ class ChatService:
                 "graph_used": use_rag,
                 "intent": intent or ("semantic" if use_rag else "none"),
                 "domain": domain,
+                "provider": provider.name,
+                "fallback_used": fallback_used,
             }
         }
 

@@ -141,6 +141,10 @@ class FunctionMap:
         "temperature": 0.7,
         "max_tokens": 4096,
     })
+    # Резервный провайдер для этой функции: если основной не ответил (таймаут, 5xx, пустой
+    # ответ), запрос уходит на резерв. Пустые строки = резерва нет.
+    fallback_provider_id: str = ""
+    fallback_model: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -149,6 +153,8 @@ class FunctionMap:
             "model": self.model,
             "system_prompt": self.system_prompt,
             "parameters": self.parameters,
+            "fallback_provider_id": self.fallback_provider_id,
+            "fallback_model": self.fallback_model,
         }
 
     @classmethod
@@ -159,6 +165,8 @@ class FunctionMap:
             model=data.get("model", ""),
             system_prompt=data.get("system_prompt", ""),
             parameters=data.get("parameters", {"temperature": 0.7, "max_tokens": 4096}),
+            fallback_provider_id=data.get("fallback_provider_id", "") or "",
+            fallback_model=data.get("fallback_model", "") or "",
         )
 
 
@@ -442,6 +450,32 @@ class ProviderService:
             return None
 
         return (provider, fm)
+
+    def get_function_provider_chain(self, function_name: str) -> List[tuple[ProviderConfig, str]]:
+        """Цепочка «основной → резервный» для функции: [(провайдер, модель), ...].
+
+        Зачем: у одного провайдера может быть несколько одновременных потребителей (чат,
+        обработка документов, тесты) на один ключ — при лимитах или сбое на его стороне
+        запрос висит до таймаута, и пользователь видит ошибку. Резерв задаётся в привязке
+        функции (Админка → Модели LLM): fallback_provider_id + fallback_model.
+        """
+        pair = self.get_function_provider(function_name)
+        if not pair:
+            return []
+        provider, fm = pair
+        chain = [(provider, fm.model)]
+        fb_id = (getattr(fm, "fallback_provider_id", "") or "").strip()
+        if fb_id and fb_id != provider.id:
+            fb_provider = self._provider_cache.get(fb_id)
+            if fb_provider and fb_provider.enabled:
+                fb_model = (getattr(fm, "fallback_model", "") or "").strip()
+                if not fb_model:
+                    fb_model = fb_provider.models[0] if fb_provider.models else ""
+                chain.append((fb_provider, fb_model))
+            else:
+                logger.warning(f"Резервный провайдер {fb_id} для функции {function_name} "
+                               f"не найден или выключен — резерв не используется")
+        return chain
 
     @staticmethod
     def _format_api_key(provider_type: str, api_key: str) -> str:

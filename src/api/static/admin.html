@@ -2006,12 +2006,21 @@
 
             title = def.icon + ' Настройка: ' + def.label;
 
+            var fallbackOptions = '<option value="">— нет резерва —</option>' + providers.map(function(p) {
+                var sel = (fm && fm.fallback_provider_id === p.id) ? 'selected' : '';
+                return '<option value="' + escHtml(p.id) + '" ' + sel + '>' + escHtml(p.name) + ' (' + p.type + ')</option>';
+            }).join('');
+
             var html = '<div id="fm-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.15s">' +
                 '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;max-width:550px;width:90%;max-height:80vh;overflow-y:auto">' +
                 '<h3 style="font-size:16px;font-weight:600;margin-bottom:16px">' + title + '</h3>' +
                 '<input type="hidden" id="fm-name" value="' + escHtml(functionName) + '">' +
                 '<div class="form-group"><label>Провайдер</label>' +
                 '<select id="fm-provider" onchange="onFmProviderChange()" style="width:100%">' + providerOptions + '</select></div>' +
+                '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><span>Резервный провайдер</span></label>' +
+                '<select id="fm-fallback-provider" style="width:100%">' + fallbackOptions + '</select>' +
+                '<input type="text" id="fm-fallback-model" value="' + escHtml(fm.fallback_model || '') + '" placeholder="модель резерва, например z-ai/glm-5.3-flash" style="width:100%;margin-top:6px">' +
+                '<div class="muted" style="font-size:11px;margin-top:4px">Если основной провайдер не ответил (таймаут, ошибка, пустой ответ), запрос уходит на резерв — и в журнале появится «Ответ дан РЕЗЕРВНЫМ провайдером», а в ответе API флаг <code>fallback_used</code>. Зачем: у одного провайдера могут быть одновременно чат, обработка документов и тесты на один ключ — при лимитах или сбое на его стороне запрос висит до таймаута. Модель резерва можно оставить пустой — тогда возьмётся первая из списка моделей провайдера.</div></div>' +
                 '<div class="form-group"><label>Модель <span id="fm-model-loading" style="font-size:11px;color:var(--text4)"></span></label>' +
                 '<select id="fm-model" style="width:100%"><option value="">⏳ Загрузка моделей...</option></select></div>';
 
@@ -2172,6 +2181,11 @@
                 provider_id: document.getElementById('fm-provider').value,
                 model: document.getElementById('fm-model').value,
                 system_prompt: document.getElementById('fm-prompt') ? document.getElementById('fm-prompt').value : '',
+                // Резервный провайдер/модель: пусто = резерва нет
+                fallback_provider_id: document.getElementById('fm-fallback-provider')
+                    ? document.getElementById('fm-fallback-provider').value : '',
+                fallback_model: document.getElementById('fm-fallback-model')
+                    ? document.getElementById('fm-fallback-model').value.trim() : '',
                 parameters: (function() {
                     var p = {};
                     var t = document.getElementById('fm-temp');

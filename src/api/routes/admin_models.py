@@ -1682,6 +1682,10 @@ class FunctionMapSaveRequest(BaseModel):
     model: str = Field(default="", description="Модель")
     system_prompt: str = Field(default="", description="Системный промпт")
     parameters: dict = Field(default_factory=lambda: {"temperature": 0.7, "max_tokens": 4096})
+    # Резервный провайдер/модель: используются, если основной не ответил (таймаут, 5xx,
+    # пустой ответ). Пусто = резерва нет.
+    fallback_provider_id: str = Field(default="", description="ID резервного провайдера")
+    fallback_model: str = Field(default="", description="Модель резервного провайдера")
 
 
 @router.post("/functions", summary="Сохранить привязку функции")
@@ -1697,6 +1701,8 @@ async def save_function_map(req: FunctionMapSaveRequest):
         model=req.model,
         system_prompt=req.system_prompt,
         parameters=req.parameters or {"temperature": 0.7, "max_tokens": 4096},
+        fallback_provider_id=req.fallback_provider_id or "",
+        fallback_model=req.fallback_model or "",
     )
 
     success = provider_service.save_function_map(fm)
