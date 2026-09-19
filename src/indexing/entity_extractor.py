@@ -561,6 +561,57 @@ JSON:
         api_key: str = "", provider: str = "ollama",
         system_prompt: str = "", temperature: float = None
     ) -> Dict[str, Any]:
+        """Вызов LLM с резервом: не получилось у основного — пробуем резервный провайдер.
+
+        Резерв задаётся в привязке функции graph (Админка → Модели LLM): у одного провайдера
+        могут быть одновременно чат, обработка документов и тесты на один ключ, и при сбое
+        или лимитах шаг извлечения графа раньше просто падал с пустым результатом.
+        """
+        result = await self._call_llm_once(
+            prompt=prompt, model=model, llm_url=llm_url, chunk_id=chunk_id, pass_name=pass_name,
+            api_key=api_key, provider=provider, system_prompt=system_prompt, temperature=temperature)
+        if self._has_graph_content(result):
+            return result
+        reserve = self._graph_reserve(model)
+        if not reserve:
+            return result
+        _warn = ((result.get("warnings") or [""])[0] or "")[:80]
+        logger.warning(f"[graph] {chunk_id} ({pass_name}): основной {provider}/{model} не дал "
+                       f"результата ({_warn}) — пробую РЕЗЕРВ {reserve.get('provider')}/{reserve.get('model')}")
+        result2 = await self._call_llm_once(
+            prompt=prompt, model=reserve.get("model", ""), llm_url=reserve.get("url", ""),
+            chunk_id=chunk_id, pass_name=f"{pass_name}:reserve", api_key=reserve.get("api_key", ""),
+            provider=reserve.get("provider", "custom"),
+            system_prompt=system_prompt or reserve.get("system_prompt", ""), temperature=temperature)
+        if self._has_graph_content(result2):
+            logger.warning(f"[graph] {chunk_id}: ответ дан РЕЗЕРВНЫМ провайдером "
+                           f"{reserve.get('provider')}/{reserve.get('model')}")
+            return result2
+        return result
+
+    @staticmethod
+    def _has_graph_content(result: Dict[str, Any]) -> bool:
+        """Есть ли в ответе хоть что-то полезное (сущности/связи/факты)."""
+        return bool(result) and bool(result.get("entities") or result.get("relations") or result.get("facts"))
+
+    def _graph_reserve(self, current_model: str) -> Optional[Dict[str, Any]]:
+        """Резервный LLM-конфиг для функции graph (или None, если резерва нет)."""
+        try:
+            from src.api.services.provider_service import provider_service
+            chain = provider_service.get_function_llm_chain("graph")
+        except Exception:
+            return None
+        for cfg in chain[1:]:
+            if cfg.get("model") and cfg.get("model") != current_model:
+                return cfg
+        return None
+
+    async def _call_llm_once(
+        self, prompt: str, model: str, llm_url: str,
+        chunk_id: str = "", pass_name: str = "",
+        api_key: str = "", provider: str = "ollama",
+        system_prompt: str = "", temperature: float = None
+    ) -> Dict[str, Any]:
         """Вызвать LLM и распарсить JSON-ответ.
         
         Поддерживает провайдеров:

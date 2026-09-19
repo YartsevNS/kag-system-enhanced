@@ -146,6 +146,7 @@ class ChatService:
         max_tokens: int,
         provider,
         extra_payload: Optional[dict] = None,
+        timeout: float = 120.0,
     ) -> Dict[str, Any]:
         """
         Вызвать LLM через API провайдера (OpenAI-совместимый формат).
@@ -172,7 +173,7 @@ class ChatService:
 
         start = time.time()
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(url, json=payload, headers=headers)
                 elapsed = time.time() - start
 
@@ -345,17 +346,40 @@ class ChatService:
         )
         messages = [{"role": "user", "content": prompt}]
         try:
-            result = await self._call_llm(
-                messages=messages,
-                model=cfg.get("model", ""),
-                temperature=0.0,
-                max_tokens=200,
-                provider=type("QACfg", (), {
-                    "url": cfg.get("url", ""),
-                    "api_key": cfg.get("api_key", ""),
-                    "type": cfg.get("provider", "custom"),
-                })(),
-            )
+            # Разбиение вопроса — короткий служебный вызов (на критическом пути ответа):
+            # таймаут 30 с и резерв из привязки функции, чтобы зависший провайдер
+            # не задерживал ответ пользователю на две минуты.
+            try:
+                dc_chain = provider_service.get_function_llm_chain("query_analysis") or [cfg]
+            except Exception:
+                dc_chain = [cfg]
+            _last_err = None
+            for _i, _c in enumerate(dc_chain):
+                try:
+                    result = await self._call_llm(
+                        messages=messages,
+                        model=_c.get("model", ""),
+                        temperature=0.0,
+                        max_tokens=200,
+                        provider=type("QACfg", (), {
+                            "url": _c.get("url", ""),
+                            "api_key": _c.get("api_key", ""),
+                            "type": _c.get("provider", "custom"),
+                        })(),
+                        timeout=30.0,
+                    )
+                    if (result.get("content") or "").strip():
+                        if _i > 0:
+                            logger.warning("Декомпозиция: ответ дан РЕЗЕРВНЫМ провайдером "
+                                           f"{_c.get('provider')}/{_c.get('model')}")
+                        break
+                except Exception as _e:
+                    _last_err = _e
+                    result = {}
+                if _i + 1 < len(dc_chain):
+                    logger.warning("Декомпозиция: провайдер не ответил — пробую резерв")
+            if _last_err and not (result.get("content") or "").strip():
+                raise _last_err
             raw = (result.get("content") or "").strip()
             import re, json as _json
             m = re.search(r"\{.*\}", raw, re.S)
@@ -416,31 +440,45 @@ class ChatService:
         ]
 
         params = cfg.get("parameters") or {}
-        # MiniCPM5 думает вслух (<think>...) — для классификации это лишнее:
-        # через llama.cpp отключаем think (chat_template_kwargs). Управляется
-        # параметром no_think привязки функции (админка), по умолчанию True.
-        # Для других провайдеров (Ollama/OpenAI) параметр не передаём.
-        extra_payload = None
-        if cfg.get("provider") == "llamacpp" and params.get("no_think", True):
-            extra_payload = {"chat_template_kwargs": {"enable_thinking": False}}
+        # Классификация домена — короткий вызов: длинный таймаут здесь вреден, потому что
+        # он на критическом пути ответа пользователю (наблюдали 19.09.2026: провайдер завис,
+        # и ответ пришёл через 122 с, хотя генерация заняла 2.3 с).
+        qa_timeout = 30.0
         try:
-            result = await self._call_llm(
-                messages=messages,
-                model=cfg.get("model", ""),
-                temperature=params.get("temperature", 0.1),
-                max_tokens=params.get("max_tokens", 150),
-                provider=type(
-                    "QACfg", (), {
-                        "url": cfg.get("url", ""),
-                        "api_key": cfg.get("api_key", ""),
-                        "type": cfg.get("provider", "custom"),
-                    }
-                )(),
-                extra_payload=extra_payload,
-            )
-        except Exception as e:
-            logger.warning(f"Query analysis вызов не удался: {e}")
-            return None
+            qa_chain = provider_service.get_function_llm_chain("query_analysis") or [cfg]
+        except Exception:
+            qa_chain = [cfg]
+        result = {}
+        for _i, _c in enumerate(qa_chain):
+            extra_payload = None
+            if _c.get("provider") == "llamacpp" and (_c.get("parameters") or {}).get("no_think", True):
+                extra_payload = {"chat_template_kwargs": {"enable_thinking": False}}
+            try:
+                result = await self._call_llm(
+                    messages=messages,
+                    model=_c.get("model", ""),
+                    temperature=(_c.get("parameters") or {}).get("temperature", params.get("temperature", 0.1)),
+                    max_tokens=(_c.get("parameters") or {}).get("max_tokens", params.get("max_tokens", 150)),
+                    provider=type(
+                        "QACfg", (), {
+                            "url": _c.get("url", ""),
+                            "api_key": _c.get("api_key", ""),
+                            "type": _c.get("provider", "custom"),
+                        }
+                    )(),
+                    extra_payload=extra_payload,
+                    timeout=qa_timeout,
+                )
+            except Exception as e:
+                logger.warning(f"Query analysis вызов не удался: {e}")
+                result = {}
+            if (result.get("content") or "").strip():
+                if _i > 0:
+                    logger.warning(f"Query analysis: ответ дан РЕЗЕРВНЫМ провайдером "
+                                   f"{_c.get('provider')}/{_c.get('model')}")
+                break
+            if _i + 1 < len(qa_chain):
+                logger.warning(f"Query analysis: провайдер {_c.get('provider')} не ответил — пробую резерв")
 
         raw = (result.get("content") or "").strip()
         if not raw:
