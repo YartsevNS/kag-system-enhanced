@@ -58,6 +58,34 @@ def test_bulk_actions_use_selection_set():
     assert "[...selectedDocs]" in process_fn, "массовая обработка должна идти по selectedDocs"
 
 
+def test_bulk_delete_does_not_depend_on_native_confirm():
+    """Жалоба 20.09.2026: «кнопка удалить выбранные не действует».
+
+    Причина: подтверждение шло через window.confirm(), а Chrome умеет глушить
+    системные диалоги страницы — тогда клик молча ничего не делал (ни запроса, ни
+    сообщения). Подтверждение должно быть в самой панели (два нажатия).
+    """
+    delete_fn = JS.split("async function bulkDelete")[1].split("\n// ")[0]
+    assert "confirm(" not in delete_fn, \
+        "системный confirm() в массовом удалении использовать нельзя: его могут заглушить"
+    assert "_bulkArmedKey" in delete_fn, "нужно подтверждение вторым нажатием"
+    assert "setBulkStatus" in delete_fn, "пользователь должен видеть ход и итог удаления"
+    assert 'id="btn-bulk-delete"' in HTML and 'id="bulk-status"' in HTML, \
+        "кнопка и строка состояния должны иметь id — по ним идёт подтверждение и отчёт"
+
+
+def test_failed_delete_shows_reason():
+    delete_fn = JS.split("async function bulkDelete")[1].split("\n// ")[0]
+    assert "reasons" in delete_fn and "r.status" in delete_fn, \
+        "код ответа сервера должен попадать в сообщение, иначе причина отказа не видна"
+
+
+def test_uncaught_errors_are_visible():
+    """Ни одно действие не должно молча ничего не делать."""
+    assert re.search(r"addEventListener\('error'", JS), \
+        "необработанные ошибки страницы должны показываться пользователю"
+
+
 def test_clear_selection_button_exists():
     assert "clearSelection()" in HTML and "function clearSelection()" in JS, \
         "нужна кнопка «снять выбор», иначе снять пачку можно только по одной"
