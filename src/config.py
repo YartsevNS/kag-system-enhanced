@@ -214,6 +214,10 @@ class Settings(BaseSettings):
     MAX_ARCHIVE_ENTRIES: int = 1000                          # файлов в архиве
     MAX_ARCHIVE_UNCOMPRESSED: int = 2 * 1024 * 1024 * 1024   # распакованного, 2 ГБ
     UPLOAD_TEMP_DIR: str = "/tmp"                            # распаковка архивов и TUS-сессии
+    # Папка для массового импорта из файловой системы стенда: админ кладёт туда файлы
+    # (scp/флешка), в админке нажимает «Импортировать» — приложение забирает всё, что нашло.
+    # Путь из env, по умолчанию ./data/inbox (в контейнере /app/data/inbox).
+    IMPORT_BASE_DIR: str = "/app/data/inbox"
     TUS_DIR: str = "/tmp/tus_uploads"                        # сессии докачки (TUS)
     THUMBNAILS_DIR: str = "/app/data/thumbnails"             # кэш миниатюр
 

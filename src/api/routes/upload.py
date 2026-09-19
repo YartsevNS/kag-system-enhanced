@@ -72,7 +72,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Optional, List, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response, Form
@@ -112,6 +112,46 @@ router = APIRouter()
 # Лимиты берём из настроек, а не держим литералами в роутере.
 _settings = get_settings()
 MAX_FILE_SIZE = _settings.MAX_FILE_SIZE
+
+# Расширения, которые принимает загрузка (одиночная, архивом и импортом из папки).
+ALLOWED_UPLOAD_EXTS = {".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".xlsx", ".xls", ".png", ".jpg", ".jpeg"}
+
+
+def _import_base_dir() -> Path:
+    """Корневая папка импорта (админ кладёт файлы сюда, приложение забирает)."""
+    base = Path(getattr(_settings, "IMPORT_BASE_DIR", "/app/data/inbox"))
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"Папка импорта {base} недоступна: {e}")
+    return base
+
+
+def _resolve_import_dir(folder: str) -> Path:
+    """Подпапка внутри корня импорта. Наружу выйти нельзя (никаких ../ и абсолютных путей)."""
+    base = _import_base_dir().resolve()
+    target = (base / (folder or "")).resolve()
+    if target != base and base not in target.parents:
+        raise HTTPException(status_code=400, detail="Папка должна находиться внутри каталога импорта")
+    return target
+
+
+def _scan_import_dir(folder: str = "", recursive: bool = True) -> list:
+    """Файлы, готовые к импорту: только разрешённые расширения, без скрытых и служебных."""
+    target = _resolve_import_dir(folder)
+    if not target.exists() or not target.is_dir():
+        return []
+    iterator = target.rglob("*") if recursive else target.glob("*")
+    files = []
+    for path in sorted(iterator):
+        if not path.is_file():
+            continue
+        if path.name.startswith(".") or path.name.startswith("__"):
+            continue
+        if path.suffix.lower() not in ALLOWED_UPLOAD_EXTS:
+            continue
+        files.append(path)
+    return files
 # Сколько чанков документа тянем из Qdrant за раз (scroll, не пагинация):
 # при достижении лимита в ответе будет truncated=True, чтобы это не было тихой потерей.
 CHUNKS_SCROLL_LIMIT = 10000
@@ -705,7 +745,7 @@ async def upload_bulk(
     uploaded_by = current_user.id if current_user else None
     group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
     results = []
-    allowed_exts = {".pdf", ".docx", ".doc", ".txt", ".md", ".csv", ".xlsx", ".xls", ".png", ".jpg", ".jpeg"}
+    allowed_exts = ALLOWED_UPLOAD_EXTS  # единый список с одиночной загрузкой и импортом из папки
 
     try:
         # Определяем тип архива по расширению
@@ -844,6 +884,139 @@ async def _process_bulk_file(
     except Exception as e:
         logger.warning(f"[{upload_id}] Ошибка файла {file_path.name}: {e}")
         results.append({"filename": file_path.name, "status": "error", "error": str(e)})
+
+
+class ImportFolderRequest(BaseModel):
+    """Импорт всех файлов из папки внутри каталога импорта (админ кладёт файлы заранее)."""
+    folder: str = Field(default="", description="Подпапка внутри каталога импорта (по умолчанию — корень)")
+    recursive: bool = Field(default=True, description="Обходить вложенные папки")
+    limit: int = Field(default=0, description="Ограничить количество файлов (0 — все)")
+    dry_run: bool = Field(default=False, description="Только показать, что будет импортировано")
+    process: bool = Field(default=False, description="Сразу поставить импортированные документы в обработку")
+
+
+def _require_admin(current_user) -> None:
+    if not (current_user and getattr(current_user, "is_admin", False)):
+        raise HTTPException(status_code=403, detail="Импорт из папки доступен только администратору")
+
+
+@router.get("/import-folder", summary="Что лежит в папке импорта (без импорта)")
+async def import_folder_scan(
+    folder: str = "",
+    recursive: bool = True,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Список файлов, которые будут импортированы: только разрешённые расширения.
+
+    Папка задаётся относительно каталога импорта (`IMPORT_BASE_DIR`, в контейнере
+    /app/data/inbox). Наружу выйти нельзя: `../` и абсолютные пути отклоняются.
+    """
+    _require_admin(current_user)
+    base = _import_base_dir()
+    files = _scan_import_dir(folder, recursive)
+    by_ext: dict = {}
+    total_size = 0
+    for path in files:
+        ext = path.suffix.lower()
+        by_ext[ext] = by_ext.get(ext, 0) + 1
+        try:
+            total_size += path.stat().st_size
+        except Exception:
+            pass
+    return {
+        "base_dir": str(base),
+        "folder": folder,
+        "recursive": recursive,
+        "total": len(files),
+        "by_ext": by_ext,
+        "total_size": total_size,
+        "files": [str(p.relative_to(base)) for p in files[:200]],
+    }
+
+
+@router.post("/import-folder", summary="Импортировать все файлы из папки (пакетно)")
+async def import_folder(
+    req: ImportFolderRequest,
+    request: Request = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Забрать в базу всё, что нашлось в папке.
+
+    Зачем: документы удобнее складывать пачкой на диск (scp/флешка/скрипт), чем тащить
+    через браузер. Дедупликация по хешу: уже загруженные файлы пропускаются (в отчёте —
+    duplicates). Обработка по умолчанию НЕ запускается (как и у архива) — поставьте
+    process=true, чтобы сразу отправить импортированное в очередь.
+    """
+    _require_admin(current_user)
+    client_ip = request.client.host if request and request.client else "unknown"
+    _check_rate_limit(client_ip)
+    _deny_if_uploads_blocked()
+
+    base = _import_base_dir()
+    files = _scan_import_dir(req.folder, req.recursive)
+    if req.limit and req.limit > 0:
+        files = files[: req.limit]
+
+    if req.dry_run:
+        return {"dry_run": True, "base_dir": str(base), "folder": req.folder,
+                "total": len(files), "files": [str(p.relative_to(base)) for p in files[:200]]}
+
+    if not files:
+        return {"status": "empty", "base_dir": str(base), "folder": req.folder,
+                "imported": 0, "duplicates": 0, "errors": 0,
+                "message": f"В {base / (req.folder or '')} нет файлов с разрешёнными расширениями"}
+
+    upload_id = str(uuid.uuid4())
+    uploaded_by = current_user.id if current_user else None
+    group_ids = [g.id for g in current_user.groups] if current_user and current_user.groups else None
+
+    from src.api.services.document_repository import get_doc_repo
+    repo = get_doc_repo()
+
+    results: list = []
+    duplicates: list = []
+    for path in files:
+        # Дедупликация ДО сохранения: считаем sha256 файла и смотрим, нет ли такого в базе.
+        # document_service сам умеет находить дубли, но тогда в отчёте не отличить «уже было»
+        # от «только что импортировано».
+        try:
+            import hashlib
+            digest = await asyncio.to_thread(lambda p=path: hashlib.sha256(p.read_bytes()).hexdigest())
+            if repo.find_by_hash(digest):
+                duplicates.append(str(path.relative_to(base)))
+                continue
+        except Exception as e:
+            logger.debug(f"[import-folder] не удалось проверить дубль {path.name}: {e}")
+
+        await _process_bulk_file(path, path.suffix.lower(), uploaded_by, group_ids, upload_id, results)
+
+    imported = [r for r in results if r.get("document_id")]
+    errors = [r for r in results if r.get("status") == "error"]
+
+    queued = 0
+    if req.process and imported:
+        try:
+            from src.indexing.queue_guard import enqueue_document
+            for r in imported:
+                if enqueue_document(r["document_id"], force=True):
+                    queued += 1
+        except Exception as e:
+            logger.warning(f"[import-folder] постановка в очередь не удалась: {e}")
+
+    logger.info(f"[import-folder] {upload_id}: импортировано {len(imported)}, дублей {len(duplicates)}, "
+                f"ошибок {len(errors)}, в очередь {queued}")
+    return {
+        "status": "ok",
+        "base_dir": str(base),
+        "folder": req.folder,
+        "imported": len(imported),
+        "duplicates": len(duplicates),
+        "errors": len(errors),
+        "queued": queued,
+        "documents": [{"document_id": r["document_id"], "filename": r["filename"]} for r in imported[:200]],
+        "duplicate_files": duplicates[:200],
+        "error_files": [{"filename": r.get("filename"), "error": r.get("error")} for r in errors[:200]],
+    }
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatus, summary="Статус документа")

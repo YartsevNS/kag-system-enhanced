@@ -177,6 +177,31 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   </div>
   <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
 
+  <!-- Импорт папкой: файлы кладутся на диск стенда, приложение забирает всё найденное.
+       Блок виден только администратору (см. loadCurrentUser) — он работает с файловой системой. -->
+  <details id="folder-import" style="display:none;margin:14px 0;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
+    <summary style="padding:10px 12px;cursor:pointer;user-select:none">
+      <strong>📥 Импорт из папки</strong>
+      <span style="color:var(--text4);font-size:11px;margin-left:8px">пакетно: папка на диске стенда → база</span>
+    </summary>
+    <div style="padding:0 12px 12px">
+      <div style="color:var(--text4);margin-bottom:8px">
+        Положите файлы в папку импорта (например <code>scp *.pdf yartsevn@192.168.50.18:/home/yartsevn/kag-system/data/inbox/</code>)
+        и нажмите «Проверить» — приложение заберёт всё, что найдёт. Файлы, которые уже есть в базе
+        (совпал хеш), пропускаются. Обработку можно запустить сразу галочкой ниже или потом кнопкой ▶️ у документа.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <input id="import-folder-name" placeholder="подпапка (пусто — корень)"
+               style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;min-width:200px">
+        <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-recursive" checked> вложенные папки</label>
+        <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-process"> сразу обработать</label>
+        <button class="btn" onclick="importFolderScan()">Проверить</button>
+        <button class="btn" onclick="importFolderRun()">Импортировать</button>
+      </div>
+      <div id="import-folder-result" style="margin-top:10px;color:var(--text2)"></div>
+    </div>
+  </details>
+
   <!-- Права доступа при загрузке (сворачиваемый блок) -->
   <div style="margin:14px 0 10px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
     <div onclick="toggleUploadAccess()" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">
@@ -1110,8 +1135,81 @@ async function loadCurrentUser() {
     const r = await fetch(`${API}/auth/me`, { credentials: 'include' });
     if (r.ok) currentUser = await r.json();
   } catch(e) { currentUser = null; }
+  // Импорт из папки работает с файловой системой стенда — показываем только администратору
+  const fi = document.getElementById('folder-import');
+  if (fi) fi.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
   if (typeof renderAll === 'function') renderAll();
   if (typeof updateProcAllButton === 'function') updateProcAllButton();
+}
+
+// ── Импорт из папки (пакетно) ────────────────────────────────────────────────
+// Файлы лежат в каталоге импорта на диске стенда (./data/inbox), приложение забирает
+// всё, что найдёт: дедупликация по хешу, отчёт по каждому пропуску и ошибке.
+function _importFolderParams() {
+  return {
+    folder: (document.getElementById('import-folder-name').value || '').trim(),
+    recursive: document.getElementById('import-recursive').checked,
+    process: document.getElementById('import-process').checked
+  };
+}
+
+async function importFolderScan() {
+  const box = document.getElementById('import-folder-result');
+  const p = _importFolderParams();
+  box.innerHTML = '⏳ Смотрю папку…';
+  try {
+    const url = `${API}/upload/import-folder?folder=${encodeURIComponent(p.folder)}&recursive=${p.recursive}`;
+    const r = await fetch(url, { credentials: 'include' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Ошибка сканирования');
+    const exts = Object.entries(d.by_ext || {}).map(([e, n]) => `${e}: ${n}`).join(', ');
+    let html = `<div>Папка: <code>${d.base_dir}${p.folder ? '/' + p.folder : ''}</code></div>`;
+    html += `<div style="margin-top:4px">Найдено файлов: <b>${d.total}</b>` +
+            (exts ? ` (${exts})` : '') + `, размер ${(d.total_size / 1048576).toFixed(1)} МБ</div>`;
+    if (d.total) {
+      html += '<div style="margin-top:6px;max-height:170px;overflow:auto">' +
+              d.files.slice(0, 60).map(f => `<div>• ${f}</div>`).join('') +
+              (d.total > 60 ? `<div>… и ещё ${d.total - 60}</div>` : '') + '</div>';
+    } else {
+      html += '<div style="margin-top:6px">Пусто: положите файлы в эту папку и нажмите «Проверить» снова.</div>';
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--red)">Ошибка: ${e.message}</span>`;
+  }
+}
+
+async function importFolderRun() {
+  const box = document.getElementById('import-folder-result');
+  const p = _importFolderParams();
+  if (!confirm(`Импортировать все файлы из папки${p.folder ? ' «' + p.folder + '»' : ''}?\n` +
+               `Файлы, которые уже есть в базе (совпал хеш), будут пропущены.`)) return;
+  box.innerHTML = '⏳ Импортирую… это может занять время на большой папке';
+  try {
+    const r = await fetch(`${API}/upload/import-folder`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Ошибка импорта');
+    let html = `<div>Импортировано: <b style="color:var(--green)">${d.imported}</b> | ` +
+               `дублей: ${d.duplicates} | ошибок: ${d.errors}` +
+               (d.queued ? ` | в очередь обработки: ${d.queued}` : '') + '</div>';
+    if (d.duplicate_files && d.duplicate_files.length) {
+      html += '<div style="margin-top:6px">Пропущены (уже в базе): ' +
+              d.duplicate_files.slice(0, 10).map(f => `<div>• ${f}</div>`).join('') +
+              (d.duplicate_files.length > 10 ? `<div>… и ещё ${d.duplicate_files.length - 10}</div>` : '') + '</div>';
+    }
+    if (d.error_files && d.error_files.length) {
+      html += '<div style="margin-top:6px;color:var(--red)">Ошибки: ' +
+              d.error_files.slice(0, 10).map(f => `<div>• ${f.filename}: ${f.error}</div>`).join('') + '</div>';
+    }
+    box.innerHTML = html;
+    if (typeof loadAll === 'function') loadAll();
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--red)">Ошибка: ${e.message}</span>`;
+  }
 }
 
 // Можно ли пользователю запускать обработку документа

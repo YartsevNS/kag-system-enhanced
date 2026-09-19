@@ -12,7 +12,7 @@ services:
     #          docker push kre44et/kag-api:<tag>
     # DEV-режим (живой код без пересборки): docker-compose.dev.yml
     # (docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d).
-    image: kre44et/kag-api:2026.09.19.12
+    image: kre44et/kag-api:2026.09.19.13
     container_name: kag-api
     ports:
       # НЕ публикуем api наружу — единственная точка входа nginx (80/443).
