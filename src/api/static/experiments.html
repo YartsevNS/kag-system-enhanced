@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — опыты и модели</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 24px;color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;transition:all 0.15s}
+nav a:hover{color:var(--text2);background:rgba(255,255,255,0.04)}
+nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
+main{margin-left:240px;flex:1;padding:28px 36px;max-width:1400px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text4);margin-bottom:20px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+.panel h2{font-size:15px;font-weight:600;margin-bottom:10px}
+details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
+details summary{cursor:pointer;user-select:none;font-size:15px;font-weight:600}
+details[open] summary{margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 10px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid var(--border-s)}
+td{padding:9px 10px;color:var(--text2);border-bottom:1px solid var(--border-s);vertical-align:top}
+td.num{font-family:var(--mono);white-space:nowrap}
+tr.best td{color:var(--text)}
+tr.best td.num{color:var(--accent-h);font-weight:600}
+.badge{display:inline-block;padding:2px 9px;border-radius:var(--radius-pill);font-size:11px;border:1px solid var(--border);color:var(--text3);white-space:nowrap}
+.badge.ok{background:rgba(62,207,142,0.12);color:var(--accent-h);border-color:rgba(62,207,142,0.35)}
+.badge.bad{background:rgba(229,72,77,0.12);color:var(--red);border-color:rgba(229,72,77,0.35)}
+.badge.wait{background:rgba(245,166,35,0.12);color:var(--amber);border-color:rgba(245,166,35,0.35)}
+.note{font-size:12px;color:var(--text4);line-height:1.6}
+.note b{color:var(--text3)}
+.meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.meta .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;min-width:150px}
+.meta .stat .v{font-size:18px;font-weight:600}
+.meta .stat .l{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.03em}
+.empty{color:var(--text4);font-size:13px;padding:8px 0}
+@media(max-width:900px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">KA<span>G</span></div>
+  <a href="/chat"><span>Чат с AI</span></a>
+  <a href="/documents"><span>Документы</span></a>
+  <a href="/chunks"><span>Чанки</span></a>
+  <a href="/kg"><span>Граф знаний</span></a>
+  <a href="/admin"><span>Админ</span></a>
+  <a href="/experiments" class="active"><span>Опыты и модели</span></a>
+</nav>
+<main>
+  <h1>Опыты и модели</h1>
+  <div class="sub">Сравнение моделей на нашем корпусе: что проверено, с какими цифрами и что делаем дальше. Страница доступна только администраторам.</div>
+
+  <div class="meta" id="meta"></div>
+
+  <details open>
+    <summary>Сравнение эмбеддеров на нашем корпусе</summary>
+    <div class="note" style="margin-bottom:10px">
+      Метрика — ранг фрагмента с ответом внутри пула кандидатов (20 вопросов с эталонами, пул по 15 фрагментов).
+      hit@K — доля вопросов, где правильный фрагмент попал в первые K; MRR — средний обратный ранг.
+      Чем больше, тем лучше. <b>Строка-эталон</b> — модель, которая работает в KAG сейчас.
+    </div>
+    <table>
+      <thead><tr>
+        <th>Модель</th><th>Размерность</th><th>Где считалась</th>
+        <th>hit@1</th><th>hit@3</th><th>hit@5</th><th>MRR</th><th>Вердикт</th>
+      </tr></thead>
+      <tbody id="emb-table"></tbody>
+    </table>
+    <div class="note" style="margin-top:12px">
+      <b>Ограничения замера.</b> Пулы фрагментов собраны действующей моделью (её top-15), поэтому кандидаты
+      переранжируют уже отобранное и не могут найти то, что действующая модель пропустила — это смещение в её пользу.
+      Разметка «где лежит ответ» сделана чтением фрагментов (без платных судей). Полное сравнение требует прогона
+      кандидата по всему корпусу, то есть отдельной коллекции Qdrant и переиндексации.
+    </div>
+  </details>
+
+  <details>
+    <summary>Что доступно из моделей и где</summary>
+    <table>
+      <thead><tr><th>Источник</th><th>Модели</th><th>Комментарий</th></tr></thead>
+      <tbody>
+        <tr><td>GigaChat (облако, через прокси)</td><td class="num">GigaR (2560), GigaEmbeddings-3B-2025-09 (2048), Embeddings-2 (1024), Embeddings (1024)</td><td>работает в KAG; новых instruct-моделей 3B-0826 / 10B в нашем доступе нет — API их не отдаёт</td></tr>
+        <tr><td>Локально, сервер 41 (Ollama)</td><td class="num">bge-m3, qllama/bge-m3 (Q4), enbeddrus, bge-reranker-v2-m3</td><td>CPU, 20 ядер, 76 ГБ RAM, GPU нет; ollama слушает только localhost</td></tr>
+        <tr><td>Локально, сервер 41 (Python)</td><td class="num">Giga-Embeddings-instruct-3B-0826</td><td>sentence-transformers на CPU, веса 5.9 ГБ, размерность 2048</td></tr>
+        <tr><td>Внешний агрегатор (polza.ai)</td><td class="num">deepseek-v4.1-flash, glm-5.3-flash и др.</td><td>только генерация; эмбеддинги ключу недоступны</td></tr>
+      </tbody>
+    </table>
+  </details>
+
+  <details>
+    <summary>Что дальше: опыты, которым нужен GPU</summary>
+    <table>
+      <thead><tr><th>Опыт</th><th>Зачем</th><th>Что нужно</th></tr></thead>
+      <tbody>
+        <tr><td>Giga-Embeddings-instruct-10B-A1.8B</td><td>проверить верх линейки Giga на нашем корпусе (в карточке MTEB rus 74.99 против 74.57 у 3B)</td><td>GPU; запуск через vLLM с флагами pooling/embed и trust-remote-code</td></tr>
+        <tr><td>Giga-Embeddings-instruct-3B-0826 на GPU</td><td>сравнить с CPU-прогоном и с действующей моделью по скорости</td><td>GPU (на CPU считается, но медленно)</td></tr>
+        <tr><td>Реранкер bge-reranker-v2-m3</td><td>перемерить реранкер на большем наборе: прошлый (flashrank MultiBERT) по замеру ухудшал ответы</td><td>GPU желателен; на CPU уже стоит в Ollama</td></tr>
+        <tr><td>Переиндексация корпуса под выбранную модель</td><td>только после победы кандидата: другая размерность — отдельная коллекция Qdrant и полный пересчёт эмбеддингов</td><td>GPU ускоряет, но не обязателен</td></tr>
+      </tbody>
+    </table>
+  </details>
+
+  <details>
+    <summary>История замеров и решения</summary>
+    <div id="history" class="note"></div>
+  </details>
+
+  <div class="panel">
+    <h2>Методика: как мы измеряем</h2>
+    <div class="note">
+      <b>Поиск.</b> Набор вопросов с эталонными ответами; для ранжирования сравниваем ранг фрагмента с ответом.<br>
+      <b>Ответы.</b> LLM-судья по рубрике; шум судьи ±0.04 на 20 вопросах, поэтому базу и вариант измеряем в одном заходе,
+      а разницу меньше ~0.05 считаем отсутствием эффекта.<br>
+      <b>Стоимость.</b> Внешние модели для судейства — только дешёвые, с журналом расходов и дневным лимитом.
+    </div>
+  </div>
+</main>
+<script src="/static/branding.js"></script>
+<script>
+const API = '/api/v1';
+
+const FALLBACK = {
+  meta: [
+    {v: '20', l: 'вопросов с эталонами'},
+    {v: '15', l: 'фрагментов в пуле'},
+    {v: '20 ядер / 76 ГБ', l: 'сервер 41 (CPU)'},
+    {v: 'GPU нет', l: 'серверы 18 и 41'}
+  ],
+  embedders: [
+    {model: 'Giga Embeddings GigaR', dim: '2560', where: 'облако GigaChat, через прокси (действующая)',
+     hit1: 0.550, hit3: 0.800, hit5: 0.950, mrr: 0.690, verdict: 'эталон', cls: 'ok', best: true},
+    {model: 'bge-m3 (Ollama, 41)', dim: '1024', where: 'локально, CPU',
+     hit1: 0.300, hit3: 0.750, hit5: 0.900, mrr: 0.560, verdict: 'хуже эталона', cls: 'bad'},
+    {model: 'enbeddrus (Ollama, 41)', dim: '768', where: 'локально, CPU',
+     hit1: 0.150, hit3: 0.750, hit5: 0.900, mrr: 0.445, verdict: 'хуже эталона', cls: 'bad'},
+    {model: 'Giga-Embeddings-instruct-3B-0826', dim: '2048', where: 'сервер 41, CPU (sentence-transformers)',
+     hit1: null, hit3: null, hit5: null, mrr: null, verdict: 'замер идёт', cls: 'wait'},
+    {model: 'Giga-Embeddings-instruct-10B-A1.8B', dim: '1536', where: 'нужен GPU (vLLM/SGLang)',
+     hit1: null, hit3: null, hit5: null, mrr: null, verdict: 'запланировано', cls: 'wait'}
+  ],
+  history: [
+    '19.09.2026 — сравнили локальные модели на 41 (bge-m3, enbeddrus) с действующей GigaR на одних пулах: локальные хуже, hit@1 0.30 и 0.15 против 0.55.',
+    '19.09.2026 — проверили доступность моделей через GigaChat API: доступны Embeddings, Embeddings-2, GigaR, GigaEmbeddings-3B-2025-09; instruct-модели 3B-0826 и 10B не отдаются.',
+    '18.09.2026 — A/B промпта чата: требование полноты не дало эффекта (0.5950 против 0.6000); шум судьи ±0.04.',
+    '18.09.2026 — найдена причина отказов «информация не найдена»: жёсткий фильтр по домену скрывал документы без домена (1012 чанков из 4944).'
+  ]
+};
+
+function fmt(x) { return (x === null || x === undefined) ? '—' : Number(x).toFixed(3); }
+
+function render(d) {
+  const meta = document.getElementById('meta');
+  meta.innerHTML = (d.meta || []).map(function (m) {
+    return '<div class="stat"><div class="v">' + m.v + '</div><div class="l">' + m.l + '</div></div>';
+  }).join('');
+
+  document.getElementById('emb-table').innerHTML = (d.embedders || []).map(function (r) {
+    return '<tr' + (r.best ? ' class="best"' : '') + '>' +
+      '<td>' + r.model + '</td>' +
+      '<td class="num">' + r.dim + '</td>' +
+      '<td>' + r.where + '</td>' +
+      '<td class="num">' + fmt(r.hit1) + '</td>' +
+      '<td class="num">' + fmt(r.hit3) + '</td>' +
+      '<td class="num">' + fmt(r.hit5) + '</td>' +
+      '<td class="num">' + fmt(r.mrr) + '</td>' +
+      '<td><span class="badge ' + (r.cls || '') + '">' + r.verdict + '</span></td>' +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('history').innerHTML = (d.history || []).map(function (h) {
+    return '— ' + h;
+  }).join('<br>');
+}
+
+render(FALLBACK);
+fetch(API + '/admin/models/experiments', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
+  .then(function (r) { return r.ok ? r.json() : null; })
+  .then(function (d) { if (d && d.embedders) render(d); })
+  .catch(function () { /* остаются встроенные данные */ });
+</script>
+</body>
+</html>

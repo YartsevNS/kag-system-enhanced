@@ -221,6 +221,18 @@ async def admin_web(request: Request):
     return await _html_response(os.path.join(static_path, "admin.html"))
 
 
+@app.get("/experiments", summary="Опыты и модели (замеры, только для admin)")
+async def experiments_page(request: Request):
+    """Страница результатов замеров моделей (только для admin).
+
+    Данные — из /api/v1/admin/models/experiments (config_store), поэтому обновляются
+    без пересборки образа; если данных нет, страница показывает встроенный набор.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "experiments.html"))
+
+
 @app.get("/docker", summary="Docker Dashboard")
 async def docker_dashboard(request: Request):
     """Страница Docker Dashboard (только для admin)."""

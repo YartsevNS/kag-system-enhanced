@@ -21,4 +21,20 @@
     .then(function (r) { return r.json(); })
     .then(apply)
     .catch(function () { /* оставляем как есть */ });
+
+  /* Пункт «Опыты и модели» — только для администраторов: страница /experiments
+     отдаёт 302 обычным пользователям, поэтому и ссылку показываем только админу.
+     Проверяем по /auth/me (поле is_admin), молча выходим при любой ошибке. */
+  fetch('/api/v1/auth/me', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (u) {
+      if (!u || !u.is_admin) return;
+      var nav = document.querySelector('nav');
+      if (!nav || nav.querySelector('a[href="/experiments"]')) return;
+      var a = document.createElement('a');
+      a.href = '/experiments';
+      a.innerHTML = '<span>Опыты и модели</span>';
+      nav.appendChild(a);
+    })
+    .catch(function () { /* не админ или нет связи — ссылки просто нет */ });
 })();

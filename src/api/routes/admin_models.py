@@ -3011,3 +3011,44 @@ def _safe_unlink(path: str):
         os.unlink(path)
     except Exception:
         pass
+
+
+class ExperimentsUpdate(BaseModel):
+    """Данные страницы «Опыты и модели» (замеры моделей на нашем корпусе)."""
+
+    meta: Optional[List[Dict[str, Any]]] = None
+    embedders: Optional[List[Dict[str, Any]]] = None
+    history: Optional[List[str]] = None
+
+
+@router.get("/experiments", summary="Данные страницы «Опыты и модели»")
+async def get_experiments():
+    """Результаты замеров моделей для страницы /experiments (только админ).
+
+    Лежат в config_store («experiments»/«models»), поэтому обновляются данными, без
+    пересборки образа: страница читает их через этот эндпоинт, а если данных нет —
+    показывает встроенный набор.
+    """
+    try:
+        data = config_store.get("experiments", "models") or {}
+        if not isinstance(data, dict):
+            return {"status": "error", "message": "данные страницы повреждены"}
+        return data
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/experiments", summary="Обновить данные страницы «Опыты и модели»")
+async def save_experiments(payload: ExperimentsUpdate):
+    """Сохранить результаты замеров (страница читает их тем же эндпоинтом)."""
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        return {"status": "error", "message": "пустое тело: нужен хотя бы один раздел"}
+    try:
+        current = config_store.get("experiments", "models")
+        merged = dict(current) if isinstance(current, dict) else {}
+        merged.update(data)
+        config_store.set("experiments", "models", merged)
+        return {"status": "ok", "sections": sorted(merged.keys())}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
