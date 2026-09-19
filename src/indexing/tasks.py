@@ -646,3 +646,30 @@ def run_monitor_check(self, source_id: str = None):
     except Exception as e:
         logger.error(f"❌ Монитор проверка упала: {e}")
         raise self.retry(exc=e)
+
+
+@celery_app.task(bind=True, queue="maintenance", max_retries=2, default_retry_delay=300,
+                 soft_time_limit=900, time_limit=1200)
+def scan_orphans(self):
+    """Раз в сутки: найти точки в Qdrant, у которых нет документа в Postgres.
+
+    Ничего не удаляет — результат складывается в config_store, админка показывает его
+    администратору (сироты могут быть следствием штатной паузы обработки, поэтому
+    решение об удалении принимает человек).
+    """
+    from src.api.services.orphan_service import scan
+
+    try:
+        result = scan()
+    except Exception as e:
+        logger.error(f"[Beat] Скан сирот упал: {e}")
+        raise self.retry(exc=e)
+    if result.get("status") == "error":
+        logger.warning(f"[Beat] Скан сирот не сохранён: {result.get('message')}")
+        return {"status": "error", "message": result.get("message")}
+    logger.info(
+        f"[Beat] Сироты: {result['orphans_count']} id / {result['orphans_points']} точек "
+        f"(в Qdrant {result['points_in_qdrant']} точек, в БД {result['documents_in_db']} документов)"
+    )
+    return {"status": "ok", "orphans_count": result["orphans_count"],
+            "orphans_points": result["orphans_points"], "ts": result["ts"]}

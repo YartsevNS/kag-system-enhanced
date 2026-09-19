@@ -3053,3 +3053,103 @@ async def save_experiments(payload: ExperimentsUpdate):
         return {"status": "ok", "sections": sorted(merged.keys())}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+class OrphanCleanupRequest(BaseModel):
+    """ID документов, точки которых администратор решил удалить."""
+
+    document_ids: List[str] = Field(default_factory=list)
+
+
+class OrphanIgnoreRequest(BaseModel):
+    """ID документа, который больше не показывать в списке сирот."""
+
+    document_id: str
+
+
+@router.get("/orphans", summary="Сироты в векторном хранилище (последний скан)")
+async def get_orphans():
+    """Точки в Qdrant, у которых нет документа в Postgres. Только чтение."""
+    try:
+        from src.api.services.orphan_service import last_scan
+
+        data = last_scan()
+        if not data:
+            return {"status": "empty", "message": "скан ещё не выполнялся",
+                    "orphans_count": 0, "items": [], "ignored": []}
+        return data
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/orphans/scan", summary="Найти сирот сейчас (не удаляя)")
+async def scan_orphans_now():
+    """Ручной запуск суточного скана: считает сирот и сохраняет результат."""
+    try:
+        from src.api.services.orphan_service import scan
+
+        # Синхронные клиенты Qdrant/SQL — в поток, чтобы не блокировать event loop.
+        result = await asyncio.to_thread(scan)
+        if result.get("status") == "error":
+            return result
+        result["status"] = "ok"
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/orphans/cleanup", summary="Удалить точки выбранных сирот (решение админа)")
+async def cleanup_orphans(payload: OrphanCleanupRequest):
+    """Удаление выполняет администратор: автоматика сирот не трогает.
+
+    После удаления скан повторяется, чтобы админка показала актуальную картину.
+    """
+    ids = [str(x) for x in (payload.document_ids or []) if str(x).strip()]
+    if not ids:
+        return {"status": "error", "message": "не передан ни один document_id"}
+    try:
+        from src.api.services.orphan_service import cleanup, scan
+
+        result = await asyncio.to_thread(cleanup, ids)
+        fresh = await asyncio.to_thread(scan)
+        result["scan"] = {k: fresh.get(k) for k in
+                          ("ts", "orphans_count", "orphans_points", "points_in_qdrant", "documents_in_db")}
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/orphans/ignore", summary="Не показывать сироту в списке")
+async def ignore_orphan(payload: OrphanIgnoreRequest):
+    """Игнорируемый id остаётся в коллекции, но из списка сирот пропадает."""
+    did = (payload.document_id or "").strip()
+    if not did:
+        return {"status": "error", "message": "пустой document_id"}
+    try:
+        from src.api.services.orphan_service import ignored, scan, set_ignored
+
+        ids = set(ignored())
+        ids.add(did)
+        set_ignored(list(ids))
+        fresh = await asyncio.to_thread(scan)
+        return {"status": "ok", "ignored": sorted(ids),
+                "orphans_count": fresh.get("orphans_count"), "items": fresh.get("items", [])}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/orphans/unignore", summary="Вернуть сироту в список")
+async def unignore_orphan(payload: OrphanIgnoreRequest):
+    did = (payload.document_id or "").strip()
+    if not did:
+        return {"status": "error", "message": "пустой document_id"}
+    try:
+        from src.api.services.orphan_service import ignored, scan, set_ignored
+
+        ids = {x for x in ignored() if x != did}
+        set_ignored(list(ids))
+        fresh = await asyncio.to_thread(scan)
+        return {"status": "ok", "ignored": sorted(ids),
+                "orphans_count": fresh.get("orphans_count"), "items": fresh.get("items", [])}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

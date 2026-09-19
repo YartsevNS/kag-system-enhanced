@@ -55,6 +55,13 @@ celery_app.conf.update(
             'schedule': 86400.0,  # раз в сутки
             'options': {'queue': 'maintenance'},
         },
+        # Сироты в векторном хранилище: точки без документа в Postgres. Только скан и
+        # запись результата в config_store — удаляет администратор из админки.
+        'scan-orphans': {
+            'task': 'src.indexing.tasks.scan_orphans',
+            'schedule': 86400.0,  # раз в сутки
+            'options': {'queue': 'maintenance'},
+        },
     },
 
     # Маршрутизация задач
