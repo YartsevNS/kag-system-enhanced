@@ -2041,6 +2041,18 @@
                     '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fm-nothink" style="width:auto;vertical-align:middle" ' + ((fm.parameters && fm.parameters.no_think === false) ? '' : 'checked') + '> Отключить размышления модели (no think)</label>' +
                     '<div class="muted" style="font-size:11px;margin-top:4px">По умолчанию включено. Замер на нашем стенде 19.09.2026: без этого параметра reasoning-модель уходит в размышления до всего лимита токенов и возвращает ПУСТОЙ ответ (content 0 символов), с ним — нормальный текст. Работает для deepseek/openai/openrouter-совместимых (шлём thinking.type=disabled); у локальных Ollama/llama.cpp ручка другая и здесь не используется.</div></div>';
             }
+            if (functionName === 'chat') {
+                var ctxVal = (params.context_limit !== undefined) ? params.context_limit : 10;
+                var thrVal = (params.min_top_score !== undefined) ? params.min_top_score : 0;
+                html += '<div class="form-group"><label>Глубина контекста, фрагментов</label>' +
+                    '<input type="number" id="fm-context" value="' + ctxVal + '" step="1" min="3" max="20" style="width:90px">' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">Сколько найденных фрагментов уходит в промпт (по умолчанию 10). Меньше — короче промпт, ответ быстрее и дешевле, но выше риск потерять факт; больше — полнее, но медленнее. Менять только по замеру: точность и скорость сравниваются на наборе вопросов.</div></div>' +
+                    '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fm-markbest" style="width:auto;vertical-align:middle" ' + (params.mark_best ? 'checked' : '') + '> Помечать самый релевантный фрагмент</label>' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">Первый по score фрагмент помечается в контексте как «самый релевантный» с указанием опираться на него в первую очередь — модель реже размазывает ответ по всему контексту. По умолчанию выключено (включать по замеру).</div></div>' +
+                    '<div class="form-group"><label>Порог отказа по score (0 — выключено)</label>' +
+                    '<input type="number" id="fm-threshold" value="' + thrVal + '" step="0.05" min="0" max="1" style="width:90px">' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">Если лучший фрагмент ближе по score, чем этот порог, чат сразу честно отвечает «не найдено» и НЕ вызывает модель — быстрее и дешевле на вопросах вне корпуса. Осторожно: вопрос, которого в корпусе нет, может дать высокий score (замер 18.09.2026), поэтому порог ненадёжен и подбирается только по замеру. По умолчанию выключено.</div></div>';
+            }
             html += '<div style="display:flex;gap:10px;margin-top:16px">' +
                 '<button class="btn btn-primary" onclick="saveFunctionMap()">💾 Сохранить</button>' +
                 '<button class="btn btn-secondary" onclick="closeFmModal()">Отмена</button>' +
@@ -2168,6 +2180,12 @@
                     if (tk) p.max_tokens = parseInt(tk.value, 10) || 4096;
                     var nt = document.getElementById('fm-nothink');
                     if (nt) p.no_think = nt.checked;
+                    var cx = document.getElementById('fm-context');
+                    if (cx) p.context_limit = parseInt(cx.value, 10) || 10;
+                    var mb = document.getElementById('fm-markbest');
+                    if (mb) p.mark_best = mb.checked;
+                    var th = document.getElementById('fm-threshold');
+                    if (th) p.min_top_score = parseFloat(th.value) || 0;
                     return p;
                 })(),
             };

@@ -668,6 +668,24 @@ class ChatService:
         temp = temperature if temperature is not None else _cfg_temperature
         tokens = max_tokens if max_tokens is not None else _cfg_max_tokens
 
+        # ── Работа с контекстом (тоже настраивается в привязке функции chat) ──
+        # context_limit — сколько фрагментов уходит в промпт. Меньше фрагментов = короче промпт
+        # (быстрее и дешевле), но выше риск потерять факт. Замер: см. docs/guides/
+        # reranker-and-answer-quality.md, раздел про глубину контекста.
+        try:
+            ctx_limit = int(_fm_params.get("context_limit", 10) or 10)
+        except (TypeError, ValueError):
+            ctx_limit = 10
+        ctx_limit = max(3, min(20, ctx_limit))
+        # mark_best — пометить первый (лучший по score) фрагмент: модель опирается на него раньше.
+        mark_best = bool(_fm_params.get("mark_best", False))
+        # min_top_score — честный отказ без вызова LLM, если лучший фрагмент слишком далёк
+        # (0 = выключено). Экономит время на вопросах вне корпуса.
+        try:
+            min_top_score = float(_fm_params.get("min_top_score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            min_top_score = 0.0
+
         # Отключение размышлений у reasoning-моделей — галочка «Отключить размышления
         # модели (no think)» в привязке функции (Админка → Модели LLM).
         # Замер на стенде 19.09.2026: без этого параметра модель уходила в reasoning до
@@ -743,10 +761,36 @@ class ChatService:
                 from src.indexing.embeddings_service import embeddings_service
                 # Поиск релевантных чанков
                 search_results = await self._search_with_widening(
-                    user_message, self._search_limit,
+                    user_message, ctx_limit,
                     group_ids=group_ids, is_admin=is_admin, user_id=user_id,
                     domain=domain,
                 )
+
+                # Порог «нет ответа»: если лучший фрагмент слишком далёк по score, честно
+                # отказываем БЕЗ вызова LLM (быстрее и дешевле). Выключено при 0.
+                # Осторожно: контролировать порогом «ответа нет» ненадёжно — вопрос, которого
+                # в корпусе нет, может дать высокий score (замер 18.09.2026), поэтому значение
+                # подбирается по замеру и по умолчанию выключено.
+                if min_top_score > 0 and search_results:
+                    _top = max((float(c.get("score") or 0) for c in search_results), default=0.0)
+                    if _top < min_top_score:
+                        logger.info(f"[rag] отказ по порогу: лучший фрагмент {_top:.3f} < {min_top_score:.2f}")
+                        return {
+                            "id": str(uuid.uuid4()),
+                            "session_id": session_id or str(uuid.uuid4()),
+                            "response": ("В загруженных документах эта информация не найдена: "
+                                         "ближайшие найденные фрагменты слишком далеки от вопроса."),
+                            "model": model_name,
+                            "backend": provider.type,
+                            "sources": [],
+                            "usage": {},
+                            "metadata": {"rag_used": True,
+                                         "sources_count": 0,
+                                         "refused_low_score": True,
+                                         "top_score": round(_top, 4),
+                                         "total_docs": self._get_total_docs(),
+                                         "generated_at": datetime.utcnow().isoformat()},
+                        }
 
                 if search_results:
                     # Приоритет содержательным фрагментам: титульные листы, оглавления и
@@ -778,8 +822,12 @@ class ChatService:
                         from src.indexing.ids import display_filename
                         result['filename'] = display_filename(filename) or doc_id[:12]
                         score_info = f"rerank:{result.get('rerank_score', 0):.3f}" if 'rerank_score' in result else f"score:{result['score']:.3f}"
+                        # Пометка лучшего фрагмента (настройка mark_best): модель видит, на что
+                        # опираться в первую очередь, и реже «размазывает» ответ по всему контексту.
+                        _mark = (" — САМЫЙ РЕЛЕВАНТНЫЙ ФРАГМЕНТ (отвечай по нему в первую очередь)"
+                                 if (mark_best and i == 1) else "")
                         context_parts.append(
-                            f"[Источник {i}] «{filename or doc_id[:12]}» ({score_info}):\n{result['content']}"
+                            f"[Источник {i}{_mark}] «{filename or doc_id[:12]}» ({score_info}):\n{result['content']}"
                         )
                     context = "\n\n".join(context_parts)
                     if _comparison_block:
@@ -1040,6 +1088,14 @@ class ChatService:
 
         model_name = func_map.model if func_map and func_map.model else ""
         system_prompt = func_map.system_prompt if func_map and func_map.system_prompt else self._get_default_prompt()
+        # Настройки контекста из привязки функции chat — те же, что в обычном пути
+        # (generate_response), чтобы потоковый ответ не расходился с обычным.
+        _fm_params = getattr(func_map, "parameters", None) or {}
+        try:
+            ctx_limit = max(3, min(20, int(_fm_params.get("context_limit", 10) or 10)))
+        except (TypeError, ValueError):
+            ctx_limit = 10
+        mark_best = bool(_fm_params.get("mark_best", False))
 
         # RAG поиск
         from src.indexing.embeddings_service import embeddings_service
@@ -1053,7 +1109,7 @@ class ChatService:
             pass
         search_results = await embeddings_service.search(
             query=user_message,
-            limit=self._search_limit,
+            limit=ctx_limit,
             group_ids=group_ids,
             is_admin=is_admin,
             user_id=user_id,
@@ -1074,8 +1130,10 @@ class ChatService:
                 logger.debug(f"[rag/stream] порядок контекста не перестроен: {e}")
             context_parts = []
             for i, result in enumerate(search_results, 1):
+                _mark = (" — САМЫЙ РЕЛЕВАНТНЫЙ ФРАГМЕНТ (отвечай по нему в первую очередь)"
+                         if (mark_best and i == 1) else "")
                 context_parts.append(
-                    f"[Источник {i}]: {result['content']}"
+                    f"[Источник {i}{_mark}]: {result['content']}"
                 )
             context = "\n\n".join(context_parts)
 
