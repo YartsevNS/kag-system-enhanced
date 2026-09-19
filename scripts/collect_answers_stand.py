@@ -92,12 +92,32 @@ def main() -> int:
             data = post("/chat/", {"messages": [{"role": "user", "content": q["query"]}],
                                    "stream": False, "temperature": 0.0}, token=token)
             answer = data.get("response") or data.get("answer") or ""
+            # Скорость и расход: metadata в ответе бывает и словарём, и строкой repr —
+            # разбираем оба варианта, чтобы сравнивать замеры по токенам и времени.
+            md = data.get("metadata")
+            usage = {}
+            if isinstance(md, dict):
+                usage = md.get("usage") or {}
+            elif isinstance(md, str):
+                try:
+                    usage = json.loads(md.replace("'", '"')).get("usage") or {}
+                except Exception:
+                    import re as _re
+                    pt = _re.search(r"prompt_tokens'?:\s*(\d+)", md)
+                    ct = _re.search(r"completion_tokens'?:\s*(\d+)", md)
+                    usage = {"prompt_tokens": int(pt.group(1)) if pt else None,
+                             "completion_tokens": int(ct.group(1)) if ct else None}
+            extra = {"usage": usage,
+                     "prompt_tokens": usage.get("prompt_tokens"),
+                     "completion_tokens": usage.get("completion_tokens"),
+                     "sources": len(data.get("sources") or [])}
         except Exception as e:
             err = f"{type(e).__name__}: {str(e)[:70]}"
+            extra = {"usage": {}, "prompt_tokens": None, "completion_tokens": None, "sources": 0}
         done[q["id"]] = {"id": q["id"], "query": q["query"], "answer": answer,
                          "answer_len": len(answer), "error": err,
                          "refused": ("не найдена" in answer.lower() or "не найдено" in answer.lower()),
-                         "seconds": round(time.time() - t0, 1)}
+                         "seconds": round(time.time() - t0, 1), **extra}
         try:
             json.dump(list(done.values()), open(OUT, "w", encoding="utf-8"),
                       ensure_ascii=False, indent=1)
