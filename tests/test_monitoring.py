@@ -22,6 +22,31 @@ from sqlalchemy.orm import sessionmaker
 # In-memory SQLite for tests
 # ──────────────────────────────────────────────
 
+
+def _step_clock(monkeypatch):
+    """Часы с шагом в секунду вместо datetime в notification_service.
+
+    Зачем: там, где проверяется порядок «новые сверху», два вызова datetime.now() могут
+    попасть в один тик системного таймера (на Windows разрешение ~15 мс) — created_at
+    совпадёт, и проверить сортировку будет нечем (тесты падали примерно в половине
+    прогонов). Порядок при совпадении времени теперь детерминирован вторичным ключом
+    в list_notifications, а здесь мы проверяем именно сортировку по времени.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from src.api.services import notification_service as ns
+
+    class _Clock:
+        def __init__(self):
+            self._t = datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc)
+
+        def now(self, tz=None):
+            self._t += timedelta(seconds=1)
+            return self._t
+
+    monkeypatch.setattr(ns, "datetime", _Clock())
+
+
 @pytest.fixture(scope="function")
 def test_db():
     """Create an in-memory SQLite database for testing."""
@@ -346,9 +371,11 @@ class TestNotificationAPI:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_list_after_creation(self, test_db, client):
-        """List shows created notifications."""
+    def test_list_after_creation(self, test_db, client, monkeypatch):
+        """List shows created notifications (newest first). Часы с шагом — см. _step_clock."""
         from src.api.services.notification_service import create_notification
+
+        _step_clock(monkeypatch)
 
         create_notification(test_db, "web_changed", "Test notification 1")
         create_notification(test_db, "file_detected", "Test notification 2")
@@ -424,12 +451,14 @@ class TestNotificationService:
         assert n.message == "Page changed!"
         assert n.read is False
 
-    def test_list_notifications(self, test_db):
-        """list_notifications returns newest first."""
+    def test_list_notifications(self, test_db, monkeypatch):
+        """list_notifications returns newest first. Часы с шагом — см. _step_clock."""
         from src.api.services.notification_service import (
             create_notification,
             list_notifications,
         )
+
+        _step_clock(monkeypatch)
 
         create_notification(test_db, "web_changed", "First")
         create_notification(test_db, "file_detected", "Second")

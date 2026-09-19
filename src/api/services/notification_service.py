@@ -63,7 +63,14 @@ def list_notifications(
     query = db.query(Notification)
     if unread_only:
         query = query.filter(Notification.read == False)  # noqa: E712
-    return query.order_by(Notification.created_at.desc()).limit(limit).all()
+    # Вторичный ключ — только для детерминированного порядка при совпавшем created_at:
+    # два события в одном тике системных часов (на Windows разрешение таймера ~15 мс)
+    # иначе возвращались в порядке вставки, и «новые сверху» не гарантировалось.
+    return (
+        query.order_by(Notification.created_at.desc(), Notification.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def mark_read(db: Session, notification_id: str) -> Optional[Notification]:
