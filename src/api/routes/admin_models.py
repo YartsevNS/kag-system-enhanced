@@ -995,7 +995,7 @@ async def test_ext_llm():
                 "options": {"max_tokens": 5}
             }
             headers = {}
-        elif cfg.provider in ("openai", "deepseek", "openrouter"):
+        elif cfg.provider in ("openai", "deepseek", "openrouter", "custom"):
             # OpenAI-совместимый API
             url = f"{cfg.url}/v1/chat/completions"
             payload = {

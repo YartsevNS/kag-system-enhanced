@@ -536,6 +536,47 @@ class ProviderService:
             "parameters": fm.parameters or {},
         }
 
+    def get_function_llm_chain(self, function_name: str) -> List[dict]:
+        """Список LLM-конфигов для прямых вызовов: [основной, резервный (если задан)].
+
+        Нужно там, где провайдер вызывается напрямую (анализ документа, извлечение графа,
+        перестройка графа): раньше падение основного провайдера означало ошибку шага,
+        теперь можно повторить на резервном из привязки функции (Админка → Модели LLM).
+        Каждый элемент — тот же формат, что у get_function_llm_config.
+        """
+        pair = self.get_function_provider(function_name)
+        if not pair:
+            return []
+        provider, fm = pair
+        system_prompt = fm.system_prompt or self.load_default_prompt(function_name)
+        params = fm.parameters or {}
+        out = [{
+            "provider": provider.type,
+            "url": (provider.url or "").rstrip("/"),
+            "api_key": self._format_api_key(provider.type, provider.api_key),
+            "model": fm.model or "",
+            "system_prompt": system_prompt,
+            "parameters": params,
+        }]
+        fb_id = (getattr(fm, "fallback_provider_id", "") or "").strip()
+        if fb_id and fb_id != provider.id:
+            fb_provider = self._provider_cache.get(fb_id)
+            if fb_provider and fb_provider.enabled:
+                fb_model = (getattr(fm, "fallback_model", "") or "").strip() or (
+                    fb_provider.models[0] if fb_provider.models else fm.model or "")
+                out.append({
+                    "provider": fb_provider.type,
+                    "url": (fb_provider.url or "").rstrip("/"),
+                    "api_key": self._format_api_key(fb_provider.type, fb_provider.api_key),
+                    "model": fb_model,
+                    "system_prompt": system_prompt,
+                    "parameters": params,
+                })
+            else:
+                logger.warning(f"Резервный провайдер {fb_id} для функции {function_name} "
+                               f"не найден или выключен — резерв не используется")
+        return out
+
     @staticmethod
     def _prompt_file_path(function_name: str) -> Optional[str]:
         """Путь к файлу промпта prompts/{function}.txt (в контейнере — /app/prompts)."""

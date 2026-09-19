@@ -1194,10 +1194,10 @@ class KnowledgeGraphService:
                     _no_think = bool((cfg.get("parameters") or {}).get("no_think", True))
                 except Exception:
                     pass
-                if provider in ("deepseek", "openai", "openrouter") and _no_think:
+                if provider in ("deepseek", "openai", "openrouter", "custom") and _no_think:
                     payload["thinking"] = {"type": "disabled"}
 
-                if provider in ("openai", "deepseek", "openrouter"):
+                if provider in ("openai", "deepseek", "openrouter", "gigachat", "custom"):
                     endpoint = f"{llm_url}/v1/chat/completions"
                 else:
                     endpoint = f"{llm_url}/api/generate"
@@ -1211,7 +1211,7 @@ class KnowledgeGraphService:
                             logger.warning(f"[resolution] LLM верификация HTTP {resp.status}")
                             continue
                         data = await resp.json()
-                        if provider in ("openai", "deepseek", "openrouter"):
+                        if provider in ("openai", "deepseek", "openrouter", "gigachat", "custom"):
                             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                         else:
                             content = data.get("response", "")

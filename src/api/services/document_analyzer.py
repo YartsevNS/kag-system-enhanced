@@ -54,31 +54,46 @@ class DocumentAnalyzer:
             logger.debug(f"Слишком короткий чанк для анализа: {document_id}")
             return {}
 
-        # Настройки ТОЛЬКО из admin (function_map:doc_analysis)
-        cfg = self._get_config()
-        if not cfg or not cfg.get("model"):
+        # Настройки ТОЛЬКО из admin (function_map:doc_analysis). Берём цепочку
+        # «основной → резервный»: если основной провайдер не ответил, анализ повторяется
+        # на резервном (привязка функции в админке).
+        try:
+            from src.api.services.provider_service import provider_service
+            cfgs = provider_service.get_function_llm_chain("doc_analysis")
+        except Exception as e:
+            logger.debug(f"[analyze] цепочка провайдеров doc_analysis не получена: {e}")
+            cfgs = []
+        if not cfgs or not cfgs[0].get("model"):
             logger.warning(f"[analyze] Функция 'doc_analysis' не настроена в админке — анализ пропущен для {document_id}")
             return {}
 
-        model = cfg.get("model")
-        llm_url = cfg.get("url", "")
-        api_key = cfg.get("api_key", "")
-        provider = cfg.get("provider", "ollama")
-
         from src.indexing.auto_tagger import DocumentType
         type_labels = ", ".join(t.value for t in DocumentType)
-        system_prompt = (cfg.get("system_prompt") or "").replace("{type_labels}", type_labels)
+        system_prompt = (cfgs[0].get("system_prompt") or "").replace("{type_labels}", type_labels)
         if not system_prompt:
             system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
         prompt = self._build_prompt(first_chunk_text, filename, type_labels)
 
         last_error = ""
-        for attempt in (1, 2):
+        # (конфиг, попытка): основной дважды, затем резервный дважды — если резерв задан
+        plan = [(cand, attempt) for cand in range(len(cfgs)) for attempt in (1, 2)]
+        for cand, attempt in plan:
+            cfg = cfgs[cand]
+            model = cfg.get("model")
+            llm_url = cfg.get("url", "")
+            api_key = cfg.get("api_key", "")
+            provider = cfg.get("provider", "ollama")
+            if cand > 0 and attempt == 1:
+                logger.warning(f"[analyze] {document_id}: основной провайдер не ответил — "
+                               f"пробую РЕЗЕРВ {provider}/{model}")
             try:
                 import aiohttp
 
                 async with aiohttp.ClientSession() as session:
-                    if provider in ("openai", "deepseek", "openrouter", "gigachat"):
+                    # «custom» — OpenAI-совместимые провайдеры, добавленные вручную (например
+                    # polza.ai): их API тот же /v1/chat/completions, а не Ollama. Без этого
+                    # анализ документа уходил в ветку Ollama и падал на разборе ответа.
+                    if provider in ("openai", "deepseek", "openrouter", "gigachat", "custom"):
                         headers = {"Content-Type": "application/json"}
                         if api_key:
                             headers["Authorization"] = f"Bearer {api_key}"

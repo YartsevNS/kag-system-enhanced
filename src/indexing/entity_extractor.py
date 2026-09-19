@@ -589,7 +589,9 @@ JSON:
         try:
             import aiohttp
             
-            if provider in ("openai", "deepseek", "openrouter"):
+            # «custom» — OpenAI-совместимые провайдеры, добавленные вручную (polza.ai и подобные):
+            # тот же /v1/chat/completions. Без этого граф уходил в ветку Ollama и падал.
+            if provider in ("openai", "deepseek", "openrouter", "gigachat", "custom"):
                 # OpenAI-совместимый API (chat/completions)
                 headers = {"Content-Type": "application/json"}
                 if api_key:
@@ -624,7 +626,7 @@ JSON:
                     _no_think = bool((_cfgx.get("parameters") or {}).get("no_think", True))
                 except Exception:
                     pass
-                if provider in ("deepseek", "openai", "openrouter") and _no_think:
+                if provider in ("deepseek", "openai", "openrouter", "custom") and _no_think:
                     payload["thinking"] = {"type": "disabled"}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
