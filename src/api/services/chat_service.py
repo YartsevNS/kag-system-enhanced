@@ -41,6 +41,34 @@ class ChatService:
         self._search_limit = 10  # Количество документов для контекста чата
         logger.info("ChatService инициализирован")
 
+    def _domain_mode(self) -> str:
+        """Как домен вопроса участвует в поиске: hard | safe | off (настройка chat/domain).
+
+        hard — прежнее поведение: фильтр по домену как отсечение. Опасно: у части
+        документов домен не определён (в payload пусто), и они исчезают из выдачи
+        целиком — чат отвечает «информация не найдена» при наличии документа в корпусе
+        (замер 18.09.2026: 1012 чанков из 4944 без домена, вопрос про 2-МР давал 0.00
+        с фильтром против 0.90 без него).
+        safe — фильтр по домену, но пустой домен в выдачу допускается.
+        off — домен в поиске не участвует (определяется, но не фильтрует).
+
+        По умолчанию hard: поведение меняется только по замеру (см. docs/handoff.md).
+        """
+        try:
+            from src.api.services.config_store import config_store
+            raw = config_store.get("chat", "domain")
+        except Exception:
+            return "hard"
+        mode = str(raw or "hard").strip().lower()
+        return mode if mode in ("hard", "safe", "off") else "hard"
+
+    def _domain_kwargs(self, domain: Optional[str]) -> dict:
+        """Аргументы поиска по домену согласно режиму (см. _domain_mode)."""
+        mode = self._domain_mode()
+        if mode == "off" or not domain:
+            return {"domain": None}
+        return {"domain": domain, "domain_include_empty": mode == "safe"}
+
     def _get_chat_provider(self) -> tuple:
         """
         Получить провайдера и function_map для чата из Provider Architecture.
@@ -655,10 +683,10 @@ class ChatService:
                     limit=self._search_limit,  # Количество чанков для контекста
                     group_ids=group_ids,
                     is_admin=is_admin,
-                    # Фильтр RAG по домену (если query_analysis определила домен)
-                    domain=domain if domain else None,
-                    # ACL pre-filter (права доступа)
+                    # Домен определяется по вопросу, а как он участвует в поиске —
+                    # настройка chat/domain (hard|safe|off), см. _domain_kwargs
                     user_id=user_id,
+                    **self._domain_kwargs(domain if domain else None),
                 )
 
                 if search_results:
@@ -712,8 +740,8 @@ class ChatService:
                             for _sq in _subs[:4]:
                                 _extra = await embeddings_service.search(
                                     query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin,
-                                    domain=domain if domain else None,
                                     user_id=user_id,
+                                    **self._domain_kwargs(domain if domain else None),
                                 )
                                 for _r in _extra:
                                     _rid = _r.get("id")
@@ -968,8 +996,8 @@ class ChatService:
             limit=self._search_limit,
             group_ids=group_ids,
             is_admin=is_admin,
-            domain=_stream_domain,
             user_id=user_id,
+            **self._domain_kwargs(_stream_domain),
         )
         search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
 

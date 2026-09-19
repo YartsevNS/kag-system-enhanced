@@ -55,6 +55,25 @@ def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
         raise ValueError(f"Unsupported match type: {type(match)}")
 
 
+def _domain_condition(domain: str, include_empty: bool = False):
+    """Условие поиска по домену: жёсткое равенство или «домен ИЛИ пустой домен».
+
+    include_empty=True добавляет к условию пустую строку домена. Зачем: у части
+    документов домен не определился при индексации (в payload пусто), и жёсткое
+    равенство выбрасывало их из выдачи целиком — чат отвечал «информация не найдена»
+    при наличии документа в корпусе (замер 18.09.2026: вопрос про 2-МР давал 0.00 и
+    отказ с фильтром против 0.90 без него; в коллекции 1012 чанков из 4944 без домена).
+    Пустую строку ловит именно MatchValue(""), а is_empty НЕ ловит (проверено:
+    is_empty=81, пустая строка=1012), поэтому условие на пустой домен задано явно.
+    """
+    from qdrant_client.models import FieldCondition as _FC, Filter as _F, MatchValue as _MV
+
+    exact = _FC(key="domain", match=_MV(value=domain))
+    if not include_empty:
+        return exact
+    return _F(should=[exact, _FC(key="domain", match=_MV(value=""))])
+
+
 class EmbeddingsService:
     """
     Сервис для работы с эмбеддингами и Qdrant.
@@ -659,6 +678,7 @@ class EmbeddingsService:
         is_admin: bool = False,
         domain: Optional[str] = None,
         user_id: Optional[str] = None,
+        domain_include_empty: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Семантический поиск по embeddings.
@@ -733,20 +753,12 @@ class EmbeddingsService:
                         )
 
             if domain:
-                conditions.append(
-                    FieldCondition(
-                        key="domain",
-                        match=_MV_F(value=domain)
-                    )
-                )
+                conditions.append(_domain_condition(domain, domain_include_empty))
 
         # domain — независимый параметр: применяется и без filters
         # (раньше был вложен в `if filters:` и терялся при пустых filters).
         if domain and not filters:
-            from qdrant_client.models import MatchValue as _MV_D
-            conditions.append(
-                FieldCondition(key="domain", match=_MV_D(value=domain))
-            )
+            conditions.append(_domain_condition(domain, domain_include_empty))
 
         # ── ACL pre-filter: права доступа (visibility + allow/deny) ───────
         # Доступно, если: public ИЛИ пользователь/группа в allow-списках.
