@@ -31,6 +31,8 @@ Provider Service — единое управление LLM провайдера�
   }
 """
 
+import os
+import time
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from loguru import logger
@@ -177,11 +179,18 @@ class ProviderService:
     Вся логика работы с config_store (PostgreSQL) сосредоточена здесь.
     """
 
+    # Кэш провайдеров и привязок перечитывается не чаще, чем раз в N секунд.
+    # Зачем TTL: правки в админке инвалидируют кэш ТОЛЬКО того процесса, через который
+    # сохраняли (обычно api). Воркеры (обработка документов, граф) держали старую привязку
+    # до перезапуска — выглядело как «в админке поменял, а работает по-старому».
+    CACHE_TTL_SECONDS = float(os.environ.get("PROVIDER_CACHE_TTL", "30"))
+
     def __init__(self):
         self._config_store = None  # Lazy init
         self._provider_cache: Dict[str, ProviderConfig] = {}
         self._function_cache: Dict[str, FunctionMap] = {}
         self._cache_loaded = False
+        self._cache_loaded_at = 0.0
 
     @property
     def config_store(self):
@@ -191,8 +200,8 @@ class ProviderService:
         return self._config_store
 
     def _load_cache(self):
-        """Загрузить всё из БД в кэш"""
-        if self._cache_loaded:
+        """Загрузить всё из БД в кэш (не чаще, чем раз в CACHE_TTL_SECONDS)."""
+        if self._cache_loaded and (time.monotonic() - self._cache_loaded_at) < self.CACHE_TTL_SECONDS:
             return
 
         # Загружаем провайдеров
@@ -210,11 +219,13 @@ class ProviderService:
                 self._function_cache[fname] = FunctionMap.from_dict(fdata)
 
         self._cache_loaded = True
+        self._cache_loaded_at = time.monotonic()
         logger.debug(f"ProviderService: загружено {len(self._provider_cache)} провайдеров, {len(self._function_cache)} функций")
 
     def _invalidate_cache(self):
         """Сбросить кэш при изменении"""
         self._cache_loaded = False
+        self._cache_loaded_at = 0.0
         self._provider_cache = {}
         self._function_cache = {}
 
