@@ -74,6 +74,27 @@ def test_context_limit_is_passed_to_search(monkeypatch):
     assert captured["limit"] == 5, f"поиск вызван с limit={captured['limit']}"
 
 
+def test_default_context_limit_is_10(monkeypatch):
+    """Дефолт глубины — 10 (решение владельца, несмотря на замер).
+
+    Замер 20.09.2026 на внешнем наборе (75 вопросов, по 4 прогона на настройку): глубина 10 —
+    0.737, глубина 20 — 0.820 при +0,3 с на ответ, диапазоны не пересекаются. Но контекст в 20
+    фрагментов дороже по токенам у платного провайдера, поэтому 20/30/40 проверяем позже на
+    локальных моделях, а дефолт остаётся 10 (docs/handoff.md: «Что дальше», п. 7 и «Пилот
+    второй волны»). Тест стережёт дефолт, чтобы он не уехал без решения.
+    """
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True))
+    assert captured["limit"] == 10, f"дефолт глубины контекста — 10, а не {captured['limit']}"
+
+    # А на конкретный запрос глубину 20 поставить можно: ручка существует, просто не по умолчанию.
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9)], captured)
+    _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True, context_limit=20))
+    assert captured["limit"] == 20
+
+
 def test_context_limit_is_clamped(monkeypatch):
     captured = {}
     service = _service(monkeypatch, {"context_limit": 99}, [_chunk(0.9)], captured)
