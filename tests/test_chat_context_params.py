@@ -270,3 +270,58 @@ def test_gap_filters_junk_from_context_and_sources(monkeypatch):
     assert "нужный факт про реку" in joined
     ids = [s["id"] for s in response["sources"]]
     assert "c4" not in ids, "и в источники ответа он попадать не должен"
+
+
+# ── таблицы в источниках: только для вычислительных вопросов ────────────────────
+
+def _patch_tables(monkeypatch, computed: bool):
+    """Подменить табличный слой: computed=True — вопрос вычислительный, False — нет."""
+    import src.indexing.table_router as tr
+    import src.indexing.tables_settings as ts
+
+    monkeypatch.setattr(ts, "get_tables_config", lambda: {"sql_enabled": True})
+    monkeypatch.setattr(tr, "answer_from_tables", lambda q, docs: {"status": "ok" if computed else "none"})
+    monkeypatch.setattr(tr, "context_block", lambda res: "--- ПОСЧИТАНО SQL ---\nсумма 100" if computed else "")
+
+
+def test_source_tables_only_for_computational_question(monkeypatch):
+    """Таблицы источника отдаём пользователю только когда табличный слой посчитал ответ.
+
+    Причина: раньше таблицы прикреплялись к источникам всегда, и интерфейс рисовал их под
+    любым ответом — на вопросе «перечисли стандарты» под ответом появились таблицы из попутно
+    найденного документа (к вопросу отношения не имеющие).
+    """
+    class _FakeQuery:
+        def filter_by(self, **kw):
+            return self
+
+        def all(self):
+            class _T:
+                def to_dict(self):
+                    return {"headers": ["Номер", "Название"], "rows": [["ГОСТ", "тест"]], "page_num": 1}
+            return [_T()]
+
+    class _FakeSession:
+        def query(self, *a, **kw):
+            return _FakeQuery()
+
+        def close(self):
+            pass
+
+    import src.database.session as dbs
+    monkeypatch.setattr(dbs, "get_session_local", lambda: (lambda: _FakeSession()))
+
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9, "c1")], captured)
+
+    _patch_tables(monkeypatch, computed=False)
+    response = _run(service.generate_response(user_message="перечисли стандарты", use_rag=True, is_admin=True))
+    assert not any(s.get("tables") for s in response["sources"]), \
+        "на текстовом вопросе таблицы источникам прикрепляться не должны"
+
+    captured = {}
+    service = _service(monkeypatch, {}, [_chunk(0.9, "c1")], captured)
+    _patch_tables(monkeypatch, computed=True)
+    response = _run(service.generate_response(user_message="посчитай сумму", use_rag=True, is_admin=True))
+    assert any(s.get("tables") for s in response["sources"]), \
+        "на вычислительном вопросе таблицы источника показывать нужно"

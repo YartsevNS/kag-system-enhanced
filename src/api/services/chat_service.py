@@ -1011,38 +1011,39 @@ class ChatService:
                     search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
 
                     # ── Обогащение источников таблицами (table RAG) ────────────
-                    # Если чанк — таблица (markdown-структура) или документ имеет
-                    # таблицы в document_tables — прикрепляем HTML-версии к source,
-                    # чтобы чат мог отрендерить их пользователю структурно.
-                    # Исследование (2026): лучший подход — слоёный: markdown для
-                    # LLM-контекста + HTML для отображения пользователю
-                    # (Microsoft Azure Document Intelligence v4.0, LlamaIndex).
-                    try:
+                    # Раньше таблицы прикреплялись к источникам ВСЕГДА, и интерфейс рисовал их
+                    # под любым ответом — включая текстовые вопросы. На живом примере (вопрос
+                    # «перечисли стандарты») под ответом появились таблицы жизненного цикла
+                    # безопасности из попутно найденного документа, к вопросу отношения не
+                    # имеющие. Теперь таблицы прикрепляются только когда вопрос действительно
+                    # вычислительный — то есть табличный слой дал результат (см. шаг 2c ниже).
+                    def _attach_source_tables(_sources, _limit: int = 3):
+                        """Прикрепить к источникам их таблицы — интерфейс рисует их пользователю.
+
+                        Вызывается ТОЛЬКО когда табличный слой дал результат (см. шаг 2c):
+                        иначе таблицы попадали под любой текстовый ответ.
+                        """
                         from src.database.session import get_session_local
                         from src.database.document_table_models import DocumentTable
-                        _doc_tables_cache = {}
-                        for src in sources:
-                            did = src.get('document_id')
-                            if not did or did in _doc_tables_cache:
+                        cache: dict = {}
+                        for _src in _sources:
+                            _did = _src.get('document_id')
+                            if not _did or _did in cache:
                                 continue
                             _maker = get_session_local()
-                            _s = _maker()
+                            _session = _maker()
                             try:
-                                _tabs = _s.query(DocumentTable).filter_by(document_id=did).all()
-                                _doc_tables_cache[did] = [t.to_dict() for t in _tabs[:3]]
+                                cache[_did] = [t.to_dict() for t in
+                                               _session.query(DocumentTable)
+                                               .filter_by(document_id=_did).all()[:_limit]]
                             finally:
-                                _s.close()
-                        for src in sources:
-                            did = src.get('document_id')
-                            tabs = _doc_tables_cache.get(did) or []
-                            if tabs:
-                                src['tables'] = tabs
-                        _with_tables = sum(1 for s in sources if s.get('tables'))
-                        if _with_tables:
-                            logger.info(f"Table RAG: {_with_tables} источников с таблицами")
-                    except Exception as e:
-                        logger.debug(f"Table RAG обогащение пропущено: {e}")
-
+                                _session.close()
+                        for _src in _sources:
+                            _tabs = cache.get(_src.get('document_id')) or []
+                            if _tabs:
+                                _src['tables'] = _tabs
+                        logger.info(f"Table RAG: {sum(1 for s in _sources if s.get('tables'))} "
+                                    f"источников с таблицами")
                     logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
 
                 # 2b. Поиск в графе Neo4j
@@ -1097,6 +1098,12 @@ class ChatService:
                                 f"[tables] SQL по таблицам: статус {t_res.get('status')}, "
                                 f"строк {t_res.get('row_count')}, источник {t_res.get('source')}"
                             )
+                            # Вопрос вычислительный — вот теперь показываем таблицы источников
+                            # пользователю (интерфейс рисует их из sources[].tables).
+                            # Раньше это происходило для любого вопроса и давало мусор
+                            # под текстовыми ответами.
+                            if _attach_source_tables:
+                                await asyncio.to_thread(_attach_source_tables, sources)
                 except Exception as e:
                     logger.debug(f"табличный слой пропущен: {e}")
 
