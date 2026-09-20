@@ -19,6 +19,7 @@ from src.database.monitoring_models import WatchedURL, WatchedFolder, Notificati
 from src.database.chat_models import ChatSession, ChatMessage  # noqa: F401 — регистрация моделей
 from src.database.entity_alias_models import EntityAlias  # noqa: F401 — словарь алиасов для entity resolution
 from src.database.document_table_models import DocumentTable  # noqa: F401 — таблицы документов для table RAG
+from src.database.table_row_models import TableRow  # noqa: F401 — строки таблиц (строчный слой)
 
 logger = logging.getLogger(__name__)
 

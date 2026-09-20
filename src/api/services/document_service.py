@@ -1307,6 +1307,21 @@ class DocumentService:
                         )
                         session.add(row)
                         saved += 1
+                        # Строчный слой: каждая строка таблицы отдельной записью — по нему
+                        # работают точные фильтры и вычисления (SQL), а не подсчёт по тексту.
+                        try:
+                            from src.indexing.table_store import save_table_rows
+
+                            save_table_rows(
+                                document_id=document_id,
+                                table_id=_tid,
+                                headers=tb.get('headers') or [],
+                                rows=data_rows,
+                                page_num=getattr(page, 'page_num', 0),
+                                session=session,
+                            )
+                        except Exception as _e:
+                            logger.debug(f"строки таблицы {_tid[:8]} не сохранены: {_e}")
                 session.commit()
             finally:
                 session.close()
