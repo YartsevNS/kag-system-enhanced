@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from loguru import logger
 import asyncio
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks
 from src.api.routes.chat import router_export
@@ -40,6 +41,21 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Жизненный цикл приложения"""
+    # Пул потоков для СИНХРОННЫХ вызовов (Neo4j, Qdrant-клиент, чтения БД в потоках).
+    # Пул по умолчанию — min(32, CPU+4), и при десятках одновременных запросов он становится
+    # узким местом: каждый чат делает несколько вызовов через asyncio.to_thread. Ставим свой
+    # пул и логируем его размер, чтобы это было видно в замерах (обоснование — разбор и
+    # консультация по плану async-перехода: docs/guides/async-migration-plan.md).
+    try:
+        from src.config import get_settings
+        _threads = int(getattr(get_settings(), "ASYNC_BLOCKING_THREADS", 64) or 64)
+        _threads = max(8, min(256, _threads))
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(max_workers=_threads, thread_name_prefix="kag-blocking"))
+        logger.info(f"Пул потоков для блокирующих вызовов: {_threads}")
+    except Exception as e:
+        logger.warning(f"Не удалось поднять пул потоков для блокирующих вызовов: {e}")
+
     # Инициализация при запуске
     try:
         setup_opentelemetry()

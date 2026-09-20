@@ -184,6 +184,11 @@ class Settings(BaseSettings):
     CHUNK_TRIAGE_NEIGHBORS: int = 5       # сколько соседей смотрим в Qdrant
     CHUNK_SIZE: int = 1500
     CHUNK_OVERLAP: int = 225  # 15% перекрытие (1500 * 0.15 ≈ 225)
+    # Размер пула потоков для синхронных вызовов (Neo4j, Qdrant-клиент, чтения БД) в api.
+    # Пул по умолчанию (min(32, CPU+4)) становится узким местом при десятках одновременных
+    # запросов: каждый вопрос в чате делает несколько вызовов через asyncio.to_thread.
+    # Обоснование и замеры — docs/guides/async-migration-plan.md
+    ASYNC_BLOCKING_THREADS: int = 64
 
     # Общие настройки LLM
     LLM_MODEL_NAME: str = "mistralai/Mistral-7B-Instruct-v0.2"
