@@ -86,14 +86,15 @@ def test_error_marker_counts_as_failure(monkeypatch):
 
 
 def test_without_fallback_error_is_returned(monkeypatch):
-    """Резерва нет — пользователь получает прежнюю честную ошибку, а не пустоту."""
+    """Резерва нет — пользователь получает понятное сообщение с технической причиной, не пустоту."""
     chain = [(_provider("p1", "deepseec"), "deepseek-flash")]
     service, calls = _service(monkeypatch, chain,
                               behaviours=[("❌ Ошибка подключения к LLM: timed out", "timed out")])
     res = _run(service.generate_response(user_message="вопрос", use_rag=False, is_admin=True))
 
     assert res["metadata"]["fallback_used"] is False
-    assert "❌" in res["response"]
+    assert "Не удалось получить ответ от модели" in res["response"]
+    assert "timed out" in res["response"], "техническая причина должна остаться в тексте"
 
 
 def test_extra_payload_computed_per_provider(monkeypatch):

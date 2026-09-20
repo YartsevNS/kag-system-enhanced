@@ -43,6 +43,75 @@ SCORE_GAP_BY_DOMAIN = {       # доменные дефолты: где мусо
     "medical": 0.05,
 }
 
+# ── Бюджет времени на вызов модели ──────────────────────────────────────────────
+# Две разные величины, которые раньше были одной (120 с на попытку и никакого предела
+# на цепочку): из-за этого зависший провайдер держал запрос до ~8 минут, а вместе с ним
+# и весь api (health тоже перестаёт отвечать — он в том же цикле событий).
+LLM_ATTEMPT_TIMEOUT = 45.0    # сколько ждём ОДНУ попытку (провайдер висит «по таймауту»)
+LLM_CHAIN_BUDGET = 90.0       # сколько всего отведено на цепочку «основной → резерв»
+
+# ── История диалога: бюджет ─────────────────────────────────────────────────────
+# Клиент присылает всю переписку, сервер раньше добавлял её целиком — цена вопроса росла
+# с каждым ходом. Бюджет ставим НА СЕРВЕРЕ (клиенту доверять нельзя), режем целыми ходами.
+HISTORY_BUDGET_TOKENS = 2500  # ≈ сколько токенов истории максимум уходит в запрос
+HISTORY_KEEP_LAST = 3         # последние ходы не трогаем: там «а по этому адресу?»
+HISTORY_MAX_MSG_CHARS = 1200  # длинный старый ответ ассистента укорачиваем, а не выбрасываем
+
+
+def _cfg_llm_timeout(params: Dict[str, Any]) -> float:
+    """Таймаут попытки: из привязки функции, иначе общий дефолт (границы 1..300 с)."""
+    try:
+        value = float((params or {}).get("llm_timeout", LLM_ATTEMPT_TIMEOUT))
+    except (TypeError, ValueError):
+        value = LLM_ATTEMPT_TIMEOUT
+    return max(1.0, min(300.0, value))
+
+
+def _cfg_llm_budget(params: Dict[str, Any]) -> float:
+    """Бюджет на всю цепочку: из привязки, иначе дефолт (границы 2..600 с)."""
+    try:
+        value = float((params or {}).get("llm_budget", LLM_CHAIN_BUDGET))
+    except (TypeError, ValueError):
+        value = LLM_CHAIN_BUDGET
+    return max(2.0, min(600.0, value))
+
+
+def _trim_history(history: Optional[List[Dict[str, str]]],
+                  budget_tokens: int = HISTORY_BUDGET_TOKENS,
+                  keep_last: int = HISTORY_KEEP_LAST,
+                  chars_per_token: float = 2.5) -> List[Dict[str, str]]:
+    """Обрезать историю диалога до бюджета — иначе она растёт без предела.
+
+    Зачем (замер 20.09.2026): веб-интерфейс присылает ВСЮ историю сессии с каждым запросом,
+    сервер добавлял её целиком, и стоимость вопроса линейно росла к концу разговора. При этом
+    вся история стоит ПОСЛЕ меняющегося контекста, поэтому не кэшируется и оплачивается заново.
+
+    Правила: режем целыми ХОДАМИ с конца (старые выбрасываем, последние keep_last не трогаем —
+    именно там местоимения «а по этому адресу?»); длинные ответы ассистента не выбрасываем
+    целиком, а укорачиваем до первых символов (в наших ответах вывод идёт в начале).
+    """
+    if not history:
+        return []
+    limit_chars = int(budget_tokens * chars_per_token)
+    kept: List[Dict[str, str]] = []
+    used = 0
+    total = len(history)
+    for idx in range(total - 1, -1, -1):
+        msg = history[idx]
+        text = str(msg.get("content", "") or "")
+        must_keep = (total - 1 - idx) < keep_last
+        cost = len(text)
+        fits = (used + cost) <= limit_chars or must_keep
+        if not fits:
+            break
+        if len(text) > HISTORY_MAX_MSG_CHARS and not must_keep:
+            text = text[:HISTORY_MAX_MSG_CHARS].rstrip() + " …"
+            cost = len(text)
+        kept.append({"role": msg.get("role", "user"), "content": text})
+        used += cost
+    kept.reverse()
+    return kept
+
 
 def apply_score_gap(results: List[Dict[str, Any]], gap: float,
                     min_keep: int = SEARCH_KEEP_MIN) -> List[Dict[str, Any]]:
@@ -960,7 +1029,7 @@ class ChatService:
                         if not filename:
                             try:
                                 from src.api.services.document_service import document_service
-                                record = document_service.get_document(doc_id)
+                                record = await asyncio.to_thread(document_service.get_document, doc_id)
                                 if record:
                                     filename = record.filename
                             except Exception:
@@ -1047,6 +1116,10 @@ class ChatService:
                     logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
 
                 # 2b. Поиск в графе Neo4j
+                # ВАЖНО: kg_service.hybrid_search — СИНХРОННЫЙ (драйвер Neo4j синхронный).
+                # Раньше он вызывался прямо в асинхронном обработчике и блокировал цикл событий:
+                # пока Neo4j отвечает (или висит), api не может отдать даже /health, и контейнер
+                # уходит в unhealthy. Теперь — в отдельный поток, как и прочий синхронный I/O.
                 try:
                     from src.indexing.knowledge_graph import kg_service
                     import re
@@ -1056,9 +1129,14 @@ class ChatService:
                     ))[:5]
                     entities_for_search = list(set(words))[:5]
 
-                    graph_results = kg_service.hybrid_search(entities_for_search, doc_ids_from_qdrant) if entities_for_search else []
+                    if entities_for_search:
+                        graph_results = await asyncio.to_thread(
+                            kg_service.hybrid_search, entities_for_search, doc_ids_from_qdrant)
+                    else:
+                        graph_results = []
                     if not graph_results:
-                        graph_results = kg_service.hybrid_search([user_message], doc_ids_from_qdrant)
+                        graph_results = await asyncio.to_thread(
+                            kg_service.hybrid_search, [user_message], doc_ids_from_qdrant)
 
                     if graph_results:
                         graph_context = []
@@ -1118,7 +1196,9 @@ class ChatService:
         # Статистика базы (для системных вопросов «сколько документов» и т.п.)
         try:
             from src.api.services.document_repository import get_doc_repo
-            _docs = get_doc_repo().get_all() or {}
+            # Синхронное чтение из БД — в отдельный поток, иначе блокирует цикл событий
+            # (см. правило: синхронный I/O внутри async — только через asyncio.to_thread).
+            _docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
             total_docs = len(_docs)
             stats_line = f"В базе знаний загружено документов: {total_docs}."
         except Exception:
@@ -1130,31 +1210,20 @@ class ChatService:
             from src.indexing.comparison import COMPARISON_INSTRUCTION
             system_prompt = f"{system_prompt}\n\n{COMPARISON_INSTRUCTION}"
 
-        # Системный промпт (из function_map, с контекстом RAG)
-        if context or meta_context:
-            # Для мета-запросов (список/сколько) контекст — это СПИСОК из БД,
-            # для семантических — чанки из Qdrant. Никогда не оба сразу.
-            rag_block = f"КОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}" if context else ""
-            list_block = f"{meta_context}" if meta_context else ""
-            api_messages.append({
-                "role": "system",
-                "content": f"""{system_prompt}
+        # ── Порядок блоков подобран под кэш префикса ─────────────────────────────
+        # Провайдер кэширует САМЫЙ ДЛИННЫЙ ОБЩИЙ префикс запроса, поэтому:
+        #   1) стабильный системный промпт — в самое начало (он не меняется между вопросами);
+        #   2) история диалога — сразу за ним (она растёт только добавлением в конец);
+        #   3) МЕНЯЮЩИЙСЯ контекст документов и статистика — в конец, перед вопросом;
+        #   4) вопрос пользователя — последним.
+        # Раньше контекст был склеен с системным промптом и стоял ДО истории: из-за этого ни
+        # промпт, ни история не кэшировались, и вся переписка оплачивалась заново на каждом
+        # вопросе. Разбор — reports/_scratch/consult_cost_answer.md.
+        api_messages.append({"role": "system", "content": system_prompt})
 
-{stats_line}
-
-{list_block}
-{rag_block}
-
-Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа на вопрос — скажи честно «в загруженных документах эта информация не найдена». НЕ объясняй, как устроена система, если тебя не спросили об этом напрямую."""
-            })
-        else:
-            api_messages.append({
-                "role": "system",
-                "content": f"{system_prompt}\n\n{stats_line}".strip()
-            })
-
-        # История сообщений
-        for msg in (history or []):
+        # История сообщений — с серверным бюджетом (клиент присылает всю переписку целиком)
+        _history = _trim_history(history)
+        for msg in _history:
             role = msg.get("role", "user")
             if role not in ("user", "assistant", "system"):
                 role = "user"
@@ -1162,6 +1231,25 @@ class ChatService:
                 "role": role,
                 "content": msg.get("content", "")
             })
+
+        # Меняющийся хвост: статистика базы, контекст документов, инструкция отвечать строго.
+        # Держим его ПОСЛЕ стабильной части и истории — так он не ломает кэш префикса.
+        if context or meta_context:
+            # Для мета-запросов (список/сколько) контекст — это СПИСОК из БД,
+            # для семантических — чанки из Qdrant. Никогда не оба сразу.
+            rag_block = f"КОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}" if context else ""
+            list_block = f"{meta_context}" if meta_context else ""
+            volatile = "\n\n".join(x for x in (
+                stats_line,
+                list_block,
+                rag_block,
+                "Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа на "
+                "вопрос — скажи честно «в загруженных документах эта информация не найдена». "
+                "НЕ объясняй, как устроена система, если тебя не спросили об этом напрямую."
+            ) if x and x.strip())
+            api_messages.append({"role": "system", "content": volatile})
+        elif stats_line.strip():
+            api_messages.append({"role": "system", "content": stats_line.strip()})
 
         # Текущее сообщение пользователя
         api_messages.append({
@@ -1196,9 +1284,25 @@ class ChatService:
 
         llm_result = {}
         fallback_used = False
+        # ── Бюджет времени на всю цепочку ────────────────────────────────────────
+        # Раньше таймаут был только на ОДНУ попытку (120 с), а попыток в цепочке до
+        # четырёх — запрос мог занять 8 минут, и всё это время обработчик был занят.
+        # Замер 20.09.2026: при зависшем провайдере api перестаёт отвечать даже на /health.
+        # Теперь: у каждой попытки свой короткий таймаут, а на всю цепочку — общий бюджет;
+        # когда бюджет исчерпан, отвечаем честной ошибкой, а не держим соединение.
+        _attempt_timeout = _cfg_llm_timeout(_fm_params)
+        _deadline = time.monotonic() + _cfg_llm_budget(_fm_params)
         for _idx, (_prov, _model) in enumerate(chain):
             _model = _model or model_name
-            logger.debug(f"Запрос в LLM: provider={_prov.type}/{_prov.name}, model={_model}")
+            _left = _deadline - time.monotonic()
+            if _left <= 1.0:
+                logger.warning(
+                    f"Бюджет времени на цепочку исчерпан ({_cfg_llm_budget(_fm_params):.0f} с), "
+                    f"остались непробованными: {[p.name for p, _ in chain[_idx:]]}"
+                )
+                break
+            logger.debug(f"Запрос в LLM: provider={_prov.type}/{_prov.name}, model={_model}, "
+                         f"таймаут {min(_attempt_timeout, _left):.0f} с (остаток бюджета {_left:.0f} с)")
             llm_result = await self._call_llm(
                 messages=api_messages,
                 model=_model,
@@ -1206,6 +1310,7 @@ class ChatService:
                 max_tokens=tokens,
                 provider=_prov,
                 extra_payload=_extra_for(_prov),
+                timeout=min(_attempt_timeout, _left),
             )
             _content = (llm_result.get("content") or "").strip()
             _ok = bool(_content) and not llm_result.get("error") and not _content.startswith("❌")
@@ -1218,6 +1323,29 @@ class ChatService:
             _next = chain[_idx + 1][0].name if _idx + 1 < len(chain) else None
             logger.warning(f"Провайдер {_prov.name} не ответил ({_content[:60]!r})"
                            + (f" — пробую резерв {_next}" if _next else " — резерва нет"))
+
+        # Ни одна попытка не дала ответа: отдаём понятное сообщение, а не пустую строку.
+        # Раньше клиент получал пустоту и не понимал, что произошло (при этом запрос уже
+        # ограничен бюджетом времени, так что ждать больше нечего).
+        _final = (llm_result.get("content") or "").strip()
+        if not _final or llm_result.get("error"):
+            _budget = _cfg_llm_budget(_fm_params)
+            # Техническую причину сохраняем в тексте (её видно в скриншотах и логах), но ответ
+            # начинается с понятного человеку объяснения — раньше клиент получал пустоту или
+            # сырой текст ошибки и не понимал, что делать.
+            _reason = (llm_result.get("error") or _final or "").strip()
+            _reason = f" Причина: {_reason}" if _reason else ""
+            llm_result = {
+                **llm_result,
+                "content": (
+                    "Не удалось получить ответ от модели: провайдер не ответил за отведённое "
+                    f"время (бюджет {_budget:.0f} с на попытки).{_reason} Вопрос сохранён — "
+                    "попробуйте задать его ещё раз или выберите другую модель в чате."
+                ),
+                "error": llm_result.get("error") or "all_providers_failed",
+            }
+            logger.error(f"Все провайдеры цепочки не ответили за {_budget:.0f} с: "
+                         f"{[p.name for p, _ in chain]}")
 
         # Шаг 5: Логируем запрос (в audit — реальный пользователь, не session_id)
         from src.security.audit import audit_logger, AuditEventType
@@ -1381,26 +1509,27 @@ class ChatService:
         # Статистика базы
         try:
             from src.api.services.document_repository import get_doc_repo
-            _docs = get_doc_repo().get_all() or {}
+            _docs = await asyncio.to_thread(lambda: get_doc_repo().get_all() or {})
             stats_line = f"В базе знаний загружено документов: {len(_docs)}."
         except Exception:
             stats_line = ""
 
-        # Формируем сообщения
-        if context:
-            system_content = (
-                f"{system_prompt}\n\n{stats_line}\n\nКОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}\n\n"
-                "Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа — "
-                "скажи честно «в загруженных документах эта информация не найдена». "
-                "НЕ объясняй, как устроена система, если тебя не спросили напрямую."
-            )
-        else:
-            system_content = f"{system_prompt}\n\n{stats_line}".strip()
-        api_messages = [{"role": "system", "content": system_content}]
-        for msg in (history or []):
+        # Формируем сообщения — тот же порядок, что в обычном пути ответа (под кэш префикса):
+        # стабильный промпт → история (с бюджетом) → меняющийся контекст → вопрос.
+        api_messages = [{"role": "system", "content": system_prompt}]
+        for msg in _trim_history(history):
             role = msg.get("role", "user")
             if role in ("user", "assistant", "system"):
                 api_messages.append({"role": role, "content": msg.get("content", "")})
+        if context:
+            api_messages.append({"role": "system", "content": (
+                f"{stats_line}\n\nКОНТЕКСТ ИЗ ДОКУМЕНТОВ:\n{context}\n\n"
+                "Отвечай СТРОГО на основе контекста выше. Если контекст не содержит ответа — "
+                "скажи честно «в загруженных документах эта информация не найдена». "
+                "НЕ объясняй, как устроена система, если тебя не спросили напрямую."
+            ).strip()})
+        elif stats_line.strip():
+            api_messages.append({"role": "system", "content": stats_line.strip()})
         api_messages.append({"role": "user", "content": user_message})
 
         # Потоковый вызов LLM через провайдера
@@ -1418,7 +1547,10 @@ class ChatService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # Таймаут попытки — из привязки функции (по умолчанию 45 с, а не 120): при
+            # зависшем провайдере потоковый ответ тоже не должен держать соединение минутами.
+            _stream_timeout = _cfg_llm_timeout(_fm_params)
+            async with httpx.AsyncClient(timeout=_stream_timeout) as client:
                 async with client.stream("POST", url, json=payload, headers=headers) as resp:
                     if resp.status_code != 200:
                         body = await resp.aread()
