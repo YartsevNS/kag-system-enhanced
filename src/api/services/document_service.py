@@ -562,11 +562,17 @@ class DocumentService:
             # (без OOM); Occular — для сканов (рендер+нейросеть).
             try:
                 from src.indexing.hybrid_parser import get_hybrid_parser
+                from src.indexing.table_ids import make_table_id
+
                 hybrid = get_hybrid_parser()
                 parsed = hybrid.parse_pymupdf_first(str(file_path)) or hybrid.parse_ocular_only(str(file_path))
                 if not parsed:
                     raise ValueError("PyMuPDF/Occular недоступны")
                 segments = []
+                # Сквозная нумерация таблиц по документу: page.tables начинается заново на
+                # каждой странице, поэтому номер таблицы на странице не годится как часть id —
+                # таблица №0 на стр. 1 и таблица №0 на стр. 7 получили бы один и тот же id.
+                _table_seq = 0
                 for page in parsed.pages:
                     if page.text and page.text.strip():
                         segments.append({
@@ -584,13 +590,29 @@ class DocumentService:
                     # попадают в Qdrant со структурой. HTML-версия уходит в
                     # document_tables для точных запросов.
                     for tb in getattr(page, 'tables', []):
+                        # Номер берём ДО инкремента и считаем ВСЕ таблицы страницы, включая
+                        # пропущенные: так нумерация здесь и в _save_document_tables совпадает,
+                        # и чанк, и запись в Postgres получают один и тот же table_id.
+                        _ti = _table_seq
+                        _tid = make_table_id(document_id, page.page_num, _ti)
+                        _table_seq += 1
                         md = tb.get('markdown', '')
                         if md:
                             segments.append({
                                 "type": "table",
                                 "content": md,
                                 "page": page.page_num,
-                                "metadata": {"is_table": True, "complex": tb.get('complex', False)}
+                                "metadata": {
+                                    "chunk_type": "table",
+                                    "is_table": True,
+                                    "complex": tb.get('complex', False),
+                                    "table_id": _tid,
+                                    "table_index": _ti,
+                                    "row_count": tb.get('row_count', 0),
+                                    "col_count": tb.get('col_count', 0),
+                                    "quality": tb.get('quality', 0.0),
+                                    "columns": tb.get('headers', []),
+                                }
                             })
                 parsed_metadata = parsed.metadata
                 parser_name = parsed.parse_method
@@ -1248,8 +1270,14 @@ class DocumentService:
             maker = get_session_local()
             session = maker()
             try:
+                # Сквозная нумерация таблиц та же, что в конвейере обработки (segments):
+                # только так table_id чанка и table_id записи в БД совпадают.
+                _table_seq = 0
                 for page in getattr(parsed, 'pages', []):
                     for ti, tb in enumerate(getattr(page, 'tables', [])):
+                        _ti = _table_seq
+                        _tid = make_table_id(document_id, getattr(page, 'page_num', 0), _ti)
+                        _table_seq += 1
                         rows = tb.get('rows') or []
                         if not rows:
                             continue
@@ -1266,13 +1294,16 @@ class DocumentService:
                             id=str(uuid.uuid4()),
                             document_id=document_id,
                             page_num=getattr(page, 'page_num', 0),
-                            table_index=ti,
+                            table_index=_ti,
+                            table_id=_tid,
+                            row_count=len(data_rows),
+                            quality=float(tb.get('quality') or 0.0),
                             rows_json=json.dumps(data_rows, ensure_ascii=False),
                             headers_json=json.dumps(tb.get('headers', []), ensure_ascii=False),
                             markdown=tb.get('markdown', ''),
                             html=tb.get('html', ''),
                             bbox=json.dumps(tb.get('bbox', []), ensure_ascii=False),
-                            model="pymupdf",
+                            model=tb.get('extraction_method', 'pymupdf'),
                         )
                         session.add(row)
                         saved += 1

@@ -12,7 +12,7 @@
 заголовки отрывались от тел, таблицы резались пополам.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from loguru import logger
 
 from src.indexing.standard_parser import extract_structure
@@ -45,7 +45,12 @@ class DocumentChunker:
     ):
         settings = get_settings()
         self.chunk_size = chunk_size or settings.CHUNK_SIZE
-        self.chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
+        # ВАЖНО: `chunk_overlap or settings.CHUNK_OVERLAP` делал 0 неотличимым от «не задан»,
+        # а 0 здесь осмысленное значение — «без перекрытия» (нужно для проверок и для
+        # таблиц, которые склеивать с соседним текстом нельзя).
+        self.chunk_overlap = (
+            chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP
+        )
 
         # RecursiveCharacterTextSplitter — только для сегментов-гигантов
         if LANGCHAIN_AVAILABLE:
@@ -100,7 +105,26 @@ class DocumentChunker:
         chunk_seq = 0
         overlap = self.chunk_overlap or 0
 
-        def _finalize(text: str, metas: List[Dict[str, Any]], tail_in: str) -> dict:
+        # Табличный стек: атомарность табличных сегментов — управляемая настройка
+        # (`tables.config.atomic_chunks`). Ошибка чтения настроек не должна ломать
+        # чанкинг, поэтому по умолчанию ведём себя как раньше, но помечаем таблицы.
+        try:
+            from src.indexing.tables_settings import get_tables_config
+
+            atomic_tables = bool(get_tables_config().get("atomic_chunks", True))
+        except Exception:
+            atomic_tables = True
+
+        # Поля таблицы, которые переносим в разметку чанка (а оттуда — в payload Qdrant).
+        # Без них строку/таблицу нельзя отличить от обычного текста: именно на этом
+        # ломались вопросы вида «какая цена у X» — таблица склеивалась с текстом страницы.
+        table_keys = (
+            "table_id", "table_index", "row_count", "col_count", "quality", "columns",
+        )
+
+        def _finalize(text: str, metas: List[Dict[str, Any]], tail_in: str,
+                      extra: Optional[Dict[str, Any]] = None,
+                      chunk_type: str = "text") -> dict:
             """Собрать чанк: приклеить хвост, обрезать страховочно, собрать metadata."""
             nonlocal chunk_seq
             if tail_in:
@@ -125,11 +149,14 @@ class DocumentChunker:
                     "chunk_index": chunk_seq - 1,
                     "chunk_seq": chunk_seq,
                     "total_chunks": 0,  # заполняется после сборки
-                    "splitter": "segment_based",
+                    "splitter": "segment_based" if chunk_type == "text" else "table_segment",
+                    "chunk_type": chunk_type,
                     "is_partial": False,
                     "overlap_applied": bool(tail_in),
                     "pages": pages,
                     "segment_types": types,
+                    # Табличные поля (пусто для обычного текста)
+                    **(extra or {}),
                     # Структурные поля (стандарт/пункт/раздел) — для payload-фильтров
                     # поиска («ГОСТ 57580.1-2017, п. 5.2.1»). Пусто, если не найдено.
                     **extract_structure(text),
@@ -153,6 +180,37 @@ class DocumentChunker:
             meta_merged = dict(meta)
             if page is not None:
                 meta_merged["page"] = page
+
+            # ── Табличный сегмент: атомарный чанк ────────────────────────────────
+            # Закрываем накопленный текст, таблицу отдаём ОТДЕЛЬНЫМ чанком и обнуляем хвост
+            # перекрытия: иначе таблица склеивается с текстом страницы (и с соседней
+            # таблицей), и в одном векторе оказываются строки разных таблиц — ровно то,
+            # что делает поиск по строкам бессмысленным.
+            if atomic_tables and meta_merged.get("chunk_type") == "table":
+                if buffer:
+                    text = "\n\n".join(s["content"] for s in buffer)
+                    chunks.append(_finalize(text, [s["meta"] for s in buffer], tail))
+                    buffer, buffer_len, tail = [], 0, ""
+
+                extra = {
+                    key: meta_merged[key] for key in table_keys
+                    if meta_merged.get(key) not in (None, "", [], 0)
+                }
+
+                if len(content) > self.chunk_size and LANGCHAIN_AVAILABLE and self.text_splitter:
+                    # Таблица длиннее лимита: режем по строкам (разделитель — перевод строки),
+                    # каждой части оставляем тот же table_id и помечаем как частичную.
+                    # Строковые векторы для таких таблиц делает этап 3 (по строкам).
+                    pieces = [p.strip() for p in self.text_splitter.split_text(content) if p.strip()]
+                    for piece in pieces:
+                        chunk = _finalize(piece, [meta_merged], "",
+                                          extra={**extra, "is_partial": len(pieces) > 1},
+                                          chunk_type="table")
+                        chunks.append(chunk)
+                else:
+                    chunks.append(_finalize(content, [meta_merged], "", extra=extra,
+                                            chunk_type="table"))
+                continue
 
             # Очередной сегмент не влезает в буфер → закрываем текущий чанк
             if buffer and buffer_len + 2 + len(content) > self.chunk_size:

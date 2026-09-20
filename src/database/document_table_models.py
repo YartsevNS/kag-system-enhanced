@@ -8,7 +8,7 @@
 по document_tables (SQL: значение в колонке/строке). Рендер в чате из html.
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, Index
+from sqlalchemy import Column, String, Integer, DateTime, Text, Index, Float
 from datetime import datetime, timezone
 
 from src.database.models import Base
@@ -24,6 +24,11 @@ class DocumentTable(Base):
     document_id = Column(String, nullable=False, index=True)
     page_num = Column(Integer, default=0)
     table_index = Column(Integer, default=0)          # номер таблицы на странице
+    # Устойчивый идентификатор таблицы: uuid5(документ + страница + номер таблицы).
+    # Один и тот же при переиндексации; по нему связаны строки, векторы и разметка чанков.
+    table_id = Column(String, default="", index=True)
+    row_count = Column(Integer, default=0)            # строк данных (без шапки)
+    quality = Column(Float, default=0.0)              # оценка качества извлечения, 0..1
     # Представления одной таблицы
     rows_json = Column(Text, default="[]")            # 2D массив ячеек (JSON)
     headers_json = Column(Text, default="[]")         # строка заголовков (JSON)
@@ -45,6 +50,9 @@ class DocumentTable(Base):
             "document_id": self.document_id,
             "page_num": self.page_num,
             "table_index": self.table_index,
+            "table_id": getattr(self, "table_id", "") or "",
+            "row_count": getattr(self, "row_count", 0) or 0,
+            "quality": getattr(self, "quality", 0.0) or 0.0,
             "rows": rows,
             "headers": headers,
             "markdown": self.markdown,

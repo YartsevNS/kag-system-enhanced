@@ -381,6 +381,8 @@ class HybridDocumentParser:
                 # ── Таблицы: fitz.find_tables → структурированные ячейки ──
                 # Иначе таблицы «склеятся» в плоский текст без структуры.
                 try:
+                    from src.indexing.table_ids import table_quality, table_stats
+
                     found = page.find_tables()
                     for tb in found.tables:
                         data = tb.extract()  # 2D массив ячеек
@@ -420,6 +422,12 @@ class HybridDocumentParser:
                             "headers": [str(c or "") for c in data[0]],
                             "bbox": [round(v, 1) for v in tb.bbox],
                             "complex": complex_table,
+                            # Размер и качество считаем ЗДЕСЬ, у источника: по качеству
+                            # решается, нужен ли второй экстрактор и пускать ли строки
+                            # этой таблицы в поиск (мусор в выдаче не нужен).
+                            **table_stats(data),
+                            "quality": table_quality(data),
+                            "extraction_method": "pymupdf",
                         })
                 except Exception as e:
                     logger.debug(f"find_tables page {page_num + 1}: {e}")

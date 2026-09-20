@@ -48,12 +48,21 @@ _COLUMN_MIGRATIONS = [
     ("entity_aliases", "domain", "VARCHAR DEFAULT 'universal'"),
     # users — источник пользователя (SSO Keycloak: hashed_password NULL)
     ("users", "source", "VARCHAR DEFAULT 'local'"),
+    # document_tables — табличный стек: устойчивый id таблицы, размер, качество извлечения.
+    # Без table_id строки таблицы после переиндексации теряли связь с самой таблицей,
+    # и поиск по строкам не мог отделить одну таблицу от другой.
+    ("document_tables", "table_id", "VARCHAR DEFAULT ''"),
+    ("document_tables", "row_count", "INTEGER DEFAULT 0"),
+    ("document_tables", "quality", "FLOAT DEFAULT 0"),
 ]
 
 # ALTER-миграции, которые НЕ являются ADD COLUMN (идемпотентны).
 _ALTER_MIGRATIONS = [
     # Keycloak-пользователи (SSO) не имеют локального пароля
     ("users", "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"),
+    # Индекс по table_id: поиск строк таблицы идёт по нему (без индекса — сканы)
+    ("document_tables",
+     "CREATE INDEX IF NOT EXISTS ix_dt_table_id ON document_tables (table_id)"),
 ]
 
 

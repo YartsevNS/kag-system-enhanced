@@ -435,13 +435,19 @@ class EmbeddingsService:
             if metadata:
                 filename = metadata.get("filename", "")
             
-            # Структурные поля чанка (standard_number/clause/section) — на верхний
-            # уровень payload, чтобы по ним работали фильтры Qdrant.
+            # Структурные поля чанка — на верхний уровень payload, чтобы по ним работали
+            # фильтры Qdrant: номер стандарта/пункт/раздел, а также табличные поля
+            # (тип фрагмента, table_id, размер таблицы). Без табличных полей нельзя ни
+            # отфильтровать «только таблицы», ни собрать строки одной таблицы обратно.
             chunk_meta = chunk.get("metadata", {}) or {}
             structure = {
                 key: chunk_meta[key]
-                for key in ("standard_number", "clause", "section")
-                if chunk_meta.get(key)
+                for key in (
+                    "standard_number", "clause", "section",
+                    "chunk_type", "table_id", "table_index",
+                    "row_count", "col_count", "quality", "columns",
+                )
+                if chunk_meta.get(key) not in (None, "", [], 0)
             }
 
             payload = {
