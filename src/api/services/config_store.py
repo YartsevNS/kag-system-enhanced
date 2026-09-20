@@ -31,7 +31,25 @@ class PostgresConfigStore:
     # (сеанс SQLAlchemy + запрос + разбор JSON), а вызывается он десятками мест
     # в async-коде. Две секунды убирают эти 10 мс с повторных чтений и при этом
     # оставляют изменения, сделанные другим процессом, видимыми почти сразу.
-    CACHE_TTL_SECONDS = 2.0
+    #
+    # Разделение на два уровня (2026-09-20): часть ключей меняется только из админки —
+    # и в этом же процессе вызывается invalidate(), поэтому держать их по 2 секунды
+    # бессмысленно. Сканер показал 97 чтений настроек внутри async-кода, и каждое
+    # промахивается в БД: с долгим TTL для статики промахов остаётся мало.
+    # Динамика (статусы, прогресс, мониторинг) остаётся на коротком TTL: её пишет
+    # ДРУГОЙ процесс (worker), и именно для неё важна быстрая видимость.
+    CACHE_TTL_SECONDS = 2.0          # динамика: статусы, прогресс, очереди, мониторинг
+    CACHE_TTL_STATIC_SECONDS = 30.0  # статика: промпты, привязки моделей, настройки поиска
+    STATIC_CATEGORIES = {
+        "function_map", "providers", "llm", "ext_llm", "graph_model", "embedding",
+        "chunking", "reranker", "search", "ocr", "scaling", "setup", "chat", "tables",
+        "branding", "upload_config",
+    }
+
+    def _ttl_for(self, category: str) -> float:
+        """TTL по категории: статика — долгий, динамика — короткий."""
+        return (self.CACHE_TTL_STATIC_SECONDS if category in self.STATIC_CATEGORIES
+                else self.CACHE_TTL_SECONDS)
 
     def __init__(self):
         # Ленивое подключение через единый engine (src.database.session).
@@ -55,8 +73,11 @@ class PostgresConfigStore:
         return True, copy.deepcopy(value)
 
     def _cache_put(self, config_id: str, value: Any) -> None:
+        # TTL выбираем по категории (префикс id до «:»): статика живёт дольше,
+        # динамика — коротко (см. _ttl_for и комментарий к CACHE_TTL_*).
+        category = config_id.split(":", 1)[0]
         with self._cache_lock:
-            self._cache[config_id] = (time.monotonic() + self.CACHE_TTL_SECONDS, value)
+            self._cache[config_id] = (time.monotonic() + self._ttl_for(category), value)
 
     def invalidate(self, category: str, key: str = "default") -> None:
         """Сбросить кэш по ключу (зовётся из set/delete/compare_and_set)."""

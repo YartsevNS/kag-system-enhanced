@@ -117,3 +117,34 @@ def test_missing_key_cache_invalidated_by_set(monkeypatch):
     store.invalidate("scaling", "default")
     store.get("scaling", "default", default=None)
     assert len(counter) == 2, "после инвалидации чтение обязано идти в источник"
+
+
+# ── два уровня TTL: статика долго, динамика коротко (2026-09-20) ────────────────
+
+def test_static_categories_use_long_ttl():
+    """Промпты и привязки моделей меняются из админки — она же инвалидирует кэш.
+
+    Держать их по 2 секунды незачем: каждое промахивание — синхронное чтение из БД внутри
+    async-кода (сканер: 97 таких мест), то есть блокировка цикла событий.
+    """
+    assert config_store._ttl_for("function_map") == config_store.CACHE_TTL_STATIC_SECONDS
+    assert config_store._ttl_for("providers") == config_store.CACHE_TTL_STATIC_SECONDS
+    assert config_store._ttl_for("chat") == config_store.CACHE_TTL_STATIC_SECONDS
+
+
+def test_dynamic_categories_keep_short_ttl():
+    """Динамику пишет ДРУГОЙ процесс (worker) — для неё быстрая видимость обязательна."""
+    for dynamic in ("system", "web_monitor", "process_logs", "entity_cache", "rebuild_progress"):
+        assert config_store._ttl_for(dynamic) == config_store.CACHE_TTL_SECONDS, \
+            f"для {dynamic!r} нужен короткий TTL"
+
+
+def test_cache_put_picks_ttl_by_category():
+    config_store._cache_put("function_map:chat", {"system_prompt": "п"})
+    config_store._cache_put("system:status", "idle")
+    with config_store._cache_lock:
+        static_deadline, _ = config_store._cache["function_map:chat"]
+        dynamic_deadline, _ = config_store._cache["system:status"]
+    now = time.monotonic()
+    assert static_deadline - now > 20, "статика должна жить заметно дольше двух секунд"
+    assert dynamic_deadline - now < 5, "динамика должна остаться на коротком TTL"
