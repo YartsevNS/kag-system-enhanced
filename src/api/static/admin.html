@@ -2052,10 +2052,22 @@
             }
             if (functionName === 'chat') {
                 var ctxVal = (params.context_limit !== undefined) ? params.context_limit : 10;
+                var gapVal = (params.min_score_gap !== undefined && params.min_score_gap !== null) ? params.min_score_gap : '';
+                var gapMap = (params.score_gap_by_domain && typeof params.score_gap_by_domain === 'object') ? params.score_gap_by_domain : {};
                 var thrVal = (params.min_top_score !== undefined) ? params.min_top_score : 0;
                 html += '<div class="form-group"><label>Глубина контекста, фрагментов</label>' +
                     '<input type="number" id="fm-context" value="' + ctxVal + '" step="1" min="3" max="20" style="width:90px">' +
                     '<div class="muted" style="font-size:11px;margin-top:4px">Сколько найденных фрагментов уходит в промпт (по умолчанию 10). Замер 20.09.2026 на внешнем наборе (75 вопросов, по 4 прогона): глубина 10 — 0.737, глубина 20 — 0.820 при +0,3 с, но 20 фрагментов дороже по токенам у платного провайдера. Значение 20 НЕ ставим по решению владельца: глубины 20/30/40 проверяем позже на локальных моделях (docs/handoff.md, «Что дальше», п. 7).</div></div>' +
+                    '<div class="form-group"><label>Строгость отбора фрагментов (порог от лучшего score; 0 — выключено)</label>' +
+                    '<input type="number" id="fm-gap" value="' + gapVal + '" step="0.01" min="0" max="0.30" style="width:110px">' +
+                    '<div class="muted" style="font-size:11px;margin-top:4px">Слабые фрагменты (посторонние документы) отбрасываются: в промпт, в ответ и в список источников попадает только то, что близко к лучшему фрагменту. Порог относительный — переносится между доменами, в отличие от абсолютного. Замер 20.09.2026: на текстах посторонний фрагмент отстоит от нужного на ~0,10, на финкорпусе — на 0,02; отсечение 0,05 убирает 83% и 26% посторонних фрагментов соответственно и не теряет нужный источник до 0,15/0,12. Пользователь в чате может сдвинуть отбор в диапазоне 0,02–0,20, но не выключить его и не выкрутить в максимум.</div></div>' +
+                    '<div class="form-group"><label>Порог по доменам (пусто — общий; где мусор ближе к топу, порог жёстче)</label>' +
+                    '<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">' +
+                    ['universal', 'legal', 'infosec', 'accounting', 'medical'].map(function (d) {
+                        return '<label style="display:flex;align-items:center;gap:4px">' + d +
+                            '<input type="number" id="fm-gap-' + d + '" value="' + (gapMap[d] !== undefined ? gapMap[d] : '') + '" step="0.01" min="0" max="0.30" style="width:80px"></label>';
+                    }).join('') +
+                    '</div></div>' +
                     '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fm-markbest" style="width:auto;vertical-align:middle" ' + (params.mark_best ? 'checked' : '') + '> Помечать самый релевантный фрагмент</label>' +
                     '<div class="muted" style="font-size:11px;margin-top:4px">Первый по score фрагмент помечается в контексте как «самый релевантный» с указанием опираться на него в первую очередь — модель реже размазывает ответ по всему контексту. По умолчанию выключено (включать по замеру).</div></div>' +
                     '<div class="form-group"><label>Порог отказа по score (0 — выключено)</label>' +
@@ -2196,6 +2208,22 @@
                     if (nt) p.no_think = nt.checked;
                     var cx = document.getElementById('fm-context');
                     if (cx) p.context_limit = parseInt(cx.value, 10) || 10;
+                    // Строгость отбора: пустое поле = параметр не задан (действует доменный
+                    // дефолт сервера); 0 = отсечение выключено (решение администратора).
+                    var gp = document.getElementById('fm-gap');
+                    if (gp && gp.value !== '') {
+                        var gv = parseFloat(gp.value);
+                        if (!isNaN(gv)) p.min_score_gap = Math.max(0, Math.min(0.30, gv));
+                    }
+                    var gmap = {};
+                    ['universal', 'legal', 'infosec', 'accounting', 'medical'].forEach(function (d) {
+                        var el = document.getElementById('fm-gap-' + d);
+                        if (el && el.value !== '') {
+                            var dv = parseFloat(el.value);
+                            if (!isNaN(dv)) gmap[d] = Math.max(0, Math.min(0.30, dv));
+                        }
+                    });
+                    if (Object.keys(gmap).length) p.score_gap_by_domain = gmap;
                     var mb = document.getElementById('fm-markbest');
                     if (mb) p.mark_best = mb.checked;
                     var th = document.getElementById('fm-threshold');

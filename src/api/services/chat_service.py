@@ -22,6 +22,80 @@ from src.llm import (
 )
 from src.api.services.provider_service import provider_service
 
+# ── Отсечение слабых фрагментов по релевантности ────────────────────────────────
+# «Порог» здесь относительный: фрагмент выбрасывается, если его score ниже лучшего на эту
+# величину. Абсолютный порог не годится — скоры разных доменов лежат в своих диапазонах
+# (замер 20.09.2026: на текстах посторонний фрагмент отстоит от своего на ~0,10, на финкорпусе
+# всего на 0,02), а относительный переносится между доменами без перенастройки.
+SEARCH_KEEP_MIN = 3           # никогда не оставляем меньше фрагментов, чем это
+SCORE_GAP_DEFAULT = 0.05      # встроенный дефолт, если ни запрос, ни привязка не задали
+SCORE_GAP_ADMIN_MAX = 0.30    # предел для значения из привязки (админка)
+SCORE_GAP_MIN = 0.02          # пользовательский диапазон: 0 = выключить нельзя (решение владельца)
+SCORE_GAP_MAX = 0.20          # и выкрутить в максимум тоже нельзя
+SCORE_GAP_BY_DOMAIN = {       # доменные дефолты: где мусор ближе к топу, порог жёстче
+    "universal": 0.08,
+    "legal": 0.05,
+    "infosec": 0.03,
+    "accounting": 0.03,
+    "medical": 0.05,
+}
+
+
+def apply_score_gap(results: List[Dict[str, Any]], gap: float,
+                    min_keep: int = SEARCH_KEEP_MIN) -> List[Dict[str, Any]]:
+    """Убрать фрагменты, чей score ниже лучшего на gap. Порядок (по score) сохраняется.
+
+    Если после отсечения остаётся меньше min_keep фрагментов, возвращаем min_keep лучших:
+    короткая выдача не должна схлопываться в один кусок — по опыту это стоит фактов.
+    """
+    if not results or gap <= 0:
+        return list(results)
+    top = max(float(r.get("score") or 0.0) for r in results)
+    kept = [r for r in results if float(r.get("score") or 0.0) >= top - gap]
+    if len(kept) < min_keep:
+        ordered = sorted(results, key=lambda r: float(r.get("score") or 0.0), reverse=True)
+        kept = ordered[:min_keep]
+    return kept
+
+
+def resolve_score_gap(params: Dict[str, Any], requested: Optional[float],
+                      domain: Optional[str] = None) -> tuple:
+    """Какое отсечение применить и откуда оно взялось.
+
+    Приоритет: значение из запроса → привязка функции chat → доменный дефолт → встроенный.
+    Значение из запроса зажато пользовательским диапазоном (0,02..0,20): выключить отсечение
+    или выкрутить его в максимум из интерфейса нельзя. Значение из привязки — до 0,30, и только
+    оно может быть 0 (то есть «выключено») — это решение администратора, а не пользователя.
+    """
+    params = params or {}
+    if requested is not None:
+        try:
+            value = float(requested)
+        except (TypeError, ValueError):
+            value = None
+        if value is not None:
+            return max(SCORE_GAP_MIN, min(SCORE_GAP_MAX, value)), "запрос"
+
+    binding = params.get("min_score_gap")
+    if binding is not None:
+        try:
+            value = max(0.0, min(SCORE_GAP_ADMIN_MAX, float(binding)))
+            return value, "привязка функции"
+        except (TypeError, ValueError):
+            pass
+
+    mapping = params.get("score_gap_by_domain")
+    if isinstance(mapping, dict) and domain:
+        for key in (domain, str(domain).lower()):
+            if key in mapping:
+                try:
+                    return max(0.0, min(SCORE_GAP_ADMIN_MAX, float(mapping[key]))), f"домен {domain}"
+                except (TypeError, ValueError):
+                    break
+
+    value = SCORE_GAP_BY_DOMAIN.get(str(domain or "").lower(), SCORE_GAP_DEFAULT)
+    return value, "доменный дефолт" if domain else "дефолт"
+
 
 class ChatService:
     """
@@ -645,6 +719,7 @@ class ChatService:
         is_admin: bool = False,
         user_id: Optional[str] = None,
         context_limit: Optional[int] = None,
+        min_score_gap: Optional[float] = None,
         provider_id: Optional[str] = None,
         model: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -815,6 +890,23 @@ class ChatService:
                     group_ids=group_ids, is_admin=is_admin, user_id=user_id,
                     domain=domain,
                 )
+
+                # Отсечение слабых фрагментов (относительный порог от лучшего score).
+                # Зачем: без порога в промпт и в интерфейс попадает «хвост» выдачи — куски
+                # посторонних документов, которые путают модель, показываются пользователю и
+                # стоят денег. Замер: docs/handoff.md, «Пилот второй волны» (посторонние
+                # фрагменты — 2,4 из 10 на ответ). Минимум KEEP_MIN фрагментов оставляем
+                # всегда: короткая выдача не должна схлопываться в один кусок.
+                _gap, _gap_src = resolve_score_gap(_fm_params, min_score_gap, domain)
+                if _gap > 0 and search_results:
+                    _before = len(search_results)
+                    _kept = apply_score_gap(search_results, _gap, SEARCH_KEEP_MIN)
+                    if _kept:
+                        search_results = _kept
+                    logger.info(
+                        f"[rag] отсечение по релевантности: {len(search_results)} из {_before} "
+                        f"фрагментов (порог {_gap:.2f} от лучшего, источник: {_gap_src})"
+                    )
 
                 # Порог «нет ответа»: если лучший фрагмент слишком далёк по score, честно
                 # отказываем БЕЗ вызова LLM (быстрее и дешевле). Выключено при 0.
@@ -1184,6 +1276,7 @@ class ChatService:
         is_admin: bool = False,
         user_id: Optional[str] = None,
         context_limit: Optional[int] = None,
+        min_score_gap: Optional[float] = None,
     ):
         """
         Потоковая генерация ответа.
@@ -1240,6 +1333,19 @@ class ChatService:
             **self._domain_kwargs(_stream_domain),
         )
         search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
+
+        # Такое же отсечение слабых фрагментов, как в обычном пути ответа: потоковый ответ
+        # не должен расходиться с обычным (иначе настройка «работает через раз»).
+        _gap, _gap_src = resolve_score_gap(_fm_params, min_score_gap, _stream_domain)
+        if _gap > 0 and search_results:
+            _before = len(search_results)
+            _kept = apply_score_gap(search_results, _gap, SEARCH_KEEP_MIN)
+            if _kept:
+                search_results = _kept
+            logger.info(
+                f"[rag] отсечение по релевантности (поток): {len(search_results)} из {_before} "
+                f"фрагментов (порог {_gap:.2f}, источник: {_gap_src})"
+            )
 
         context = ""
         if search_results:

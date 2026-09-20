@@ -661,6 +661,19 @@
                         </select>
                         <span title="Сколько найденных фрагментов уходит модели. Меньше — быстрее и дешевле, но выше риск потерять нужную норму; больше — полнее ответ, но медленнее. «Как в настройках» — значение из админки (привязка функции chat).">?</span>
                     </span>
+                    <span style="margin-left:10px">
+                        Строгость отбора:
+                        <select id="score-gap" onchange="saveScoreGap()"
+                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px">
+                            <option value="">как в настройках</option>
+                            <option value="0.02">мягко — брать почти всё</option>
+                            <option value="0.05">обычно</option>
+                            <option value="0.08">строже</option>
+                            <option value="0.12">только близкое</option>
+                            <option value="0.20">максимум (только самое близкое)</option>
+                        </select>
+                        <span title="Насколько близкими к лучшему фрагменту должны быть остальные, чтобы попасть в ответ. Слабо похожие фрагменты (чужие документы) отбрасываются: ответ чище, дешевле и быстрее. Слишком строгое значение может отрезать нужное; крайние значения (выключить вовсе или выкрутить на максимум) из интерфейса недоступны намеренно — это настройка администратора.">?</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -703,6 +716,7 @@
             loadSessions();
             loadCurrentModel();
             restoreContextDepth();
+            restoreScoreGap();
             document.getElementById('message-input').focus();
         });
 
@@ -729,6 +743,34 @@
             try {
                 const saved = localStorage.getItem('kag_context_depth');
                 const sel = document.getElementById('context-depth');
+                if (saved && sel) sel.value = saved;
+            } catch (e) { /* ignore */ }
+        }
+
+        // ── Строгость отбора фрагментов (относительный порог от лучшего score) ────
+        // Пользователь может сдвинуть отбор в мягкую или строгую сторону, но не выключить его
+        // и не выкрутить в максимум: сервер зажимает значение в 0.02..0.20. Пусто = «как
+        // в настройках» (значение из привязки функции chat или доменный дефолт).
+        function scoreGap() {
+            const sel = document.getElementById('score-gap');
+            return sel && sel.value ? parseFloat(sel.value) : null;
+        }
+
+        function saveScoreGap() {
+            const value = scoreGap();
+            try {
+                if (value) {
+                    localStorage.setItem('kag_score_gap', String(value));
+                } else {
+                    localStorage.removeItem('kag_score_gap');
+                }
+            } catch (e) { /* приватный режим — просто не запоминаем */ }
+        }
+
+        function restoreScoreGap() {
+            try {
+                const saved = localStorage.getItem('kag_score_gap');
+                const sel = document.getElementById('score-gap');
                 if (saved && sel) sel.value = saved;
             } catch (e) { /* ignore */ }
         }
@@ -1078,12 +1120,15 @@
                     // привязки функции chat (Админка → Модели LLM). Раньше здесь был хардкод
                     // 0.7/2048, из-за которого настройки админки не действовали.
                     // context_limit передаём, только если пользователь выбрал его вручную.
+                    // context_limit и min_score_gap передаём, только если пользователь выбрал
+                    // их вручную (пусто = значения из настроек: привязка функции chat).
                     body: JSON.stringify(Object.assign(
                         {
                             messages: apiMessages,
                             session_id: currentSessionId
                         },
                         contextDepth() ? { context_limit: contextDepth() } : {},
+                        scoreGap() ? { min_score_gap: scoreGap() } : {},
                         modelChoice() ? { provider_id: modelChoice().provider_id, model: modelChoice().model } : {}
                     ))
                 });

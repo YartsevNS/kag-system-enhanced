@@ -186,3 +186,70 @@ def test_broken_request_context_limit_ignored(monkeypatch):
     _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True,
                                    context_limit="abc"))
     assert captured["limit"] == 7, "мусор в поле не должен ломать поиск"
+
+
+# ── отсечение слабых фрагментов (относительный порог) ──────────────────────────
+
+def test_apply_score_gap_drops_weak_tail():
+    from src.api.services.chat_service import apply_score_gap
+
+    # Фрагментов заведомо больше минимума (3), иначе сработает правило «минимум три»
+    # и тест будет проверять не отсечение, а его.
+    frags = [_chunk(0.80, "a"), _chunk(0.79, "b"), _chunk(0.78, "c"),
+             _chunk(0.70, "d"), _chunk(0.64, "e")]
+    kept = apply_score_gap(frags, 0.05)
+    assert [f["id"] for f in kept] == ["a", "b", "c"], "ниже лучшего на 0.05 — выбрасываем"
+
+
+def test_apply_score_gap_keeps_minimum_three():
+    from src.api.services.chat_service import apply_score_gap
+
+    frags = [_chunk(0.90, "a"), _chunk(0.50, "b"), _chunk(0.40, "c"), _chunk(0.30, "d")]
+    kept = apply_score_gap(frags, 0.25)
+    assert len(kept) == 3, "даже при жёстком пороге оставляем минимум три фрагмента"
+    assert [f["id"] for f in kept] == ["a", "b", "c"], "оставляем именно лучшие три"
+
+
+def test_apply_score_gap_off_and_empty():
+    from src.api.services.chat_service import apply_score_gap
+
+    frags = [_chunk(0.9, "a"), _chunk(0.1, "b")]
+    assert len(apply_score_gap(frags, 0)) == 2, "порог 0 = выключено"
+    assert apply_score_gap([], 0.1) == []
+
+
+def test_resolve_score_gap_priority_and_bounds():
+    from src.api.services.chat_service import resolve_score_gap
+
+    # запрос важнее привязки
+    assert resolve_score_gap({"min_score_gap": 0.25}, 0.10, "universal")[0] == 0.10
+    # из интерфейса нельзя выключить (0) и нельзя выкрутить в максимум
+    assert resolve_score_gap({}, 0.0, None)[0] == 0.02
+    assert resolve_score_gap({}, 0.9, None)[0] == 0.20
+    # привязка может выключить отсечение — это решение администратора
+    assert resolve_score_gap({"min_score_gap": 0}, None, "universal")[0] == 0.0
+    # доменная карта важнее доменного дефолта
+    assert resolve_score_gap({"score_gap_by_domain": {"accounting": 0.03}}, None, "accounting")[0] == 0.03
+    # доменный дефолт, когда ничего не задано
+    assert resolve_score_gap({}, None, "universal")[0] == 0.08
+    assert resolve_score_gap({}, None, "infosec")[0] == 0.03
+    # неизвестный домен — встроенный дефолт
+    assert resolve_score_gap({}, None, "нечто")[0] == 0.05
+    assert resolve_score_gap({}, None, None)[0] == 0.05
+
+
+def test_gap_filters_junk_from_context_and_sources(monkeypatch):
+    """Сквозная проверка: слабые фрагменты не попадают ни в промпт, ни в список источников."""
+    captured = {}
+    results = [_chunk(0.80, "c1", "нужный факт про реку"),
+               _chunk(0.78, "c2", "ещё по делу"),
+               _chunk(0.79, "c3", "и это по делу"),
+               _chunk(0.62, "c4", "инфляция, мусор")]
+    service = _service(monkeypatch, {"min_score_gap": 0.08}, results, captured)
+    response = _run(service.generate_response(user_message="вопрос", use_rag=True, is_admin=True))
+
+    joined = "\n".join(m.get("content", "") for m in captured["messages"])
+    assert "инфляция, мусор" not in joined, "мусорный фрагмент не должен попадать в промпт"
+    assert "нужный факт про реку" in joined
+    ids = [s["id"] for s in response["sources"]]
+    assert "c4" not in ids, "и в источники ответа он попадать не должен"

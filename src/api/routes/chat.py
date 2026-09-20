@@ -226,6 +226,9 @@ async def send_message(
             # Глубина контекста: клиент может задать своё число фрагментов на запрос
             # (сервер зажимает 3..20); None → значение из привязки функции chat.
             context_limit=getattr(request, "context_limit", None),
+            # Порог отсечения слабых фрагментов (относительный, от лучшего score):
+            # клиент может ослабить/усилить отбор на запрос (сервер зажимает 0.02..0.20).
+            min_score_gap=getattr(request, "min_score_gap", None),
             # Выбор модели в чате: клиент может указать провайдера/модель на запрос
             # (UI чата — клик по названию модели). Недоступный провайдер игнорируется.
             provider_id=getattr(request, "provider_id", None),
@@ -323,6 +326,7 @@ async def stream_message(
                 group_ids=group_ids,
                 is_admin=is_admin,
                 context_limit=getattr(request, "context_limit", None),
+                min_score_gap=getattr(request, "min_score_gap", None),
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
