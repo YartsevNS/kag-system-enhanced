@@ -223,9 +223,9 @@ def test_resolve_score_gap_priority_and_bounds():
 
     # запрос важнее привязки
     assert resolve_score_gap({"min_score_gap": 0.25}, 0.10, "universal")[0] == 0.10
-    # из интерфейса нельзя выключить (0) и нельзя выкрутить в максимум
+    # из интерфейса нельзя выключить отсечение (0) и нельзя взять почти всю выдачу (мягкий край)
     assert resolve_score_gap({}, 0.0, None)[0] == 0.02
-    assert resolve_score_gap({}, 0.9, None)[0] == 0.20
+    assert resolve_score_gap({}, 0.9, None)[0] == 0.12
     # привязка может выключить отсечение — это решение администратора
     assert resolve_score_gap({"min_score_gap": 0}, None, "universal")[0] == 0.0
     # доменная карта важнее доменного дефолта
@@ -236,6 +236,23 @@ def test_resolve_score_gap_priority_and_bounds():
     # неизвестный домен — встроенный дефолт
     assert resolve_score_gap({}, None, "нечто")[0] == 0.05
     assert resolve_score_gap({}, None, None)[0] == 0.05
+
+
+def test_smaller_gap_is_stricter():
+    """Смысл числа: это допустимое отставание от лучшего, поэтому МЕНЬШЕ = жёстче.
+
+    Тест фиксирует семантику, потому что её легко перевернуть (первая версия подписей
+    в интерфейсе была именно перевёрнута) и потом долго искать, почему «строгое» значение
+    оставляет больше фрагментов.
+    """
+    from src.api.services.chat_service import apply_score_gap
+
+    frags = [_chunk(0.90, "a"), _chunk(0.86, "b"), _chunk(0.82, "c"), _chunk(0.78, "d")]
+    assert len(apply_score_gap(frags, 0.02, min_keep=1)) == 1, "0.02 — только самое близкое"
+    assert len(apply_score_gap(frags, 0.05, min_keep=1)) == 2, "0.05 — отставание до 0.05"
+    assert len(apply_score_gap(frags, 0.09, min_keep=1)) == 3
+    assert len(apply_score_gap(frags, 0.13, min_keep=1)) == 4
+    assert len(apply_score_gap(frags, 0.20, min_keep=1)) == 4, "0.20 — почти вся выдача"
 
 
 def test_gap_filters_junk_from_context_and_sources(monkeypatch):
