@@ -24,7 +24,7 @@ from loguru import logger
 
 # Белый список операций: только сравнения и подстрока. Никаких функций, LIKE с шаблоном
 # от пользователя, подзапросов и UNION — план приходит из модели, а не от человека.
-ALLOWED_OPS = ("=", "!=", ">", ">=", "<", "<=", "contains")
+ALLOWED_OPS = ("=", "!=", ">", ">=", "<", "<=", "contains", "not_contains")
 
 # Агрегаты для вычислений.
 ALLOWED_AGGREGATES = ("sum", "avg", "min", "max", "count")
@@ -335,8 +335,11 @@ def run_table_query(plan: Dict[str, Any], max_rows: int = 500,
             op = f["op"]
             value = f["value"]
             key = f"v{i}"
-            if op == "contains":
-                where_parts.append(f"{_json_text_expr(dialect, f['column'])} LIKE :{key}")
+            if op in ("contains", "not_contains"):
+                # NOT LIKE нужен, чтобы исключить строки-итоги («Итого», «Всего») из агрегата:
+                # оставленная в сумме итоговая строка удваивает результат.
+                sql_op = "LIKE" if op == "contains" else "NOT LIKE"
+                where_parts.append(f"{_json_text_expr(dialect, f['column'])} {sql_op} :{key}")
                 params[key] = f"%{value}%"
                 continue
             num = parse_number(value)

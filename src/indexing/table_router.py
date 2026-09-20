@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from loguru import logger
 
 from src.indexing.table_store import parse_number, run_table_query, table_schema
+from src.indexing.table_guard import ambiguity_note, post_checks, pre_checks
 
 # ── канонические роли колонок и синонимы формулировок ───────────────────────
 # Роль — то, ЧТО пользователь имеет в виду; синонимы — как это называют в документах
@@ -288,17 +289,6 @@ def build_plan(question: str, candidate: TableCandidate) -> Dict[str, Any]:
     return plan
 
 
-def _count_unparsed(rows: List[Dict[str, Any]], column: str) -> int:
-    """Сколько строк в выдаче имеют нечисловое значение в колонке (риск занижения суммы)."""
-    bad = 0
-    for row in rows:
-        data = row.get("row_data") or {}
-        nums = row.get("row_num") or {}
-        if column in data and str(data[column]).strip() and column not in nums:
-            bad += 1
-    return bad
-
-
 def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = None,
                        sources: Optional[Sequence[Dict[str, Any]]] = None,
                        max_tables: int = 40) -> Dict[str, Any]:
@@ -335,6 +325,35 @@ def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = No
         # Ни вычисления, ни условия: это обычный смысловой вопрос, SQL ему не нужен.
         return {"status": "unparsed", "message": "вопрос не про вычисление по таблице",
                 "reason": "не понял вопрос", "table": candidate.__dict__}
+
+    name_column = candidate.roles.get("name")
+    target_column = plan.get("aggregate_column") or (filters[0]["column"] if filters else None)
+
+    # ── Проверки ПЕРЕД вычислением ──────────────────────────────────────────
+    # Сначала смотрим на сами данные (сколько значений реально числа, какие единицы,
+    # есть ли строки-итоги), и только потом считаем. Отказ здесь — это честное
+    # «уточните», а не сбой: неверная сумма хуже отсутствия ответа.
+    probe = run_table_query({**plan, "aggregate": None, "aggregate_column": None, "group_by": None})
+    probe_rows = probe.get("rows") or []
+
+    if aggregate in ("sum", "avg", "min", "max") and target_column:
+        checks = pre_checks(probe_rows, target_column, name_column, aggregate)
+        if checks["refusals"]:
+            return {
+                "status": "clarify",
+                "message": " ".join(checks["refusals"]),
+                "reason": "нужно уточнение",
+                "plan": plan,
+                "table": candidate.__dict__,
+            }
+        guard_warnings = list(checks["warnings"])
+        # Строки-итоги исключаем из самого запроса, а не «на словах».
+        if checks["total_rows"] and name_column:
+            for marker in ("Итого", "Всего"):
+                plan.setdefault("filters", []).append(
+                    {"column": name_column, "op": "not_contains", "value": marker})
+    else:
+        guard_warnings = []
 
     result = run_table_query(plan)
     if result.get("error"):
@@ -416,18 +435,15 @@ def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = No
             if data:
                 lines.append("; ".join(f"{k}: {v}" for k, v in list(data.items())[:8]))
 
-    warnings: List[str] = []
-    if aggregate in ("sum", "avg") and plan.get("aggregate_column"):
-        # Проверяем по строкам ВЫДАЧИ (для фильтрованных запросов это ровно то множество,
-        # по которому считали) — если часть значений не числа, сумма занижена.
-        probe = run_table_query({**plan, "aggregate": None, "aggregate_column": None})
-        probe_rows = probe.get("rows") or []
-        bad = _count_unparsed(probe_rows, plan["aggregate_column"])
-        if bad and not plan.get("group_by"):
-            warnings.append(
-                f"{bad} строк(и) со значением, которое не удалось распознать как число — "
-                f"итог может быть занижен"
-            )
+    warnings: List[str] = list(guard_warnings)
+    if aggregate in ("sum", "avg") and plan.get("aggregate_column") and rows:
+        # После расчёта: сверка с контрольной строкой «Итого» (если она есть в документе)
+        # и проверка аномалий (например, отрицательный итог).
+        first_value = None if plan.get("group_by") else rows[0].get("value")
+        warnings.extend(post_checks(first_value, probe_rows, plan["aggregate_column"], name_column))
+        ambiguous = ambiguity_note(probe_rows, name_column)
+        if ambiguous:
+            note = (note + "; " if note else "") + ambiguous
 
     return {
         "status": "ok",
@@ -446,6 +462,11 @@ def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = No
 
 def context_block(result: Dict[str, Any]) -> str:
     """Блок контекста для модели: цифры посчитаны SQL, и это прямо сказано."""
+    if result.get("status") == "clarify":
+        # Отказ считать — это тоже ответ. Модель не должна вместо уточнения выдумывать число.
+        return ("\n\n--- ТАБЛИЦЫ (SQL) ---\n"
+                f"Точный расчёт невозможен: {result.get('message')}\n"
+                "Так и ответь — задай уточняющий вопрос. Число не называй.")
     if result.get("status") == "no_rows":
         return ("\n\n--- ТАБЛИЦЫ (SQL) ---\n"
                 f"По условию вопроса в таблице ничего не найдено ({result.get('source', '')}). "
