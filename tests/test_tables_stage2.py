@@ -275,3 +275,52 @@ def test_backfill_dry_run_writes_nothing(db):
     stats = module.backfill(dry_run=True)
     assert stats["tables"] == 1 and stats["rows"] == 2
     assert table_schema("doc-dry") == [], "пробный прогон не должен ничего записывать"
+
+
+# ── сохранение таблиц конвейером обработки ──────────────────────────────────
+
+def test_save_document_tables_writes_tables_and_rows(db):
+    """Функциональная проверка конвейера: таблицы документа попадают и в document_tables, и в строки.
+
+    Этот тест появился после живой ошибки: в `_save_document_tables` использовался
+    `make_table_id`, а импорт был добавлен лишь в ветку разбора. Функция падала NameError,
+    широкий except это глотал — документ выглядел обработанным, а табличный слой оставался
+    пустым (в базе 0 таблиц и 0 строк). Источниковые проверки такую ошибку не ловят.
+    """
+    from types import SimpleNamespace
+
+    from src.api.services.document_service import document_service
+    from src.database.document_table_models import DocumentTable
+
+    headers = ["Наименование", "Артикул", "Количество, шт", "Цена, руб.", "Сумма, руб."]
+    rows = [
+        headers,
+        ["Насос ЦНС 38", "P001", "12", "15 400,50", "184 806,00"],
+        ["Втулка В2", "P003", "100", "120,25", "12 025,00"],
+        ["Итого", "", "", "", "196 831,00"],
+    ]
+    table = {
+        "markdown": "| ... |", "html": "<table></table>", "rows": rows, "headers": headers,
+        "bbox": [40, 140, 550, 400], "complex": False,
+        "row_count": len(rows), "col_count": len(headers), "quality": 0.95,
+        "extraction_method": "pymupdf",
+    }
+    parsed = SimpleNamespace(pages=[SimpleNamespace(page_num=2, tables=[table])])
+
+    saved = document_service._save_document_tables("doc-spec", parsed)
+
+    assert saved == 1, "таблица должна сохраниться (при ошибке функция вернула бы 0)"
+    session = db()
+    try:
+        rec = session.query(DocumentTable).filter_by(document_id="doc-spec").one()
+        assert rec.table_id, "table_id обязателен: по нему связаны строки и разметка чанков"
+        assert rec.row_count == 3, "заголовок не дублируется в строках данных"
+        assert rec.quality and rec.quality > 0.9
+        assert rec.model == "pymupdf"
+    finally:
+        session.close()
+
+    stored = rows_for_table(rec.table_id)
+    assert [r["row_text"].split(";")[0] for r in stored][:2] == [
+        "Наименование: Насос ЦНС 38", "Наименование: Втулка В2"
+    ], "строки должны лежать в строчном слое с тем же table_id"

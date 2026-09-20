@@ -1254,6 +1254,11 @@ class DocumentService:
         """
         try:
             import uuid, json
+            # ВАЖНО: импорт нужен ЗДЕСЬ, а не только в конвейере парсинга. Раньше он был
+            # добавлен лишь в ветку разбора, и в этом методе `make_table_id` падал
+            # NameError. Ошибку глотал широкий except, и таблицы молча не сохранялись:
+            # документ обрабатывался «успешно», а табличный слой оставался пустым.
+            from src.indexing.table_ids import make_table_id
             from src.database.session import get_session_local
             from src.database.document_table_models import DocumentTable
 
