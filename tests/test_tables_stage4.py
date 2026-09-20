@@ -76,6 +76,28 @@ def test_role_not_duplicated():
     assert list(roles.values()).count(roles["price"]) == 1, "одна роль — одна колонка"
 
 
+def test_column_gets_only_one_role():
+    """Живой промах на корпусе: «Сценарий QR-кода» занимал и артикул, и цену."""
+    roles = map_columns(["Наименование меры защиты", "Описание меры защиты", "Сценарий QR-кода"])
+    assert roles.get("name") == "Наименование меры защиты"
+    assert "Сценарий QR-кода" not in roles.values(), \
+        "одна колонка не может обслуживать несколько ролей"
+
+
+def test_synonym_matched_by_whole_word_only():
+    """«Сценарий» не должен считаться «ценой»: внутри слова нет отдельного слова «цена»."""
+    roles = map_columns(["Сценарий применения", "Стоимость, руб."])
+    assert roles.get("amount") == "Стоимость, руб.", "стоимость — это сумма, а не цена за единицу"
+    assert "Сценарий применения" not in roles.values()
+
+
+def test_unit_header_survives_normalization():
+    """«Ед. изм.» не должно терять «м» при чистке единиц измерения."""
+    roles = map_columns(["Цена за единицу, руб.", "Ед. изм."])
+    assert roles.get("price") == "Цена за единицу, руб."
+    assert roles.get("unit") == "Ед. изм."
+
+
 # ── понимание вопроса ───────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("question,expected", [

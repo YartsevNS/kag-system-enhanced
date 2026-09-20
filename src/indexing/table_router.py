@@ -87,31 +87,50 @@ class TableCandidate:
 
 
 def _normalize(text: str) -> str:
-    """Нормализация заголовка/фразы: нижний регистр, без единиц измерения и пунктуации."""
+    """Нормализация заголовка/фразы: нижний регистр, без единиц измерения и пунктуации.
+
+    Единицы убираем только как ОТДЕЛЬНОЕ слово: без границы слова «м» и «т» съедали
+    буквы из нормальных слов («Ед. изм.» превращалось в «ед из», и колонка единиц
+    переставала опознаваться — живой промах, поймано тестом).
+    """
     value = (text or "").lower().replace("ё", "е")
     value = re.sub(r"\(.*?\)", " ", value)
-    value = re.sub(r"[,.]?\s*(руб|р\.|тыс|млн|шт|м|мм|кг|т|чел|дн|ч|%)\b\.?", " ", value)
+    value = re.sub(
+        r"(?<![а-яa-z])[,.]?\s*(руб|р\.|тыс|млн|шт|м|мм|кг|т|чел|дн|ч|%)\b\.?", " ", value
+    )
     value = re.sub(r"[^a-zа-я0-9\s\-]", " ", value)
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _words(text: str) -> set:
+    """Слова нормализованного заголовка (для сопоставления по целым словам)."""
+    return {w for w in re.split(r"[\s\-\/,]+", text or "") if w}
 
 
 def map_columns(columns: Sequence[str], question: str = "") -> Dict[str, str]:
     """Сопоставить колонки таблицы с каноническими ролями.
 
-    Порядок: точное совпадение с синонимом → вхождение синонима в заголовок → вхождение
-    нормализованного заголовка в вопрос. Роль занимается один раз (первая подходящая
-    колонка выигрывает): две колонки одной роли в плане бессмысленны.
+    Правила (оба появились из живого промаха на корпусе):
+    - сопоставление по ЦЕЛЫМ словам, а не подстрокой: иначе «Сценарий QR-кода» попадал
+      в роль «цена» (внутри «Сценарий» есть «цен»), и цена уезжала в описание;
+    - одна колонка — одна роль: без этого один и тот же столбец занимал и «артикул»,
+      и «цену», а план запроса потом считал по описанию.
+
+    Порядок: точное совпадение с синонимом → синоним как отдельное слово в заголовке →
+    заголовок встречается в самом вопросе.
     """
     roles: Dict[str, str] = {}
+    claimed_columns: set = set()
     norm_question = _normalize(question)
 
+    normalized = {col: _normalize(col) for col in columns}
+
     def _claim(role: str, column: str) -> bool:
-        if role in roles:
+        if role in roles or column in claimed_columns:
             return False
         roles[role] = column
+        claimed_columns.add(column)
         return True
-
-    normalized = {col: _normalize(col) for col in columns}
 
     # 1. точное совпадение заголовка с синонимом
     for role, synonyms in ROLE_SYNONYMS.items():
@@ -119,14 +138,21 @@ def map_columns(columns: Sequence[str], question: str = "") -> Dict[str, str]:
             if norm_col and norm_col in synonyms:
                 _claim(role, col)
 
-    # 2. вхождение синонима в заголовок («цена за единицу, руб.» → price)
+    # 2. синоним как отдельное слово заголовка («цена за единицу, руб.» → price;
+    #    «Сценарий QR-кода» → НЕ price)
     for role, synonyms in ROLE_SYNONYMS.items():
         if role in roles:
             continue
         for col, norm_col in normalized.items():
             if not norm_col:
                 continue
-            if any(syn in norm_col for syn in synonyms):
+            words = _words(norm_col)
+            hit = any(
+                syn in words or (len(syn.split()) > 1 and re.search(
+                    rf"(?<![а-яa-z]){re.escape(syn)}(?![а-яa-z])", norm_col))
+                for syn in synonyms
+            )
+            if hit:
                 _claim(role, col)
 
     # 3. вхождение заголовка в вопрос (пользователь назвал колонку своими словами)
@@ -135,7 +161,7 @@ def map_columns(columns: Sequence[str], question: str = "") -> Dict[str, str]:
             if role in roles:
                 continue
             for col, norm_col in normalized.items():
-                if norm_col and norm_col in norm_question:
+                if norm_col and col not in claimed_columns and norm_col in norm_question:
                     _claim(role, col)
     return roles
 
@@ -306,8 +332,15 @@ def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = No
                 "reason": "нет данных"}
 
     if document_ids:
+        # Работаем ТОЛЬКО с таблицами документов, которые нашёл поиск. Молча взять таблицу
+        # из другого документа нельзя: цифра будет верной по своей таблице и чужой по смыслу
+        # (правило из консультации — «не смешивать документы молча»).
         allowed = set(document_ids)
-        schema = [t for t in schema if t.get("document_id") in allowed] or schema
+        in_docs = [t for t in schema if t.get("document_id") in allowed]
+        if not in_docs:
+            return {"status": "no_data", "reason": "нет данных",
+                    "message": "в найденных документах таблиц нет — считать не по чему"}
+        schema = in_docs
 
     candidates = schema[:max_tables]
     candidate = pick_table(question, candidates, prefer_documents=document_ids)
@@ -325,6 +358,16 @@ def answer_from_tables(question: str, document_ids: Optional[Sequence[str]] = No
         # Ни вычисления, ни условия: это обычный смысловой вопрос, SQL ему не нужен.
         return {"status": "unparsed", "message": "вопрос не про вычисление по таблице",
                 "reason": "не понял вопрос", "table": candidate.__dict__}
+
+    # Уверенность выбора проверяем ПОСЛЕ плана (иначе «нет колонки для суммы» подменялось бы
+    # общим «не понял вопрос»): если роли колонок почти не сходятся и документ в вопросе не
+    # назван — лучше спросить, чем посчитать по случайной таблице.
+    core_roles = {"name", "article", "price", "quantity", "amount"}
+    if len(core_roles & set(candidate.roles)) < 2 and not document_ids:
+        return {"status": "clarify", "reason": "нужно уточнение",
+                "message": ("не понял, к какой таблице относится вопрос: у подходящих таблиц "
+                            "не сходятся колонки. Уточните документ или название таблицы"),
+                "table": candidate.__dict__}
 
     name_column = candidate.roles.get("name")
     target_column = plan.get("aggregate_column") or (filters[0]["column"] if filters else None)
