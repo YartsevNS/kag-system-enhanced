@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import re
+import json
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -211,24 +212,34 @@ def rows_for_table(table_id: str, limit: int = 200) -> List[Dict[str, Any]]:
 
 # ── построение безопасного запроса по плану ─────────────────────────────────
 
+def _sqlite_json_path(column: str) -> str:
+    """Путь для json_extract: ключ ВСЕГДА в двойных кавычках.
+
+    Зачем: в заголовках бывают запятые, точки и пробелы («Цена, руб.», «Ед. изм.»).
+    Путь `$.Цена, руб.` JSON-парсер понимает как два разных ключа и возвращает NULL —
+    запрос молча даёт «ничего не найдено». Кавычки внутри имени ключа в путях SQLite
+    не экранируются, поэтому такие символы из имени убираем (в реальных заголовках их не
+    бывает, а тихо ломаться на этом нельзя).
+    """
+    safe = column.replace('"', "").replace("\\", "")
+    return f'$."{safe}"'
+
+
 def _json_text_expr(dialect: str, column: str) -> str:
     """Выражение «значение колонки как текст» для текущей СУБД.
 
     Имя колонки попадает в SQL только после проверки по ЗАГОЛОВКАМ ТАБЛИЦЫ (см.
     validate_plan), это не пользовательский ввод.
     """
-    quoted = column.replace("'", "''")
     if dialect == "postgresql":
-        return f"row_data ->> '{quoted}'"
-    # SQLite (тесты): json_extract по JSON-колонке (её SQLAlchemy хранит как TEXT)
-    return f"json_extract(row_data, '$.{quoted}')"
+        return f"row_data ->> '{column.replace(chr(39), chr(39) * 2)}'"
+    return f"json_extract(row_data, '{_sqlite_json_path(column)}')"
 
 
 def _json_num_expr(dialect: str, column: str) -> str:
-    quoted = column.replace("'", "''")
     if dialect == "postgresql":
-        return f"(row_num ->> '{quoted}')::numeric"
-    return f"json_extract(row_num, '$.{quoted}')"
+        return f"(row_num ->> '{column.replace(chr(39), chr(39) * 2)}')::numeric"
+    return f"json_extract(row_num, '{_sqlite_json_path(column)}')"
 
 
 def validate_plan(plan: Dict[str, Any], available_columns: Sequence[str]) -> Dict[str, Any]:
@@ -385,7 +396,28 @@ def run_table_query(plan: Dict[str, Any], max_rows: int = 500,
 
         columns = list(result.keys())
         truncated = len(rows) > int(max_rows)
-        payload = [dict(zip(columns, r)) for r in rows[:int(max_rows)]]
+
+        def _decode(value: Any) -> Any:
+            """Значения JSON-колонок приходят из raw SQL СТРОКОЙ (тип-декоратор не работает).
+
+            Без этого разбора код, ожидающий словарь ячеек, падает или молча считает мусор:
+            `row_data['Цена']` на строке JSON — это TypeError, а `'Цена' in row_data` —
+            проверка подстроки, которая «случайно» проходит.
+            """
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except Exception:
+                    return {}
+            return value
+
+        payload = []
+        for r in rows[:int(max_rows)]:
+            item = dict(zip(columns, r))
+            for key in ("row_data", "row_num"):
+                if key in item:
+                    item[key] = _decode(item[key])
+            payload.append(item)
         return {
             "columns": columns,
             "rows": payload,

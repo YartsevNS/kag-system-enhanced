@@ -973,6 +973,33 @@ class ChatService:
                 except Exception as e:
                     logger.debug(f"Neo4j поиск пропущен: {e}")
 
+                # 2c. Вычисления по таблицам: цифры считает SQL, а не модель по тексту.
+                # Зачем: «сколько позиций и на какую сумму» — вопрос к данным, а не к
+                # похожим фрагментам. Если сумма посчитана по найденным кускам, она зависит
+                # от того, что попало в контекст, и молча получается заниженной.
+                try:
+                    from src.indexing.tables_settings import get_tables_config
+
+                    if get_tables_config().get("sql_enabled", True):
+                        from src.indexing.table_router import answer_from_tables, context_block
+
+                        _table_docs = list({
+                            r.get('document_id') for r in (search_results or [])
+                            if r.get('document_id')
+                        })[:5]
+                        # Синхронные запросы к БД — в отдельный поток, иначе api заблокируется
+                        t_res = await asyncio.to_thread(
+                            answer_from_tables, user_message, _table_docs)
+                        block = context_block(t_res)
+                        if block:
+                            context += block
+                            logger.info(
+                                f"[tables] SQL по таблицам: статус {t_res.get('status')}, "
+                                f"строк {t_res.get('row_count')}, источник {t_res.get('source')}"
+                            )
+                except Exception as e:
+                    logger.debug(f"табличный слой пропущен: {e}")
+
             except Exception as e:
                 logger.warning(f"RAG поиск не выполнен: {e}")
                 sources = []
