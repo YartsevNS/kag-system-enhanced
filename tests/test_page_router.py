@@ -54,36 +54,50 @@ def test_digital_page_with_tables_is_not_sent_to_model():
 
 def test_scan_with_table_goes_to_model():
     """Картинка/скан без текстового слоя, но с табличным текстом — это работа для модели."""
-    sig = PageSignals.from_text(3, SCAN_TABLE_TEXT, tables_found=0)
+    sig = PageSignals.from_text(3, SCAN_TABLE_TEXT, tables_found=0, doc_is_scan=True)
     assert sig.text_chars >= 200            # текст есть, но он от OCR
-    assert sig.table_like > 0.3
+    assert sig.table_like > 0.3 and sig.table_like_lines >= 3
     d = decide_route(sig)
     assert d["route"] == ROUTE_VLM, d
-    assert "без разметки" in d["reason"]
+    assert "таблиц" in d["reason"]
 
 
 def test_scan_without_tables_goes_to_our_ocr():
     """Скан без признаков таблицы — модель не нужна, хватит нашего OCR."""
-    sig = PageSignals.from_text(2, "короткий текст", tables_found=0)
+    sig = PageSignals.from_text(2, "короткий текст", tables_found=0, doc_is_scan=True)
     d = decide_route(sig)
     assert d["route"] == ROUTE_OCR, d
-    assert "таблиц не видно" in d["reason"]
+    assert "без признаков" in d["reason"]
 
 
-def test_low_quality_table_goes_to_model():
-    """Разметка есть, но качество низкое (объединённые ячейки, потерянные границы) — восстанавливаем моделью."""
-    sig = PageSignals.from_text(5, DIGITAL_PAGE, tables_found=1, worst_quality=0.41)
-    d = decide_route(sig)
-    assert d["route"] == ROUTE_VLM, d
-    assert "низкого качества" in d["reason"]
+def test_low_quality_table_in_scan_goes_to_model():
+    """Скан с плохо разобранной таблицей — восстанавливаем моделью."""
+    sig = PageSignals.from_text(5, SCAN_TABLE_TEXT, tables_found=1, worst_quality=0.41,
+                                doc_tables_count=1, doc_tables_quality=0.41, doc_is_scan=True)
+    assert decide_route(sig)["route"] == ROUTE_VLM
 
 
-def test_damaged_text_layer_goes_to_model():
-    """Побитая кодировка: текстовому слою доверять нельзя (реальный случай с пятью документами)."""
-    sig = PageSignals.from_text(7, MOJIBAKE, tables_found=0)
+def test_low_quality_table_in_digital_pdf_is_not_sent_to_model():
+    """У цифрового PDF низкое качество разметки — НЕ повод гнать страницу в модель.
+
+    Прогон по корпусу показал: если считать это поводом, в модель уходит 35% фрагментов (3455 из 9931),
+    потому что большинство «таблиц» в цифровых документах — шум, который нам не нужен.
+    """
+    sig = PageSignals.from_text(5, DIGITAL_PAGE, tables_found=1, worst_quality=0.41,
+                                doc_tables_count=3, doc_tables_quality=0.41)
+    assert decide_route(sig)["route"] == ROUTE_PARSER
+
+
+def test_damaged_text_layer_goes_to_ocr_not_to_model():
+    """Побитая кодировка лечится повторным распознаванием, а не табличной моделью.
+
+    Реальный случай 2026-09-14: у пяти документов текст был записан неверной кодировкой — проблема
+    в тексте, а не в структуре таблицы, поэтому маршрут «наш OCR», не VLM.
+    """
+    sig = PageSignals.from_text(7, MOJIBAKE, tables_found=0, doc_tables_count=0)
     assert sig.garbage > 0.05, sig.garbage
     d = decide_route(sig)
-    assert d["route"] == ROUTE_VLM, d
+    assert d["route"] == ROUTE_OCR, d
     assert "повреждён" in d["reason"]
 
 
@@ -109,7 +123,7 @@ def test_garbage_ratio_separates_normal_from_mojibake():
 def test_document_summary_counts_pages_by_route():
     pages = [
         PageSignals.from_text(1, DIGITAL_PAGE, tables_found=1, worst_quality=0.9),
-        PageSignals.from_text(2, SCAN_TABLE_TEXT, tables_found=0),
+        PageSignals.from_text(2, SCAN_TABLE_TEXT, tables_found=0, doc_is_scan=True),
         PageSignals.from_text(3, "короткий", tables_found=0),
     ]
     summary = route_document(pages)
@@ -119,3 +133,34 @@ def test_document_summary_counts_pages_by_route():
     assert summary["by_route"].get(ROUTE_OCR) == 1
     assert summary["vlm_pages"] == [2]
     assert len(summary["decisions"]) == 3
+
+
+def test_document_with_parsed_tables_skips_model_for_all_pages():
+    """Если у документа таблицы разобраны с приемлемым качеством — модель не нужна ни одной странице.
+
+    Это правило появилось после прогона по корпусу: без него в модель уходило 22% фрагментов (2206
+    из 9931), потому что короткие числовые строки есть почти в любом документе (колонтитулы, номера
+    страниц, списки). Сигнал уровня документа убирает основную массу таких срабатываний.
+    """
+    sig = PageSignals.from_text(1, SCAN_TABLE_TEXT, tables_found=0,
+                                doc_tables_count=5, doc_tables_quality=0.85)
+    d = decide_route(sig)
+    assert d["route"] == ROUTE_PARSER, d
+    assert "модель не нужна" in d["reason"]
+
+
+def test_scan_page_with_table_goes_to_model_even_if_doc_has_poor_tables():
+    """Скан с таблицей: маршрут в модель (документные таблицы при этом разобраны плохо)."""
+    sig = PageSignals.from_text(1, SCAN_TABLE_TEXT, tables_found=0, worst_quality=0.35,
+                                doc_tables_count=1, doc_tables_quality=0.35, doc_is_scan=True)
+    d = decide_route(sig)
+    assert d["route"] == ROUTE_VLM, d
+    assert "таблиц" in d["reason"]
+
+
+def test_few_numeric_lines_are_not_a_table():
+    """Три числовые строки на страницу — это колонтитулы и номера, а не таблица."""
+    text = ("1\n" + "Обычный абзац документа с текстом и объяснением требований.\n" * 8 + "2\n3\n")
+    sig = PageSignals.from_text(1, text)
+    assert sig.table_like_lines == 3
+    assert decide_route(sig)["route"] == ROUTE_PARSER, decide_route(sig)
