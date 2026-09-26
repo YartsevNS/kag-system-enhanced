@@ -22,6 +22,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -87,8 +89,27 @@ def ask(prompt: str, key: str, max_tokens: int = 900) -> tuple[dict, float, int]
         }).encode()
         req = urllib.request.Request(URL, data=body, headers={
             "Content-Type": "application/json", "Authorization": "Bearer " + key})
-        with urllib.request.urlopen(req, timeout=300) as r:
-            d = json.loads(r.read().decode("utf-8", "replace"))
+        # Сетевые сбои и лимиты провайдера НЕ должны убивать прогон: без этого обработчика
+        # один таймаут или 429 обрывал весь замер и отчёт не сохранялся (реальный случай
+        # 26.09.2026: прогон BGE умер на середине, числа потеряны). Ждём и повторяем,
+        # а в самом плохом случае отдаём score=None — это видно в покрытии метрик.
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                d = json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read()[:120].decode("utf-8", "replace")
+            except Exception:
+                detail = ""
+            last = {"score": None, "reason": f"попытка {attempt}: HTTP {e.code} {detail}"}
+            if e.code in (429, 500, 502, 503, 504):
+                time.sleep(5 * attempt)
+                continue
+            break
+        except Exception as e:                      # таймаут, обрыв, DNS
+            last = {"score": None, "reason": f"попытка {attempt}: {type(e).__name__} {str(e)[:80]}"}
+            time.sleep(5 * attempt)
+            continue
         choice = (d.get("choices") or [{}])[0].get("message", {}) or {}
         text = choice.get("content") or ""
         usage = d.get("usage") or {}
@@ -225,7 +246,12 @@ def main() -> int:
         if not c:
             print(f"  {item['id']}: нет собранного ответа — пропуск")
             continue
-        res, cost, tokens = judge_item(item, c, key)
+        try:
+            res, cost, tokens = judge_item(item, c, key)
+        except Exception as e:
+            # Один проблемный вопрос не должен стоить нам всего прогона: фиксируем и идём дальше.
+            print(f"  {item['id']}: сбой оценки ({type(e).__name__}: {str(e)[:60]}) — пропуск", flush=True)
+            res, cost, tokens = {"faithfulness": {"score": None, "reason": f"сбой: {type(e).__name__}"}}, 0.0, 0
         total_cost += cost
         total_tokens += tokens
         def sc(name):
