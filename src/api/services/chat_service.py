@@ -958,11 +958,20 @@ class ChatService:
                 logger.info(f"[rag] глубина контекста: {ctx_limit} фрагментов (источник: {_ctx_source})")
                 from src.indexing.embeddings_service import embeddings_service
                 # Поиск релевантных чанков
+                _t_search = time.monotonic()
                 search_results = await self._search_with_widening(
                     user_message, ctx_limit,
                     group_ids=group_ids, is_admin=is_admin, user_id=user_id,
                     domain=domain,
                 )
+                _search_ms = (time.monotonic() - _t_search) * 1000
+                logger.info(f"[rag] поиск: {len(search_results)} фрагментов за {_search_ms:.0f} мс "
+                            f"(глубина {ctx_limit}, домен {domain or '—'})")
+                try:
+                    from src.monitoring.prometheus import record_rag_stage
+                    record_rag_stage("qdrant", _search_ms / 1000)
+                except Exception:
+                    pass
 
                 # Отсечение слабых фрагментов (относительный порог от лучшего score).
                 # Зачем: без порога в промпт и в интерфейс попадает «хвост» выдачи — куски
@@ -1130,13 +1139,23 @@ class ChatService:
                     entities_for_search = list(set(words))[:5]
 
                     if entities_for_search:
+                        _t_graph = time.monotonic()
                         graph_results = await asyncio.to_thread(
                             kg_service.hybrid_search, entities_for_search, doc_ids_from_qdrant)
                     else:
                         graph_results = []
                     if not graph_results:
+                        _t_graph = time.monotonic()
                         graph_results = await asyncio.to_thread(
                             kg_service.hybrid_search, [user_message], doc_ids_from_qdrant)
+                    _graph_ms = (time.monotonic() - _t_graph) * 1000 if entities_for_search or graph_results else 0.0
+                    if _graph_ms:
+                        logger.info(f"[rag] граф: {len(graph_results or [])} связей за {_graph_ms:.0f} мс")
+                        try:
+                            from src.monitoring.prometheus import record_rag_stage
+                            record_rag_stage("graph", _graph_ms / 1000)
+                        except Exception:
+                            pass
 
                     if graph_results:
                         graph_context = []
@@ -1167,14 +1186,22 @@ class ChatService:
                             if r.get('document_id')
                         })[:5]
                         # Синхронные запросы к БД — в отдельный поток, иначе api заблокируется
+                        _t_tables = time.monotonic()
                         t_res = await asyncio.to_thread(
                             answer_from_tables, user_message, _table_docs)
+                        _tables_ms = (time.monotonic() - _t_tables) * 1000
                         block = context_block(t_res)
+                        try:
+                            from src.monitoring.prometheus import record_rag_stage
+                            record_rag_stage("tables", _tables_ms / 1000)
+                        except Exception:
+                            pass
                         if block:
                             context += block
                             logger.info(
                                 f"[tables] SQL по таблицам: статус {t_res.get('status')}, "
-                                f"строк {t_res.get('row_count')}, источник {t_res.get('source')}"
+                                f"строк {t_res.get('row_count')}, источник {t_res.get('source')}, "
+                                f"за {_tables_ms:.0f} мс"
                             )
                             # Вопрос вычислительный — вот теперь показываем таблицы источников
                             # пользователю (интерфейс рисует их из sources[].tables).
@@ -1392,6 +1419,20 @@ class ChatService:
             f"sources={len(sources)}, "
             f"elapsed={llm_result.get('elapsed', 0):.1f}s"
         )
+        # Метрики вызова модели: время по модели + токены (для контроля стоимости).
+        try:
+            from src.monitoring.prometheus import record_llm_call, record_rag_stage
+            _usage = response["usage"] or {}
+            record_llm_call(
+                model=response["model"],
+                status="ok" if not llm_result.get("error") else "error",
+                duration=float(llm_result.get("elapsed", 0) or 0),
+                prompt_tokens=int(_usage.get("prompt_tokens", 0) or 0),
+                completion_tokens=int(_usage.get("completion_tokens", 0) or 0),
+            )
+            record_rag_stage("llm", float(llm_result.get("elapsed", 0) or 0))
+        except Exception:
+            pass
 
         return response
 

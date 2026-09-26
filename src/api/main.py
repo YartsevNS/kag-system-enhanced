@@ -41,6 +41,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Жизненный цикл приложения"""
+    # Журналы: каждая строка несёт trace_id запроса (см. src/api/trace.py)
+    configure_logging_with_trace()
+
     # Пул потоков для СИНХРОННЫХ вызовов (Neo4j, Qdrant-клиент, чтения БД в потоках).
     # Пул по умолчанию — min(32, CPU+4), и при десятках одновременных запросов он становится
     # узким местом: каждый чат делает несколько вызовов через asyncio.to_thread. Ставим свой
@@ -160,11 +163,16 @@ if cors_origins:
         allow_origins=[o.strip() for o in cors_origins.split(",")],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "X-Trace-ID"],
     )
 
 # SecurityMiddleware (JWT через JWKS + локальный fallback)
 app.add_middleware(SecurityMiddleware)
+
+# TraceMiddleware добавляем ПОСЛЕДНИМ: в Starlette последний добавленный — самый внешний,
+# поэтому trace_id видит все запросы (включая ошибки в других middleware) и попадает в метрики.
+from src.api.trace import TraceMiddleware, configure_logging_with_trace  # noqa: E402
+app.add_middleware(TraceMiddleware)
 
 # Подключение роутеров
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
@@ -182,6 +190,23 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(chunks.router, prefix="/api/v1", tags=["chunks"])
+
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    """Метрики в формате Prometheus (для скрейпа Prometheus/Grafana).
+
+    Раньше метрики только объявлялись в src/monitoring/prometheus.py, но никуда не отдавались
+    и почти никем не записывались — то есть наблюдаемость была нулевой. Теперь: скрейп отсюда,
+    запись HTTP-запросов в TraceMiddleware, стадии RAG — в chat_service.
+    """
+    try:
+        from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+        from fastapi import Response as _Response
+        return _Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except Exception as e:  # метрики не должны ломать сервис
+        from fastapi import Response as _Response
+        return _Response(content=f"# метрики недоступны: {e}\n", media_type="text/plain")
 
 # Статические файлы и веб-интерфейс
 static_path = os.path.join(os.path.dirname(__file__), "static")

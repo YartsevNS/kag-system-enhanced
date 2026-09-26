@@ -171,3 +171,37 @@ def record_document_processing(file_type: str, status: str, duration: float):
     """Записать обработку документа"""
     documents_processed_total.labels(file_type=file_type, status=status).inc()
     documents_processing_duration_seconds.labels(file_type=file_type).observe(duration)
+
+
+# ── Стадии RAG-запроса (2026-09-26) ─────────────────────────────────────────────
+# Зачем отдельная гистограмма: по ней видно, куда уходит время внутри одного вопроса —
+# поиск в Qdrant, граф, табличный слой, вызов модели. Метки по стадии, чтобы в Grafana
+# строить p50/p95/p99 по каждой.
+rag_stage_duration_seconds = Histogram(
+    "rag_stage_duration_seconds",
+    "Длительность стадий обработки вопроса (mode=qdrant|graph|tables|llm|access)",
+    ["stage"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0]
+)
+
+
+def record_rag_stage(stage: str, duration: float) -> None:
+    """Записать длительность стадии вопроса (в секундах). Ошибки метрик не должны ломать ответ."""
+    try:
+        rag_stage_duration_seconds.labels(stage=stage).observe(max(duration, 0.0))
+    except Exception:
+        pass
+
+
+def record_llm_call(model: str, status: str, duration: float,
+                    prompt_tokens: int = 0, completion_tokens: int = 0) -> None:
+    """Записать вызов модели: счётчик, время и токены (для контроля стоимости)."""
+    try:
+        llm_requests_total.labels(model=model or "unknown", status=status).inc()
+        llm_request_duration_seconds.labels(model=model or "unknown").observe(max(duration, 0.0))
+        if prompt_tokens:
+            llm_tokens_total.labels(type="prompt").inc(prompt_tokens)
+        if completion_tokens:
+            llm_tokens_total.labels(type="completion").inc(completion_tokens)
+    except Exception:
+        pass
