@@ -1,0 +1,21 @@
+# Провайдер дашбордов Grafana (провижининг).
+#
+# Grafana читает эти манифесты ТОЛЬКО из подкаталога dashboards/ внутри
+# /etc/grafana/provisioning. В options.path указывается каталог, где лежат сами
+# JSON-файлы дашбордов (он смонтирован из ./docker/grafana/dashboards).
+# Правки дашбордов подхватываются без перезапуска: updateIntervalSeconds.
+
+apiVersion: 1
+
+providers:
+  - name: KAG
+    orgId: 1
+    folder: KAG
+    folderUid: kag
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

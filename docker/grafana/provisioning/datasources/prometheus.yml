@@ -1,0 +1,28 @@
+# Источники данных Grafana (провижининг).
+#
+# ВАЖНО: Grafana читает источники данных ТОЛЬКО из подкаталога datasources/
+# внутри /etc/grafana/provisioning. Раньше datasources и провайдер дашбордов лежали
+# одним файлом в корне каталога (provisioning/dashboards.yml) — Grafana такой файл
+# не читает вообще: в журнале «can't read ... files from directory» и ноль
+# источников данных, поэтому в интерфейсе нечего было выбирать (проверено 26.09.2026).
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
