@@ -302,27 +302,39 @@ class QdrantMonitor:
         Returns:
             Список коллекций с основной статистикой
         """
-        try:
-            if not self._ensure_client():
-                return []
+        if not self._ensure_client():
+            return []
 
-            collections = self._client.get_collections()
-            result = []
+        collections = self._client.get_collections()
+        result = []
 
-            for col in collections.collections:
+        for col in collections.collections:
+            try:
                 info = self._client.get_collection(col.name)
+                # Размер диска называется по-разному в разных версиях qdrant-client:
+                # обращение к info.disk_size_bytes напрямую роняло ВСЮ сводку
+                # (AttributeError проглатывался общим except, и монитор отдавал пустой
+                # список — выглядело как «данных нет», а не как ошибка; найдено 26.09.2026).
+                disk_bytes = (getattr(info, "disk_size_bytes", None)
+                              or getattr(info, "size_bytes", None)
+                              or getattr(info, "disk_data_size", 0) or 0)
                 result.append({
                     "name": col.name,
                     "points_count": info.points_count,
-                    "vectors_count": info.vectors_count,
-                    "disk_size_mb": round(info.disk_size_bytes / 1024 / 1024, 2) if info.disk_size_bytes else 0,
-                    "status": info.status
+                    "vectors_count": getattr(info, "vectors_count", None),
+                    "disk_size_mb": round(disk_bytes / 1024 / 1024, 2) if disk_bytes else 0,
+                    "status": getattr(info, "status", None),
                 })
+            except Exception as e:
+                # Одна проблемная коллекция не должна обнулять сводку по остальным.
+                logger.warning(f"Сводка по коллекции {col.name} не собрана: {e}")
+                result.append({"name": col.name, "points_count": None,
+                               "vectors_count": None, "disk_size_mb": 0,
+                               "status": None, "error": str(e)[:120]})
 
-            return result
-        except Exception as e:
-            logger.error(f"Ошибка получения сводки: {e}")
-            return []
+        if not result:
+            logger.warning("Qdrant вернул пустой список коллекций — сводка пуста")
+        return result
 
 
 qdrant_monitor = QdrantMonitor()

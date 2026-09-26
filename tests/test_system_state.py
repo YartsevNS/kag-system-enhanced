@@ -135,3 +135,33 @@ def test_health_reports_uptime(client, auth_headers):
     d = client.get("/api/v1/system/health", headers=auth_headers).json()
     assert d["status"] == "ok"
     assert d["uptime_seconds"] >= 0
+
+
+def test_collections_summary_survives_missing_disk_size(monkeypatch):
+    """Регрессия: сводка Qdrant обнулялась из-за отсутствующего поля.
+
+    Реальный случай 26.09.2026: у CollectionInfo нет disk_size_bytes, обращение к нему
+    кидало AttributeError, общий except проглатывал его и возвращал пустой список —
+    страница состояния показывала «векторов 0» при живом Qdrant с 9929 точками.
+    """
+    from types import SimpleNamespace
+    from src.api.services.qdrant_monitor import QdrantMonitor
+
+    class _InfoWithoutDiskSize:
+        points_count = 9929
+
+    class _Client:
+        def get_collections(self):
+            return SimpleNamespace(collections=[SimpleNamespace(name="kag_documents")])
+
+        def get_collection(self, name):
+            return _InfoWithoutDiskSize()
+
+    monitor = QdrantMonitor()
+    monkeypatch.setattr(monitor, "_ensure_client", lambda: True)
+    monkeypatch.setattr(monitor, "_client", _Client())
+
+    summary = monitor.get_collections_summary()
+    assert len(summary) == 1, f"сводка пуста: {summary}"
+    assert summary[0]["points_count"] == 9929, summary
+    assert summary[0]["disk_size_mb"] == 0
