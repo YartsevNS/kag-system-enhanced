@@ -150,11 +150,35 @@ def judge_item(item: dict, collected: dict, key: str) -> tuple[dict, float, int]
          "не ниже 0.6: пользователю важен честный ответ, а не догадка.")
     r, c, t = ask(p, key); res["answer_relevance"] = r; spend += c; tokens += t
 
-    # 3. Context precision: доля фрагментов, полезных для вопроса.
-    p = (f"ВОПРОС:\n{q}\n\nФРАГМЕНТЫ (по порядку):\n{_ctx_block(ctx, limit=10, chars=700)}\n\n"
-         "Оцени, какая доля найденных фрагментов нужна для ответа на вопрос. 1.0 — все полезны, "
-         "0.0 — все посторонние. Посторонним считается фрагмент не на тему вопроса.")
-    r, c, t = ask(p, key); res["context_precision"] = r; spend += c; tokens += t
+    # 3. Context precision: размечаем КАЖДЫЙ фрагмент (0/1), долю считаем сами.
+    # Почему не «оцени долю»: на вопрос «какая доля полезна» судья отвечал огрублённо
+    # (0,1 / 0,2 / 0,5 / 1,0) и одинаково для разных конфигураций — метрика не различала
+    # отсечение и реранк (проверено 26.09.2026: precision 0,271 и при 5, и при 7,7, и при 10
+    # фрагментах). Построчная разметка даёт ту же цену одного вызова, но различает порядок
+    # и состав контекста, потому что считается по фактам, а не по впечатлению.
+    n_ctx = min(len(ctx), 10)
+    if n_ctx == 0:
+        res["context_precision"] = {"score": 0.0, "reason": "фрагментов не найдено"}
+    else:
+        numbered = "\n".join(
+            f"{i}. {((ctx[i].get('content') or '')[:600])}" for i in range(n_ctx))
+        p = (f"ВОПРОС:\n{q}\n\nФРАГМЕНТЫ (пронумерованы):\n{numbered}\n\n"
+             "Для КАЖДОГО фрагмента реши, нужен ли он, чтобы ответить на этот вопрос "
+             "(нужен = в нём есть сведения по теме вопроса; не нужен = посторонняя тема, "
+             "другой документ, соседний пункт без ответа). "
+             f'Верни строго JSON: {{"marks": [<по одному 0 или 1 для каждого из {n_ctx} фрагментов>], '
+             '"reason": "<кратко>"}}. Поле score не нужно.')
+        r, c, t = ask(p, key); spend += c; tokens += t
+        marks = r.get("marks") if isinstance(r, dict) else None
+        if isinstance(marks, list) and marks:
+            vals = [1 if str(m).strip() in ("1", "1.0", "true", "True") else 0 for m in marks]
+            score = round(sum(vals) / len(vals), 3)
+            res["context_precision"] = {
+                "score": score, "marks": vals,
+                "reason": (r.get("reason") or "")[:200]}
+        else:
+            res["context_precision"] = {"score": None,
+                                        "reason": f"разметка не получена: {str(r.get('reason'))[:120]}"}
 
     # 4. Context recall: есть ли в фрагментах всё нужное (нужен эталон).
     if not gt:
