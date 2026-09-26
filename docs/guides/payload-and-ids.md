@@ -119,6 +119,19 @@ curl -s -X POST http://localhost:6333/collections/kag_documents/points/count \
 python scripts/evaluate_retrieval.py --output reports/eval_after.json
 ```
 
+## 7. Прочие предохранители (2026-09-12)
+
+| Что | Где | Поведение |
+|---|---|---|
+| Проверка записи векторов | `document_service._process_document_impl` + `indexing_guards.check_points_written` | 0 точек → `failed`, расхождение → warning |
+| Liveness вместо слепых 60 минут | `recovery.py` + `indexing_guards.recovery_reason` | задачи нет в active/reserved >5 мин → документ перезапускается сразу; порог 60 мин остаётся страховкой, когда `inspect` недоступен |
+| Ретрай дедлоков Neo4j | `indexing_guards.run_with_transient_retry` в `batch_create_entities/relations` | при `TransientError.DeadlockDetected` — до 3 попыток; нетранзиентные ошибки пробрасываются (раньше пачка связей терялась молча) |
+| Ошибка эмбеддинга ≠ «ничего не найдено» | `POST /api/v1/chat/search` | при отказе модели запроса — 503 вместо 200 с пустым списком |
+
+Сверка рассинхрона Qdrant/Neo4j и БД: `scripts/cleanup_orphans.py`
+(dry-run по умолчанию, `--apply` удаляет). Перезаливка текста чанков в граф:
+`scripts/backfill_graph_chunk_text.py`.
+
 ## 8. Схема payload: как есть и что предлагается (2026-09-26)
 
 ### Как есть — реальные примеры из коллекции (9 929 точек, коллекция `kag_documents`)
@@ -260,15 +273,104 @@ python scripts/evaluate_retrieval.py --output reports/eval_after.json
 Проверка после переиндексации — по разделу 6 («Проверка после переиндексации») плюс сверка
 `is_current`, `page_start` и ACL-полей на выборке.
 
-## 7. Прочие предохранители (2026-09-12)
+## 9. Ответы на разбор схемы (2026-09-26)
 
-| Что | Где | Поведение |
-|---|---|---|
-| Проверка записи векторов | `document_service._process_document_impl` + `indexing_guards.check_points_written` | 0 точек → `failed`, расхождение → warning |
-| Liveness вместо слепых 60 минут | `recovery.py` + `indexing_guards.recovery_reason` | задачи нет в active/reserved >5 мин → документ перезапускается сразу; порог 60 мин остаётся страховкой, когда `inspect` недоступен |
-| Ретрай дедлоков Neo4j | `indexing_guards.run_with_transient_retry` в `batch_create_entities/relations` | при `TransientError.DeadlockDetected` — до 3 попыток; нетранзиентные ошибки пробрасываются (раньше пачка связей терялась молча) |
-| Ошибка эмбеддинга ≠ «ничего не найдено» | `POST /api/v1/chat/search` | при отказе модели запроса — 503 вместо 200 с пустым списком |
+Ответы на конкретные вопросы из внешнего разбора — с проверкой по коду и замерами, а не по памяти.
 
-Сверка рассинхрона Qdrant/Neo4j и БД: `scripts/cleanup_orphans.py`
-(dry-run по умолчанию, `--apply` удаляет). Перезаливка текста чанков в граф:
-`scripts/backfill_graph_chunk_text.py`.
+### 1. Правило разрешения конфликтов ACL (пользователь и в allow, и в deny)
+
+**Побеждает deny.** Реализовано в двух местах:
+
+- pre-filter в Qdrant (`src/indexing/embeddings_service.py`, ~строка 769): «доступно, если
+  public ИЛИ пользователь/группа в allow» собирается как `should`-группа, а «запрещено, если
+  пользователь/группа в deny» — как `must_not`. `must_not` применяется независимо от `should`,
+  поэтому deny сильнее allow и даже владельца;
+- post-guard `_access_guard` (та же логика через `can_read`) — на случай, если документ
+  попал в выдачу обходным путём.
+
+Тесты: `tests/test_document_access.py` — `test_deny_has_priority`, `test_deny_beats_owner`,
+`test_restricted_hidden_from_others`, `test_legacy_group_ids_restrict_access`.
+
+Отдельно про «пустой allow + пустой deny = доступ всем»: в нашей схеме это не так.
+`visibility="restricted"` без записей в allow-списках не проходит `should`-группу
+(там только `visibility=public`, `allow_group_ids`, `allow_user_ids`), поэтому такой документ
+виден только администратору и владельцу — то есть «fail closed», а не «доступ всем».
+
+### 2. Замер фильтра по `domain` до и после индекса
+
+Методика: 300 запросов напрямую в Qdrant (имя вектора `dense`), коллекция 9 929 точек,
+фильтр `domain=infosec` подходит к 4 401 точке. Индекс создаётся мгновенно (0,3 с).
+
+| Состояние | Без фильтра (p50) | С фильтром (p50) | Стоимость фильтра |
+| :-- | :-- | :-- | :-- |
+| до индекса | 11,10 мс | 35,28 мс | **+24,18 мс на каждый запрос** |
+| после индекса | 11,12 мс | 10,83 мс | ~0 (в пределах шума) |
+
+Ускорение фильтрованного запроса — **3,3×** (35,28 → 10,83 мс). Индекс на `domain` **создан на
+стенде** этой проверкой (0,3 с, обратимо через `delete_payload_index`). Честная оговорка: в общем
+времени ответа чата (~3,5 с) это доли процента — выигрыш не в сегодняшней скорости, а в том, что
+штраф за фильтр растёт с размером коллекции; на миллионах точек он стал бы заметным.
+Такие же индексы нужны `visibility` (используется в том же фильтре) и `is_current`/`valid_to`.
+
+### 3. Обновление `valid_to` при выходе новой версии документа
+
+Важно: **сегодня версионирования нет** — таблица `document_versions` в Postgres пустая (0 строк),
+переиндексация документа заменяет фрагменты на месте (delete + upsert). Ниже — псевдокод того,
+как это делать, если версии понадобятся (с учётом замечания «не вводить `is_current`, а
+использовать `valid_to is null`» — согласен, это атомарнее):
+
+```python
+def publish_new_version(doc_id: str, text: str) -> None:
+    now = utcnow()
+    new_hash = sha256(text)                       # content_hash: ловит «то же имя, другой текст»
+    with transaction():                           # Postgres — источник правды
+        old = versions.current(doc_id)            # where valid_to is null
+        if old and old.content_hash == new_hash:
+            return                                # текст не менялся — переиндексация не нужна
+        versions.insert(doc_id, new_hash, valid_from=now, valid_to=None)
+        if old:
+            versions.close(old, valid_to=now)     # ОДНО обновление; «текущая» = valid_to is null
+    qdrant.set_payload(                          # закрываем старые точки пачкой
+        filter={"document_id": doc_id, "valid_to": None},
+        payload={"valid_to": now.isoformat()})
+    chunks = parse_and_chunk(text)
+    points = embed(chunks, payload={"document_id": doc_id, "valid_from": now.isoformat(),
+                                    "valid_to": None, "content_hash": new_hash,
+                                    "schema_version": SCHEMA_VERSION})
+    qdrant.upsert(points)                        # новые точки считаются текущими
+```
+
+Поиск «только актуальное» — фильтр `valid_to is null`, без отдельного `is_current`. Откат версии —
+закрыть текущую (`valid_to=now`) и вернуть прежние точки (`valid_to=null`), не пересчитывая векторы.
+
+### 4. Есть ли в Neo4j узлы, которые не являются фрагментами
+
+Да, четыре вида узлов (замер на стенде 26.09.2026):
+
+| Метка | Узлов | Свойства |
+| :-- | :-- | :-- |
+| `Entity` | 34 261 | `name`, `type`, `description`, `confidence`, `source_docs`, `properties`, `updated_at` |
+| `Chunk` | 9 814 | `id`, `qdrant_point_id`, `text`, `section_id`, `breadcrumb`, `chunk_seq`, `updated_at` |
+| `Section` | 301 | раздел документа (узел-раздел, к которому привязаны фрагменты) |
+| `Document` | 230 | `id`, `filename`, `metadata`, `updated_at` |
+
+Отсюда ответ на вопрос про `graph_node_id`: отдельное поле не нужно — `chunk_id` и есть
+`Chunk.id`, то есть идентификатор узла графа, общий для обеих систем. Связь односторонняя
+(граф → вектор, через `qdrant_point_id`) и этого достаточно; `graph_node_id` в payload создал бы
+циклическую зависимость без выигрыша.
+
+### Что принято из разбора, а что отклонено (с причинами)
+
+| Совет | Решение | Почему |
+| :-- | :-- | :-- |
+| `acl_mode: public/restricted` | **отклонено** | роль маркера уже играет `visibility`; «fail closed» на пустых allow-списках проверен кодом и тестами |
+| Удалить `group_ids` как устаревшее | **отклонено** | поле используется (legacy-группы, оно же проиндексировано); 9,9 тыс. точек — это ~150 КБ, экономить нечего |
+| Выбрать одно: `pages[]` или `page_start/page_end` | **принято** | оставляем `pages[]` + nested-индекс; `min/max` для интерфейса считаем на месте |
+| Вместо `is_current` — `valid_to is null` | **принято** | одно атомарное обновление вместо двух точек |
+| `content_hash` | **принято** | дедупликация «тот же текст под другим именем» и защита от лишней переиндексации |
+| `graph_node_id` в payload | **принято частично** | не нужно как поле: `chunk_id` = `Chunk.id`; односторонней связи достаточно |
+| `standard_number`/`clause` в `attributes` | **отложено** | сейчас это плоские поля; вложенность потребует путей в индексах без выигрыша. Нужны только индексы (как у `domain`) |
+| `schema_version` | **принято** | дешёвая страховка при эволюции схемы |
+| `ingested_at` отдельно от `valid_from` | **принято** | «когда залили» и «когда действует» — разные вещи, для отладки нужно первое |
+| `language` | **принято как низкий приоритет** | в корпусе есть английские документы, но эмбеддинги многоязычные |
+| `trace_id` в payload | **согласен — не в payload** | генерируется на входе API, идёт заголовком и в логи; в Qdrant возвращаем `chunk_id` |
