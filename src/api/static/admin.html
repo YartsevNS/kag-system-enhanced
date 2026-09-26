@@ -680,23 +680,42 @@
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
                 <input type="checkbox" id="reranker-enabled" onchange="saveRerankerConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
                 <label for="reranker-enabled" style="font-size:14px;font-weight:600;cursor:pointer">Включить реранкер</label>
+                <select id="reranker-backend" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px">
+                    <option value="none">выключено (без ранжирования)</option>
+                    <option value="flashrank">локальная модель в api (flashrank)</option>
+                    <option value="service">сервис на сервере моделей</option>
+                </select>
                 <select id="reranker-model" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px"></select>
                 <button class="btn" onclick="warmRerankerModel()" title="Скачать модель в кэш и загрузить её сейчас">⬇️ Загрузить модель</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+                <span style="font-size:12px;color:var(--text3)">Сервис:</span>
+                <input id="reranker-endpoint" onchange="saveRerankerConfig()" placeholder="http://192.168.50.41:8010" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px;width:250px">
+                <span style="font-size:12px;color:var(--text3)">таймаут, мс</span>
+                <input id="reranker-timeout" type="number" min="50" max="30000" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px;width:90px">
+                <span style="font-size:12px;color:var(--text3)">не ранжировать, если фрагментов меньше</span>
+                <input id="reranker-minfrag" type="number" min="1" max="50" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px;width:70px">
+                <button class="btn" onclick="checkRerankService()" title="Спросить у сервиса готовность и модель">Проверить связь</button>
             </div>
             <span id="reranker-status" style="font-size:12px;color:var(--text4)"></span>
             <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
                 <strong>Что это.</strong> Cross-encoder переранжирует найденные фрагменты перед отправкой в LLM:
                 берёт top-N из векторного поиска и упорядочивает их по смысловой близости к вопросу. Это улучшает
                 то, какие именно фрагменты попадут в ответ.<br>
-                <strong>Модель.</strong> По умолчанию выбрана <em>ms-marco-MultiBERT-L-12</em> — единственная
-                мультиязычная модель из списка flashrank (остальные работают на английском, для русских текстов это хуже).<br>
-                <strong>Почему раньше не работало.</strong> В коде была захардкожена модель
-                <em>BAAI/bge-reranker-v2-m3</em>, которой у flashrank нет: запрос уходил на несуществующий файл и
-                получал 404, реранкер не загружался никогда, а вместо явного «выключено» молча включался BM25-фолбэк,
-                который падал и возвращал исходный порядок. Теперь состояние видно здесь и переключается.<br>
-                <strong>Кэш модели.</strong> Скачивается в <em>/app/data/models/flashrank</em> (постоянный каталог
-                ./data — переживает пересоздание контейнера). Для изолированного контура модель нужно скачать заранее
-                кнопкой «Загрузить модель» или вшить в образ.
+                <strong>Где живёт модель.</strong> Два варианта: «локальная модель в api» (flashrank, работает без
+                внешних зависимостей, но на 4 ядрах стенда медленно) и «сервис на сервере моделей» (cross-encoder
+                на отдельном сервере, стенд обращается по HTTP). Во втором случае модель живёт на сервере, а api
+                только зовёт его — и при отказе сервиса порядок остаётся векторным, чат не ломается.<br>
+                <strong>Что даёт по замерам.</strong> На эталонном наборе (14 вопросов, точная метрика) с моделью
+                DiTy на сервисе: precision 0,314 → 0,354, recall 0,718 → 0,833, faithfulness 0,793 → 0,964 —
+                при том же числе фрагментов (5). Плата — около 1,5 секунды на вопрос (локальный сервер, позже
+                с GPU будет незаметно). Поэтому по умолчанию выключено: включается осознанно.<br>
+                <strong>Проверка.</strong> Кнопка «Проверить связь» спрашивает у сервиса готовность и имя
+                загруженной модели — это надо делать ДО включения, иначе отказ сервиса выглядит как «реранкер
+                не работает» при живом чате.<br>
+                <strong>Модель в сервисе.</strong> Список ниже относится к локальному flashrank; для сервиса
+                имя модели задаётся на сервере (сейчас это <em>DiTy/cross-encoder-russian-msmarco</em>), и
+                отсутствие её в списке flashrank — нормально.
             </div>
         </div>
 
@@ -1315,7 +1334,8 @@
             } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
 
-        // ── Реранкер: включение/выключение, выбор модели, предзагрузка ─────
+        // ── Реранкер: включение/выключение, бэкенд, сервис, предзагрузка ─────
+        const RERANK_BACKEND_LABEL = {none: 'выключено', flashrank: 'локальная модель (flashrank)', service: 'сервис на сервере моделей'};
         async function loadRerankerConfig() {
             try {
                 const r = await apiFetch(`${API_URL}/reranker-config`);
@@ -1323,19 +1343,41 @@
                 if (!d || d.status === 'error') return;
                 const sel = document.getElementById('reranker-model');
                 if (sel && Array.isArray(d.available_models)) {
-                    sel.innerHTML = d.available_models.map(m =>
+                    // Модель сервиса (например DiTy) в списке flashrank отсутствует — добавляем её,
+                    // иначе селект «потеряет» текущее состояние и админ увидит чужую модель.
+                    const models = d.available_models.slice();
+                    if (d.model && !models.includes(d.model)) models.unshift(d.model);
+                    sel.innerHTML = models.map(m =>
                         `<option value="${m}"${m === d.model ? ' selected' : ''}>${m}</option>`).join('');
                 }
                 const cb = document.getElementById('reranker-enabled');
                 if (cb) cb.checked = !!d.enabled;
+                const be = document.getElementById('reranker-backend');
+                if (be) be.value = d.backend || 'none';
+                const ep = document.getElementById('reranker-endpoint');
+                if (ep && d.endpoint) ep.value = d.endpoint;
+                const to = document.getElementById('reranker-timeout');
+                if (to && d.timeout_ms) to.value = d.timeout_ms;
+                const mf = document.getElementById('reranker-minfrag');
+                if (mf && d.min_fragments) mf.value = d.min_fragments;
                 renderRerankerStatus(d);
             } catch (e) { console.error('reranker-config load:', e); }
         }
         function renderRerankerStatus(d) {
             const st = document.getElementById('reranker-status');
             if (!st || !d) return;
-            const state = d.enabled ? (d.loaded ? 'включён, модель загружена' : 'включён, модель ещё не загружена') : 'выключен';
-            st.textContent = `${state} · модель: ${d.model} · кэш: ${d.cache_dir}`
+            const backend = d.backend || 'none';
+            let state;
+            if (!d.enabled || backend === 'none') {
+                state = 'выключен';
+            } else if (backend === 'service') {
+                state = `включён, бэкенд «сервис» (${d.endpoint}), модель ${d.model}`;
+            } else {
+                state = d.loaded ? 'включён, модель загружена' : 'включён, модель ещё не загружена';
+            }
+            st.textContent = `${state} · бэкенд: ${RERANK_BACKEND_LABEL[backend] || backend}`
+                + (backend === 'flashrank' ? ` · кэш: ${d.cache_dir}` : '')
+                + (backend === 'service' ? ` · таймаут ${d.timeout_ms} мс · не ранжировать при <${d.min_fragments} фрагментов` : '')
                 + (d.load_error ? ` · ошибка: ${d.load_error}` : '');
         }
         async function saveRerankerConfig() {
@@ -1347,13 +1389,31 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         enabled: document.getElementById('reranker-enabled').checked,
+                        backend: document.getElementById('reranker-backend').value,
                         model: document.getElementById('reranker-model').value,
+                        endpoint: document.getElementById('reranker-endpoint').value,
+                        timeout_ms: parseInt(document.getElementById('reranker-timeout').value, 10) || 1500,
+                        min_fragments: parseInt(document.getElementById('reranker-minfrag').value, 10) || 4,
+                        keep_dense_on_error: true,
                     })
                 });
                 const d = await r.json();
                 if (!r.ok) { if (st) st.textContent = '❌ ' + (d.detail || 'ошибка'); return; }
                 renderRerankerStatus(d);
                 if (st) st.textContent = '✅ ' + st.textContent;
+            } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
+        }
+        async function checkRerankService() {
+            const st = document.getElementById('reranker-status');
+            if (st) st.textContent = '⏳ Проверяю сервис...';
+            try {
+                const r = await apiFetch(`${API_URL}/reranker-config/service-health`);
+                const d = await r.json();
+                if (st) {
+                    st.textContent = d.ok
+                        ? `✅ сервис готов: ${d.endpoint}, модель ${d.model}`
+                        : `❌ сервис не ответил: ${d.endpoint} ${d.error || ''}`;
+                }
             } catch (e) { if (st) st.textContent = '❌ ' + e.message; }
         }
         async function warmRerankerModel() {
