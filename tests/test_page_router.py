@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.indexing.page_router import (  # noqa: E402
     ROUTE_OCR, ROUTE_PARSER, ROUTE_SKIP, ROUTE_VLM,
-    PageSignals, decide_route, garbage_ratio, route_document, table_like_ratio,
+    PageSignals, decide_route, garbage_ratio, route_document, table_like_ratio, table_like_stats,
 )
 
 DIGITAL_PAGE = (
@@ -164,3 +164,27 @@ def test_few_numeric_lines_are_not_a_table():
     sig = PageSignals.from_text(1, text)
     assert sig.table_like_lines == 3
     assert decide_route(sig)["route"] == ROUTE_PARSER, decide_route(sig)
+
+
+def test_toc_page_is_not_a_table():
+    """Оглавление Р 50.1.110—2016 уходило в модель: строки с точечными выносками считались таблицей."""
+    toc = ("Содержание\n1 Область применения ................... 1\n"
+           "2 Нормативные ссылки ................... 1\n"
+           "5.1 Представление ключа ................ 2\n"
+           "5.2 Объект закрытого ключа .............. 3\n"
+           "Приложение А (справочное) ASN.1 ......... 8\n")
+    ratio, lines = table_like_stats(toc)
+    assert lines == 0, f"строки оглавления не должны считаться табличными (получили {lines})"
+    sig = PageSignals.from_text(3, toc, tables_found=0, doc_low_text=False)
+    assert decide_route(sig)["route"] != ROUTE_VLM
+
+
+def test_short_fragment_of_text_document_is_not_scan():
+    """Короткий фрагмент цифрового PDF — граница разбиения, а не «нет текстового слоя»."""
+    short = "5.2 Объект закрытого ключа\nКлюч хранится в контейнере.\n12345 67890"
+    sig = PageSignals.from_text(9, short, tables_found=0, doc_low_text=False)
+    d = decide_route(sig)
+    assert d["route"] == ROUTE_PARSER, d
+    # а если у документа действительно нет текста — уходит в наш OCR
+    sig2 = PageSignals.from_text(9, short, tables_found=0, doc_low_text=True)
+    assert decide_route(sig2)["route"] == ROUTE_OCR

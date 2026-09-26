@@ -78,6 +78,15 @@ def main() -> int:
     for pl in scroll_chunks():
         by_doc[str(pl.get("document_id") or "?")].append(pl)
 
+    # медиана символов на фрагмент по документу: свойство документа, а не отдельного фрагмента
+    doc_lens = defaultdict(list)
+    for doc_id, pls in by_doc.items():
+        doc_lens[doc_id] = sorted(len(x.get("content") or "") for x in pls)
+
+    def doc_low_text(doc_id: str) -> bool:
+        lens = doc_lens.get(doc_id) or []
+        return bool(lens) and lens[len(lens) // 2] < 200
+
     routes = Counter()
     vlm_per_doc = Counter()
     chars_per_doc = Counter()
@@ -93,6 +102,7 @@ def main() -> int:
                 doc_tables_count=q.get("tables", 0),
                 doc_tables_quality=q.get("worst_quality"),
                 doc_is_scan=str(pl.get("file_type") or "").startswith("image/"),
+                doc_low_text=doc_low_text(doc_id),
             )
             d = decide_route(sig)
             routes[d["route"]] += 1

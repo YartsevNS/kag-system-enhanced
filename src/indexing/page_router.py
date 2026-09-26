@@ -36,6 +36,16 @@ _OK_CHARS = set("абвгдеёжзийклмнопрстуфхцчшщъыьэ�
 _NUMERICISH = set("0123456789.,%-–—")
 
 
+def _is_toc_line(line: str) -> bool:
+    """Строка оглавления: текст, точечная выноска, номер страницы в конце.
+
+    Такие строки дали ложных кандидатов в модель (оглавление Р 50.1.110—2016), поэтому их
+    исключаем до подсчёта табличных признаков.
+    """
+    dots = line.count(".") + line.count("…")
+    return dots >= 4
+
+
 def table_like_stats(text: str) -> tuple[float, int]:
     """Признаки табличности: (доля табличных строк, их количество).
 
@@ -57,6 +67,8 @@ def table_like_stats(text: str) -> tuple[float, int]:
 
     like = 0
     for line in lines:
+        if _is_toc_line(line):
+            continue
         tokens = line.split()
         numeric = sum(1 for t in tokens if _is_number(t))
         if numeric >= 2:
@@ -101,7 +113,10 @@ class PageSignals:
     # (первый прогон по корпусу без этого сигнала дал 22% фрагментов в модель).
     doc_tables_count: int = 0
     doc_tables_quality: Optional[float] = None
-    doc_is_scan: bool = False                  # картинка или скан (file_type image/* или PDF без текстового слоя)
+    doc_is_scan: bool = False                  # картинка или скан (file_type image/*)
+    # Медиана символов на страницу по ДОКУМЕНТУ. Короткий фрагмент цифрового PDF — это граница
+    # разбиения, а не отсутствие текста, поэтому проверять это надо на уровне документа.
+    doc_low_text: Optional[bool] = None
     notes: List[str] = field(default_factory=list)
 
     @classmethod
@@ -110,14 +125,15 @@ class PageSignals:
                   already_vlm: bool = False,
                   doc_tables_count: int = 0,
                   doc_tables_quality: Optional[float] = None,
-                  doc_is_scan: bool = False) -> "PageSignals":
+                  doc_is_scan: bool = False,
+                  doc_low_text: Optional[bool] = None) -> "PageSignals":
         """Собрать сигналы из текста страницы одной строкой — так это делает вызывающий код."""
         ratio, lines = table_like_stats(text)
         return cls(page=page, text_chars=len(text or ""), tables_found=tables_found,
                    worst_quality=worst_quality, table_like=ratio, table_like_lines=lines,
                    garbage=garbage_ratio(text), already_vlm=already_vlm,
                    doc_tables_count=doc_tables_count, doc_tables_quality=doc_tables_quality,
-                   doc_is_scan=doc_is_scan)
+                   doc_is_scan=doc_is_scan, doc_low_text=doc_low_text)
 
 
 def decide_route(sig: PageSignals) -> Dict[str, Any]:
@@ -149,7 +165,8 @@ def decide_route(sig: PageSignals) -> Dict[str, Any]:
         return {"page": sig.page, "route": ROUTE_OCR,
                 "reason": "скан или картинка без признаков таблицы — наш OCR"}
 
-    no_text_layer = sig.text_chars < MIN_TEXT_CHARS
+    # Известно про документ — доверяем документу; неизвестно (одиночная страница) — судим по фрагменту.
+    no_text_layer = sig.doc_low_text if sig.doc_low_text is not None else (sig.text_chars < MIN_TEXT_CHARS)
     if no_text_layer:
         if looks_like_table:
             return {"page": sig.page, "route": ROUTE_VLM,
