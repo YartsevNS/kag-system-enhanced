@@ -388,6 +388,50 @@
             <div id="functions-list">
                 <div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div> Загрузка функций...</div>
             </div>
+
+            <!-- Реранкер: включение, бэкенд и модель — ЗДЕСЬ, рядом с привязкой моделей к функциям
+                 (требование владельца: выбор модели реранкера должен быть там же, где привязка).
+                 Параметры сервиса (адрес, таймаут) — в карточке «Реранкер» ниже, там же кнопка проверки
+                 связи. Идентификаторы полей прежние, чтобы работал уже написанный JS. -->
+            <div style="margin-top:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm)">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:600">Реранкер</span>
+                    <label for="reranker-enabled" style="font-size:13px;cursor:pointer">включён</label>
+                        <option value="none">без ранжирования</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="saveRerankerConfig()">💾 Сохранить реранкер</button>
+                    <button class="btn btn-secondary" onclick="checkRerankService()" title="Спросить у сервиса готовность и модель">Проверить связь</button>
+                </div>
+                <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">
+                    Cross-encoder переранжирует найденные фрагменты. Замер на эталонном наборе (14 вопросов),
+                    модель DiTy: precision 0,314 → 0,354, recall 0,718 → 0,833, faithfulness 0,793 → 0,964 —
+                    при том же числе фрагментов. Цена — около 1,5 секунды на вопрос (локальный сервер моделей).
+                    При отказе сервиса порядок остаётся векторным, ответы не ломаются.
+                </div>
+                <span id="reranker-status" style="font-size:12px;color:var(--text4);display:block;margin-top:6px"></span>
+            </div>
+            <!-- Реранкер: включение, бэкенд и модель — здесь, рядом с привязкой моделей к функциям.
+                 Параметры сервиса (адрес, таймаут) — в карточке «Реранкер» ниже, там же проверка связи. -->
+            <div style="margin-top:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm)">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:600">Реранкер</span>
+                    <input type="checkbox" id="reranker-enabled" onchange="saveRerankerConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                    <label for="reranker-enabled" style="font-size:13px;cursor:pointer">включён</label>
+                    <select id="reranker-backend" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px">
+                        <option value="none">без ранжирования</option>
+                        <option value="flashrank">локальная модель в api</option>
+                        <option value="service">сервис на сервере моделей</option>
+                    </select>
+                    <select id="reranker-model" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px"></select>
+                    <button class="btn btn-primary" onclick="saveRerankerConfig()">💾 Сохранить реранкер</button>
+                    <button class="btn btn-secondary" onclick="checkRerankService()" title="Спросить у сервиса готовность и модель">Проверить связь</button>
+                </div>
+                <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.6">
+                    Cross-encoder переранжирует найденные фрагменты. Замер на эталонном наборе (14 вопросов), модель DiTy:
+                    precision 0,314 → 0,354, recall 0,718 → 0,833, faithfulness 0,793 → 0,964 — при том же числе
+                    фрагментов. Цена — около 1,5 секунды на вопрос. При отказе сервиса порядок остаётся векторным.
+                </div>
+            </div>
             <div style="margin-top:12px">
                 <button class="btn btn-secondary" onclick="loadFunctionMaps()">🔄 Обновить</button>
                 <span id="functions-status" style="font-size:13px;margin-left:12px"></span>
@@ -677,16 +721,9 @@
         <!-- Реранкер: переранжирование выдачи (cross-encoder) -->
         <div class="section">
             <h2 class="section-title">✨ Реранкер (переранжирование результатов поиска)</h2>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-                <input type="checkbox" id="reranker-enabled" onchange="saveRerankerConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
-                <label for="reranker-enabled" style="font-size:14px;font-weight:600;cursor:pointer">Включить реранкер</label>
-                <select id="reranker-backend" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px">
-                    <option value="none">выключено (без ранжирования)</option>
-                    <option value="flashrank">локальная модель в api (flashrank)</option>
-                    <option value="service">сервис на сервере моделей</option>
-                </select>
-                <select id="reranker-model" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px"></select>
-                <button class="btn" onclick="warmRerankerModel()" title="Скачать модель в кэш и загрузить её сейчас">⬇️ Загрузить модель</button>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6">
+                Включение, бэкенд и модель выбираются выше — в разделе «Привязка функций», рядом с функциями.
+                Здесь настраиваются только адрес и таймаут сервиса реранка.
             </div>
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
                 <span style="font-size:12px;color:var(--text3)">Сервис:</span>
@@ -697,7 +734,6 @@
                 <input id="reranker-minfrag" type="number" min="1" max="50" onchange="saveRerankerConfig()" style="padding:6px 10px;background:var(--surface);color:var(--text);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:13px;width:70px">
                 <button class="btn" onclick="checkRerankService()" title="Спросить у сервиса готовность и модель">Проверить связь</button>
             </div>
-            <span id="reranker-status" style="font-size:12px;color:var(--text4)"></span>
             <div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px">
                 <strong>Что это.</strong> Cross-encoder переранжирует найденные фрагменты перед отправкой в LLM:
                 берёт top-N из векторного поиска и упорядочивает их по смысловой близости к вопросу. Это улучшает
@@ -951,7 +987,6 @@
                 <label>Название модели (например, llama3:8b, mistral:latest, qwen2:7b)</label>
                 <input type="text" id="model-name-input" placeholder="Введите название модели...">
             </div>
-            <button class="btn btn-primary" onclick="pullModel()">Загрузить модель</button>
             <div id="pull-status" style="margin-top: 1rem;"></div>
         </div>
 
