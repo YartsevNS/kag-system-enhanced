@@ -237,10 +237,47 @@ def main() -> int:
     if args.limit:
         golden = golden[:args.limit]
 
-    print(f"судья: {JUDGE_MODEL} | вопросов: {len(golden)}")
-    rows = []
+    out = Path(args.out) if args.out else ROOT / "reports" / "eval" / f"rag_eval_{datetime.now():%Y%m%d_%H%M}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict] = []
     total_cost = 0.0
     total_tokens = 0
+
+    def build_summary() -> dict:
+        """Сводка по уже накопленным строкам (вызывается и для промежуточного сохранения)."""
+        def avg(name):
+            vals = [r[name] for r in rows if r[name] is not None]
+            return round(sum(vals) / len(vals), 3) if vals else None
+
+        metrics = ("faithfulness", "answer_relevance", "context_precision", "context_recall")
+        s = {m: avg(m) for m in metrics}
+        # Покрытие обязательно печатаем: среднее по 8 вопросам из 14 — это не оценка системы,
+        # а оценка тех вопросов, где судья не промолчал (урок 26.09.2026).
+        s["покрытие"] = {m: f"{len([r for r in rows if r[m] is not None])}/{len(rows)}"
+                         for m in metrics}
+        thin = [m for m in metrics if len([r for r in rows if r[m] is not None]) < 0.8 * len(rows)]
+        if thin:
+            s["предупреждение"] = ("мало оценок (меньше 80% набора) по метрикам: "
+                                   + ", ".join(thin) + " — средние по ним не считать надёжными")
+        s["вопросов"] = len(rows)
+        s["стоимость_₽"] = round(total_cost, 4)
+        s["токенов_судьи"] = total_tokens
+        return s
+
+    def save(partial: bool = False) -> None:
+        """Сохранить отчёт (в том числе промежуточный после каждого вопроса).
+
+        Страховка от потери денег: прогон BGE 26.09.2026 умер на 9-м вопросе из 14, и все
+        уже оплаченные вызовы судьи пропали вместе с отчётом.
+        """
+        summary = build_summary()
+        if partial:
+            summary["частичный"] = True
+        out.write_text(json.dumps({"summary": summary, "model": JUDGE_MODEL, "rows": rows},
+                                  ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"судья: {JUDGE_MODEL} | вопросов: {len(golden)}")
     for item in golden:
         c = by_id.get(item["id"])
         if not c:
@@ -266,34 +303,13 @@ def main() -> int:
         print(f"  {item['id']}: faith={sc('faithfulness')} rel={sc('answer_relevance')} "
               f"prec={sc('context_precision')} rec={sc('context_recall')} "
               f"({len(c.get('answer') or '')} симв.)", flush=True)
+        save(partial=True)          # деньги уже потрачены — результат сохраняем сразу
 
-    def avg(name):
-        vals = [r[name] for r in rows if r[name] is not None]
-        return round(sum(vals) / len(vals), 3) if vals else None
-
-    metrics = ("faithfulness", "answer_relevance", "context_precision", "context_recall")
-    summary = {m: avg(m) for m in metrics}
-    # Покрытие обязательно печатаем: среднее по 8 вопросам из 14 — это не оценка системы,
-    # а оценка тех вопросов, где судья не промолчал (урок 26.09.2026: 9 пустых ответов судьи
-    # дали красивую единицу по faithfulness всего на половине набора).
-    summary["покрытие"] = {m: f"{len([r for r in rows if r[m] is not None])}/{len(rows)}"
-                           for m in metrics}
-    thin = [m for m in metrics if len([r for r in rows if r[m] is not None]) < 0.8 * len(rows)]
-    if thin:
-        summary["предупреждение"] = ("мало оценок (меньше 80% набора) по метрикам: "
-                                     + ", ".join(thin) + " — средние по ним не считать надёжными")
-    summary["вопросов"] = len(rows)
-    summary["стоимость_₽"] = round(total_cost, 4)
-    summary["токенов_судьи"] = total_tokens
-
+    summary = build_summary()
     print("\n=== ИТОГ ===")
     for k, v in summary.items():
         print(f"  {k}: {v}")
-
-    out = Path(args.out) if args.out else ROOT / "reports" / "eval" / f"rag_eval_{datetime.now():%Y%m%d_%H%M}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps({"summary": summary, "model": JUDGE_MODEL, "rows": rows},
-                              ensure_ascii=False, indent=2), encoding="utf-8")
+    save()
     print(f"  отчёт: {out}")
     return 0
 
