@@ -48,3 +48,18 @@ def test_metrics_endpoint_serves_prometheus_format():
 def test_generate_latest_contains_stage_labels():
     record_text = generate_latest().decode()
     assert 'stage="qdrant"' in record_text or 'rag_stage_duration_seconds' in record_text
+
+
+def test_metrics_path_is_public():
+    """/metrics должен быть доступен без токена: скрапер Prometheus не имеет сессии.
+
+    Регрессия реально случилась: сначала путь перехватывал SetupCheckMiddleware, потом
+    SecurityMiddleware — оба отдавали страницу входа (302), и /metrics был недоступен.
+    Проверяем оба места, чтобы не повторилось.
+    """
+    from src.api.middleware.security import _is_public
+    from src.api.middleware.setup_checker import SetupCheckMiddleware
+
+    assert _is_public("/metrics") is True, "SecurityMiddleware закроет /metrics"
+    assert any("/metrics".startswith(p) for p in SetupCheckMiddleware.PUBLIC_PATHS), \
+        "SetupCheckMiddleware закроет /metrics"
