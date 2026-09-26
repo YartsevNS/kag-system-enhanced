@@ -25,18 +25,36 @@ class QdrantMonitor:
     Сервис мониторинга Qdrant базы данных.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 6333):
-        """Инициализация монитора"""
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None):
+        """Инициализация монитора.
+
+        Адрес Qdrant берём из настроек. Раньше хост был жёстко localhost: в контейнере
+        Qdrant живёт по имени kag-qdrant, поэтому монитор отдавал пустой список
+        коллекций (проверено 26.09.2026: 0 коллекций и 0 точек при живом Qdrant —
+        из-за этого в админке не было статистики, а страница состояния показывала
+        «векторов 0»).
+        """
+        from src.config import get_settings
+        settings = get_settings()
+
+        host = host or settings.QDRANT_HOST
+        if host == "kag-qdrant":
+            import os
+            if not os.path.exists("/.dockerenv"):
+                host = "localhost"   # запуск на хосте (тесты, локальная разработка)
+
         self.host = host
-        self.port = port
-        self.url = f"http://{host}:{port}"
+        self.port = port or settings.QDRANT_PORT
+        self.url = f"http://{self.host}:{self.port}"
+        self._api_key = getattr(settings, "QDRANT_API_KEY", "") or ""
         self._client: Optional[QdrantClient] = None
 
     def _connect(self):
-        """Подключиться к Qdrant"""
+        """Подключиться к Qdrant (с ключом, если он задан: иначе 401)."""
         if QDRANT_AVAILABLE:
             try:
-                self._client = QdrantClient(url=self.url)
+                self._client = (QdrantClient(url=self.url, api_key=self._api_key)
+                                if self._api_key else QdrantClient(url=self.url))
                 logger.info(f"QdrantMonitor подключен: {self.url}")
                 return True
             except Exception as e:

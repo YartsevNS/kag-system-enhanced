@@ -78,6 +78,22 @@ def test_recorded_metrics_are_visible_in_overview(client, auth_headers):
     assert d["feedback"]["up"] >= 1
 
 
+def test_qdrant_monitor_takes_host_from_settings(monkeypatch):
+    """Регрессия: монитор Qdrant жёстко ходил на localhost.
+
+    В контейнере Qdrant живёт по имени kag-qdrant — монитор отдавал 0 коллекций при
+    живом Qdrant, из-за чего в админке не было статистики, а страница состояния
+    показывала «векторов 0» (найдено 26.09.2026).
+    """
+    from src.config import get_settings
+    from src.api.services.qdrant_monitor import QdrantMonitor
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "QDRANT_HOST", "kag-qdrant-test", raising=False)
+    monitor = QdrantMonitor()
+    assert "kag-qdrant-test" in monitor.url, f"монитор ходит не туда: {monitor.url}"
+
+
 def test_quantile_interpolation():
     """Квантиль по гистограмме: без него p50/p95 на странице были бы пустыми."""
     from src.monitoring.prometheus import rag_stage_duration_seconds
