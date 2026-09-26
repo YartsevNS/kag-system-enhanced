@@ -119,6 +119,147 @@ curl -s -X POST http://localhost:6333/collections/kag_documents/points/count \
 python scripts/evaluate_retrieval.py --output reports/eval_after.json
 ```
 
+## 8. Схема payload: как есть и что предлагается (2026-09-26)
+
+### Как есть — реальные примеры из коллекции (9 929 точек, коллекция `kag_documents`)
+
+Карточка документа (участвует в поиске как источник верхнего уровня):
+
+```json
+{
+  "id": "0005eb5c-d9d1-5027-bef9-f7f7cb0512db",
+  "payload": {
+    "document_id": "765589a3-98d7-490c-9673-c2b25e4f3e64",
+    "chunk_id": "card",
+    "level": "document",
+    "content": "Р 50.1.113—2016. Рекомендации по стандартизации. …",
+    "filename": "r-50.1.pdf",
+    "title": "Р 50.1.113—2016. Рекомендации по стандартизации. Информационная технология…",
+    "document_type": "standard",
+    "summary": "Документ представляет собой рекомендации по стандартизации…",
+    "topics": ["криптографическая защита информации", "электронная цифровая подпись", "хэширование"],
+    "visibility": "public",
+    "allow_group_ids": [], "deny_group_ids": [],
+    "allow_user_ids": [], "deny_user_ids": [],
+    "domain": "infosec"
+  }
+}
+```
+
+Обычный фрагмент (страницы лежат ВНУТРИ вложенного `metadata`):
+
+```json
+{
+  "id": "000ba86b-9274-5327-a94f-a1ff792d94e5",
+  "payload": {
+    "document_id": "ddb26a90-5157-40a3-ac91-76d2854615ca",
+    "chunk_id": "ddb26a90-…_chunk_00107",
+    "content": ") = TUV ∈ V768: …",
+    "file_type": ".pdf",
+    "filename": "r-1323565.1.pdf",
+    "document_type": "standard",
+    "domain": "infosec",
+    "visibility": "public",
+    "allow_group_ids": [], "deny_group_ids": [],
+    "allow_user_ids": [], "deny_user_ids": [],
+    "group_ids": [],
+    "metadata": {
+      "page_count": 40, "parser": "pymupdf", "tables_count": 17,
+      "chunk_index": 106, "chunk_seq": 107, "total_chunks": 116,
+      "splitter": "segment_based", "is_partial": false, "overlap_applied": true,
+      "pages": [34, 35]
+    }
+  }
+}
+```
+
+### Что из этого уже закрывает требования
+
+| Требование | Состояние |
+| :-- | :-- |
+| ACL | ✅ плоские поля: `visibility` + `allow/deny_group_ids` + `allow/deny_user_ids`, плюс `group_ids` для pre-filter |
+| Страница (откуда факт) | ⚠️ есть, но внутри `metadata.pages` (массив: фрагмент может пересекать страницы) и НЕ проиндексировано |
+| Версионирование документа | ❌ в payload нет; версии лежат в Postgres (`document_versions`) |
+| Связь с Neo4j | ⚠️ односторонняя: узлы графа несут `qdrant_point_id`, в payload узла нет — искать приходится по `chunk_id` |
+| Табличный слой | ⚠️ `table_id`/`row_count` живут в Postgres, в payload их нет |
+
+Индексировано сейчас (5 полей): `chunk_id`, `document_id`, `file_type`, `filename`, `group_ids`.
+`domain` и `visibility` используются в фильтрах чата, но индекса не имеют — фильтр работает без ускорения.
+
+### Предлагаемая схема (плоская, обратно совместимая)
+
+Правило: всё, по чему фильтруем, сортируем или переходим — ПЛОСКИМ полем; вложенный `metadata`
+оставляем как есть (в нём тайминги парсинга, `splitter`, `pages` — ломать совместимость незачем).
+
+```json
+{
+  "id": "uuid5(chunk_id)",
+  "payload": {
+    "document_id": "ddb26a90-5157-40a3-ac91-76d2854615ca",
+    "chunk_id": "ddb26a90-…_chunk_00107",
+    "level": "chunk",
+    "content": "…) = TUV ∈ V768: …",
+    "filename": "r-1323565.1.pdf",
+    "file_type": ".pdf",
+    "document_type": "standard",
+    "domain": "infosec",
+
+    "visibility": "public",
+    "allow_group_ids": ["g-analytics"],
+    "deny_group_ids": [],
+    "allow_user_ids": [],
+    "deny_user_ids": [],
+    "group_ids": ["g-analytics"],
+
+    "page_start": 34,
+    "page_end": 35,
+    "pages": [34, 35],
+
+    "document_version": 3,
+    "version_valid_from": "2026-09-20T18:00:00Z",
+    "version_valid_to": null,
+    "is_current": true,
+
+    "graph_node_id": "chunk:ddb26a90-…_chunk_00107",
+    "table_id": null,
+    "row_count": null,
+    "standard_number": "ГОСТ Р 57580.1-2017",
+    "clause": "5.2.1",
+
+    "metadata": { "…как и раньше: parser, splitter, pages, tables_count, …": "…" }
+  }
+}
+```
+
+Поля и их назначение:
+
+| Поле | Тип | Зачем | Индекс |
+| :-- | :-- | :-- | :-- |
+| `visibility`, `allow_/deny_group_ids`, `allow_/deny_user_ids`, `group_ids` | keyword / keyword[] | ACL pre-filter (уже работает) | `group_ids` есть, остальные не нужны (фильтр идёт по ним вместе) |
+| `domain` | keyword | мягкий фильтр домена в чате | **нужен** |
+| `visibility` | keyword | отсечение закрытых документов | **нужен** |
+| `page_start`, `page_end` | integer | переход к странице, фильтр «только эта страница», подсветка | **нужен** |
+| `document_version`, `is_current` | integer / bool | откат к версии, «искать только в актуальной» | `is_current` — **нужен** |
+| `version_valid_from/to` | datetime | аудит и временные вопросы («что действовало тогда») | по потребности |
+| `graph_node_id` | keyword | переход вектор → узел графа без поиска по `chunk_id` | не нужен (точечный get) |
+| `table_id`, `row_count` | keyword / integer | связка с табличным слоем (SQL-ответ) | `table_id` — по потребности |
+
+### Переход без простоя (blue-green, как в присланном разборе)
+
+1. **Индексы добавляются сразу** на существующую коллекцию — они построятся по имеющимся точкам,
+   а значения новых полей появятся по мере переиндексации. Простоя нет.
+2. **Новые поля пишутся при обработке** документа и при `reindex_document` — то есть корпус
+   наполняется постепенно, без остановки системы.
+3. **Полная переиндексация (смена модели эмбеддингов, смена размерности) — только через псевдоним:**
+   создать `kag_documents_v2`, залить, сверить (число точек, ACL-поля, наличие `page_start`/`domain`),
+   переключить псевдоним `kag_documents_current` (в коде обращаться только к нему), старую коллекцию
+   удалить через сутки. Сейчас псевдонимов нет, а в коде есть путь, который сносит коллекцию целиком
+   (`delete_collection` при смене размерности) — это единственная операция, где система может остаться
+   без поиска.
+
+Проверка после переиндексации — по разделу 6 («Проверка после переиндексации») плюс сверка
+`is_current`, `page_start` и ACL-полей на выборке.
+
 ## 7. Прочие предохранители (2026-09-12)
 
 | Что | Где | Поведение |
