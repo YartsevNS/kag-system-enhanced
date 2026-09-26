@@ -28,30 +28,29 @@ scrape_configs:
           environment: "production"
 
   # KAG MCP Server
-  - job_name: "kag-mcp"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["mcp-server:8001"]
-        labels:
-          service: "kag-mcp"
-          environment: "production"
+  # ВНИМАНИЕ (проверено 26.09.2026): у MCP-сервера нет ручки /metrics — цель отдавала 404.
+  # Держим её выключенной, чтобы не было «постоянно красной» цели в Grafana; включать,
+  # когда у mcp-server появится экспорт метрик.
+  # - job_name: "kag-mcp"
+  #   metrics_path: "/metrics"
+  #   static_configs:
+  #     - targets: ["mcp-server:8001"]
 
   # Qdrant
-  - job_name: "qdrant"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["qdrant:6333"]
-        labels:
-          service: "qdrant"
-          environment: "production"
+  # ВНИМАНИЕ (проверено 26.09.2026): /metrics у Qdrant закрыт ключом (401 Unauthorized).
+  # Чтобы включить: положить ключ в файл (НЕ в этот конфиг — он в git) и раскомментировать
+  # static_configs + authorization. Пока метрики Qdrant берём из api (qdrant_* в его /metrics).
+  # - job_name: "qdrant"
+  #   metrics_path: "/metrics"
+  #   authorization:
+  #     type: Bearer
+  #     credentials_file: /etc/prometheus/qdrant_key
+  #   static_configs:
+  #     - targets: ["qdrant:6333"]
 
   # Redis
-  - job_name: "redis"
-    static_configs:
-      - targets: ["redis:6379"]
-        labels:
-          service: "redis"
-          environment: "production"
+  # ВНИМАНИЕ (проверено 26.09.2026): скарейп снимался с самого Redis (6379) — там нет
+  # /metrics вообще (нужен отдельный redis_exporter). Цель убрана, чтобы не шуметь.
 
   # Prometheus self-monitoring
   - job_name: "prometheus"

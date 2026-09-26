@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAG — Состояние системы</title>
+<link rel="icon" href="/static/favicon.ico">
+<style>
+:root{
+  --bg:#0f1115; --surface:#171a21; --surface2:#1d2029; --border:#2a2f3a; --border-s:#232833;
+  --text:#e6e8ee; --text2:#a8adba; --text3:#7d8393; --text4:#5f6675;
+  --accent:#5b8def; --ok:#3fb950; --warn:#d29922; --err:#f85149; --radius-sm:6px; --radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:20px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:20px;font-weight:600;margin:0}
+.sub{color:var(--text3);font-size:12px}
+.btn{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);
+     padding:6px 12px;font-size:13px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.kpi .label{color:var(--text3);font-size:12px;margin-bottom:6px}
+.kpi .value{font-size:22px;font-weight:600;line-height:1.2}
+.kpi .note{color:var(--text4);font-size:11px;margin-top:4px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+summary{font-size:15px;font-weight:600;cursor:pointer;user-select:none;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary:before{content:"▸ ";color:var(--text3)}
+details[open] summary:before{content:"▾ "}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-s)}
+th{color:var(--text3);font-weight:500;font-size:12px}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.hint{color:var(--text3);font-size:12px;line-height:1.7;background:var(--surface2);border:1px solid var(--border-s);
+      border-radius:var(--radius-sm);padding:10px 12px;margin-top:10px}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)} .muted{color:var(--text3)}
+.bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:var(--accent)}
+#err{display:none;background:#3a1d1d;border:1px solid #f8514955;color:#ffb4ae;padding:10px 12px;border-radius:var(--radius-sm);margin:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Состояние системы</h1>
+    <span class="sub" id="gen">загрузка…</span>
+    <span style="flex:1"></span>
+    <label class="sub" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="auto" checked style="accent-color:var(--accent)"> автообновление 10 с
+    </label>
+    <button class="btn" onclick="load(true)">Обновить</button>
+    <a class="btn" href="/chat">Чат</a>
+    <a class="btn" href="/admin">Админка</a>
+  </header>
+  <div class="sub">Числа считаются внутри api из тех же метрик, что отдаются в Prometheus
+    (<code>/metrics</code>) — Grafana не нужна. Каждый запрос имеет trace_id: возьмите его из заголовка
+    ответа <code>X-Trace-ID</code> и найдите в журнале (<a class="sub" href="/logs">Логи</a>).</div>
+
+  <div id="err"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="panel"><details><summary>Стадии ответа: куда уходит время</summary>
+    <div id="stages"></div>
+    <div class="hint">Если стадия «модель» занимает 80–90% времени — оптимизировать поиск бессмысленно,
+      рычаг в модели (кэш префикса, меньшая модель для простых вопросов, стриминг).</div>
+  </details></div>
+
+  <div class="panel"><details><summary>Ответы: сколько и какие</summary>
+    <div id="answers"></div>
+    <div class="hint">«Отказ без данных» — модель честно сказала «не найдено» при пустом контексте.
+      Растущая доля отказов при растущем корпусе — сигнал к разбору поиска (домен, порог, чанкинг).</div>
+  </details></div>
+
+  <div class="panel"><details><summary>Отбор контекста и реранкер</summary>
+    <div id="retrieval"></div>
+    <div class="hint">Порог отсечения убирает посторонние фрагменты из промпта (дешевле и точнее).
+      Реранкер полезен, только если реально меняет лучший фрагмент: доля изменений ниже 5% означает,
+      что он тратит время впустую.</div>
+  </details></div>
+
+  <div class="panel"><details><summary>Модель: вызовы и токены (стоимость)</summary>
+    <div id="llm"></div>
+    <div class="hint">Промпт — это контекст, он оплачивается каждый раз. Сокращать его надёжнее, чем
+      менять модель: отсечение уже дало −22% промпта.</div>
+  </details></div>
+
+  <div class="panel"><details><summary>Оценки пользователей</summary>
+    <div id="feedback"></div>
+    <div class="hint">Оценка пишется вместе с trace_id в <code>data/feedback.jsonl</code> — по «плохо»
+      виден весь путь запроса (поиск, отсечение, модель), без догадок.</div>
+  </details></div>
+
+  <div class="panel"><details><summary>Данные: документы, векторы, очередь</summary>
+    <div id="corpus"></div>
+  </details></div>
+</div>
+
+<script>
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function num(v,d){ if(v===null||v===undefined) return "—"; if(typeof v!=="number") return esc(v);
+  return v.toLocaleString("ru-RU",{maximumFractionDigits:(d===undefined?2:d)}); }
+function ms(v){ return v===null||v===undefined ? "—" : num(v*1000,1)+" мс"; }
+function sec(v){ return v===null||v===undefined ? "—" : num(v,2)+" с"; }
+function kpi(label,value,note,cls){ return '<div class="kpi"><div class="label">'+esc(label)+'</div><div class="value '+(cls||"")+'">'+value+'</div><div class="note">'+esc(note||"")+'</div></div>'; }
+function table(rows,head){
+  var h='<table><thead><tr>'+head.map(x=>'<th'+(x.num?' style="text-align:right"':'')+'>'+esc(x.title||x)+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{ h+='<tr>'+r.map((c,i)=>'<td class="'+(head[i]&&head[i].num?'num':'')+'">'+c+'</td>').join('')+'</tr>'; });
+  return h+'</tbody></table>';
+}
+
+async function load(manual){
+  try{
+    const r = await fetch('/api/v1/system/overview', {credentials:'same-origin', cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    document.getElementById('err').style.display='none';
+    render(d);
+    const t = new Date(d.generated_at).toLocaleTimeString('ru-RU');
+    document.getElementById('gen').textContent = 'обновлено '+t+' · аптайм '+Math.round(d.uptime_seconds/60)+' мин';
+  }catch(e){
+    const el=document.getElementById('err'); el.style.display='block';
+    el.textContent='Не удалось получить состояние: '+e.message+(manual?' (проверьте вход в систему)':'');
+  }
+}
+
+function render(d){
+  const R=d.requests||{}, A=d.answers||{}, Q=d.retrieval||{}, L=d.llm||{}, F=d.feedback||{}, C=d.corpus||{};
+  const stages=d.stages||{};
+  const llmAvg=(stages.llm&&stages.llm.avg)||0;
+  const totalAvg=Object.keys(stages).reduce((s,k)=>s+((stages[k].avg)||0),0);
+
+  document.getElementById('kpis').innerHTML =
+      kpi('Запросов к API', num(R.total,0), 'ошибок '+(R.error_pct||0)+'%', (R.error_pct>5?'err':''))
+    + kpi('Ответов чата', num(A.total,0), 'успешных '+(A.ok_pct||0)+'%')
+    + kpi('Доля модели', totalAvg? Math.round(100*llmAvg/totalAvg)+'%' : '—', 'от времени ответа')
+    + kpi('p95 модели', sec((stages.llm||{}).p95), 'p50 '+sec((stages.llm||{}).p50))
+    + kpi('Фрагментов в промпте', num((Q.fragments||{}).avg,1), 'p50 '+num((Q.fragments||{}).p50,0))
+    + kpi('Отсечений порогом', num(Q.cutoff_triggered,0), 'убрано в среднем '+(num((Q.cutoff_dropped||{}).avg,1)))
+    + kpi('Оценки 👍/👎', num(F.up,0)+' / '+num(F.down,0), 'всего '+num((F.up||0)+(F.down||0),0))
+    + kpi('Документов / очередь', num(C.documents,0)+' / '+num(C.queue_total,0), 'векторов '+num(C.vectors,0));
+
+  // Стадии
+  var srows=[];
+  [['qdrant','поиск в Qdrant'],['graph','граф знаний'],['tables','табличный слой'],['llm','модель'],['access','права доступа']]
+    .forEach(([k,name])=>{ const st=stages[k]; if(!st) return;
+      const share=totalAvg? Math.round(100*(st.avg||0)/totalAvg) : 0;
+      srows.push([esc(name), num(st.count,0), sec(st.avg), sec(st.p50), sec(st.p95),
+        '<div class="bar"><div style="width:'+Math.min(share,100)+'%"></div></div>'+share+'%']) });
+  document.getElementById('stages').innerHTML = srows.length
+    ? table(srows,[{title:'Стадия'},{title:'Вызовов',num:1},{title:'Среднее',num:1},{title:'p50',num:1},{title:'p95',num:1},{title:'Доля времени',num:1}])
+    : '<div class="sub">Пока нет данных: задайте вопрос в чате.</div>';
+
+  // Ответы
+  const bs=A.by_status||{};
+  var arows=[['Успешные ответы','ok'],['Отказ: нет данных','refusal_no_data'],
+             ['Отказ: порог score','refusal_low_score'],['Ошибки','error']]
+    .filter(([,k])=>bs[k]).map(([name,k])=>[esc(name), num(bs[k],0), num(100*bs[k]/(A.total||1),1)+'%']);
+  arows.push(['<span class="muted">Длина ответа: средняя / p50</span>', num((A.length_chars||{}).avg,0)+' симв.', num((A.length_chars||{}).p50,0)+' симв.']);
+  document.getElementById('answers').innerHTML = table(arows,[{title:'Итог'},{title:'Ответов',num:1},{title:'Доля',num:1}]);
+
+  // Отбор
+  document.getElementById('retrieval').innerHTML = table([
+      ['Фрагментов в промпте: среднее / p50', num((Q.fragments||{}).avg,1), num((Q.fragments||{}).p50,0)],
+      ['Отсечение порогом: ответов / убрано в среднем', num(Q.cutoff_triggered,0), num((Q.cutoff_dropped||{}).avg,1)],
+      ['Реранкер: запусков', num(Q.reranker_runs,0), ''],
+      ['Реранкер: поменял лучший фрагмент', num(Q.reranker_top1_changed,0), (Q.reranker_change_pct||0)+'%'],
+    ],[{title:'Показатель'},{title:'Значение',num:1},{title:'Доля',num:1}]);
+
+  // Модель
+  const calls=L.calls_by_model||{};
+  var lrows=Object.keys(calls).map(m=>[esc(m), num(calls[m],0), '']);
+  lrows.push(['Токены промпта / ответа', num(L.tokens_prompt,0), num(L.tokens_completion,0)]);
+  document.getElementById('llm').innerHTML = table(lrows,[{title:'Модель / показатель'},{title:'Значение',num:1},{title:'Ответных токенов',num:1}]);
+
+  // Оценки
+  document.getElementById('feedback').innerHTML = table([
+      ['Полезно', num(F.up,0), ''],
+      ['Не полезно', num(F.down,0), ''],
+      ['Всего оценок', num((F.up||0)+(F.down||0),0), (F.up||0)+(F.down||0) ? Math.round(100*(F.up||0)/((F.up||0)+(F.down||0)))+'% полезных' : ''],
+    ],[{title:'Оценка'},{title:'Количество',num:1},{title:'Доля',num:1}]);
+
+  // Данные
+  const cols=(C.collections||[]).map(c=>esc(c.name)+' — '+num(c.points,0)).join('; ');
+  document.getElementById('corpus').innerHTML = table([
+      ['Документов в системе', num(C.documents,0)],
+      ['Векторов в Qdrant', num(C.vectors,0)],
+      ['Очередь обработки (celery / maintenance)', num((C.queue||{}).celery,0)+' / '+num((C.queue||{}).maintenance,0)],
+      ['Коллекции', cols || '—'],
+    ],[{title:'Показатель'},{title:'Значение',num:1}]);
+}
+
+load(false);
+setInterval(()=>{ if(document.getElementById('auto').checked) load(false); }, 10000);
+</script>
+</body>
+</html>

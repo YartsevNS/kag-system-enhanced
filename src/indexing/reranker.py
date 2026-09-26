@@ -208,6 +208,26 @@ class _BM25_Reranker:
         return results
 
 
+def _record_rerank_change(before: List[Dict[str, Any]], after: List[Dict[str, Any]]) -> None:
+    """Метрика: поменял ли реранкер лучший фрагмент.
+
+    Зачем: если реранкер никогда не меняет топ-1, он тратит время и ничего не даёт.
+    Счётчики rag_reranker_runs_total / rag_reranker_changed_top1_total отвечают на
+    это в Grafana (доля изменений).
+    """
+    try:
+        if not before or not after:
+            return
+
+        def _key(item: Dict[str, Any]):
+            return item.get("id") or item.get("chunk_id") or item.get("document_id")
+
+        from src.monitoring.prometheus import record_rerank
+        record_rerank(_key(before[0]) != _key(after[0]))
+    except Exception:
+        pass
+
+
 async def rerank_search_results(
     query: str,
     results: List[Dict[str, Any]],
@@ -248,8 +268,12 @@ async def rerank_search_results(
                 except (TypeError, ValueError):
                     item["rerank_score"] = 0.0
                 reranked.append(item)
-            return reranked[:top_k]
-        return ranker.rerank(query, results, top_k)
+            _out = reranked[:top_k]
+            _record_rerank_change(results, _out)
+            return _out
+        _out = ranker.rerank(query, results, top_k)
+        _record_rerank_change(results, _out)
+        return _out
     except Exception as e:
         # Ошибка на конкретном запросе: пишем ОДИН раз на тип ошибки, порядок не меняем.
         global _logged_error_for

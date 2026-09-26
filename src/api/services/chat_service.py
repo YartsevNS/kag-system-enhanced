@@ -989,6 +989,13 @@ class ChatService:
                         f"[rag] отсечение по релевантности: {len(search_results)} из {_before} "
                         f"фрагментов (порог {_gap:.2f} от лучшего, источник: {_gap_src})"
                     )
+                    # Метрика работы порога: видно, как часто и сколько отсекается.
+                    try:
+                        from src.monitoring.prometheus import record_cutoff
+                        record_cutoff(domain or "", _before - len(search_results),
+                                      len(search_results))
+                    except Exception:
+                        pass
 
                 # Порог «нет ответа»: если лучший фрагмент слишком далёк по score, честно
                 # отказываем БЕЗ вызова LLM (быстрее и дешевле). Выключено при 0.
@@ -999,6 +1006,13 @@ class ChatService:
                     _top = max((float(c.get("score") or 0) for c in search_results), default=0.0)
                     if _top < min_top_score:
                         logger.info(f"[rag] отказ по порогу: лучший фрагмент {_top:.3f} < {min_top_score:.2f}")
+                        try:
+                            from src.monitoring.prometheus import record_answer
+                            _ref = ("В загруженных документах эта информация не найдена: "
+                                    "ближайшие найденные фрагменты слишком далеки от вопроса.")
+                            record_answer("refusal_low_score", len(_ref), domain or "", 0)
+                        except Exception:
+                            pass
                         return {
                             "id": str(uuid.uuid4()),
                             "session_id": session_id or str(uuid.uuid4()),
@@ -1431,6 +1445,23 @@ class ChatService:
                 completion_tokens=int(_usage.get("completion_tokens", 0) or 0),
             )
             record_rag_stage("llm", float(llm_result.get("elapsed", 0) or 0))
+        except Exception:
+            pass
+
+        # Итог ответа: статус, длина, домен, число фрагментов. Без этого видно только
+        # «сколько запросов», но не «сколько ответов и сколько отказов» (2026-09-26).
+        try:
+            from src.monitoring.prometheus import record_answer
+            _txt = (response.get("response") or "")
+            _low = _txt.lower()
+            _no_src = len(sources) == 0
+            if llm_result.get("error"):
+                _status = "error"
+            elif _no_src and ("не найдена" in _low or "не найдены" in _low or "не найден" in _low):
+                _status = "refusal_no_data"
+            else:
+                _status = "ok"
+            record_answer(_status, len(_txt), domain or "", len(sources))
         except Exception:
             pass
 

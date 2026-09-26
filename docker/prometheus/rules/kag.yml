@@ -1,0 +1,85 @@
+# Правила алертов KAG.
+#
+# Зачем: метрики без алертов — это картинка, на которую никто не смотрит. Правила
+# закрывают три класса отказов: сервис лежит, сервис отвечает плохо (ошибки/задержки),
+# сервис отвечает «правильно», но бесполезно (всплеск отказов — обычно порог отбора
+# или домен отсекли контекст).
+groups:
+  - name: kag-availability
+    rules:
+      - alert: KagApiDown
+        expr: up{job="kag-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KAG API не отвечает на скрейп"
+          description: "Prometheus не может снять /metrics с api более 2 минут. Проверить: docker ps | grep kag-api, docker logs --tail 50 kag-api. Частая причина на стенде — зависание провайдера модели: docker restart kag-api."
+
+      - alert: KagApiScrapeFailing
+        expr: up{job="kag-api"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Метрики KAG API недоступны 10 минут"
+          description: "Слепая зона: без /metrics нельзя понять, что происходит внутри."
+
+  - name: kag-errors
+    rules:
+      - alert: KagHighErrorRate
+        expr: |
+          100 * sum(rate(http_requests_total{status=~"5.."}[10m]))
+              / clamp_min(sum(rate(http_requests_total[10m])), 0.0001) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Более 5% ответов api — ошибки 5xx"
+          description: "Смотреть trace_id упавших запросов: docker logs kag-api | grep <trace_id>."
+
+      - alert: KagLlmErrors
+        expr: sum(rate(llm_requests_total{status="error"}[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Вызовы модели завершаются ошибкой"
+          description: "Проверить провайдера и резерв: llm_requests_total по model/status в Grafana. Частая причина — таймаут внешнего провайдера."
+
+      - alert: KagChatSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{endpoint=~"/api/v1/chat.*"}[10m]))) > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 ответа чата выше 20 секунд"
+          description: "Смотреть стадии: rag_stage_duration_seconds. Если доминирует llm — рычаг в модели (кэш префикса, меньшая модель), а не в поиске."
+
+  - name: kag-quality
+    rules:
+      - alert: KagRefusalSpike
+        expr: |
+          sum(increase(rag_answers_total{status=~"refusal.*"}[1h]))
+            / clamp_min(sum(increase(rag_answers_total[1h])), 1) > 0.5
+          and sum(increase(rag_answers_total[1h])) > 20
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Больше половины ответов — отказы"
+          description: "Обычно порог отбора (min_score_gap) или детекция домена отсекли контекст. Проверить: detection домена, доменный порог, глубину контекста."
+
+      - alert: KagAnswerTooShort
+        expr: |
+          sum(rate(rag_answer_length_chars_sum[30m]))
+            / clamp_min(sum(rate(rag_answer_length_chars_count[30m])), 0.0001) < 200
+          and sum(increase(rag_answers_total{status="ok"}[30m])) > 5
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Средняя длина успешного ответа меньше 200 символов"
+          description: "Похоже на «контекст пришёл, но факта в нём нет»: смотреть долю фрагментов и какие документы попадают в топ."

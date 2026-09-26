@@ -205,3 +205,99 @@ def record_llm_call(model: str, status: str, duration: float,
             llm_tokens_total.labels(type="completion").inc(completion_tokens)
     except Exception:
         pass
+
+
+# ── Качество ответов и поведение отбора (2026-09-26) ───────────────────────────
+# Зачем: операционные метрики (время, токены) не отвечают на вопрос «а ответ-то
+# хороший?». Эти пять отвечают: сколько ответов, сколько отказов и почему, сколько
+# фрагментов уходит в промпт, как часто порог отсекает лишнее, менял ли реранкер
+# лучший фрагмент, что говорят сами пользователи.
+answers_total = Counter(
+    "rag_answers_total",
+    "Ответы чата по итогу (ok | refusal_low_score | refusal_no_data | error)",
+    ["status"]
+)
+
+answer_length_chars = Histogram(
+    "rag_answer_length_chars",
+    "Длина ответа в символах (аномально короткие = проблема с контекстом)",
+    buckets=[100, 300, 600, 1200, 2500, 5000, 10000, 25000]
+)
+
+context_fragments = Histogram(
+    "rag_context_fragments",
+    "Сколько фрагментов ушло в промпт",
+    ["domain"],
+    buckets=[1, 2, 3, 5, 8, 10, 15, 20, 30]
+)
+
+cutoff_triggered_total = Counter(
+    "rag_cutoff_triggered_total",
+    "Ответы, где порог релевантности отсеял хотя бы один фрагмент",
+    ["domain"]
+)
+
+cutoff_dropped_fragments = Histogram(
+    "rag_cutoff_dropped_fragments",
+    "Сколько фрагментов отсеял порог релевантности за один ответ",
+    ["domain"],
+    buckets=[0, 1, 2, 3, 5, 8, 13, 20, 35]
+)
+
+feedback_total = Counter(
+    "rag_feedback_total",
+    "Оценки ответов пользователями (up | down)",
+    ["value"]
+)
+
+reranker_runs_total = Counter(
+    "rag_reranker_runs_total",
+    "Сколько раз реранкер пересортировал выдачу"
+)
+
+reranker_changed_top1_total = Counter(
+    "rag_reranker_changed_top1_total",
+    "Сколько раз реранкер поменял лучший (первый) фрагмент"
+)
+
+
+def record_answer(status: str, length_chars: int = 0, domain: str = "",
+                  fragments: int = 0) -> None:
+    """Записать итог ответа: статус, длину, домен и число фрагментов в промпте."""
+    try:
+        answers_total.labels(status=status).inc()
+        if length_chars > 0:
+            answer_length_chars.observe(length_chars)
+        if fragments > 0:
+            context_fragments.labels(domain=domain or "unknown").observe(fragments)
+    except Exception:
+        pass
+
+
+def record_cutoff(domain: str, dropped: int, kept: int) -> None:
+    """Записать работу порога отсечения: сколько фрагментов убрали и сколько оставили."""
+    try:
+        _d = domain or "unknown"
+        cutoff_dropped_fragments.labels(domain=_d).observe(max(dropped, 0))
+        if dropped > 0:
+            cutoff_triggered_total.labels(domain=_d).inc()
+    except Exception:
+        pass
+
+
+def record_feedback(value: str) -> None:
+    """Записать оценку ответа пользователем (up | down)."""
+    try:
+        feedback_total.labels(value=value if value in ("up", "down") else "other").inc()
+    except Exception:
+        pass
+
+
+def record_rerank(changed_top1: bool) -> None:
+    """Записать работу реранкера: применялся и поменял ли лучший фрагмент."""
+    try:
+        reranker_runs_total.inc()
+        if changed_top1:
+            reranker_changed_top1_total.inc()
+    except Exception:
+        pass

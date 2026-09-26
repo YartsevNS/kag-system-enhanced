@@ -16,6 +16,7 @@ from src.api.routes import chat, upload, admin, health, admin_models, auth, watc
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
+from src.api.routes import system_state
 from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
@@ -190,6 +191,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(chunks.router, prefix="/api/v1", tags=["chunks"])
+app.include_router(system_state.router, tags=["system"])
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -336,6 +338,13 @@ async def monitoring_page():
     if os.path.exists(mon_path):
         return FileResponse(mon_path)
     return {"error": "Monitoring page not found"}
+
+
+@app.get("/system", summary="Состояние системы")
+async def system_page():
+    """Страница состояния системы: метрики изнутри api (отдаётся через _html_response,
+    то есть без кеша браузера — иначе после правок видно старую версию страницы)."""
+    return await _html_response(os.path.join(static_path, "system.html"))
 
 
 @app.get("/users", summary="Пользователи и группы")
