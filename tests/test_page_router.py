@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.indexing.page_router import (  # noqa: E402
     ROUTE_OCR, ROUTE_PARSER, ROUTE_SKIP, ROUTE_VLM,
-    PageSignals, decide_route, garbage_ratio, route_document, table_like_ratio, table_like_stats,
+    PageSignals, decide_route, garbage_ratio, route_document, table_like_ratio, table_like_stats, is_plain_text_file,
 )
 
 DIGITAL_PAGE = (
@@ -188,3 +188,15 @@ def test_short_fragment_of_text_document_is_not_scan():
     # а если у документа действительно нет текста — уходит в наш OCR
     sig2 = PageSignals.from_text(9, short, tables_found=0, doc_low_text=True)
     assert decide_route(sig2)["route"] == ROUTE_OCR
+
+
+def test_text_file_never_goes_to_model():
+    """Правило владельца: в текстовом файле таблиц не бывает — реальные таблицы в PDF и сканах."""
+    numeric_block = "Реквизиты\n12345 67890 11111\n22222 33333 44444\n55555 66666 77777\n88888 99999 00000"
+    assert is_plain_text_file("text/plain", "1817.txt") is True
+    assert is_plain_text_file("", "84.txt") is True
+    assert is_plain_text_file("application/pdf", "r-50.1.pdf") is False
+    sig = PageSignals.from_text(1, numeric_block, tables_found=0, doc_is_plain_text=True,
+                                doc_low_text=True, doc_is_scan=False)
+    d = decide_route(sig)
+    assert d["route"] == ROUTE_PARSER, d

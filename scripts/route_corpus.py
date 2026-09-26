@@ -103,6 +103,10 @@ def main() -> int:
                 doc_tables_quality=q.get("worst_quality"),
                 doc_is_scan=str(pl.get("file_type") or "").startswith("image/"),
                 doc_low_text=doc_low_text(doc_id),
+                doc_is_plain_text=(
+                    str(pl.get("file_type") or "").lower().startswith("text/")
+                    or str(pl.get("filename") or "").lower().endswith((".txt", ".md", ".markdown", ".log"))
+                ),
             )
             d = decide_route(sig)
             routes[d["route"]] += 1

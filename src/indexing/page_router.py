@@ -36,6 +36,19 @@ _OK_CHARS = set("абвгдеёжзийклмнопрстуфхцчшщъыьэ�
 _NUMERICISH = set("0123456789.,%-–—")
 
 
+# Типы, в которых таблиц не бывает: текстовый файл остаётся текстом. Реальные таблицы приходят
+# только из PDF (в том числе сканированных без текстового слоя) и из картинок. Правило владельца.
+TEXT_FILE_EXTENSIONS = (".txt", ".md", ".markdown", ".log")
+
+
+def is_plain_text_file(file_type: str = "", filename: str = "") -> bool:
+    """Текстовый файл: в нём таблиц не ищем — ни моделью, ни эвристиками."""
+    ft = (file_type or "").lower()
+    if ft.startswith("text/") and "csv" not in ft:
+        return True
+    return (filename or "").lower().endswith(TEXT_FILE_EXTENSIONS)
+
+
 def _is_toc_line(line: str) -> bool:
     """Строка оглавления: текст, точечная выноска, номер страницы в конце.
 
@@ -117,6 +130,7 @@ class PageSignals:
     # Медиана символов на страницу по ДОКУМЕНТУ. Короткий фрагмент цифрового PDF — это граница
     # разбиения, а не отсутствие текста, поэтому проверять это надо на уровне документа.
     doc_low_text: Optional[bool] = None
+    doc_is_plain_text: bool = False            # текстовый файл: таблиц не бывает по определению
     notes: List[str] = field(default_factory=list)
 
     @classmethod
@@ -126,14 +140,16 @@ class PageSignals:
                   doc_tables_count: int = 0,
                   doc_tables_quality: Optional[float] = None,
                   doc_is_scan: bool = False,
-                  doc_low_text: Optional[bool] = None) -> "PageSignals":
+                  doc_low_text: Optional[bool] = None,
+                  doc_is_plain_text: bool = False) -> "PageSignals":
         """Собрать сигналы из текста страницы одной строкой — так это делает вызывающий код."""
         ratio, lines = table_like_stats(text)
         return cls(page=page, text_chars=len(text or ""), tables_found=tables_found,
                    worst_quality=worst_quality, table_like=ratio, table_like_lines=lines,
                    garbage=garbage_ratio(text), already_vlm=already_vlm,
                    doc_tables_count=doc_tables_count, doc_tables_quality=doc_tables_quality,
-                   doc_is_scan=doc_is_scan, doc_low_text=doc_low_text)
+                   doc_is_scan=doc_is_scan, doc_low_text=doc_low_text,
+                   doc_is_plain_text=doc_is_plain_text)
 
 
 def decide_route(sig: PageSignals) -> Dict[str, Any]:
@@ -150,6 +166,10 @@ def decide_route(sig: PageSignals) -> Dict[str, Any]:
         return {"page": sig.page, "route": ROUTE_PARSER,
                 "reason": (f"у документа {sig.doc_tables_count} разобранных таблиц, "
                            f"качество {sig.doc_tables_quality:.2f} — модель не нужна")}
+
+    if sig.doc_is_plain_text:
+        return {"page": sig.page, "route": ROUTE_PARSER,
+                "reason": "текстовый файл: таблиц в тексте не бывает (реальные таблицы — в PDF и сканах)"}
 
     # Табличность требуем и по доле, и по количеству строк: три числовые строки — это колонтитулы.
     looks_like_table = sig.tables_found > 0 or (

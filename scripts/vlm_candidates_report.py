@@ -17,7 +17,8 @@ sys.path.insert(0, "/app")
 sys.path.insert(0, "/app/data")
 
 try:
-    from src.indexing.page_router import PageSignals, ROUTE_VLM, decide_route
+    from src.indexing.page_router import (PageSignals, ROUTE_VLM, decide_route,
+                                 )
 except ModuleNotFoundError:
     from page_router import PageSignals, ROUTE_VLM, decide_route  # type: ignore
 
@@ -83,6 +84,10 @@ def main() -> int:
                 doc_tables_count=q.get("tables", 0), doc_tables_quality=q.get("worst_quality"),
                 doc_is_scan=str(pl.get("file_type") or "").startswith("image/"),
                 doc_low_text=low_text.get(doc_id),
+                doc_is_plain_text=(
+                    str(pl.get("file_type") or "").lower().startswith("text/")
+                    or str(pl.get("filename") or "").lower().endswith((".txt", ".md", ".markdown", ".log"))
+                ),
             )
             d = decide_route(sig)
             if d["route"] == ROUTE_VLM:
