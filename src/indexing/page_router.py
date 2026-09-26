@@ -14,6 +14,7 @@
 """
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Dict, List, Optional
 
 # ── Пороги (обоснование — замеры выше и правила из docs/guides/table-recovery-and-export.md) ──
@@ -59,6 +60,36 @@ def _is_toc_line(line: str) -> bool:
     return dots >= 4
 
 
+_HEX_TOKEN = re.compile(r"^[0-9a-fA-F]{1,2}$")
+_CLAUSE_NUMBER = re.compile(r"^\d{1,3}(?:\.\d{1,3}){1,3}\.?$")
+_ENCODED_TOKEN = re.compile(r"^[A-Za-z0-9+/=]{40,}$")
+
+
+def _is_encoded_line(line: str) -> bool:
+    """Строка закодированных данных: hex-дамп или блок base64.
+
+    Реальные ложные кандидаты (проверено глазами на страницах 27.09.2026): тестовые векторы
+    Р 50.1.115—2016 («Точка Q2», X/Y/U/V в hex и SEED из 32 байт) и base64-блоки контейнеров ключей
+    из Р 50.1.110—2016. Наборы коротких токенов выглядели как строки таблицы, хотя таблицы там нет:
+    это данные, структуру восстанавливать нечего.
+    """
+    tokens = line.split()
+    if len(tokens) >= 5 and all(_HEX_TOKEN.match(t) for t in tokens):
+        return True
+    if len(tokens) <= 3 and any(_ENCODED_TOKEN.match(t) for t in tokens):
+        return True
+    return False
+
+
+def _is_clause_number(tok: str) -> bool:
+    """Номер пункта (3.1, 5.2.1) — не ячейка таблицы.
+
+    Страница «3 Термины и определения» (Р 1323565.1.018—2018) уходила в модель: номера пунктов
+    отдельными строками считались числовыми ячейками.
+    """
+    return bool(_CLAUSE_NUMBER.match(tok))
+
+
 def table_like_stats(text: str) -> tuple[float, int]:
     """Признаки табличности: (доля табличных строк, их количество).
 
@@ -76,11 +107,13 @@ def table_like_stats(text: str) -> tuple[float, int]:
         return 0.0, 0
 
     def _is_number(tok: str) -> bool:
+        if _is_clause_number(tok):
+            return False
         return bool(tok) and any(ch.isdigit() for ch in tok) and all(ch in _NUMERICISH for ch in tok)
 
     like = 0
     for line in lines:
-        if _is_toc_line(line):
+        if _is_toc_line(line) or _is_encoded_line(line):
             continue
         tokens = line.split()
         numeric = sum(1 for t in tokens if _is_number(t))

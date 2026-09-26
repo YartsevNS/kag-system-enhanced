@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.indexing.page_router import (  # noqa: E402
     ROUTE_OCR, ROUTE_PARSER, ROUTE_SKIP, ROUTE_VLM,
     PageSignals, decide_route, garbage_ratio, route_document, table_like_ratio, table_like_stats, is_plain_text_file,
+    _is_clause_number,
 )
 
 DIGITAL_PAGE = (
@@ -200,3 +201,30 @@ def test_text_file_never_goes_to_model():
                                 doc_low_text=True, doc_is_scan=False)
     d = decide_route(sig)
     assert d["route"] == ROUTE_PARSER, d
+
+
+def test_hex_dump_and_base64_are_not_tables():
+    """Проверено глазами: Р 50.1.115—2016 «Точка Q2» и base64-блоки контейнеров — данные, не таблицы."""
+    seed = ("SEED:\n35 5f d0 bb ce c7 16 49 ac e4 1b 4d ac 07 6c a6\n"
+            "96 a8 c6 fd 06 91 a8 79 13 5d e1 90 96 e3 c8 03\n"
+            "c5 b4 ad 41 68 36 9b e7 b9 ed 81 d6 e2 bd 0c a2")
+    ratio, lines = table_like_stats(seed)
+    assert lines == 0, f"hex-дамп не должен считаться таблицей (получили {lines})"
+    b64 = ("9vzv1yL3kDxZeM6vF7MBACSCSRGaqGmbyLk4VQOQApEAmAAGlIDUFapAfQfWFpMSgocGPDQjIVwS\n"
+           "QBAFvOMDpOM11ai4DK1MDtMEmbapCIRKxYRP35pIed6DDPDQbwgPCgcIjqGgpDApCwJP")
+    assert table_like_stats(b64)[1] == 0
+
+
+def test_clause_numbers_are_not_table_cells():
+    """Страница «3 Термины и определения»: номера пунктов отдельными строками — не таблица."""
+    text = "3 Термины и определения\n3.1\nбортовое устройство\n3.2\nкарта тахографа\n3.3\nконтрольное устройство"
+    assert table_like_stats(text)[1] == 0
+    assert _is_clause_number("3.1") and _is_clause_number("5.2.1")
+    assert not _is_clause_number("43") and not _is_clause_number("125")
+
+
+def test_real_table_rows_still_count():
+    """Настоящие табличные строки по-прежнему распознаются — правило не сломало отбор."""
+    table = ("Блок детектирования 4 28\nБлок питания 12 138\nКабель 8 43")
+    ratio, lines = table_like_stats(table)
+    assert lines == 3, f"настоящие строки таблицы должны считаться (получили {lines})"
