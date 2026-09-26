@@ -2013,12 +2013,21 @@ async def save_graph_build_config(payload: GraphBuildConfig):
 # BM25-фолбэк, падал с division by zero и отдавал исходный порядок. Теперь это настройка.
 
 class RerankerConfig(BaseModel):
-    """Тело POST /reranker-config (все поля опциональны, исключены — не трогаем)."""
+    """Тело POST /reranker-config (все поля опциональны, исключены — не трогаем).
+
+    backend: none (выключено) | flashrank (модель внутри api) | service (сервис на сервере моделей).
+    Дополнительные поля нужны только для service: endpoint, timeout_ms, min_fragments.
+    """
     model_config = ConfigDict(extra="forbid")
     enabled: Optional[bool] = Field(None, description="Включить переранжирование")
-    model: Optional[str] = Field(None, description="Имя модели из списка flashrank")
-    cache_dir: Optional[str] = Field(None, description="Каталог кэша модели")
+    backend: Optional[str] = Field(None, description="none | flashrank | service")
+    model: Optional[str] = Field(None, description="Модель: для flashrank из списка, для service — имя на сервере")
+    cache_dir: Optional[str] = Field(None, description="Каталог кэша модели (flashrank)")
     top_k: Optional[int] = Field(None, ge=1, le=50, description="Сколько результатов оставлять")
+    endpoint: Optional[str] = Field(None, description="Адрес сервиса реранка, например http://192.168.50.41:8010")
+    timeout_ms: Optional[int] = Field(None, ge=50, le=30000, description="Таймаут вызова сервиса, мс")
+    min_fragments: Optional[int] = Field(None, ge=1, le=50, description="Не ранжировать, если фрагментов меньше")
+    keep_dense_on_error: Optional[bool] = Field(None, description="При ошибке сервиса оставить векторный порядок")
 
 
 @router.get("/reranker-config", summary="Настройки и статус реранкера")
@@ -2031,14 +2040,47 @@ async def get_reranker_config_endpoint():
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/reranker-config/service-health", summary="Проверить связь с сервисом реранка")
+async def reranker_service_health():
+    """Кнопка «Проверить связь» в админке: спрашиваем у сервиса готовность и модель.
+
+    Зачем отдельно: при бэкенде «сервис» админ должен видеть, готов ли внешний процесс и какая
+    модель в нём загружена, ДО включения реранкера — иначе отказ сервиса выглядит как «реранкер
+    не работает» при живом чате.
+    """
+    import urllib.request
+    from src.indexing.reranker import get_reranker_config
+
+    cfg = get_reranker_config()
+    url = cfg["endpoint"].rstrip("/") + "/health"
+    try:
+        def _get():
+            with urllib.request.urlopen(url, timeout=cfg["timeout_ms"] / 1000.0) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        data = await asyncio.to_thread(_get)
+        return {"ok": bool(data.get("ready")), "endpoint": cfg["endpoint"], **data}
+    except Exception as e:
+        return {"ok": False, "endpoint": cfg["endpoint"],
+                "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
 @router.post("/reranker-config", summary="Сохранить настройки реранкера")
 async def save_reranker_config_endpoint(payload: RerankerConfig):
-    """Сохранить настройки. Неизвестная модель — 422 со списком доступных."""
+    """Сохранить настройки. Неизвестная модель — 422 со списком доступных (для flashrank)."""
     from src.indexing.reranker import SUPPORTED_MODELS, reranker_status
     data = payload.model_dump(exclude_unset=True)
     try:
+        backend = data.get("backend")
+        if backend is not None and backend not in ("none", "flashrank", "service"):
+            raise HTTPException(
+                status_code=422,
+                detail="backend должен быть одним из: none, flashrank, service",
+            )
+        # Список моделей flashrank проверяем ТОЛЬКО для одноимённого бэкенда: при backend=service
+        # модель живёт на сервере (например DiTy), и её нет в списке flashrank — это нормально.
         model = data.get("model")
-        if model is not None and model not in SUPPORTED_MODELS:
+        effective_backend = backend or (config_store.get("reranker", "config") or {}).get("backend")
+        if model is not None and not effective_backend == "service" and model not in SUPPORTED_MODELS:
             raise HTTPException(
                 status_code=422,
                 detail=f"Неизвестная модель '{model}'. Доступны: {', '.join(SUPPORTED_MODELS)}",
@@ -2046,7 +2088,8 @@ async def save_reranker_config_endpoint(payload: RerankerConfig):
         cfg = config_store.get("reranker", "config") or {}
         if not isinstance(cfg, dict):
             cfg = {}
-        for key in ("enabled", "model", "cache_dir", "top_k"):
+        for key in ("enabled", "backend", "model", "cache_dir", "top_k",
+                    "endpoint", "timeout_ms", "min_fragments", "keep_dense_on_error"):
             if key in data and data[key] is not None:
                 cfg[key] = data[key]
         config_store.set("reranker", "config", cfg)

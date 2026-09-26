@@ -37,6 +37,19 @@ DEFAULT_MODEL = "ms-marco-MultiBERT-L-12"
 # Кэш в bind-каталоге ./data: /app/models теряется при пересоздании контейнера (overlay).
 DEFAULT_CACHE_DIR = "/app/data/models/flashrank"
 DEFAULT_TOP_K = 10
+# Бэкенд «сервис»: cross-encoder живёт на сервере моделей (41), api ходит к нему по HTTP.
+# Значения по умолчанию — из docs/guides/reranker-service.md (замер 26.09.2026: DiTy 1,46 с на
+# 20 ядрах, у нас на 4 ядрах стенда будет медленнее, поэтому таймаут строгий).
+DEFAULT_SERVICE_ENDPOINT = "http://192.168.50.41:8010"
+DEFAULT_SERVICE_TIMEOUT_MS = 1500
+DEFAULT_MIN_FRAGMENTS = 4
+# «Защёлка»: после стольких подряд неудач сервиса не дёргаем его BREAKER_COOLDOWN_S секунд,
+# иначе каждый вопрос будет ждать таймаут (чат замедлится, а пользы ноль).
+BREAKER_FAILS = 3
+BREAKER_COOLDOWN_S = 300
+
+_service_fails = 0
+_service_blocked_until = 0.0
 
 _FLASH_AVAILABLE = False
 _BM25_AVAILABLE = False
@@ -48,12 +61,25 @@ _logged_error_for: tuple = ()    # чтобы не повторять одну �
 
 
 def get_reranker_config() -> Dict[str, Any]:
-    """Настройки реранкера из config_store (namespace reranker, ключ config)."""
+    """Настройки реранкера из config_store (namespace reranker, ключ config).
+
+    Три состояния (решение владельца 26.09.2026 — реранкер подключаемый и отключаемый в админке):
+      backend = "none"      — не ранжируем (значение по умолчанию);
+      backend = "flashrank" — локальный cross-encoder внутри api (путь ONNX в cache_dir);
+      backend = "service"   — HTTP-вызов cross-encoder'а на сервере моделей (endpoint).
+    Совместимость: если в сохранённой конфигурации backend нет, а enabled=true — это flashrank
+    (так работала прежняя версия, ломать её настройки нельзя).
+    """
     cfg: Dict[str, Any] = {
         "enabled": False,
+        "backend": "none",
         "model": DEFAULT_MODEL,
         "cache_dir": DEFAULT_CACHE_DIR,
         "top_k": DEFAULT_TOP_K,
+        "endpoint": DEFAULT_SERVICE_ENDPOINT,
+        "timeout_ms": DEFAULT_SERVICE_TIMEOUT_MS,
+        "min_fragments": DEFAULT_MIN_FRAGMENTS,
+        "keep_dense_on_error": True,
     }
     try:
         from src.api.services.config_store import config_store
@@ -61,15 +87,28 @@ def get_reranker_config() -> Dict[str, Any]:
         if isinstance(stored, dict):
             if "enabled" in stored:
                 cfg["enabled"] = bool(stored["enabled"])
+            if stored.get("backend"):
+                backend = str(stored["backend"]).strip().lower()
+                cfg["backend"] = backend if backend in ("none", "flashrank", "service") else "none"
+            elif cfg["enabled"]:
+                cfg["backend"] = "flashrank"          # прежнее поведение
+            if not cfg["enabled"]:
+                cfg["backend"] = "none"               # тумблер выключен — никакого ранжирования
             if stored.get("model"):
                 cfg["model"] = str(stored["model"]).strip()
             if stored.get("cache_dir"):
                 cfg["cache_dir"] = str(stored["cache_dir"]).strip()
-            if stored.get("top_k"):
-                try:
-                    cfg["top_k"] = max(1, min(50, int(stored["top_k"])))
-                except (TypeError, ValueError):
-                    pass
+            if stored.get("endpoint"):
+                cfg["endpoint"] = str(stored["endpoint"]).strip()
+            for key, low, high in (("top_k", 1, 50), ("timeout_ms", 50, 30000),
+                                   ("min_fragments", 1, 50)):
+                if stored.get(key) not in (None, ""):
+                    try:
+                        cfg[key] = max(low, min(high, int(stored[key])))
+                    except (TypeError, ValueError):
+                        pass
+            if "keep_dense_on_error" in stored:
+                cfg["keep_dense_on_error"] = bool(stored["keep_dense_on_error"])
     except Exception as e:
         logger.debug(f"[reranker] настройки недоступны, значения по умолчанию: {e}")
     return cfg
@@ -228,6 +267,77 @@ def _record_rerank_change(before: List[Dict[str, Any]], after: List[Dict[str, An
         pass
 
 
+def _rerank_via_service(query: str, results: List[Dict[str, Any]],
+                        cfg: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """Ранжирование через внешний сервис (сервер моделей).
+
+    Возвращает переупорядоченный список или None, если сервис не ответил/ответил неполно —
+    решение, что делать дальше, принимает вызывающий (правило keep_dense_on_error: оставить
+    векторный порядок, но НИКОГДА не ломать ответ пользователю).
+    """
+    global _service_fails, _service_blocked_until
+    import json
+    import time as _time
+    import urllib.request
+
+    if _time.time() < _service_blocked_until:
+        return None                      # «защёлка» после серии неудач — не тратим таймаут
+
+    payload = {"query": query,
+               "candidates": [{"id": f"i{i}",
+                               "text": (r.get("text") or r.get("content") or "")[:2000]}
+                              for i, r in enumerate(results)]}
+    url = cfg["endpoint"].rstrip("/") + "/rerank"
+    timeout = max(0.05, cfg["timeout_ms"] / 1000.0)
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception as e:                      # таймаут, отказ соединения, 5xx, мусор в ответе
+        _note_service_failure(type(e).__name__, str(e)[:80])
+        return None
+
+    order: List[Dict[str, Any]] = []
+    seen = set()
+    for item in data.get("scores") or []:
+        raw = str(item.get("id") or "")
+        if not raw.startswith("i"):
+            continue
+        try:
+            pos = int(raw[1:])
+        except ValueError:
+            continue
+        if 0 <= pos < len(results) and pos not in seen:
+            seen.add(pos)
+            order.append(results[pos])
+    if len(order) != len(results):
+        _note_service_failure("неполный_ответ", f"{len(order)} из {len(results)}")
+        return None
+
+    _service_fails = 0
+    return order
+
+
+def _note_service_failure(reason: str, detail: Any = "") -> None:
+    """Учесть неудачу сервиса: метрика + «защёлка» после BREAKER_FAILS неудач подряд."""
+    global _service_fails, _service_blocked_until
+    import time as _time
+
+    _service_fails += 1
+    if _service_fails >= BREAKER_FAILS:
+        _service_blocked_until = _time.time() + BREAKER_COOLDOWN_S
+        logger.warning(f"[reranker] сервис не ответил {_service_fails} раз подряд — пауза "
+                       f"{BREAKER_COOLDOWN_S} с ({reason}: {detail})")
+    else:
+        logger.warning(f"[reranker] сервис не ответил ({reason}: {detail}) — векторный порядок")
+    try:
+        from src.monitoring.prometheus import record_reranker_error
+        record_reranker_error(reason)
+    except Exception:
+        pass
+
+
 async def rerank_search_results(
     query: str,
     results: List[Dict[str, Any]],
@@ -240,6 +350,18 @@ async def rerank_search_results(
     cfg = get_reranker_config()
     if not cfg["enabled"]:
         return results[:top_k]
+
+    # Бэкенд «сервис»: ранжирование на сервере моделей. Короткий список не ранжируем —
+    # нечего менять местами, а вызов стоит времени.
+    if cfg["backend"] == "service":
+        if len(results) < cfg["min_fragments"]:
+            return results[:top_k]
+        import asyncio
+        ordered = await asyncio.to_thread(_rerank_via_service, query, results, cfg)
+        if not ordered:
+            return results[:top_k]               # keep_dense_on_error
+        _record_rerank_change(results, ordered)
+        return ordered[:top_k]
 
     # Реранкер — УЛУЧШЕНИЕ, а не критический путь: любая его ошибка (загрузка модели,
     # инференс, приведение типов) не должна ломать ответ пользователю.

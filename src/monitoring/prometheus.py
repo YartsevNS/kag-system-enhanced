@@ -260,6 +260,24 @@ reranker_changed_top1_total = Counter(
     "Сколько раз реранкер поменял лучший (первый) фрагмент"
 )
 
+reranker_errors_total = Counter(
+    "rag_reranker_errors_total",
+    "Неудачи реранкера по причине (timeout | URLError | неполный_ответ | ...)",
+    ["reason"]
+)
+
+
+def record_reranker_error(reason: str) -> None:
+    """Записать неудачу реранкера: сервис не ответил, таймаут, неполный ответ.
+
+    Зачем отдельно: при бэкенде «сервис» отказ внешнего процесса выглядит для пользователя как
+    обычный ответ (порядок остался векторным), и без этой метрики отказ вообще не видно.
+    """
+    try:
+        reranker_errors_total.labels(reason=str(reason or "unknown")[:40]).inc()
+    except Exception:
+        pass
+
 
 def record_answer(status: str, length_chars: int = 0, domain: str = "",
                   fragments: int = 0) -> None:
