@@ -43,9 +43,21 @@ SYSTEM = ("Ты — строгий эксперт по оценке ответо
 
 
 def api_key() -> str:
+    """Прочитать ключ: берём строку, похожую на ключ, и проверяем, что в ней нет пробелов.
+
+    Реальный случай 26.09.2026: файл ключа содержал две строки («pozla» и сам ключ), из-за чего
+    в заголовок Authorization попадал перенос строки и запрос падал с ValueError ещё до отправки.
+    """
     if not KEY_FILE.exists():
         raise SystemExit(f"нет файла с ключом судьи: {KEY_FILE}")
-    return KEY_FILE.read_text(encoding="utf-8").strip()
+    lines = [l.strip() for l in KEY_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    if not lines:
+        raise SystemExit(f"файл с ключом пуст: {KEY_FILE}")
+    key = next((l for l in lines if l.startswith(("pza_", "sk-", "polza_"))), lines[-1])
+    if any(c.isspace() for c in key):
+        raise SystemExit(f"ключ в файле {KEY_FILE} содержит пробелы или переносы строк — "
+                         f"должна быть одна строка с ключом")
+    return key
 
 
 def ask(prompt: str, key: str, max_tokens: int = 900) -> tuple[dict, float, int]:
