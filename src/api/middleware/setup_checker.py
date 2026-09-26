@@ -15,6 +15,10 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
         "/setup", "/api/v1/setup", "/api/v1/health",
         "/login", "/api/v1/auth", "/api/docs",
         "/api/redoc", "/api/openapi.json", "/static", "/favicon.ico",
+        # /metrics — для скрейпа Prometheus: скрапер ходит без сессии и cookies, поэтому путь
+        # должен быть публичным. Наружу его не публикуем: закрывать на уровне nginx
+        # (или ограничивать по IP), потому что метрики содержат имена моделей и объёмы.
+        "/metrics",
     }
 
     def _is_configured(self) -> bool:
