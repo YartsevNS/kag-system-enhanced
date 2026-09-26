@@ -31,6 +31,10 @@ KEY_FILE = Path(os.environ.get("POLZA_KEY_FILE",
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "deepseek/deepseek-v4-flash-0731")
 URL = "https://polza.ai/api/v1/chat/completions"
 ROOT = Path(__file__).resolve().parents[1]
+# Скрипт запускают как scripts/eval_rag_judge.py — в sys.path попадает каталог scripts,
+# а не корень проекта, поэтому src.* не находится. Добавляем корень явно (как в тестах).
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 SYSTEM = ("Ты — строгий эксперт по оценке ответов системы поиска по документам (RAG). "
           "Отвечай ТОЛЬКО одним JSON-объектом без пояснений вокруг: "
@@ -45,35 +49,62 @@ def api_key() -> str:
 
 
 def ask(prompt: str, key: str, max_tokens: int = 900) -> tuple[dict, float, int]:
-    """Один вызов судьи. Возвращает (разобранный JSON, стоимость ₽, токенов)."""
-    body = json.dumps({
-        "model": JUDGE_MODEL,
-        "messages": [{"role": "system", "content": SYSTEM},
-                     {"role": "user", "content": prompt}],
-        "temperature": 0.0,
-        "max_tokens": max_tokens,
-    }).encode()
-    req = urllib.request.Request(URL, data=body, headers={
-        "Content-Type": "application/json", "Authorization": "Bearer " + key})
-    with urllib.request.urlopen(req, timeout=300) as r:
-        d = json.loads(r.read().decode("utf-8", "replace"))
-    text = (d.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-    usage = d.get("usage") or {}
-    cost = float(usage.get("cost") or 0) or 0.0
-    tokens = int(usage.get("total_tokens") or 0)
+    """Один вызов судьи с повторами. Возвращает (разобранный JSON, стоимость ₽, токенов).
 
-    m = re.search(r"\{.*\}", text, re.S)
-    if not m:
-        return {"score": None, "reason": f"судья вернул не JSON: {text[:120]!r}"}, cost, tokens
-    try:
-        parsed = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return {"score": None, "reason": f"JSON не разобран: {m.group(0)[:120]!r}"}, cost, tokens
-    try:
-        parsed["score"] = None if parsed.get("score") is None else round(float(parsed["score"]), 3)
-    except (TypeError, ValueError):
-        parsed["score"] = None
-    return parsed, cost, tokens
+    Зачем повторы: на длинных контекстах дешёвый судья уходил в размышления и возвращал
+    ПУСТОЙ content (то же поведение, что у GLM: замер 26.09.2026 — 9 вызовов из ~60 пустые,
+    из-за чего метрики считались по 8 вопросам из 14). Лечим двумя средствами: флаги
+    отключения размышлений (nothink_payload знает их для polza: thinking.type=disabled +
+    enable_thinking=false) и повтор с увеличенным бюджетом токенов.
+    """
+    from src.llm.nothink import nothink_payload
+
+    anti_think = nothink_payload("polza", JUDGE_MODEL) or {}
+    spend = 0.0
+    tokens = 0
+    last: dict = {"score": None, "reason": "нет ответа судьи"}
+
+    for attempt, limit in enumerate((max_tokens, max_tokens * 2, max_tokens * 4), 1):
+        body = json.dumps({
+            "model": JUDGE_MODEL,
+            "messages": [{"role": "system", "content": SYSTEM},
+                         {"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": limit,
+            **anti_think,
+        }).encode()
+        req = urllib.request.Request(URL, data=body, headers={
+            "Content-Type": "application/json", "Authorization": "Bearer " + key})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        choice = (d.get("choices") or [{}])[0].get("message", {}) or {}
+        text = choice.get("content") or ""
+        usage = d.get("usage") or {}
+        spend += float(usage.get("cost") or 0) or 0.0
+        tokens += int(usage.get("total_tokens") or 0)
+
+        m = re.search(r"\{.*\}", text, re.S)
+        if not m:
+            last = {"score": None,
+                    "reason": f"попытка {attempt}: пустой ответ судьи" if not text.strip()
+                              else f"попытка {attempt}: не JSON: {text[:100]!r}"}
+            continue
+        try:
+            parsed = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            last = {"score": None, "reason": f"попытка {attempt}: JSON не разобран: {m.group(0)[:100]!r}"}
+            continue
+        try:
+            parsed["score"] = None if parsed.get("score") is None else round(float(parsed["score"]), 3)
+        except (TypeError, ValueError):
+            parsed["score"] = None
+        if parsed.get("score") is not None:
+            if attempt > 1:
+                parsed["reason"] = f"{parsed.get('reason', '')} (получено с попытки {attempt})"
+            return parsed, spend, tokens
+        last = parsed
+
+    return last, spend, tokens
 
 
 def _ctx_block(contexts: list[dict], limit: int = 6, chars: int = 1200) -> str:
@@ -178,8 +209,17 @@ def main() -> int:
         vals = [r[name] for r in rows if r[name] is not None]
         return round(sum(vals) / len(vals), 3) if vals else None
 
-    summary = {m: avg(m) for m in ("faithfulness", "answer_relevance",
-                                   "context_precision", "context_recall")}
+    metrics = ("faithfulness", "answer_relevance", "context_precision", "context_recall")
+    summary = {m: avg(m) for m in metrics}
+    # Покрытие обязательно печатаем: среднее по 8 вопросам из 14 — это не оценка системы,
+    # а оценка тех вопросов, где судья не промолчал (урок 26.09.2026: 9 пустых ответов судьи
+    # дали красивую единицу по faithfulness всего на половине набора).
+    summary["покрытие"] = {m: f"{len([r for r in rows if r[m] is not None])}/{len(rows)}"
+                           for m in metrics}
+    thin = [m for m in metrics if len([r for r in rows if r[m] is not None]) < 0.8 * len(rows)]
+    if thin:
+        summary["предупреждение"] = ("мало оценок (меньше 80% набора) по метрикам: "
+                                     + ", ".join(thin) + " — средние по ним не считать надёжными")
     summary["вопросов"] = len(rows)
     summary["стоимость_₽"] = round(total_cost, 4)
     summary["токенов_судьи"] = total_tokens
