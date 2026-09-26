@@ -668,17 +668,22 @@ JSON:
                 # max_tokens=800: ответ с сущностями обычно 500-1500 символов;
                 # пробовали 400 — JSON обрезался на середине (невалидный),
                 # поэтому 800 с запасом.
-                # Отключаем размышления (thinking) для reasoning-моделей
-                # (deepseek/openai/openrouter). Настройка no_think — в параметрах
-                # привязки функции graph (админка); по умолчанию True.
+                # Отключаем размышления: флаг зависит от провайдера (deepseek/openai понимают
+                # thinking.type=disabled, polza/GLM — только enable_thinking: false; иначе
+                # весь бюджет уходит в reasoning и content приходит пустым). Настройка no_think —
+                # в параметрах привязки функции graph (админка); по умолчанию True.
+                # Разбор флагов — src/llm/nothink.py (замер 26.09.2026).
                 _no_think = True
                 try:
                     _cfgx = self._get_graph_config() or {}
                     _no_think = bool((_cfgx.get("parameters") or {}).get("no_think", True))
                 except Exception:
                     pass
-                if provider in ("deepseek", "openai", "openrouter", "custom") and _no_think:
-                    payload["thinking"] = {"type": "disabled"}
+                if _no_think:
+                    from src.llm.nothink import nothink_payload
+                    _extra_nothink = nothink_payload(provider, payload.get("model"))
+                    if _extra_nothink:
+                        payload.update(_extra_nothink)
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         f"{llm_url}/v1/chat/completions",

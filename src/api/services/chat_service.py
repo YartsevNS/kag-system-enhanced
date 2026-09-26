@@ -1273,11 +1273,17 @@ class ChatService:
             chain = [(provider, model or model_name)]
 
         def _extra_for(prov) -> Optional[dict]:
-            """Доп. параметры под конкретного провайдера (отключение размышлений)."""
+            """Доп. параметры под конкретного провайдера (отключение размышлений).
+
+            Флаг у каждого свой: deepseek/openai понимают `thinking.type=disabled`, а polza/GLM
+            его игнорирует и требует `enable_thinking: false` (замер 26.09.2026 — с нашим прежним
+            флагом модель уходила в reasoning и отдавала ПУСТОЙ ответ, то есть резерв не работал).
+            Разбор — src/llm/nothink.py.
+            """
             try:
-                if bool(_fm_params.get("no_think", True)) and prov.type in (
-                        "deepseek", "openai", "openrouter", "custom"):
-                    return {"thinking": {"type": "disabled"}}
+                if bool(_fm_params.get("no_think", True)):
+                    from src.llm.nothink import nothink_payload
+                    return nothink_payload(getattr(prov, "type", None), _model)
             except Exception:
                 pass
             return None

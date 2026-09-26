@@ -1187,15 +1187,20 @@ class KnowledgeGraphService:
                     # ≈ 200-300 токенов. 800 хватало с запасом; больше не нужно.
                     "max_tokens": 1000,
                 }
-                # deepseek reasoning-модель: отключаем размышления.
+                # deepseek/GLM reasoning-модели: отключаем размышления.
+                # Флаг зависит от провайдера: deepseek/openai понимают thinking.type=disabled,
+                # polza/GLM — только enable_thinking: false (см. src/llm/nothink.py).
                 # no_think — параметр привязки функции graph (админка), по умолчанию True.
                 _no_think = True
                 try:
                     _no_think = bool((cfg.get("parameters") or {}).get("no_think", True))
                 except Exception:
                     pass
-                if provider in ("deepseek", "openai", "openrouter", "custom") and _no_think:
-                    payload["thinking"] = {"type": "disabled"}
+                if _no_think:
+                    from src.llm.nothink import nothink_payload
+                    _extra_nothink = nothink_payload(provider, payload.get("model"))
+                    if _extra_nothink:
+                        payload.update(_extra_nothink)
 
                 if provider in ("openai", "deepseek", "openrouter", "gigachat", "custom"):
                     endpoint = f"{llm_url}/v1/chat/completions"
