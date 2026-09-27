@@ -568,6 +568,31 @@ class DocumentService:
                 parsed = hybrid.parse_pymupdf_first(str(file_path)) or hybrid.parse_ocular_only(str(file_path))
                 if not parsed:
                     raise ValueError("PyMuPDF/Occular недоступны")
+
+                # ── Порядок чтения для сканов: текст страницы собираем по геометрии ─────────────
+                # Без этого текст уходит во фрагменты в порядке распознавания строк («цио- прослеживаемости
+                # нальное) и 16 le и 126 12 6 22,10») — так было и до таблиц. Модель не нужна: строки
+                # группируются в колонки и полосы по координатам, ячейки одной высоты читаются слева направо.
+                if str(file_path).lower().endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")):
+                    try:
+                        from src.indexing.reading_order import order_page
+                        from src.indexing.table_strategy import _raw_lines_from_occular
+
+                        with open(file_path, "rb") as _f:
+                            _img_bytes = _f.read()
+                        _lines = _raw_lines_from_occular(_img_bytes)
+                        if _lines:
+                            _page_order = order_page(_lines)
+                            if _page_order.text.strip():
+                                for _pg in parsed.pages:
+                                    _pg.text = _page_order.text
+                                logger.info(
+                                    f"{document_id}: текст страницы собран по порядку чтения "
+                                    f"({_page_order.n_blocks} блоков, строк {len(_lines)}; "
+                                    f"{'; '.join(_page_order.notes) or 'одна колонка'})")
+                    except Exception as _ro_err:  # noqa: BLE001 — порядок чтения не должен ломать разбор
+                        logger.debug(f"порядок чтения не применён: {_ro_err}")
+
                 # ── Таблицы картинок и сканов: восстановление ДО сборки сегментов ──────────────
                 # ВАЖНО (найдено 27.09.2026): раньше восстановление стояло в конце конвейера, уже
                 # ПОСЛЕ сборки сегментов, поэтому восстановленная таблица попадала только в табличный

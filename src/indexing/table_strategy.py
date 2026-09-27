@@ -375,6 +375,17 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
             "bbox": list(table.bbox or []),
             "extraction_method": (f"vlm-{table.source_model}" if table.source == "vlm" else "occular-table"),
         })
+        # Арифметика — арбитр: структурные метрики (заполненность, TEDS) не замечают, что «1» стало «7» или
+        # значение уехало на колонку. Вердикт пишем в разбор и в журнал: по нему видно, можно ли доверять числам.
+        try:
+            from src.indexing.table_validate import check_recovered_table
+
+            _verdict = check_recovered_table(table)
+            tables[-1]["arithmetic"] = _verdict.as_dict()
+            logger.info(f"[tables] арифметика таблицы {len(tables)}: {_verdict.verdict}")
+        except Exception as _ar_err:  # noqa: BLE001 — проверка не должна ломать восстановление
+            logger.debug(f"арифметическая проверка таблицы не выполнена: {_ar_err}")
+
     logger.info(f"[tables] восстановлено таблиц для картинки: {len(report['tables'])} ({report['reason']})")
     return {"applied": True, "saved": len(report["tables"]), "technique": report["technique"],
             "reason": report["reason"], "seconds": report["seconds"]}
