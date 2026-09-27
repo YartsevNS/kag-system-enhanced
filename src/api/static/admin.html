@@ -842,6 +842,61 @@
             <div id="ocr-settings-status" style="margin-top:1rem;font-size:12px"></div>
         </div>
 
+        <!-- Таблицы: распознавание моделью зрения (VL) — ПОДКЛЮЧАЕМАЯ опция -->
+        <div class="section">
+            <h2 class="section-title">✨ Таблицы без линий: модель зрения (VL)</h2>
+            <p style="font-size:13px;color:var(--text4);margin-bottom:12px">
+                Для таблиц, нарисованных <strong>без линий сетки</strong> — например скриншотов из Excel, где
+                рамки ячеек сделаны цветной заливкой. Свой Occular такие страницы не видит по устройству (его
+                детектор ищет линии), а обычный OCR теряет числовой столбец. Модель зрения читает страницу как
+                изображение и возвращает таблицу с числами.<br>
+                Таких файлов в корпусе очень мало, поэтому опция <strong>по умолчанию выключена</strong>:
+                выключена — страница просто пропускается, без обращений к сети.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="tables-vlm-enabled" onchange="saveTablesVlm()" style="accent-color:var(--accent);width:18px;height:18px">
+                        <span><strong>Распознавать таблицы без линий моделью зрения</strong></span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px">
+                        Сначала всегда пробуем свой Occular (быстро и без выдумок). Модель зрения — только если он
+                        таблиц не нашёл и опция включена.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Адрес API сервиса моделей</label>
+                    <input type="text" id="tables-vlm-endpoint" onchange="saveTablesVlm()" placeholder="http://192.168.50.41:11434"
+                           style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        По умолчанию — Ollama на сервере моделей. Подойдёт и внешний VL-сервис с тем же API.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Модель</label>
+                    <input type="text" id="tables-vlm-model" onchange="saveTablesVlm()" placeholder="kag-qwen2vl:2b"
+                           style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        Замер 27.09.2026: таблицу без линий распознаёт <strong>qwen2vl:2b</strong> — 11 строк,
+                        числа столбца «Кол» верные (4, 28, 2, 43, 4, 12, 8, 1, 1, 4), 39 с на CPU.
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Таймаут вызова, мс</label>
+                    <input type="number" id="tables-vlm-timeout" onchange="saveTablesVlm()" min="1000" max="1800000" step="1000"
+                           style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        На CPU одна страница считается 40–300 с (первый вызов дольше — модель загружается).
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <button class="btn btn-primary" onclick="saveTablesVlm()">💾 Сохранить</button>
+                    <button class="btn" onclick="checkTablesVlm()">🔌 Проверить связь</button>
+                </div>
+            </div>
+            <div id="tables-vlm-status" style="margin-top:1rem;font-size:12px"></div>
+        </div>
+
         <!-- Словарь алиасов сущностей -->
         <div class="section">
             <h2 class="section-title">🔗 Словарь алиасов сущностей</h2>
@@ -3216,7 +3271,50 @@ async function saveOcrSettings() {
     }
   } catch(e) {}
 }
+async function loadTablesVlm(check) {
+  try {
+    var url = '/api/v1/admin/models/tables-vlm' + (check ? '?check=true' : '');
+    var r = await fetch(url, { credentials: 'include' });
+    var d = await r.json();
+    document.getElementById('tables-vlm-enabled').checked = !!d.enabled;
+    document.getElementById('tables-vlm-endpoint').value = d.endpoint || '';
+    document.getElementById('tables-vlm-model').value = d.model || '';
+    document.getElementById('tables-vlm-timeout').value = d.timeout_ms || 300000;
+    var html = d.enabled
+      ? '<span style="color:var(--green)">опция включена — таблицы без линий пойдут в модель</span>'
+      : '<span style="color:var(--text4)">опция выключена — такие страницы пропускаются</span>';
+    if (d.reachable === true) html += ' · <span style="color:var(--green)">сервис доступен</span>';
+    if (d.reachable === false) html += ' · <span style="color:#f87171">сервис недоступен</span>';
+    if (d.detail) html += '<br><span style="color:var(--text4)">' + d.detail + '</span>';
+    document.getElementById('tables-vlm-status').innerHTML = html;
+  } catch(e) {}
+}
+async function saveTablesVlm() {
+  var data = {
+    enabled: document.getElementById('tables-vlm-enabled').checked,
+    endpoint: document.getElementById('tables-vlm-endpoint').value.trim(),
+    model: document.getElementById('tables-vlm-model').value.trim(),
+    timeout_ms: parseInt(document.getElementById('tables-vlm-timeout').value) || 300000
+  };
+  try {
+    var r = await fetch('/api/v1/admin/models/tables-vlm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (r.ok) {
+      document.getElementById('tables-vlm-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
+      loadTablesVlm(false);
+    }
+  } catch(e) {}
+}
+async function checkTablesVlm() {
+  document.getElementById('tables-vlm-status').innerHTML = '<span style="color:var(--text4)">проверяю связь…</span>';
+  loadTablesVlm(true);
+}
 loadOcrSettings();
+loadTablesVlm(false);
 
 
 

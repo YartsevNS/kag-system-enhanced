@@ -2351,6 +2351,39 @@ async def save_ocr_settings(body: OcrSettingsRequest):
         "table_model": body.table_model or "pymupdf",
     })
     return {"status": "ok"}
+
+
+# ── Таблицы: распознавание моделью зрения (VL) через API — ПОДКЛЮЧАЕМАЯ опция ────────────────
+# Решение владельца 27.09.2026: таблицы, нарисованные без линий сетки (скриншоты из Excel),
+# распознаёт модель зрения, но это переключаемая опция: выключена — страница пропускается без
+# сетевых вызовов. Таких файлов мало (после отбора — единицы из 9931 фрагмента), поэтому
+# по умолчанию выключено.
+# Настройки живут в общем конфиге табличного слоя (namespace tables, ключ config), поэтому
+# сохраняем ТОЛЬКО свои ключи и не трогаем остальные (enabled, row_vectors, sql_* и прочие) —
+# иначе сохранение этой опции выключило бы весь табличный стек.
+class TablesVlmRequest(BaseModel):
+    enabled: Optional[bool] = None
+    endpoint: Optional[str] = None
+    model: Optional[str] = None
+    timeout_ms: Optional[int] = None
+    num_predict: Optional[int] = None
+    min_rows: Optional[int] = None
+
+
+@router.get("/tables-vlm", summary="Опция «таблицы через VL-модель»: настройки и состояние")
+async def get_tables_vlm(check: bool = False):
+    from src.indexing.vlm_tables import vlm_tables_status
+    return await asyncio.to_thread(vlm_tables_status, check)
+
+
+@router.post("/tables-vlm", summary="Сохранить настройки VL-распознавания таблиц")
+async def save_tables_vlm(body: TablesVlmRequest):
+    from src.indexing.vlm_tables import apply_settings_update, vlm_tables_status
+
+    existing = config_store.get("tables", "config") or {}
+    cfg = apply_settings_update(existing, body.model_dump())
+    config_store.set("tables", "config", cfg)
+    return {"status": "ok", "config": await asyncio.to_thread(vlm_tables_status, False)}
 # Backup endpoint
 from fastapi.responses import JSONResponse
 from datetime import datetime

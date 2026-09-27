@@ -42,6 +42,7 @@ class RecoveredTable:
     bbox: Optional[BBox] = None
     confidence: Optional[float] = None
     page: int = 0
+    seconds: float = 0.0                       # сколько заняло получение таблицы
     notes: List[str] = field(default_factory=list)
 
     @property
