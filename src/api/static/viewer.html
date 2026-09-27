@@ -375,6 +375,9 @@ if (!docId) {
   init();
 }
 
+let viewMode = 'pdf';      // 'pdf' | 'image' | 'text' — чем показываем документ
+let imageZoom = 1;         // масштаб картинки-страницы (скан)
+
 async function init() {
   try {
     const resp = await fetch(API + '/upload/' + docId + '/details');
@@ -392,14 +395,23 @@ async function init() {
     document.getElementById('btn-download').href = API + '/upload/' + docId + '/preview';
     pollOcrProgress();
 
-    // Determine if PDF or text document
+    // Чем показываем документ: PDF — pdf.js, картинка (скан) — сама страница, остальное — текст.
+    // Раньше для сканов шёл текстовый просмотр, и самой страницы на экране не было вовсе.
     const fname = (currentDoc.filename || '').toLowerCase();
-    const isPdf = fname.endsWith('.pdf') || (currentDoc.file_type || '').includes('pdf');
+    const ftype = (currentDoc.file_type || currentDoc.mime_type || '').toLowerCase();
+    const isPdf = fname.endsWith('.pdf') || ftype.includes('pdf');
+    const isImage = /\.(png|jpe?g|tiff?|bmp|webp)$/.test(fname) || ftype.startsWith('image/');
 
     if (isPdf) {
+      viewMode = 'pdf';
       await initPdfViewer();
       showKbdHints();
+    } else if (isImage) {
+      viewMode = 'image';
+      await initImageViewer();
+      showKbdHints();
     } else {
+      viewMode = 'text';
       await initTextViewer();
     }
 
@@ -424,6 +436,45 @@ async function initPdfViewer() {
   if (!(initPage >= 1)) initPage = 1;
   if (initPage > pdfDoc.numPages) initPage = pdfDoc.numPages;
   renderPage(initPage);
+}
+
+async function initImageViewer() {
+  // Скан или фотография документа: показываем саму страницу. pdf.js её открыть не может, а без страницы
+  // непонятно, что и где распознано. Сцена готова принять наложения (рамки блоков и таблиц).
+  const viewer = document.getElementById('viewer');
+  viewer.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.id = 'image-stage';
+  wrap.style.cssText = 'position:relative;display:inline-block;line-height:0;max-width:100%';
+
+  const img = document.createElement('img');
+  img.id = 'page-image';
+  img.alt = currentDoc.filename || 'страница документа';
+  img.src = API + '/upload/' + docId + '/preview';
+  img.style.cssText = 'display:block;width:100%;height:auto;background:#fff;border-radius:4px;'
+    + 'box-shadow:0 2px 12px rgba(0,0,0,.35)';
+  wrap.appendChild(img);
+  viewer.appendChild(wrap);
+
+  setValue('page-num', 1);
+  setMax('page-num', 1);
+  setText('page-total', '/ 1');
+  setDisabled('btn-prev', true);
+  setDisabled('btn-next', true);
+  setDisplay('zoom-controls', '');
+  imageZoom = 1;
+  applyImageZoom();
+}
+
+function applyImageZoom() {
+  const img = document.getElementById('page-image');
+  if (!img) return;
+  const stage = document.getElementById('image-stage');
+  // Ширина считается от доступной ширины сцены, поэтому «по ширине» = 100%.
+  const base = stage && stage.parentElement ? stage.parentElement.clientWidth : img.clientWidth;
+  img.style.width = Math.round(base * imageZoom) + 'px';
+  setText('zoom-label', Math.round(imageZoom * 100) + '%');
 }
 
 async function initTextViewer() {
@@ -460,8 +511,8 @@ async function initTextViewer() {
     viewer.appendChild(pre);
     
     // Hide page controls
-    document.getElementById('page-controls').style.display = 'none';
-    document.getElementById('zoom-controls').style.display = 'none';
+    setDisplay('page-controls', 'none');
+    setDisplay('zoom-controls', 'none');
     document.getElementById('kbd-hint').style.display = 'none';
   } catch(e) {
     showError('Не удалось загрузить текст документа');
@@ -608,8 +659,10 @@ function goToPage() {
   const n = parseInt(document.getElementById('page-num').value);
   if (n >= 1 && n <= pdfDoc.numPages) renderPage(n);
 }
-function zoomIn()  { scale = Math.min(3, scale + 0.25); renderPage(pageNum); }
-function zoomOut() { scale = Math.max(0.5, scale - 0.25); renderPage(pageNum); }
+function zoomIn()  { if (viewMode === 'image') { imageZoom = Math.min(3, imageZoom + 0.25); applyImageZoom(); return; }
+  scale = Math.min(3, scale + 0.25); renderPage(pageNum); }
+function zoomOut() { if (viewMode === 'image') { imageZoom = Math.max(0.25, imageZoom - 0.25); applyImageZoom(); return; }
+  scale = Math.max(0.5, scale - 0.25); renderPage(pageNum); }
 function zoomFit() {
   const viewer = document.getElementById('viewer');
   scale = (viewer.clientWidth - 32) / 612;
@@ -646,15 +699,30 @@ function setMeta(doc) {
     (tags ? '<div class="meta-pill">' + tags + '</div>' : '');
 }
 
+// Безопасная работа с элементами управления: в разметке нет #zoom-controls и #page-controls, а обращения
+// к ним напрямую валили просмотрщик (любой документ давал пустую страницу — найдено 27.09.2026).
+function el(id) { return document.getElementById(id); }
+function setDisplay(id, value) { const e = el(id); if (e) e.style.display = value; }
+function setText(id, value) { const e = el(id); if (e) e.textContent = value; }
+function setDisabled(id, value) { const e = el(id); if (e) e.disabled = value; }
+function setWidth(id, value) { const e = el(id); if (e) e.style.width = value; }
+function setMax(id, value) { const e = el(id); if (e) e.max = value; }
+function setValue(id, value) { const e = el(id); if (e) e.value = value; }
+
 function showError(msg) {
-  const overlay = document.getElementById('loading-overlay');
+  // Устойчивость важнее: раньше здесь безусловно брался #loading-overlay, а его убирает fadeOut — поэтому
+  // ЛЮБАЯ ошибка показывала пустую страницу и прятала собственную причину (найдено 27.09.2026).
+  console.error('Ошибка просмотра документа:', msg);
+  const overlay = document.getElementById('loading-overlay') || document.getElementById('viewer');
+  if (!overlay) return;
   overlay.innerHTML =
     '<div class="state-icon">📄</div>' +
     '<div class="state-text">' + msg + '</div>' +
     (docId ? '<div class="state-sub">ID: ' + docId.substring(0, 16) + '...</div>' : '') +
     '<a href="/documents" class="btn" style="margin-top:8px;text-decoration:none">← К документам</a>';
-  document.getElementById('title').textContent = '❌ Ошибка';
-  overlay.classList.remove('fade');
+  const title = document.getElementById('title');
+  if (title) title.textContent = '❌ Ошибка';
+  if (overlay.classList) overlay.classList.remove('fade');
 }
 
 function showKbdHints() {
@@ -664,8 +732,9 @@ function showKbdHints() {
 }
 
 function fadeOut(el) {
+  if (!el) return;                       // элемента может не быть в разметке — это не повод ронять просмотр
   el.classList.add('fade');
-  setTimeout(function() { el.style.display = 'none'; }, 350);
+  setTimeout(function() { if (el.style) el.style.display = 'none'; }, 350);
 }
 
 function getUserMessage(err) {
