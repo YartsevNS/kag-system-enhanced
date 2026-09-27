@@ -32,6 +32,7 @@ MIN_ROWS = 3           # меньше — это не таблица
 MIN_COLS = 2
 LINE_COVER_H = 0.5     # горизонтальная линия должна занимать половину ширины таблицы
 LINE_COVER_V = 0.10    # вертикальная — десятую часть высоты
+MAX_SPLIT_COLS = 6     # на сколько колонок максимум режем одну распознанную строку
 
 
 @dataclass
@@ -129,7 +130,7 @@ def _row_of(grid: Grid, y: float) -> Optional[int]:
 
 def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
                recognize_cells: Optional[Callable[[Any, List[np.ndarray]], List[Tuple[str, float]]]] = None,
-               page: int = 0) -> RecoveredTable:
+               page: int = 0, split_lines: Optional[Sequence[float]] = None) -> RecoveredTable:
     """Разложить распознанные строки по ячейкам сетки.
 
     Строка внутри одной колонки идёт в ячейку как есть. Строка, накрывающая несколько колонок, режется по
@@ -139,6 +140,11 @@ def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
     cells: Dict[Tuple[int, int], List[str]] = {}
     to_split: List[Tuple[int, int, np.ndarray]] = []
     notes: List[str] = []
+    # Разрезка идёт ПО ПОЛНОМУ набору колонок документа: в строке могут быть не все вертикальные линии
+    # (объединённые ячейки), и тогда широкая ячейка смешивала бы значения строки — именно так и было
+    # на накладной («796 шт Балка MS Pro 18…»). Раскладка готовых строк по ячейкам при этом идёт по линиям
+    # строки, чтобы объединённые ячейки сохранялись.
+    cut = list(split_lines) if split_lines else [x for x in grid.lines_v if grid.bbox[0] <= x <= grid.bbox[2]]
 
     for line in lines:
         text = str(line.get("text") or "").strip()
@@ -161,13 +167,19 @@ def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
         ci_last = _col_of(row_lines, x1 - 1)
         if ci_first is None:
             continue
-        if ci_last is not None and ci_last > ci_first:
+        # Границы для разрезки берём из полного набора колонок документа
+        cut_first = _col_of(cut, x0 + 1)
+        cut_last = _col_of(cut, x1 - 1)
+        spanning = (ci_last is not None and ci_last > ci_first) or (
+            cut_first is not None and cut_last is not None and cut_last > cut_first)
+        if spanning and cut_first is not None and cut_last is not None \
+                and (cut_last - cut_first) < MAX_SPLIT_COLS:
             if recognize_cells is None:
                 cells.setdefault((ri, ci_first), []).append(text)
                 continue
-            for ci in range(ci_first, ci_last + 1):
-                left = max(x0, row_lines[ci])
-                right = min(x1, row_lines[ci + 1])
+            for ci in range(cut_first, cut_last + 1):
+                left = max(x0, cut[ci])
+                right = min(x1, cut[ci + 1])
                 if right - left < MIN_CELL_PX:
                     continue
                 to_split.append((ri, ci, np.array([[left, y0], [right, y0], [right, y1], [left, y1]],
@@ -188,7 +200,7 @@ def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
                 cells.setdefault((ri, ci), []).append(text)
         notes.append(f"разрезано строк на куски: {len(to_split)}")
 
-    width = grid.max_cols
+    width = max(grid.max_cols, len(cut) - 1)
     rows_out: List[List[str]] = []
     for ri in range(grid.n_rows):
         row = []

@@ -66,3 +66,34 @@ def test_table_quality_separates_empty_from_real():
     assert real > 0.7, real
     garbage = table_quality([["", ".", ""], ["", "", "*"]])
     assert garbage < 0.3, garbage
+
+
+def test_split_uses_full_document_column_set():
+    """В строке без внутренних линий ячейка широкая — режем по полному набору колонок документа.
+
+    Так было на накладной: в строке с позициями детектор сливал «796 шт 796 шт» в одну распознанную строку,
+    и без полного набора колонок значения оставались в одной ячейке.
+    """
+    # в этой строке нарисованы только две линии: 0 и 300 — то есть одна «объединённая» ячейка
+    grid = Grid(rows=[(0.0, 20.0)], row_lines=[[0.0, 300.0]], lines_h=[0.0, 20.0],
+                lines_v=[0.0, 100.0, 200.0, 300.0], bbox=(0.0, 0.0, 300.0, 20.0))
+    cut = [0.0, 100.0, 200.0, 300.0]
+
+    def fake_recognize(image, quads):
+        return [(f"часть{idx}", 0.9) for idx, _ in enumerate(quads)]
+
+    lines = [{"text": "796 шт 796 шт 796 шт", "quad": [[5, 5], [295, 5], [295, 15], [5, 15]]}]
+    table = fill_cells(object(), grid, lines, recognize_cells=fake_recognize, split_lines=cut)
+    assert table.rows[0][0] == "часть0"
+    assert table.rows[0][1] == "часть1"
+    assert table.rows[0][2] == "часть2"
+
+
+def test_split_capped_for_very_wide_lines():
+    """Слишком широкую строку (больше предела колонок) не режем — иначе теряем текст."""
+    grid = Grid(rows=[(0.0, 20.0)], row_lines=[[0.0, 800.0]], lines_h=[0.0, 20.0],
+                lines_v=[float(x) for x in range(0, 900, 100)], bbox=(0.0, 0.0, 800.0, 20.0))
+    lines = [{"text": "заголовок на всю таблицу", "quad": [[5, 5], [795, 5], [795, 15], [5, 15]]}]
+    table = fill_cells(object(), grid, lines, recognize_cells=lambda i, q: [("x", 1.0)] * len(q),
+                       split_lines=[float(x) for x in range(0, 900, 100)])
+    assert table.rows[0][0] == "заголовок на всю таблицу"

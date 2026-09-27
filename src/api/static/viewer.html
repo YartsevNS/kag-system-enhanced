@@ -328,6 +328,12 @@ body {
   </div>
 
   <div class="meta-bar" id="meta-bar"></div>
+  <!-- Таблицы документа: восстановленные разбором (свой OCR или модель зрения). Раньше их не было видно
+       именно здесь, из-за чего казалось, что таблица вовсе не распознана. -->
+  <details id="viewer-tables" style="display:none;margin:8px 0 4px 0">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600" id="viewer-tables-summary">Таблицы документа</summary>
+    <div id="viewer-tables-body" style="margin-top:8px"></div>
+  </details>
   <div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div>
 
   <div class="viewer" id="viewer">
@@ -920,3 +926,52 @@ async function saveEdit() {
 <script src="/static/branding.js"></script>
 </body>
 </html>
+
+// ── Таблицы документа в просмотрщике ────────────────────────────────────────────────────────
+function viewerEsc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadViewerTables() {
+  const box = document.getElementById('viewer-tables');
+  const body = document.getElementById('viewer-tables-body');
+  const summary = document.getElementById('viewer-tables-summary');
+  if (!box || !body || !docId) return;
+  try {
+    const r = await fetch('/api/v1/upload/' + encodeURIComponent(docId) + '/tables', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const tables = (d && d.tables) || [];
+    if (!tables.length) return;                     // нет таблиц — блок не показываем, чтобы не мешать
+    box.style.display = '';
+    summary.textContent = 'Таблицы документа: ' + tables.length + ' (распознаны отдельным шагом)';
+    let html = '';
+    tables.forEach((t, i) => {
+      const heads = t.headers || [];
+      const rows = t.rows || [];
+      html += '<div style="border:1px solid var(--border, #333);border-radius:6px;padding:8px;margin-bottom:10px">'
+        + '<div style="font-size:11px;color:var(--text3, #898989);margin-bottom:6px">Таблица ' + (i + 1)
+        + ' · страница ' + (t.page_num || 1)
+        + ' · строк ' + (t.row_count || rows.length)
+        + ' · качество ' + (t.quality != null ? t.quality : '—')
+        + ' · распознано: ' + viewerEsc(t.model || '—') + '</div>'
+        + '<div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;min-width:100%">';
+      if (heads.length) {
+        html += '<thead><tr>' + heads.map(h2 => '<th style="border:1px solid var(--border, #333);padding:4px 6px;text-align:left">'
+          + viewerEsc(h2) + '</th>').join('') + '</tr></thead>';
+      }
+      html += '<tbody>' + rows.slice(0, 25).map(rr => '<tr>' + (rr || []).map(c =>
+        '<td style="border:1px solid var(--border, #333);padding:4px 6px;vertical-align:top"'
+        + (String(c).trim() && /^[\d\s.,%:+-]+$/.test(String(c).trim()) ? ' style="text-align:right;border:1px solid var(--border, #333);padding:4px 6px"' : '')
+        + '>' + viewerEsc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+      if (rows.length > 25) html += '<div style="font-size:11px;color:var(--text3, #898989);margin-top:4px">показаны первые 25 строк из ' + rows.length + '</div>';
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  } catch (e) { /* таблицы не показываем — это не ошибка просмотра */ }
+}
+
+if (docId) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadViewerTables);
+  else loadViewerTables();
+}
