@@ -22,11 +22,14 @@ def check(target: str) -> int:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
         page.wait_for_timeout(1500)
         defined = page.evaluate("typeof loadViewerTables")
+        globals_state = page.evaluate(
+            "() => [typeof logout, typeof pollOcrProgress, typeof openEditModal].join('/')")
         visible = page.evaluate("() => document.body.innerText")
         leaked = "function loadViewerTables" in visible or "viewerEsc(s)" in visible
         box = page.evaluate("!!document.getElementById('viewer-tables')")
         scripts = page.evaluate("document.querySelectorAll('script').length")
         print(f"  loadViewerTables: {defined}")
+        print(f"  logout/pollOcrProgress/openEditModal: {globals_state}")
         print(f"  блок таблиц в разметке: {'есть' if box else 'НЕТ'}")
         print(f"  исходник кода виден на странице: {'ДА (плохо)' if leaked else 'нет'}")
         print(f"  тегов script в DOM: {scripts}")
