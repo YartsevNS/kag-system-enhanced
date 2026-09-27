@@ -84,7 +84,8 @@ RUN python -m playwright install --with-deps chromium && \
 # occular, веса на HF. reading_order раскладывается в occular/weights/reading_order/.
 # chown кэша — в этом же слое.
 RUN python -c "from huggingface_hub import hf_hub_download as d; r='Shivin11/occular-ocr'; \
-[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx','table_struct_split_merge_v2.pt']]; \
+[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_lcnet_fp32.onnx','recognizer_svtr_lcnet_cyr12_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx','table_struct_split_merge_v2.pt']]; \
+[d('Shivin11/occular-lm-ru', f) for f in ['compact_lm.npz','unigrams.txt']]; \
 from occular import download_reading_order; download_reading_order(); \
 print('Occular weights preloaded')" && \
     chown -R kag:kag /app/.cache
