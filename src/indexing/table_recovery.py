@@ -41,6 +41,7 @@ class RecoveredTable:
     source_model: str = ""
     bbox: Optional[BBox] = None
     confidence: Optional[float] = None
+    quality: Optional[float] = None            # честная оценка пригодности таблицы (0..1)
     page: int = 0
     seconds: float = 0.0                       # сколько заняло получение таблицы
     notes: List[str] = field(default_factory=list)

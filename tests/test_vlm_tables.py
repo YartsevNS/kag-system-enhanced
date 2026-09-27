@@ -42,7 +42,8 @@ class _FakeResponse:
 
 def _enabled_config(**over):
     cfg = dict(vlm_tables.get_vlm_tables_config())
-    cfg.update({"enabled": True, "endpoint": "http://models:11434", "model": "kag-qwen2vl:2b"})
+    cfg.update({"enabled": True, "endpoint": "http://models:11434", "model": "kag-qwen2vl:2b",
+                "format": "markdown"})   # тесты разбора markdown: формат задаём явно
     cfg.update(over)
     return cfg
 

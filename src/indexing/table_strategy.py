@@ -95,6 +95,46 @@ def recognize_occular_tables(image: bytes, ocr_lines: Optional[Sequence[OcrLine]
     return result, f"таблиц от Occular: {len(result)} за {time.time() - started:.1f} с"
 
 
+def _raw_lines_from_occular(image: bytes) -> List[Dict[str, Any]]:
+    """Сырые строки OCR от Occular: текст, четырёхточечная рамка, уверенность.
+
+    Нужны и табличному пути (там важны координаты и уверенность), и обычному (там достаточно текста и рамки).
+    """
+    import tempfile
+    from pathlib import Path
+
+    path = ""
+    try:
+        from occular import OCRPipeline, Settings
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp.write(image)
+            path = tmp.name
+        try:
+            pipe = OCRPipeline(Settings(reading_order=True))
+        except Exception:  # noqa: BLE001 — модель порядка чтения может быть не скачана
+            pipe = OCRPipeline(Settings())
+        items = pipe.process_image(path) or []
+        out: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            quad = item.get("quad") or item.get("bbox")
+            if text and quad is not None:
+                out.append({"text": text, "quad": quad,
+                            "confidence": float(item.get("confidence") or 0.0)})
+        return out
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"[tables] строки OCR от Occular получить не удалось: {e}")
+        return []
+    finally:
+        if path:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+
 def _lines_from_occular(image: bytes) -> List[OcrLine]:
     """Строки текста с координатами от Occular (конвейер с порядком чтения, если модель есть)."""
     import tempfile
@@ -148,6 +188,88 @@ def _quad_to_box(quad: Any) -> Optional[tuple]:
     return None
 
 
+_cell_recognizer: Any = None
+_cell_recognizer_failed = False
+
+
+def make_cell_recognizer() -> Optional[Any]:
+    """Распознаватель Occular для вырезанных ячеек: один экземпляр на процесс.
+
+    Проверено 27.09.2026: на вырезке строки он даёт тот же текст, что полный конвейер (уверенность 0,78–0,97),
+    но принимает сразу список рамок — то есть все ячейки распознаются одним вызовом (~50 мс на ячейку).
+    """
+    global _cell_recognizer, _cell_recognizer_failed
+    if _cell_recognizer is not None or _cell_recognizer_failed:
+        return _cell_recognizer
+    try:
+        from occular import CRNNRecognizerONNX
+
+        instance = CRNNRecognizerONNX(num_threads=4, lm=True)
+
+        def recognize(image: Any, quads: Sequence[Any]) -> List[tuple]:
+            return instance.recognize(image, list(quads))
+
+        _cell_recognizer = recognize
+    except Exception as e:  # noqa: BLE001 — без распознавателя путь всё равно работает (хуже)
+        _cell_recognizer_failed = True
+        logger.debug(f"[tables] распознаватель ячеек недоступен: {e}")
+    return _cell_recognizer
+
+
+def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, Any]]] = None
+                          ) -> Tuple[List[RecoveredTable], str]:
+    """Табличный путь «сетка по линиям + раскладка текста по ячейкам».
+
+    Возвращает (таблицы, причина). Причина заполнена всегда — по ней видно, почему пошли другим путём.
+    """
+    if not isinstance(image, (bytes, bytearray)):
+        # Путь сетки работает с изображением: без байтов пропускаем его (и не ломаем вызовы с заглушкой).
+        return [], "изображение передано не байтами — путь по линиям пропущен"
+    try:
+        import cv2
+        import numpy as np
+
+        try:
+            from src.indexing.table_grid import SCALE, detect_grid, fill_cells
+        except ModuleNotFoundError:      # проверка рядом со скриптом (модули лежат в data)
+            from table_grid import SCALE, detect_grid, fill_cells
+    except Exception as e:  # noqa: BLE001
+        return [], f"сетка по линиям недоступна: {type(e).__name__}: {str(e)[:80]}"
+
+    array = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+    if array is None:
+        return [], "не удалось прочитать изображение"
+
+    started = time.time()
+    grid, scaled = detect_grid(array)
+    if grid is None:
+        return [], f"линий сетки не найдено за {time.time() - started:.2f} с (не бланк с линиями)"
+
+    lines = list(raw_lines) if raw_lines is not None else _raw_lines_from_occular(image)
+    if not lines:
+        return [], "строки распознавания не получены"
+
+    # Координаты строк переводим в масштаб сетки: сетку строим на увеличенном изображении.
+    scaled_lines = []
+    for line in lines:
+        quad = line.get("quad")
+        if quad is None:
+            continue
+        try:
+            arr = np.asarray(quad, dtype=np.float32).reshape(-1, 2) * SCALE
+        except Exception:  # noqa: BLE001
+            continue
+        scaled_lines.append({"text": line["text"], "quad": arr.tolist()})
+
+    table = fill_cells(scaled, grid, scaled_lines, recognize_cells=make_cell_recognizer())
+    table.seconds = round(time.time() - started, 1)
+    reason = (f"сетка по линиям: {grid.n_rows} строк × до {grid.max_cols} колонок, "
+              f"качество {table.quality:.2f}, {time.time() - started:.1f} с")
+    if table.n_rows < 2 or table.n_cols < 2 or table.quality < 0.25:
+        return [], reason + " — признано непригодным"
+    return [table], reason
+
+
 def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = None, page: int = 0,
                    recognizer: Any = None, vlm_caller: Any = None,
                    config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -158,7 +280,15 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
     как сбой распознавания).
     """
     started = time.time()
+    # Сначала свой разбор по линиям бланка: он даёт ячейки с текстом (библиотечная модель структуры
+    # на плотных сканах ломает строки — 23 из 30 нулевой высоты, проверено 27.09.2026).
+    grid_tables, grid_reason = recognize_grid_tables(image)
+    if grid_tables:
+        return {"tables": grid_tables, "technique": "occular-grid", "reason": grid_reason,
+                "seconds": round(time.time() - started, 1)}
+
     tables, reason = recognize_occular_tables(image, ocr_lines=ocr_lines, recognizer=recognizer)
+    reason = f"{grid_reason}; библиотечный разбор: {reason}"
     if tables:
         return {"tables": tables, "technique": "occular-grid", "reason": reason,
                 "seconds": round(time.time() - started, 1)}
