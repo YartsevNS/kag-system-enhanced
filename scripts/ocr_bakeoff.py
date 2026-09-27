@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import time
 from typing import Any, Dict, List
 
@@ -83,19 +84,68 @@ def run_rdocs(image: str) -> Dict[str, Any]:
     results = pipeline.process_img(image)
     seconds = round(time.time() - started, 1)
     words: List[str] = []
-    _collect_strings(results, words)
+    # Текст у RussianDocsOCR лежит в .ocr_normalized (нормализованный) или .ocr — проверено на 4.6.0.
+    for attr in ("ocr_normalized", "ocr"):
+        value = getattr(results, attr, None)
+        if value:
+            if isinstance(value, str):
+                words = [value]
+            else:
+                words = [str(x) for x in value]
+            break
+    if not words:
+        _collect_strings(results, words)
     if not words:
         words = [f"<результат типа {type(results).__name__}; атрибуты: "
                  f"{[a for a in dir(results) if not a.startswith('_')][:14]}>"]
-    return {"engine": "rdocs", "seconds": seconds, "lines": len(words), "text": " ".join(words)}
+    return {"engine": "rdocs", "seconds": seconds, "lines": len(words), "text": " ".join(words),
+            "doctype": str(getattr(results, "doctype", ""))[:40]}
+
+
+def _make_rapidocr() -> Any:
+    """Собрать RapidOCR с КИРИЛЛИЧЕСКИМ распознавателем (eslav), а не с латинским по умолчанию.
+
+    По умолчанию RapidOCR берёт модель латиницы/китайского, и русский текст читается похожими латинскими
+    буквами («Y Vicnpasnerse Ne 15855»): цифры выживают, слова нет. Конструктор в разных версиях принимает
+    разные ключи, поэтому пробуем по очереди и запоминаем, что сработало.
+    """
+    from rapidocr import RapidOCR  # type: ignore
+
+    # Важно (проверено 28.09.2026): по умолчанию RapidOCR 3.9 берёт распознаватель PP-OCRv6 small, а PP-OCRv6
+    # кириллицу НЕ поддерживает — на попытку включить eslav он отвечает «Unsupported rec.lang_type». Поэтому
+    # явно выбираем PP-OCRv5 (там есть eslav и cyrillic). Значения — ПЕРЕЧИСЛЕНИЯ, не строки: RapidOCR
+    # отвергает строки с «must be Enum Type».
+    attempts: List[Any] = []
+    try:
+        from rapidocr.utils.typings import LangRec, ModelType, OCRVersion  # type: ignore
+
+        # Рабочая комбинация (подобрана перебором 28.09.2026): PP-OCRv5 + ESLAV + mobile. Без model_type
+        # RapidOCR отвечает ошибкой «must be Enum Type»/«Unsupported», с PP-OCRv6 кириллицы нет вовсе.
+        attempts.extend([
+            ({"params": {"Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.lang_type": LangRec.ESLAV,
+                         "Rec.model_type": ModelType.MOBILE}}, "PP-OCRv5/eslav/mobile"),
+            ({"params": {"Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.lang_type": LangRec.CYRILLIC,
+                         "Rec.model_type": ModelType.MOBILE}}, "PP-OCRv5/cyrillic/mobile"),
+        ])
+    except Exception:  # noqa: BLE001 — в другой версии перечисления могут называться иначе
+        pass
+    attempts.extend([
+        ({"params": {"Rec.lang_type": "eslav"}}, "Rec.lang_type=eslav (строка)"),
+        ({}, "по умолчанию (PP-OCRv6, без кириллицы)"),
+    ])
+    last_error = ""
+    for kwargs, label in attempts:
+        try:
+            return RapidOCR(**kwargs), label
+        except Exception as e:  # noqa: BLE001
+            last_error = f"{type(e).__name__}: {str(e)[:80]}"
+    raise RuntimeError(f"не удалось создать RapidOCR: {last_error}")
 
 
 def run_paddle(image: str) -> Dict[str, Any]:
     """PP-OCRv5 (распознаватель eslav/cyrillic) через RapidOCR — ONNX на CPU."""
-    from rapidocr import RapidOCR  # type: ignore
-
     started = time.time()
-    engine = RapidOCR()
+    engine, model_label = _make_rapidocr()
     out = engine(image)                      # в RapidOCR 3.x это единый объект, а не пара (result, elapsed)
     if isinstance(out, tuple):
         out = out[0]
@@ -106,26 +156,36 @@ def run_paddle(image: str) -> Dict[str, Any]:
         if v:
             texts = [str(x) for x in v]
             break
-    if not texts and hasattr(out, "boxes") and getattr(out, "boxes", None) is not None:
-        texts = [str(x) for x in getattr(out, "txts", []) or []]
     if not texts and isinstance(out, (list, tuple)):
         texts = [str(item[1]) for item in out if isinstance(item, (list, tuple)) and len(item) > 1]
     if not texts:
         texts = [f"<результат типа {type(out).__name__}; атрибуты: "
                  f"{[a for a in dir(out) if not a.startswith('_')][:14]}>"]
-    return {"engine": "paddle", "seconds": seconds, "lines": len(texts), "text": " ".join(texts)}
+    return {"engine": "paddle", "model": model_label, "seconds": seconds,
+            "lines": len(texts), "text": " ".join(texts)}
 
 
 ENGINES = {"occular": run_occular, "rdocs": run_rdocs, "paddle": run_paddle}
 
 
 def score(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Оценка текста: контрольные числа ищем ПО ЦИФРАМ, а не по формату с пробелами.
+
+    Первая версия сравнивала строки целиком («13 959,9»), и это мерило разметку разрядов, а не распознавание:
+    движок с верной кириллицей писал «13959,9» и получал ноль. Теперь из текста и эталона убираются все
+    символы, кроме цифр, точки и запятой.
+    """
     text = normalize(result.get("text", ""))
-    found = sum(1 for n in CONTROL_NUMBERS if normalize(n) in text)
+    cleaned_text = re.sub(r"[^0-9,.]+", "", text).replace(",", ".")
+    found: List[str] = []
+    for n in CONTROL_NUMBERS:
+        key = re.sub(r"[^0-9,.]+", "", n).replace(",", ".")
+        if key and key in cleaned_text:
+            found.append(n)
     digits = sum(1 for ch in text if ch.isdigit())
-    return {"control_found": found, "control_total": len(CONTROL_NUMBERS),
-            "digits": digits, "chars": len(text), "seconds": result.get("seconds"),
-            "lines": result.get("lines")}
+    return {"control_found": len(found), "control_total": len(CONTROL_NUMBERS),
+            "control_list": found, "digits": digits, "chars": len(text),
+            "seconds": result.get("seconds"), "lines": result.get("lines")}
 
 
 def main() -> int:
