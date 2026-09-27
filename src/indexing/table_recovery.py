@@ -24,7 +24,6 @@ BBox = Tuple[float, float, float, float]      # x0, y0, x1, y1
 
 SOURCE_OCCULAR_GRID = "occular-grid"
 SOURCE_VLM = "vlm"
-SOURCE_COLOR_GRID = "color-grid"
 
 
 @dataclass
@@ -156,59 +155,3 @@ def table_from_markdown(markdown: str, source_model: str = "", page: int = 0) ->
     width = max(len(r) for r in rows)
     rows = [r + [""] * (width - len(r)) for r in rows]
     return RecoveredTable(rows=rows, source=SOURCE_VLM, source_model=source_model, page=page)
-
-
-def grid_from_color_blocks(image, min_block_px: int = 10, max_cells: int = 40):
-    """Сетка таблицы по цветным заливкам — для таблиц БЕЗ линий (скриншоты из Excel, как у владельца).
-
-    Как работает: ищем границы не по «доле цветных пикселей», а по СМЕНЕ ЦВЕТА между соседними
-    пикселями. Это важно: в настоящих таблицах ячейки залиты разными цветами и стоят вплотную, без
-    белых промежутков, поэтому профиль «цветное/не цветное» их не разделяет (первая версия именно на
-    этом и спотыкалась — тест на синтетической таблице это поймал).
-
-    Где смена цвета происходит в большинстве строк — там вертикальная граница (разделитель колонок);
-    где в большинстве колонок — горизонтальная (разделитель строк). Из границ получаются диапазоны.
-
-    Зависимости: только Pillow и numpy, работает за доли секунды, модель не нужна.
-    """
-    import numpy as np
-
-    if isinstance(image, (str, bytes)):
-        import io
-
-        from PIL import Image
-        image = Image.open(image) if isinstance(image, str) else Image.open(io.BytesIO(image))
-    img = image.convert("RGB")
-    w, h = img.size
-    arr = np.asarray(img, dtype=np.int16)
-
-    spread = arr.max(axis=2) - arr.min(axis=2)
-    if (spread > 18).mean() < 0.02:
-        return None, None                   # страница почти без цветных областей — это не таблица
-
-    diff_x = np.abs(np.diff(arr, axis=1)).sum(axis=2)      # смена цвета по горизонтали
-    diff_y = np.abs(np.diff(arr, axis=0)).sum(axis=2)      # по вертикали
-    col_score = (diff_x > 40).mean(axis=0)                 # доля строк, где в этой точке меняется цвет
-    row_score = (diff_y > 40).mean(axis=1)
-
-    def separators(score, threshold: float = 0.6):
-        idx = np.where(score >= threshold)[0]
-        groups: list = []
-        for i in idx:
-            if groups and i - groups[-1][-1] <= 2:
-                groups[-1].append(int(i))
-            else:
-                groups.append([int(i)])
-        return [int(round(sum(g) / len(g))) for g in groups]
-
-    def ranges_from(seps, total):
-        edges = [0] + [s for s in seps if 0 < s < total] + [total]
-        return [(float(a), float(b)) for a, b in zip(edges, edges[1:]) if b - a >= min_block_px]
-
-    rows = ranges_from(separators(row_score), h)
-    cols = ranges_from(separators(col_score), w)
-    if len(rows) < 2 or len(cols) < 2:
-        return None, None
-    if len(rows) > max_cells or len(cols) > max_cells:
-        return None, None
-    return rows, cols

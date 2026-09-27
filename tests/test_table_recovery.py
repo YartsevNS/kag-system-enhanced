@@ -1,15 +1,11 @@
 """Тесты восстановления таблиц: сетка + текст, разбор markdown от модели, сетка по цветным заливкам."""
 from __future__ import annotations
 
-import numpy as np
-from PIL import Image
-
 from src.indexing.table_recovery import (
     OcrLine,
     SOURCE_VLM,
     cells_from_grid,
     cells_from_grid_annotated,
-    grid_from_color_blocks,
     table_from_markdown,
 )
 
@@ -84,38 +80,3 @@ def test_table_from_markdown_ignores_surrounding_talk():
 
 def test_table_from_markdown_returns_none_for_plain_text():
     assert table_from_markdown("просто текст без таблицы") is None
-
-
-def _page_with_colored_cells() -> Image.Image:
-    """Синтетическая таблица без линий: 3 строки × 2 колонки, заливки разных цветов."""
-    img = Image.new("RGB", (200, 120), (255, 255, 255))
-    colors = [(200, 220, 255), (210, 240, 210), (250, 230, 200)]
-    for r, color in enumerate(colors):
-        for c in range(2):
-            for y in range(r * 40, r * 40 + 40):
-                for x in range(c * 100, c * 100 + 100):
-                    img.putpixel((x, y), color)
-    return img
-
-
-def test_grid_from_color_blocks_finds_lineless_table():
-    rows, cols = grid_from_color_blocks(_page_with_colored_cells())
-    assert rows is not None and cols is not None
-    assert len(rows) == 3, f"строк должно быть 3, получили {len(rows)}"
-    assert len(cols) == 2, f"колонок должно быть 2, получили {len(cols)}"
-
-
-def test_grid_from_color_blocks_ignores_plain_page():
-    plain = Image.new("RGB", (200, 120), (255, 255, 255))
-    rows, cols = grid_from_color_blocks(plain)
-    assert (rows, cols) == (None, None)
-
-
-def test_grid_from_color_blocks_reads_file_and_bytes(tmp_path):
-    path = tmp_path / "page.png"
-    _page_with_colored_cells().save(path)
-    rows, cols = grid_from_color_blocks(str(path))
-    assert rows is not None and len(cols) == 2
-    rows2, cols2 = grid_from_color_blocks(path.read_bytes())
-    assert rows2 is not None and len(cols2) == 2
-    assert np.asarray(_page_with_colored_cells()).shape[1] == 200
