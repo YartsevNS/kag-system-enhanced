@@ -592,6 +592,11 @@ class DocumentService:
                 # Разбор остаётся в табличном слое (карточка, просмотрщик) с честным качеством, а текст
                 # документа формируется обычным распознаванием, как и было.
                 TABLE_FRAGMENT_MIN_QUALITY = 0.65
+                try:
+                    from src.indexing.tables_settings import tables_in_fragments
+                    _tables_to_fragments = tables_in_fragments()
+                except Exception:  # noqa: BLE001 — настройку не читаем: значит не отдаём во фрагменты
+                    _tables_to_fragments = False
                 segments = []
                 # Сквозная нумерация таблиц по документу: page.tables начинается заново на
                 # каждой странице, поэтому номер таблицы на странице не годится как часть id —
@@ -622,7 +627,8 @@ class DocumentService:
                         _table_seq += 1
                         md = tb.get('markdown', '')
                         _q = tb.get('quality')
-                        if md and (_q is None or float(_q) >= TABLE_FRAGMENT_MIN_QUALITY):
+                        _ok_fragment = (_q is None or float(_q) >= TABLE_FRAGMENT_MIN_QUALITY)
+                        if md and _tables_to_fragments and _ok_fragment:
                             segments.append({
                                 "type": "table",
                                 "content": md,

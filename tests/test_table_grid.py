@@ -126,3 +126,11 @@ def test_boundary_inside_number_does_not_split():
     assert not calls, "число разрезано, хотя граница попала внутрь него"
     assert "18.652" in table.rows[0]
 
+
+
+def test_tables_not_in_fragments_by_default():
+    """Таблицы со сканов по умолчанию не идут во фрагменты (иначе в поиск и «Чанки» попадает каша)."""
+    from src.indexing.tables_settings import DEFAULTS, tables_in_fragments
+
+    assert DEFAULTS.get("tables_in_fragments") is False
+    assert tables_in_fragments() is False
