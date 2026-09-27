@@ -84,6 +84,10 @@ DEFAULTS: Dict[str, Any] = {
     "vlm_tables_timeout_ms": 300000,   # 5 минут: замер 39 с (короткая таблица) — 300 с (первый запуск)
     "vlm_tables_num_predict": 2048,    # предел генерации: с 4096 модель зацикливалась на повторах
     "vlm_tables_min_rows": 2,          # результат короче не считаем таблицей
+    # Протокол обращения к VL-сервису: "ollama" — свой API Ollama (/api/generate), "openai" —
+    # OpenAI-совместимый (/v1/chat/completions): так работают llama.cpp server, vLLM, LM Studio и
+    # большинство внешних VL-API. Проверено 27.09.2026: llama-server на 41 отвечает по этому протоколу.
+    "vlm_tables_api": "ollama",
 }
 
 

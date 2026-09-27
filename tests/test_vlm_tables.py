@@ -249,3 +249,36 @@ def test_non_image_document_is_skipped(tmp_path):
     pdf.write_bytes(b"%PDF-1.4")
     report = recover_tables_for_image_document(_FakeParsed(), str(pdf))
     assert report["applied"] is False and "не картинка" in report["reason"]
+
+
+def test_openai_protocol_payload_and_parsing(monkeypatch):
+    """OpenAI-совместимый путь: llama.cpp server, vLLM, внешние VL-API говорят именно так."""
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["payload"] = json.loads(request.data)
+        return _FakeResponse({"choices": [{"message": {"content": TABLE_MD}}]})
+
+    monkeypatch.setattr(vlm_tables.urllib.request, "urlopen", fake_urlopen)
+    cfg = _enabled_config(api="openai", endpoint="http://models:8081")
+    table, reason = vlm_tables.recognize_table(b"image", config=cfg)
+    assert captured["url"] == "http://models:8081/v1/chat/completions"
+    content = captured["payload"]["messages"][0]["content"]
+    assert content[0]["type"] == "text" and content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert captured["payload"]["max_tokens"] == cfg["num_predict"]
+    assert table is not None and table.n_rows == 4
+
+
+def test_openai_status_probe_uses_models_endpoint(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(url, timeout=None):
+        captured["url"] = url
+        return _FakeResponse({"data": [{"id": "kag-qwen2vl:2b"}]})
+
+    monkeypatch.setattr(vlm_tables.urllib.request, "urlopen", fake_urlopen)
+    status = vlm_tables.vlm_tables_status(check_service=True)
+    assert status["api"] == "ollama"                     # по умолчанию
+    assert "/api/tags" in captured["url"]

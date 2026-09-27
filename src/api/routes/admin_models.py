@@ -2368,6 +2368,8 @@ class TablesVlmRequest(BaseModel):
     timeout_ms: Optional[int] = None
     num_predict: Optional[int] = None
     min_rows: Optional[int] = None
+    # Протокол обращения: ollama (свой API) или openai (OpenAI-совместимый: llama.cpp, vLLM, внешние API)
+    api: Optional[str] = None
 
 
 @router.get("/tables-vlm", summary="Опция «таблицы через VL-модель»: настройки и состояние")

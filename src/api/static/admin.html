@@ -882,6 +882,17 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>Протокол обращения</label>
+                    <select id="tables-vlm-api" onchange="saveTablesVlm()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                        <option value="ollama">Ollama (свой API: /api/generate)</option>
+                        <option value="openai">OpenAI-совместимый (/v1/chat/completions)</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        <strong>OpenAI-совместимый</strong> подходит для llama.cpp server, vLLM, LM Studio
+                        и внешних VL-API. Адрес тогда указывается вместе с портом сервиса.
+                    </div>
+                </div>
+                <div class="form-group">
                     <label>Таймаут вызова, мс</label>
                     <input type="number" id="tables-vlm-timeout" onchange="saveTablesVlm()" min="1000" max="1800000" step="1000"
                            style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
@@ -3280,6 +3291,7 @@ async function loadTablesVlm(check) {
     document.getElementById('tables-vlm-endpoint').value = d.endpoint || '';
     document.getElementById('tables-vlm-model').value = d.model || '';
     document.getElementById('tables-vlm-timeout').value = d.timeout_ms || 300000;
+    document.getElementById('tables-vlm-api').value = d.api || 'ollama';
     var html = d.enabled
       ? '<span style="color:var(--green)">опция включена — таблицы без линий пойдут в модель</span>'
       : '<span style="color:var(--text4)">опция выключена — такие страницы пропускаются</span>';
@@ -3294,7 +3306,8 @@ async function saveTablesVlm() {
     enabled: document.getElementById('tables-vlm-enabled').checked,
     endpoint: document.getElementById('tables-vlm-endpoint').value.trim(),
     model: document.getElementById('tables-vlm-model').value.trim(),
-    timeout_ms: parseInt(document.getElementById('tables-vlm-timeout').value) || 300000
+    timeout_ms: parseInt(document.getElementById('tables-vlm-timeout').value) || 300000,
+    api: document.getElementById('tables-vlm-api').value || 'ollama'
   };
   try {
     var r = await fetch('/api/v1/admin/models/tables-vlm', {

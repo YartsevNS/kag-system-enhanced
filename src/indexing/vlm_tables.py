@@ -59,6 +59,7 @@ def get_vlm_tables_config() -> Dict[str, Any]:
         "timeout_ms": DEFAULT_TIMEOUT_MS,
         "num_predict": 2048,
         "min_rows": 2,
+        "api": "ollama",
     }
     try:
         from src.indexing.tables_settings import get_tables_config
@@ -73,6 +74,9 @@ def get_vlm_tables_config() -> Dict[str, Any]:
         cfg["timeout_ms"] = _as_int(raw.get("vlm_tables_timeout_ms"), 1_000, 1_800_000, DEFAULT_TIMEOUT_MS)
         cfg["num_predict"] = _as_int(raw.get("vlm_tables_num_predict"), 64, 8192, 2048)
         cfg["min_rows"] = _as_int(raw.get("vlm_tables_min_rows"), 2, 50, 2)
+        api = str(raw.get("vlm_tables_api") or "").strip().lower()
+        if api in ("ollama", "openai"):
+            cfg["api"] = api
     except Exception as e:  # noqa: BLE001 — настройки недоступны, работаем выключенными
         logger.debug(f"[vlm-tables] настройки недоступны, опция выключена: {e}")
         cfg["enabled"] = False
@@ -124,7 +128,22 @@ def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, A
         },
         "stop": STOP_SEQUENCES,
     }
-    url = f"{cfg['endpoint']}/api/generate"
+    if cfg.get("api") == "openai":
+        # OpenAI-совместимый протокол (llama.cpp server, vLLM, внешние VL-API): картинка — в data-URL.
+        payload = {
+            "model": cfg["model"],
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": PROMPT},
+                {"type": "image_url", "image_url": {
+                    "url": "data:image/png;base64," + base64.b64encode(image).decode()}},
+            ]}],
+            "temperature": 0,
+            "max_tokens": cfg["num_predict"],
+            "stream": False,
+        }
+        url = f"{cfg['endpoint']}/v1/chat/completions"
+    else:
+        url = f"{cfg['endpoint']}/api/generate"
     request = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=cfg["timeout_ms"] / 1000.0) as response:
@@ -139,7 +158,13 @@ def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, A
     if data.get("error"):
         return None, f"сервис моделей вернул ошибку: {str(data['error'])[:120]}"
 
-    markdown = data.get("response") or ""
+    if cfg.get("api") == "openai":
+        try:
+            markdown = data["choices"][0]["message"]["content"] or ""
+        except Exception:  # noqa: BLE001 — неожиданная форма ответа
+            return None, "сервис вернул ответ неожиданного вида (нет choices[0].message.content)"
+    else:
+        markdown = data.get("response") or ""
     table = table_from_markdown(markdown, source_model=cfg["model"], page=page)
     if table is None:
         return None, "модель не вернула таблицу (в ответе нет markdown-таблицы)"
@@ -162,13 +187,13 @@ def apply_settings_update(existing: Any, changes: Dict[str, Any]) -> Dict[str, A
     как есть — иначе сохранение этой опции выключило бы весь табличный стек.
     """
     cfg = dict(existing) if isinstance(existing, dict) else {}
-    for key in ("enabled", "endpoint", "model", "timeout_ms", "num_predict", "min_rows"):
+    for key in ("enabled", "endpoint", "model", "timeout_ms", "num_predict", "min_rows", "api"):
         value = changes.get(key)
         if value is None:
             continue
         if key == "enabled":
             cfg["vlm_tables_enabled"] = bool(value)
-        elif key in ("endpoint", "model"):
+        elif key in ("endpoint", "model", "api"):
             cfg[f"vlm_tables_{key}"] = str(value).strip()
         else:
             try:
@@ -188,6 +213,7 @@ def vlm_tables_status(check_service: bool = False) -> Dict[str, Any]:
         "timeout_ms": cfg["timeout_ms"],
         "num_predict": cfg["num_predict"],
         "min_rows": cfg["min_rows"],
+        "api": cfg.get("api", "ollama"),
         "reachable": None,
         "model_present": None,
         "detail": "",
@@ -198,9 +224,10 @@ def vlm_tables_status(check_service: bool = False) -> Dict[str, Any]:
         return status
 
     try:
-        with urllib.request.urlopen(f"{cfg['endpoint']}/api/tags", timeout=15) as response:
+        probe = f"{cfg['endpoint']}/v1/models" if cfg.get("api") == "openai" else f"{cfg['endpoint']}/api/tags"
+        with urllib.request.urlopen(probe, timeout=15) as response:
             data = json.loads(response.read())
-        names = [str(m.get("name", "")) for m in (data.get("models") or [])]
+        names = [str(m.get("name") or m.get("id") or "") for m in (data.get("models") or data.get("data") or [])]
         status["reachable"] = True
         status["model_present"] = any(n == cfg["model"] or n.startswith(cfg["model"].split(":")[0]) for n in names)
         status["models"] = names[:20]
