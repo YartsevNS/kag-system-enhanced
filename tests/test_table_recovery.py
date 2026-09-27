@@ -80,3 +80,19 @@ def test_table_from_markdown_ignores_surrounding_talk():
 
 def test_table_from_markdown_returns_none_for_plain_text():
     assert table_from_markdown("просто текст без таблицы") is None
+
+
+def test_to_markdown_and_html_roundtrip():
+    """Восстановленную таблицу надо уметь положить в хранилище: markdown для чата, html для рендера."""
+    from src.indexing.table_recovery import to_html, to_markdown
+
+    rows = [["Наименование", "Кол"], ["Блок детектирования", "4"]]
+    md = to_markdown(rows)
+    assert md.splitlines()[0] == "| Наименование | Кол |"
+    assert md.splitlines()[1] == "|---|---|"
+    assert "| Блок детектирования | 4 |" in md
+    assert table_from_markdown(md).rows == rows
+
+    html = to_html(rows)
+    assert "<th>Наименование</th>" in html and "<td>4</td>" in html
+    assert "<tbody>" in html and "</table>" in html

@@ -26,6 +26,8 @@ from src.indexing.table_recovery import (
     RecoveredTable,
     SOURCE_OCCULAR_GRID,
     cells_from_grid_annotated,
+    to_html,
+    to_markdown,
 )
 from src.indexing.vlm_tables import get_vlm_tables_config, recognize_table
 
@@ -174,3 +176,60 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
                 "seconds": round(time.time() - started, 1)}
     return {"tables": [table], "technique": "vlm", "reason": f"{reason}; {vlm_reason}",
             "seconds": round(time.time() - started, 1)}
+
+
+# Расширения картинок: для них нет текстового слоя, поэтому таблицу может дать только OCR и модель зрения.
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".tif", ".bmp")
+
+
+def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optional[Dict[str, Any]] = None
+                                      ) -> Dict[str, Any]:
+    """Восстановить таблицы для документа-картинки и вписать их в разбор документа.
+
+    Зачем именно так: дальше по конвейеру уже работает `_save_document_tables` — он берёт
+    `parsed.pages[].tables` и сохраняет их в document_tables + строчный слой. Поэтому восстановленные
+    таблицы достаточно положить в тот же разбор: не нужен отдельный путь записи, а провенанс
+    (`extraction_method` = occular-table / vlm-<модель>) сохраняется штатно.
+    """
+    from pathlib import Path
+
+    path = Path(file_path)
+    if path.suffix.lower() not in IMAGE_SUFFIXES:
+        return {"applied": False, "reason": "не картинка — этот путь только для изображений",
+                "saved": 0}
+
+    pages = getattr(parsed, "pages", None) or []
+    if not pages:
+        return {"applied": False, "reason": "в разборе документа нет страниц", "saved": 0}
+
+    try:
+        image = path.read_bytes()
+    except Exception as e:  # noqa: BLE001
+        return {"applied": False, "reason": f"файл не прочитан: {e}", "saved": 0}
+
+    report = recover_tables(image, page=getattr(pages[0], "page_num", 1) or 1, config=config)
+    if not report["tables"]:
+        return {"applied": False, "reason": report["reason"], "saved": 0, "seconds": report["seconds"]}
+
+    page = pages[0]
+    tables = getattr(page, "tables", None)
+    if tables is None:
+        tables = []
+        try:
+            page.tables = tables
+        except Exception:  # noqa: BLE001
+            return {"applied": False, "reason": "в разборе страницы нельзя записать таблицы", "saved": 0}
+
+    for table in report["tables"]:
+        tables.append({
+            "rows": table.rows,
+            "headers": table.rows[0] if table.rows else [],
+            "quality": 0.6,                     # распознавание моделью/OCR: качество ниже, чем у текстового PDF
+            "markdown": to_markdown(table.rows),
+            "html": to_html(table.rows),
+            "bbox": list(table.bbox or []),
+            "extraction_method": (f"vlm-{table.source_model}" if table.source == "vlm" else "occular-table"),
+        })
+    logger.info(f"[tables] восстановлено таблиц для картинки: {len(report['tables'])} ({report['reason']})")
+    return {"applied": True, "saved": len(report["tables"]), "technique": report["technique"],
+            "reason": report["reason"], "seconds": report["seconds"]}

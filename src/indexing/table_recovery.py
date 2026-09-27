@@ -156,3 +156,26 @@ def table_from_markdown(markdown: str, source_model: str = "", page: int = 0) ->
     width = max(len(r) for r in rows)
     rows = [r + [""] * (width - len(r)) for r in rows]
     return RecoveredTable(rows=rows, source=SOURCE_VLM, source_model=source_model, page=page)
+
+def to_markdown(rows: List[List[str]]) -> str:
+    """Собрать markdown-таблицу из ячеек (её читает и чат, и табличный слой)."""
+    if not rows:
+        return ""
+    width = max(len(r) for r in rows)
+    rows = [list(r) + [""] * (width - len(r)) for r in rows]
+    head = "| " + " | ".join(str(c).replace("|", "\\|") for c in rows[0]) + " |"
+    sep = "|" + "|".join(["---"] * width) + "|"
+    body = ["| " + " | ".join(str(c).replace("|", "\\|") for c in r) + " |" for r in rows[1:]]
+    return "\n".join([head, sep] + body)
+
+
+def to_html(rows: List[List[str]]) -> str:
+    """Собрать HTML-таблицу: первая строка — шапка (так же устроены таблицы из парсера)."""
+    if not rows:
+        return ""
+    import html as _html
+
+    head = "".join(f"<th>{_html.escape(str(c))}</th>" for c in rows[0])
+    body = "".join("<tr>" + "".join(f"<td>{_html.escape(str(c))}</td>" for c in r) + "</tr>"
+                   for r in rows[1:])
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"

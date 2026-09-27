@@ -200,3 +200,52 @@ def test_settings_update_keeps_other_table_keys():
 def test_settings_update_ignores_empty_changes():
     cfg = vlm_tables.apply_settings_update({"vlm_tables_enabled": True}, {"enabled": None, "model": None})
     assert cfg == {"vlm_tables_enabled": True}
+
+
+class _FakePage:
+    def __init__(self, page_num=1):
+        self.page_num = page_num
+        self.tables = []
+
+
+class _FakeParsed:
+    def __init__(self):
+        self.pages = [_FakePage()]
+
+
+def test_recovered_table_is_written_into_document_parse(tmp_path):
+    """Восстановленные таблицы кладём в разбор документа: дальше их сохраняет штатный путь."""
+    from src.indexing import table_strategy
+    from src.indexing.table_recovery import RecoveredTable
+
+    image = tmp_path / "page.png"
+    image.write_bytes(b"PNG")            # содержимое неважно: схему подменяем ниже
+    parsed = _FakeParsed()
+    table = RecoveredTable(rows=[["Наименование", "Кол"], ["Блок", "4"]],
+                           source="vlm", source_model="kag-qwen2vl:2b")
+
+    orig = table_strategy.recover_tables
+    table_strategy.recover_tables = lambda image, page=0, config=None: {
+        "tables": [table], "technique": "vlm", "reason": "распознано", "seconds": 1.0}
+    try:
+        report = table_strategy.recover_tables_for_image_document(parsed, str(image), config={"enabled": True})
+    finally:
+        table_strategy.recover_tables = orig
+
+    assert report["applied"] is True and report["saved"] == 1
+    assert parsed.pages[0].tables, "таблица должна попасть в разбор документа"
+    saved = parsed.pages[0].tables[0]
+    assert saved["extraction_method"] == "vlm-kag-qwen2vl:2b"
+    assert saved["headers"] == ["Наименование", "Кол"]
+    assert saved["rows"] == [["Наименование", "Кол"], ["Блок", "4"]]
+    assert saved["markdown"].startswith("| Наименование")
+    assert "<th>Наименование</th>" in saved["html"]
+
+
+def test_non_image_document_is_skipped(tmp_path):
+    from src.indexing.table_strategy import recover_tables_for_image_document
+
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    report = recover_tables_for_image_document(_FakeParsed(), str(pdf))
+    assert report["applied"] is False and "не картинка" in report["reason"]
