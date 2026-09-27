@@ -1,0 +1,5 @@
+FROM /home/yartsevn/kag-eval/models/gguf/Qwen2-VL-2B-Instruct-Q4_K_M.gguf
+FROM /home/yartsevn/kag-eval/models/gguf/mmproj-Qwen2-VL-2B-Instruct-Q8_0.gguf
+PARAMETER temperature 0
+PARAMETER num_predict 4096
+PARAMETER stop "<|im_end|>"
