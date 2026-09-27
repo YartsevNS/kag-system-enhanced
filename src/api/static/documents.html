@@ -963,8 +963,9 @@ async function showDetail(docId) {
         <div><div class="detail-label">Создан</div><div class="detail-value">${new Date(d.created_at).toLocaleString('ru-RU')}</div></div>
       </div>
       <div class="modal-tags">${(d.tags||[]).length ? d.tags.map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">Нет тэгов</span>'}</div>
-      <div style="margin-top:16px;display:flex;gap:8px">
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
+        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">♻️ Переобработать</button>
         <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
       </div>`;
   } catch(e) {
@@ -973,6 +974,27 @@ async function showDetail(docId) {
 }
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+
+// Переобработка одного документа: разбор заново (текст, таблицы, векторы, граф).
+// Нужна кнопка именно тут, потому что раньше переобработать можно было только пакетно
+// (для документов в статусе «Ожидает») или через API — владелец искал и не находил.
+async function reindexDoc(id) {
+  if (!confirm('Переобработать этот документ?\n\nОн будет разобран заново: текст, таблицы, векторы и граф.\nДля картинок с таблицами обработка занимает до пары минут (распознавание моделью зрения).')) return;
+  toast('♻️ Переобработка запускается…');
+  try {
+    const r = await fetch(`${API}/upload/${id}/reindex`, {method:'POST', credentials:'include'});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось запустить'));
+    if (d.status === 'already_queued') {
+      toast('⚠️ ' + (d.message || 'Документ уже в очереди обработки'), true);
+    } else {
+      toast('✅ ' + (d.message || 'Переобработка поставлена в очередь'));
+      setTimeout(() => loadAll(true), 3000);      // статус обновится сам
+    }
+  } catch(e) {
+    toast('❌ ' + e.message, true);
+  }
+}
 
 async function delDoc(id) {
   if (!confirm('Удалить документ безвозвратно? Будут удалены файл, векторы и граф.')) return;
