@@ -59,10 +59,17 @@ COPY requirements.txt .
 
 # Python-зависимости + Occular (--no-deps: setup.py тянет torch+CUDA ~3.5 ГБ,
 # а OCR работает на onnxruntime) + pyctcdecode. chown — в этом же слое.
+#
+# torch ставим отдельно и ТОЛЬКО CPU-сборкой: он нужен Occular для восстановления ОБЪЕДИНЁННЫХ ячеек
+# таблиц (rowspan/colspan). Без него работает ONNX-путь — сетка строк и колонок без спанов: проверено
+# 27.09.2026 в контейнере («PyTorch-путь структуры недоступен (No module named 'torch'); откат на ONNX
+# split — сетка без объединённых ячеек»). Официальный CPU-индекс, без CUDA: иначе образ вырастает
+# на гигабайты и тянет ненужные драйверы.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --no-deps git+https://github.com/Bodhi42/Occular-ocr.git && \
     pip install --no-cache-dir pyctcdecode && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     chown -R kag:kag /opt/venv
 
 # Playwright Chromium: pip-пакет уже из requirements; здесь системные deps
@@ -77,7 +84,7 @@ RUN python -m playwright install --with-deps chromium && \
 # occular, веса на HF. reading_order раскладывается в occular/weights/reading_order/.
 # chown кэша — в этом же слое.
 RUN python -c "from huggingface_hub import hf_hub_download as d; r='Shivin11/occular-ocr'; \
-[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx']]; \
+[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx','table_struct_split_merge_v2.pt']]; \
 from occular import download_reading_order; download_reading_order(); \
 print('Occular weights preloaded')" && \
     chown -R kag:kag /app/.cache

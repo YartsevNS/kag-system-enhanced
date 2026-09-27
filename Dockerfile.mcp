@@ -9,7 +9,7 @@
 #   docker build -t kre44et/kag-mcp:2026.09.07 -f Dockerfile.mcp .
 #   docker push kre44et/kag-mcp:2026.09.07
 
-FROM kre44et/kag-base:2026.09.07
+FROM kre44et/kag-base:2026.09.27.3
 
 LABEL maintainer="KAG Team"
 LABEL description="KAG MCP Server (Model Context Protocol over HTTP)"
