@@ -44,8 +44,38 @@ def run_occular(image: str) -> Dict[str, Any]:
             "lines": len(lines), "text": " ".join(str(l.get("text") or "") for l in lines)}
 
 
+def _collect_strings(obj: Any, out: List[str], depth: int = 0) -> None:
+    """Собрать все строки из структуры результата (у чужих библиотек структура меняется между версиями)."""
+    if depth > 4 or len(out) > 5000:
+        return
+    if isinstance(obj, str):
+        if obj.strip():
+            out.append(obj)
+        return
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _collect_strings(v, out, depth + 1)
+        return
+    if isinstance(obj, (list, tuple, set)):
+        for v in obj:
+            _collect_strings(v, out, depth + 1)
+        return
+    for attr in ("text", "value", "ocr_text", "words", "ocr_words", "text_lines", "lines"):
+        v = getattr(obj, attr, None)
+        if v is not None and not callable(v):
+            _collect_strings(v, out, depth + 1)
+    for attr in ("to_dict", "dict", "as_dict", "model_dump"):
+        fn = getattr(obj, attr, None)
+        if callable(fn):
+            try:
+                _collect_strings(fn(), out, depth + 1)
+            except Exception:  # noqa: BLE001
+                pass
+            break
+
+
 def run_rdocs(image: str) -> Dict[str, Any]:
-    """RussianDocsOCR: конвейер отдаёт поля документа; берём весь распознанный текст строк."""
+    """RussianDocsOCR: структура результата зависит от версии — собираем строки обходом."""
     from document_processing import Pipeline  # type: ignore
 
     started = time.time()
@@ -53,15 +83,10 @@ def run_rdocs(image: str) -> Dict[str, Any]:
     results = pipeline.process_img(image)
     seconds = round(time.time() - started, 1)
     words: List[str] = []
-    for attr in ("ocr_words", "words", "text_lines", "lines"):
-        value = getattr(results, attr, None)
-        if value:
-            words.extend([str(w) for w in value])
+    _collect_strings(results, words)
     if not words:
-        for field in getattr(results, "fields", []) or []:
-            value = getattr(field, "value", None) or (field.get("value") if isinstance(field, dict) else None)
-            if value:
-                words.append(str(value))
+        words = [f"<результат типа {type(results).__name__}; атрибуты: "
+                 f"{[a for a in dir(results) if not a.startswith('_')][:14]}>"]
     return {"engine": "rdocs", "seconds": seconds, "lines": len(words), "text": " ".join(words)}
 
 
@@ -71,9 +96,23 @@ def run_paddle(image: str) -> Dict[str, Any]:
 
     started = time.time()
     engine = RapidOCR()
-    result, _ = engine(image)
+    out = engine(image)                      # в RapidOCR 3.x это единый объект, а не пара (result, elapsed)
+    if isinstance(out, tuple):
+        out = out[0]
     seconds = round(time.time() - started, 1)
-    texts = [str(item[1]) for item in (result or [])]
+    texts: List[str] = []
+    for attr in ("txts", "texts"):
+        v = getattr(out, attr, None)
+        if v:
+            texts = [str(x) for x in v]
+            break
+    if not texts and hasattr(out, "boxes") and getattr(out, "boxes", None) is not None:
+        texts = [str(x) for x in getattr(out, "txts", []) or []]
+    if not texts and isinstance(out, (list, tuple)):
+        texts = [str(item[1]) for item in out if isinstance(item, (list, tuple)) and len(item) > 1]
+    if not texts:
+        texts = [f"<результат типа {type(out).__name__}; атрибуты: "
+                 f"{[a for a in dir(out) if not a.startswith('_')][:14]}>"]
     return {"engine": "paddle", "seconds": seconds, "lines": len(texts), "text": " ".join(texts)}
 
 
