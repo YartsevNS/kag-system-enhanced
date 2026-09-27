@@ -179,3 +179,92 @@ def to_html(rows: List[List[str]]) -> str:
     body = "".join("<tr>" + "".join(f"<td>{_html.escape(str(c))}</td>" for c in r) + "</tr>"
                    for r in rows[1:])
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+class _CellsHTMLParser:
+    """Собирает строки и ячейки из HTML-таблицы (стандартная библиотека, без зависимостей).
+
+    Нужен, если модель зрения отвечает HTML: у него есть colspan/rowspan, которых markdown не умеет
+    выражать вовсе. Разметку модели нельзя считать идеальной, поэтому парсер терпимый: битые теги
+    просто не попадут в результат, а не сломают обработку.
+    """
+
+    def __init__(self) -> None:
+        from html.parser import HTMLParser
+
+        self.rows: List[List[str]] = []
+        self._row: List[str] = []
+        self._cell: List[str] = []
+        self._in_cell = False
+        self._span: List[int] = []
+        outer = self
+
+        class _Impl(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                if tag in ("td", "th"):
+                    outer._in_cell = True
+                    outer._cell = []
+                    span = 1
+                    for k, v in attrs or []:
+                        if k == "colspan":
+                            try:
+                                span = max(1, int(str(v).strip()))
+                            except (TypeError, ValueError):
+                                span = 1
+                    outer._span = [span]
+                elif tag == "tr":
+                    outer._row = []
+
+            def handle_endtag(self, tag):
+                if tag in ("td", "th") and outer._in_cell:
+                    outer._in_cell = False
+                    text = " ".join("".join(outer._cell).split())
+                    span = outer._span[0] if outer._span else 1
+                    outer._row.extend([text] + [""] * (span - 1))
+                elif tag == "tr" and outer._row:
+                    outer.rows.append(outer._row)
+                    outer._row = []
+
+            def handle_data(self, data):
+                if outer._in_cell:
+                    outer._cell.append(data)
+
+        self._impl = _Impl()
+
+    def feed(self, text: str) -> None:
+        try:
+            self._impl.feed(text or "")
+        except Exception:  # noqa: BLE001 — битая разметка не должна ломать обработку
+            pass
+        if self._row:
+            self.rows.append(self._row)
+            self._row = []
+
+
+def rows_from_html(text: str) -> List[List[str]]:
+    """Разобрать HTML-таблицу в строки и ячейки (colspan разворачиваем в пустые ячейки)."""
+    parser = _CellsHTMLParser()
+    parser.feed(text or "")
+    return [r for r in parser.rows if any(c for c in r)]
+
+
+def rows_from_json(text: str) -> List[List[str]]:
+    """Разобрать ответ модели вида JSON-массива строк (терпимо к обёртке и тексту вокруг)."""
+    import json
+
+    cleaned = (text or "").strip()
+    start, end = cleaned.find("["), cleaned.rfind("]")
+    if start < 0 or end < 0 or end <= start:
+        return []
+    try:
+        data = json.loads(cleaned[start:end + 1])
+    except Exception:  # noqa: BLE001
+        return []
+    rows: List[List[str]] = []
+    if isinstance(data, list):
+        for row in data:
+            if isinstance(row, list):
+                rows.append([str(c) for c in row])
+            elif isinstance(row, dict):
+                rows.append([str(v) for v in row.values()])
+    return rows

@@ -893,6 +893,18 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>Формат ответа модели</label>
+                    <select id="tables-vlm-format" onchange="saveTablesVlm()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                        <option value="json">JSON — строки таблицы (быстро и точно; по умолчанию)</option>
+                        <option value="html">HTML — умеет объединённые ячейки, но медленнее</option>
+                        <option value="markdown">markdown — компактнее, но объединённые ячейки теряются</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px">
+                        Замер 27.09.2026 на файле владельца: <strong>JSON — 28 с, 10 из 10 чисел</strong>,
+                        HTML — 146 с и те же 10 из 10, markdown — 43 с и таблицу не вернул.
+                    </div>
+                </div>
+                <div class="form-group">
                     <label>Таймаут вызова, мс</label>
                     <input type="number" id="tables-vlm-timeout" onchange="saveTablesVlm()" min="1000" max="1800000" step="1000"
                            style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
@@ -3292,6 +3304,7 @@ async function loadTablesVlm(check) {
     document.getElementById('tables-vlm-model').value = d.model || '';
     document.getElementById('tables-vlm-timeout').value = d.timeout_ms || 300000;
     document.getElementById('tables-vlm-api').value = d.api || 'ollama';
+    document.getElementById('tables-vlm-format').value = d.format || 'json';
     var html = d.enabled
       ? '<span style="color:var(--green)">опция включена — таблицы без линий пойдут в модель</span>'
       : '<span style="color:var(--text4)">опция выключена — такие страницы пропускаются</span>';
@@ -3307,7 +3320,8 @@ async function saveTablesVlm() {
     endpoint: document.getElementById('tables-vlm-endpoint').value.trim(),
     model: document.getElementById('tables-vlm-model').value.trim(),
     timeout_ms: parseInt(document.getElementById('tables-vlm-timeout').value) || 300000,
-    api: document.getElementById('tables-vlm-api').value || 'ollama'
+    api: document.getElementById('tables-vlm-api').value || 'ollama',
+    format: document.getElementById('tables-vlm-format').value || 'json'
   };
   try {
     var r = await fetch('/api/v1/admin/models/tables-vlm', {

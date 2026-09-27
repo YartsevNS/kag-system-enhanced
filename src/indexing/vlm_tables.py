@@ -27,7 +27,13 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-from src.indexing.table_recovery import RecoveredTable, SOURCE_VLM, table_from_markdown
+from src.indexing.table_recovery import (
+    RecoveredTable,
+    SOURCE_VLM,
+    rows_from_html,
+    rows_from_json,
+    table_from_markdown,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,18 @@ PROMPT = (
     "одна строка таблицы на одну строку изображения; повторять строки запрещено; если данные кончились — "
     "заверши ответ. Числа сохраняй точно, ничего не додумывай."
 )
+PROMPTS = {
+    "markdown": PROMPT,
+    "html": (
+        "Преобразуй изображение в HTML-таблицу. Правила: только разметка <table>, без пояснений; "
+        "заголовки в <thead><th>, данные в <tbody><td>; если ячейки объединены, используй "
+        "rowspan/colspan; числа сохраняй точно, ничего не додумывай."
+    ),
+    "json": (
+        "Преобразуй изображение в JSON-массив строк таблицы. Правила: только JSON, без пояснений "
+        "и без markdown-обёртки; первая строка — заголовки; числа сохраняй точно."
+    ),
+}
 STOP_SEQUENCES = ["\n\n", "```"]
 DEFAULT_TIMEOUT_MS = 300_000
 
@@ -60,6 +78,7 @@ def get_vlm_tables_config() -> Dict[str, Any]:
         "num_predict": 2048,
         "min_rows": 2,
         "api": "ollama",
+        "format": "markdown",
     }
     try:
         from src.indexing.tables_settings import get_tables_config
@@ -77,6 +96,9 @@ def get_vlm_tables_config() -> Dict[str, Any]:
         api = str(raw.get("vlm_tables_api") or "").strip().lower()
         if api in ("ollama", "openai"):
             cfg["api"] = api
+        fmt = str(raw.get("vlm_tables_format") or "").strip().lower()
+        if fmt in PROMPTS:
+            cfg["format"] = fmt
     except Exception as e:  # noqa: BLE001 — настройки недоступны, работаем выключенными
         logger.debug(f"[vlm-tables] настройки недоступны, опция выключена: {e}")
         cfg["enabled"] = False
@@ -116,9 +138,11 @@ def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, A
         return None, "модель зрения выключена в настройках табличного слоя — страница пропущена"
 
     started = time.time()
+    fmt = cfg.get("format", "markdown")
+    prompt = PROMPTS.get(fmt, PROMPT)
     payload = {
         "model": cfg["model"],
-        "prompt": PROMPT,
+        "prompt": prompt,
         "images": [base64.b64encode(image).decode()],
         "stream": False,
         "options": {
@@ -133,7 +157,7 @@ def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, A
         payload = {
             "model": cfg["model"],
             "messages": [{"role": "user", "content": [
-                {"type": "text", "text": PROMPT},
+                {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {
                     "url": "data:image/png;base64," + base64.b64encode(image).decode()}},
             ]}],
@@ -165,9 +189,18 @@ def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, A
             return None, "сервис вернул ответ неожиданного вида (нет choices[0].message.content)"
     else:
         markdown = data.get("response") or ""
-    table = table_from_markdown(markdown, source_model=cfg["model"], page=page)
+    if fmt == "html":
+        rows = rows_from_html(markdown)
+        table = RecoveredTable(rows=rows, source=SOURCE_VLM, source_model=cfg["model"],
+                               page=page) if rows else None
+    elif fmt == "json":
+        rows = rows_from_json(markdown)
+        table = RecoveredTable(rows=rows, source=SOURCE_VLM, source_model=cfg["model"],
+                               page=page) if rows else None
+    else:
+        table = table_from_markdown(markdown, source_model=cfg["model"], page=page)
     if table is None:
-        return None, "модель не вернула таблицу (в ответе нет markdown-таблицы)"
+        return None, f"модель не вернула таблицу (в ответе нет разметки формата {fmt})"
 
     rows, dropped = _drop_repeats(table.rows)
     table.rows = rows
@@ -187,13 +220,13 @@ def apply_settings_update(existing: Any, changes: Dict[str, Any]) -> Dict[str, A
     как есть — иначе сохранение этой опции выключило бы весь табличный стек.
     """
     cfg = dict(existing) if isinstance(existing, dict) else {}
-    for key in ("enabled", "endpoint", "model", "timeout_ms", "num_predict", "min_rows", "api"):
+    for key in ("enabled", "endpoint", "model", "timeout_ms", "num_predict", "min_rows", "api", "format"):
         value = changes.get(key)
         if value is None:
             continue
         if key == "enabled":
             cfg["vlm_tables_enabled"] = bool(value)
-        elif key in ("endpoint", "model", "api"):
+        elif key in ("endpoint", "model", "api", "format"):
             cfg[f"vlm_tables_{key}"] = str(value).strip()
         else:
             try:
@@ -214,6 +247,7 @@ def vlm_tables_status(check_service: bool = False) -> Dict[str, Any]:
         "num_predict": cfg["num_predict"],
         "min_rows": cfg["min_rows"],
         "api": cfg.get("api", "ollama"),
+        "format": cfg.get("format", "markdown"),
         "reachable": None,
         "model_present": None,
         "detail": "",

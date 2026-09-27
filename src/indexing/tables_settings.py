@@ -88,6 +88,12 @@ DEFAULTS: Dict[str, Any] = {
     # OpenAI-совместимый (/v1/chat/completions): так работают llama.cpp server, vLLM, LM Studio и
     # большинство внешних VL-API. Проверено 27.09.2026: llama-server на 41 отвечает по этому протоколу.
     "vlm_tables_api": "ollama",
+    # Формат ответа модели: markdown | html | json. ЗАМЕР 27.09.2026 (файл владельца, Qwen2-VL-2B,
+    # scripts/vlm_format_compare.py): markdown — 43 с и 0 из 10 чисел (в том прогоне таблицу не
+    # вернул вовсе); html — 146 с, 10 из 10 чисел; json — 28 с, 10 из 10 чисел. Победил JSON: та же
+    # точность, что у HTML, но в пять раз быстрее и компактнее. HTML остаётся вариантом для случаев,
+    # где важны объединённые ячейки (rowspan/colspan он выражает, JSON — нет).
+    "vlm_tables_format": "json",
 }
 
 

@@ -2370,6 +2370,8 @@ class TablesVlmRequest(BaseModel):
     min_rows: Optional[int] = None
     # Протокол обращения: ollama (свой API) или openai (OpenAI-совместимый: llama.cpp, vLLM, внешние API)
     api: Optional[str] = None
+    # Формат ответа модели: markdown | html | json (замер: json — 28 с и 10 из 10 чисел, html — 146 с)
+    format: Optional[str] = None
 
 
 @router.get("/tables-vlm", summary="Опция «таблицы через VL-модель»: настройки и состояние")
