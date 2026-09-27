@@ -950,6 +950,11 @@ async function showDetail(docId) {
     document.getElementById('modal-title').textContent = d.recognized_title || d.filename;
     const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
     document.getElementById('modal-body').innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">♻️ Переобработать</button>
+        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+      </div>
       <img class="modal-thumb" src="${API}/upload/${docId}/thumbnail" onerror="this.style.display='none'" alt="Миниатюра">
       <div class="detail-grid">
         <div><div class="detail-label">Файл</div><div class="detail-value">${d.filename}</div></div>
@@ -967,7 +972,9 @@ async function showDetail(docId) {
         <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
         <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">♻️ Переобработать</button>
         <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
-      </div>`;
+      </div>
+      <div id="modal-tables" style="margin-top:14px"></div>`;
+    loadDocTables(d.document_id);      // таблицы подгружаем отдельно, чтобы карточка открывалась сразу
   } catch(e) {
     document.getElementById('modal-body').innerHTML = `<div style="color:var(--red);text-align:center;padding:20px">Ошибка: ${e.message}</div>`;
   }
@@ -1235,7 +1242,55 @@ function logout() {
 
 function ocrLink(d) {
   if (d.status !== 'completed') return '<span style="color:var(--text4);font-size:11px">—</span>';
-  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>';
+  // Две ссылки: открыть распознанный Markdown и переобработать документ заново.
+  // Переобработка была доступна только через API — владелец искал её и не находил,
+  // поэтому действие продублировано прямо в списке (не нужно открывать карточку).
+  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>'
+       + ' <a href="#" onclick="reindexDoc(\'' + d.document_id + '\');return false" title="Переобработать документ (разобрать заново: текст, таблицы, векторы, граф)" style="color:var(--accent);font-size:12px;text-decoration:none">♻️</a>';
+}
+
+// Экранирование для таблиц документа (в ячейках бывает что угодно — «<», кавычки, амперсанды).
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Таблицы документа в карточке: то, что восстановил разбор (свой OCR или модель зрения).
+// Раньше карточка показывала только метаданные, и восстановленную таблицу увидеть было негде.
+async function loadDocTables(id) {
+  const box = document.getElementById('modal-tables');
+  if (!box) return;
+  try {
+    const r = await fetch(`${API}/upload/${id}/tables`, {credentials: 'include'});
+    const d = await r.json();
+    const tables = (d && d.tables) || [];
+    if (!tables.length) {
+      box.innerHTML = '<div class="detail-label" style="margin-bottom:4px">Таблицы документа</div>'
+        + '<div style="font-size:12px;color:var(--text4)">Таблиц нет. Для картинок и сканов таблицу восстанавливает '
+        + 'отдельный шаг разбора: сначала свой OCR, а если он таблиц не нашёл — модель зрения (включается в админке).</div>';
+      return;
+    }
+    let html = '<div class="detail-label" style="margin-bottom:6px">Таблицы документа: ' + tables.length + '</div>';
+    tables.forEach((t, i) => {
+      const heads = t.headers || [];
+      const rows = t.rows || [];
+      html += '<div style="border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px;overflow:auto">'
+        + '<div style="font-size:11px;color:var(--text4);margin-bottom:6px">Таблица ' + (i + 1)
+        + ' · страница ' + (t.page_num || 1)
+        + ' · строк ' + (t.row_count || rows.length)
+        + ' · качество ' + (t.quality != null ? t.quality : '—')
+        + ' · распознано: ' + escHtml(t.model || '—') + '</div>'
+        + '<table style="border-collapse:collapse;font-size:12px;min-width:100%">';
+      if (heads.length) {
+        html += '<thead><tr>' + heads.map(h => '<th style="border:1px solid var(--border);padding:4px 6px;text-align:left;background:var(--surface2)">' + escHtml(h) + '</th>').join('') + '</tr></thead>';
+      }
+      html += '<tbody>' + rows.slice(0, 12).map(rr => '<tr>' + (rr || []).map(c => '<td style="border:1px solid var(--border);padding:4px 6px;vertical-align:top">' + escHtml(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+      if (rows.length > 12) html += '<div style="font-size:11px;color:var(--text4);margin-top:4px">показаны первые 12 строк из ' + rows.length + '</div>';
+      html += '</div>';
+    });
+    box.innerHTML = html;
+  } catch(e) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--text4)">Таблицы не удалось загрузить: ' + escHtml(e.message) + '</div>';
+  }
 }
 // ── Блокировка обработки (управляется из админки) ─────────────────────
 let processingBlocked = false;
