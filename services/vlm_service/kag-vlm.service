@@ -1,0 +1,19 @@
+[Unit]
+Description=KAG VLM service (Qwen2-VL, распознавание таблиц со сканов)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/kag-eval/vlm_service
+Environment=VLM_THREADS=16
+Environment=VLM_MAX_IMAGE_SIDE=1600
+Environment=VLM_MAX_NEW=4096
+Environment=HF_HOME=%h/kag-eval/models
+ExecStart=%h/kag-eval/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8011
+Restart=always
+RestartSec=5
+# Загрузка модели занимает время, даём сервису спокойно подняться
+TimeoutStartSec=600
+
+[Install]
+WantedBy=default.target

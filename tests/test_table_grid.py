@@ -46,7 +46,7 @@ def test_wide_line_is_split_across_columns_and_recognized_per_part():
 def test_without_recognizer_wide_line_keeps_text_in_center_column():
     lines = [{"text": "796 шт 796 шт", "quad": [[5, 25], [295, 25], [295, 35], [5, 35]]}]
     table = fill_cells(object(), _grid(), lines, recognize_cells=None)
-    assert table.rows[1][0] == "796 шт 796 шт"          # данные не потеряны
+    assert "796 шт 796 шт" in table.rows[1]              # данные не потеряны (колонка — по перекрытию)
     assert "разрезано" not in " ".join(table.notes)
 
 
@@ -89,11 +89,40 @@ def test_split_uses_full_document_column_set():
     assert table.rows[0][2] == "часть2"
 
 
-def test_split_capped_for_very_wide_lines():
-    """Слишком широкую строку (больше предела колонок) не режем — иначе теряем текст."""
-    grid = Grid(rows=[(0.0, 20.0)], row_lines=[[0.0, 800.0]], lines_h=[0.0, 20.0],
-                lines_v=[float(x) for x in range(0, 900, 100)], bbox=(0.0, 0.0, 800.0, 20.0))
-    lines = [{"text": "заголовок на всю таблицу", "quad": [[5, 5], [795, 5], [795, 15], [5, 15]]}]
-    table = fill_cells(object(), grid, lines, recognize_cells=lambda i, q: [("x", 1.0)] * len(q),
-                       split_lines=[float(x) for x in range(0, 900, 100)])
-    assert table.rows[0][0] == "заголовок на всю таблицу"
+def test_split_uses_all_boundaries_when_text_has_spaces():
+    """Предела «не больше N колонок» больше нет: строка с пробелами режется по всем границам.
+
+    Ограничение теперь не по числу колонок, а по смыслу: режем только там, где в тексте пробел. Так строка
+    заголовка с пробелами корректно раскладывается по колонкам, а число, разрезанное линией, — нет.
+    """
+    cut = [0.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0]
+    grid = Grid(rows=[(10.0, 60.0)], row_lines=[cut], lines_h=[10.0, 60.0], lines_v=cut,
+                bbox=(0.0, 10.0, 700.0, 60.0))
+    lines = [{"text": "а б в г д е ж", "quad": [[0, 20], [700, 20], [700, 50], [0, 50]]}]
+    seen_quads = []
+
+    def fake_recognize(image, quads):
+        seen_quads.extend(quads)
+        return [(f"к{len(seen_quads)}", 0.9) for _ in quads]
+
+    table = fill_cells(None, grid, lines, recognize_cells=fake_recognize)
+    assert len(seen_quads) == 7, f"ожидалось 7 кусков, получено {len(seen_quads)}"
+    assert all(table.rows[0])                        # каждая колонка заполнена
+
+
+def test_boundary_inside_number_does_not_split():
+    """Граница внутри числа не режет: «18 ^ 06.652» остаётся одной ячейкой (целиком в колонке перекрытия)."""
+    cut = [0.0, 100.0, 200.0]
+    grid = Grid(rows=[(10.0, 60.0)], row_lines=[cut], lines_h=[10.0, 60.0], lines_v=cut,
+                bbox=(0.0, 10.0, 200.0, 60.0))
+    line = {"text": "18.652", "quad": [[40, 20], [160, 20], [160, 50], [40, 50]]}
+    calls = []
+
+    def fake_recognize(image, quads):
+        calls.extend(quads)
+        return [("не должно вызываться", 0.5)]
+
+    table = fill_cells(None, grid, [line], recognize_cells=fake_recognize)
+    assert not calls, "число разрезано, хотя граница попала внутрь него"
+    assert "18.652" in table.rows[0]
+

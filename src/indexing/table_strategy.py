@@ -230,9 +230,9 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
         import numpy as np
 
         try:
-            from src.indexing.table_grid import SCALE, detect_grid, fill_cells
+            from src.indexing.table_grid import detect_grid, fill_cells
         except ModuleNotFoundError:      # проверка рядом со скриптом (модули лежат в data)
-            from table_grid import SCALE, detect_grid, fill_cells
+            from table_grid import detect_grid, fill_cells
     except Exception as e:  # noqa: BLE001
         return [], f"сетка по линиям недоступна: {type(e).__name__}: {str(e)[:80]}"
 
@@ -241,27 +241,34 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
         return [], "не удалось прочитать изображение"
 
     started = time.time()
-    grid, scaled = detect_grid(array)
+    grid, prepared = detect_grid(array)
     if grid is None:
         return [], f"линий сетки не найдено за {time.time() - started:.2f} с (не бланк с линиями)"
 
-    lines = list(raw_lines) if raw_lines is not None else _raw_lines_from_occular(image)
+    # Распознавание идёт по ТОМУ ЖЕ изображению, что и сетка: страница уже выровнена, увеличение применено —
+    # поэтому координаты строк и координаты сетки совпадают (на наклонённом скане это иначе ломает разбор).
+    scale = float(grid.scale or 1.0)
+    if raw_lines is None:
+        ok, buf = cv2.imencode(".png", prepared)
+        lines = _raw_lines_from_occular(buf.tobytes() if ok else image)
+        scale = 1.0                     # строки получены уже в системе координат сетки
+    else:
+        lines = list(raw_lines)         # координаты извне — переводим в масштаб сетки
     if not lines:
         return [], "строки распознавания не получены"
 
-    # Координаты строк переводим в масштаб сетки: сетку строим на увеличенном изображении.
     scaled_lines = []
     for line in lines:
         quad = line.get("quad")
         if quad is None:
             continue
         try:
-            arr = np.asarray(quad, dtype=np.float32).reshape(-1, 2) * SCALE
+            arr = np.asarray(quad, dtype=np.float32).reshape(-1, 2) * scale
         except Exception:  # noqa: BLE001
             continue
         scaled_lines.append({"text": line["text"], "quad": arr.tolist()})
 
-    table = fill_cells(scaled, grid, scaled_lines, recognize_cells=make_cell_recognizer())
+    table = fill_cells(prepared, grid, scaled_lines, recognize_cells=make_cell_recognizer())
     table.seconds = round(time.time() - started, 1)
     reason = (f"сетка по линиям: {grid.n_rows} строк × до {grid.max_cols} колонок, "
               f"качество {table.quality:.2f}, {time.time() - started:.1f} с")
