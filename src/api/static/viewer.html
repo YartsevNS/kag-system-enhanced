@@ -897,36 +897,6 @@ async function saveEdit() {
   }
 }
 
-</script>
-<!-- Модалка редактирования -->
-<div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>✏️ Изменить документ</h2>
-      <button class="modal-close" onclick="closeEditModal()">×</button>
-    </div>
-    <div class="modal-body">
-      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Название</label>
-      <input type="text" id="edit-name" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px">
-      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Тип документа</label>
-      <select id="edit-type" onchange="onTypeChange()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
-      <div id="edit-type-add" style="display:none;align-items:center;gap:8px;margin:-6px 0 14px">
-        <input type="text" id="edit-type-new" placeholder="Название нового типа" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
-        <button class="btn" onclick="addDocType()">Добавить</button>
-        <span id="edit-type-status" style="font-size:12px;color:var(--text4)"></span>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn btn-accent" onclick="saveEdit()">💾 Сохранить</button>
-        <button class="btn" onclick="closeEditModal()">Отмена</button>
-        <span id="edit-status" style="font-size:12px;color:var(--text4)"></span>
-      </div>
-    </div>
-  </div>
-</div>
-<script src="/static/branding.js"></script>
-</body>
-</html>
-
 // ── Таблицы документа в просмотрщике ────────────────────────────────────────────────────────
 function viewerEsc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -975,3 +945,33 @@ if (docId) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadViewerTables);
   else loadViewerTables();
 }
+</script>
+<!-- Модалка редактирования -->
+<div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>✏️ Изменить документ</h2>
+      <button class="modal-close" onclick="closeEditModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Название</label>
+      <input type="text" id="edit-name" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px">
+      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Тип документа</label>
+      <select id="edit-type" onchange="onTypeChange()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
+      <div id="edit-type-add" style="display:none;align-items:center;gap:8px;margin:-6px 0 14px">
+        <input type="text" id="edit-type-new" placeholder="Название нового типа" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+        <button class="btn" onclick="addDocType()">Добавить</button>
+        <span id="edit-type-status" style="font-size:12px;color:var(--text4)"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn btn-accent" onclick="saveEdit()">💾 Сохранить</button>
+        <button class="btn" onclick="closeEditModal()">Отмена</button>
+        <span id="edit-status" style="font-size:12px;color:var(--text4)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/branding.js"></script>
+</body>
+</html>
+
