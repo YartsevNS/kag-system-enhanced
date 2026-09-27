@@ -367,7 +367,9 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
             "row_count": _data_rows,
             "col_count": table.n_cols,
             "complex": False,
-            "quality": 0.6,                     # распознавание моделью/OCR: качество ниже, чем у текстового PDF
+            # Честное качество разбора (было жёстко 0.6 — из-за этого мусорный разбор выглядел как
+            # полноценный и попадал во фрагменты, поиск и страницу «Чанки»).
+            "quality": round(float(getattr(table, "quality", 0.0) or 0.0), 3),
             "markdown": to_markdown(table.rows),
             "html": to_html(table.rows),
             "bbox": list(table.bbox or []),

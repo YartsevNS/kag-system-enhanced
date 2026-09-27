@@ -586,6 +586,12 @@ class DocumentService:
                 except Exception as _e:
                     logger.debug(f"восстановление таблиц для картинки не выполнено: {_e}")
 
+                # Порог качества разбора таблицы: ниже — во фрагменты не отдаём. Иначе страница «Чанки»,
+                # поиск и выдача получают «полную ерунду» из кусков ячеек (найдено 27.09.2026 на скане
+                # накладной: фрагменты вида «| Рама Pro MS 20x10 18 531299006458 |  |  |  | 796 | ия |»).
+                # Разбор остаётся в табличном слое (карточка, просмотрщик) с честным качеством, а текст
+                # документа формируется обычным распознаванием, как и было.
+                TABLE_FRAGMENT_MIN_QUALITY = 0.65
                 segments = []
                 # Сквозная нумерация таблиц по документу: page.tables начинается заново на
                 # каждой странице, поэтому номер таблицы на странице не годится как часть id —
@@ -615,7 +621,8 @@ class DocumentService:
                         _tid = make_table_id(document_id, page.page_num, _ti)
                         _table_seq += 1
                         md = tb.get('markdown', '')
-                        if md:
+                        _q = tb.get('quality')
+                        if md and (_q is None or float(_q) >= TABLE_FRAGMENT_MIN_QUALITY):
                             segments.append({
                                 "type": "table",
                                 "content": md,
