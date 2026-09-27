@@ -568,6 +568,24 @@ class DocumentService:
                 parsed = hybrid.parse_pymupdf_first(str(file_path)) or hybrid.parse_ocular_only(str(file_path))
                 if not parsed:
                     raise ValueError("PyMuPDF/Occular недоступны")
+                # ── Таблицы картинок и сканов: восстановление ДО сборки сегментов ──────────────
+                # ВАЖНО (найдено 27.09.2026): раньше восстановление стояло в конце конвейера, уже
+                # ПОСЛЕ сборки сегментов, поэтому восстановленная таблица попадала только в табличный
+                # слой (document_tables) и не становилась «табличным фрагментом» — её не было ни в
+                # поиске, ни на странице «Чанки». Теперь таблица восстанавливается здесь и дальше
+                # проходит ровно тот же путь, что таблица из PDF: отдельный сегмент с is_table=True,
+                # markdown в Qdrant, строки в document_tables.
+                try:
+                    from src.indexing.table_strategy import recover_tables_for_image_document
+
+                    _rec = recover_tables_for_image_document(parsed, str(file_path))
+                    if _rec.get("applied"):
+                        logger.info(f"{document_id}: восстановлено таблиц {_rec['saved']} ({_rec['reason']})")
+                    elif _rec.get("reason"):
+                        logger.debug(f"{document_id}: таблицы не восстановлены — {_rec['reason']}")
+                except Exception as _e:
+                    logger.debug(f"восстановление таблиц для картинки не выполнено: {_e}")
+
                 segments = []
                 # Сквозная нумерация таблиц по документу: page.tables начинается заново на
                 # каждой странице, поэтому номер таблицы на странице не годится как часть id —
@@ -925,21 +943,6 @@ class DocumentService:
             # их в SQL: rows (2D), html — для точных запросов («что в строке X
             # колонки Y») и рендера в чате. См. src/database/document_table_models.py
             #
-            # Для КАРТИНОК таблиц в разборе нет вовсе (у них нет текстового слоя), поэтому сначала
-            # восстановление схемой: свой Occular (детерминированно, с объединёнными ячейками), а если он
-            # таблиц не нашёл — модель зрения, НО только когда опция включена в админке. Выключенная опция
-            # ничего не вызывает: страница просто пропускается (решение владельца 27.09.2026).
-            try:
-                from src.indexing.table_strategy import recover_tables_for_image_document
-
-                rec = recover_tables_for_image_document(parsed, str(file_path))
-                if rec.get("applied"):
-                    logger.info(f"{document_id}: восстановлено таблиц {rec['saved']} ({rec['reason']})")
-                elif rec.get("reason"):
-                    logger.debug(f"{document_id}: таблицы не восстановлены — {rec['reason']}")
-            except Exception as e:
-                logger.debug(f"восстановление таблиц для картинки не выполнено: {e}")
-
             try:
                 self._save_document_tables(document_id, parsed)
             except Exception as e:

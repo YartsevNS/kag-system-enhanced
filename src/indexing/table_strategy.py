@@ -221,9 +221,15 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
             return {"applied": False, "reason": "в разборе страницы нельзя записать таблицы", "saved": 0}
 
     for table in report["tables"]:
+        _data_rows = max(0, len(table.rows) - 1)          # без строки-шапки, как в document_tables
         tables.append({
             "rows": table.rows,
             "headers": table.rows[0] if table.rows else [],
+            # Поля ниже ждёт этап сборки сегментов (chunk_type=table): без них от таблицы в метаданных
+            # фрагмента остались бы нули.
+            "row_count": _data_rows,
+            "col_count": table.n_cols,
+            "complex": False,
             "quality": 0.6,                     # распознавание моделью/OCR: качество ниже, чем у текстового PDF
             "markdown": to_markdown(table.rows),
             "html": to_html(table.rows),
