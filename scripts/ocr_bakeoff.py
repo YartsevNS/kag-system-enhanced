@@ -41,8 +41,24 @@ def run_occular(image: str) -> Dict[str, Any]:
     data = pathlib.Path(image).read_bytes()
     started = time.time()
     lines = _raw_lines_from_occular(data)
-    return {"engine": "occular", "seconds": round(time.time() - started, 1),
-            "lines": len(lines), "text": " ".join(str(l.get("text") or "") for l in lines)}
+    return {"engine": "occular", "seconds": round(time.time() - started, 1), "lines": lines,
+            "text": " ".join(str(l.get("text") or "") for l in lines)}
+
+
+def run_service_ocr(image: str, base_url: str = "http://192.168.50.41:8020/ocr") -> Dict[str, Any]:
+    """Распознавание через службу на 41 (PP-OCRv5 cyrillic). Строки — с рамками, как у Occular."""
+    import json
+    import urllib.request
+
+    data = pathlib.Path(image).read_bytes()
+    started = time.time()
+    req = urllib.request.Request(base_url, data=data, headers={"Content-Type": "image/png"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        payload = json.loads(r.read().decode())
+    seconds = round(time.time() - started, 1)
+    lines = payload.get("lines") or []
+    return {"engine": payload.get("engine", "service"), "seconds": seconds, "lines": lines,
+            "text": " ".join(str(l.get("text") or "") for l in lines)}
 
 
 def _collect_strings(obj: Any, out: List[str], depth: int = 0) -> None:
@@ -165,7 +181,34 @@ def run_paddle(image: str) -> Dict[str, Any]:
             "lines": len(texts), "text": " ".join(texts)}
 
 
-ENGINES = {"occular": run_occular, "rdocs": run_rdocs, "paddle": run_paddle}
+ENGINES = {"occular": run_occular, "rdocs": run_rdocs, "paddle": run_paddle, "service": run_service_ocr}
+
+
+def acceptance(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Приёмка: сколько строк таблицы проходит арифметику (количество × цена = стоимость).
+
+    Используем тот же путь, что и прод: recognize_grid_tables (сетка по линиям + распознавание ячеек), только с
+    переданными строками OCR (occular / service). Затем table_validate считает расхождения.
+    """
+    from src.indexing.table_strategy import recognize_grid_tables
+    from src.indexing.table_validate import check_table
+
+    lines = result.get("lines") or []
+    image = result.get("image") or ""
+    if not lines:
+        return {"checked": 0, "ok": 0, "mismatch": 0, "verdict": "нет строк"}
+    try:
+        data = pathlib.Path(image).read_bytes()
+        tables, reason = recognize_grid_tables(data, raw_lines=lines)
+        if not tables:
+            return {"checked": 0, "ok": 0, "mismatch": 0, "verdict": f"таблица не собрана: {reason}"}
+        table = tables[0]
+        verdict = check_table(table.rows, header_rows=1)
+        return {"checked": verdict.checked, "ok": verdict.ok, "mismatch": verdict.mismatch,
+                "verdict": verdict.verdict, "quality": getattr(table, "quality", 0.0),
+                "reason": reason}
+    except Exception as e:  # noqa: BLE001
+        return {"checked": 0, "ok": 0, "mismatch": 0, "verdict": f"{type(e).__name__}: {str(e)[:120]}"}
 
 
 def score(result: Dict[str, Any]) -> Dict[str, Any]:
