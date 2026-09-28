@@ -1,0 +1,16 @@
+[Unit]
+Description=KAG OCR service (PP-OCRv5 cyrillic, RapidOCR/ONNX, CPU)
+After=network.target
+
+[Service]
+Type=simple
+User=yartsevn
+WorkingDirectory=/home/yartsevn/ocr-bakeoff
+ExecStart=/home/yartsevn/ocr-bakeoff/.venv/bin/python /home/yartsevn/ocr-bakeoff/ocr_service.py --port 8020 --lang cyrillic --warmup
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/yartsevn/ocr-bakeoff/ocr_service.log
+StandardError=append:/home/yartsevn/ocr-bakeoff/ocr_service.log
+
+[Install]
+WantedBy=multi-user.target
