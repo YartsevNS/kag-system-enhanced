@@ -1087,13 +1087,15 @@ class KnowledgeGraphService:
                             if dup["node_id"] not in self._resolution_plan and keeper["node_id"] != dup["node_id"]:
                                 self._resolution_plan[dup["node_id"]] = keeper["node_id"]
                         elif sim >= 0.85 and len(ei["name"]) >= 4 and len(ej["name"]) >= 4:
-                            # Серая зона → кандидат на LLM-верификацию
-                            if ei["node_id"] not in self._resolution_plan and ej["node_id"] not in self._resolution_plan:
-                                self._resolution_candidates.append({
-                                    "a_id": ei["node_id"], "a_name": ei["name"], "a_type": ei["type"],
-                                    "b_id": ej["node_id"], "b_name": ej["name"], "b_type": ej["type"],
-                                    "sim": round(sim, 3),
-                                })
+                            # Серая зона (0.85-0.95) — НЕ отправляем на модерацию.
+                            # Решение владельца (03.10.2026): «проценты точно сравнивать не
+                            # требуется, если точно не совпадают». В pending должны попадать
+                            # только пары, где сигнал сильный (>=0.95 после guard'ов) либо
+                            # инициалы (ниже). Серая зона давала сотни сомнительных пар
+                            # (956 в базе), которые человек обязан пересматривать вручную,
+                            # а точного совпадения в них нет. LLM-верификация больше не
+                            # вызывается для этих кандидатов: бюджет на неё уходил впустую.
+                            pass
                         elif sim < 0.85:
                             # Ниже порога — но может быть АББРЕВИАТУРА («ЦБ» = «Банк России»?
                             # нет — «ЦБ» = «Центральный банк»). Проверяем: одно имя —
