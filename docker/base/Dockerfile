@@ -57,19 +57,22 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Python-зависимости + Occular (--no-deps: setup.py тянет torch+CUDA ~3.5 ГБ,
-# а OCR работает на onnxruntime) + pyctcdecode. chown — в этом же слое.
+# Python-зависимости + движок OCR. chown — в этом же слое.
 #
-# torch ставим отдельно и ТОЛЬКО CPU-сборкой: он нужен Occular для восстановления ОБЪЕДИНЁННЫХ ячеек
-# таблиц (rowspan/colspan). Без него работает ONNX-путь — сетка строк и колонок без спанов: проверено
-# 27.09.2026 в контейнере («PyTorch-путь структуры недоступен (No module named 'torch'); откат на ONNX
-# split — сетка без объединённых ячеек»). Официальный CPU-индекс, без CUDA: иначе образ вырастает
-# на гигабайты и тянет ненужные драйверы.
+# Occular (и его torch ~0,9 ГБ + pyctcdecode) из образа УБРАН: текст и ячейки распознаёт PP-OCRv5
+# (RapidOCR/ONNX, Apache-2.0) — либо службой на сервере моделей, либо локально этим же движком.
+# Замер 03.10.2026 на одном хосте (накладная): PP-OCRv5 28,0 с и 4 контрольных числа против 43,9 с и
+# 3 чисел у Occular; лицензия Apache-2.0 вместо OpenRAIL-M. Локальный движок оставлен запасным
+# путём: если служба недоступна, скан всё равно распознаётся, а не теряется.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --no-deps git+https://github.com/Bodhi42/Occular-ocr.git && \
-    pip install --no-cache-dir pyctcdecode && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir rapidocr && \
+    (pip uninstall -y opencv-python || true) && \
+    pip install --no-cache-dir --force-reinstall --no-deps opencv-python-headless==4.12.0.88 && \
+    python -c "from rapidocr import RapidOCR; from rapidocr.utils.typings import LangRec, ModelType, OCRVersion;\
+base={'Rec.ocr_version': OCRVersion.PPOCRV5, 'Rec.lang_type': LangRec.CYRILLIC, 'Rec.model_type': ModelType.MOBILE};\
+RapidOCR(params=dict(base)); RapidOCR(params=dict(base, **{'Global.use_det': False}));\
+print('PP-OCRv5 weights preloaded')" && \
     chown -R kag:kag /opt/venv
 
 # Playwright Chromium: pip-пакет уже из requirements; здесь системные deps
@@ -79,16 +82,9 @@ RUN python -m playwright install --with-deps chromium && \
     chown -R kag:kag /opt/ms-playwright && \
     rm -rf /root/.cache /var/lib/apt/lists/*
 
-# Предзагрузка весов Occular с HuggingFace (Shivin11/occular-ocr).
-# raw.githubusercontent.com (Fastly) из РФ недоступен; пакет 0.3.0 переименован
-# occular, веса на HF. reading_order раскладывается в occular/weights/reading_order/.
-# chown кэша — в этом же слое.
-RUN python -c "from huggingface_hub import hf_hub_download as d; r='Shivin11/occular-ocr'; \
-[d(r,f) for f in ['detector_dbnet_fp32.onnx','recognizer_svtr_lcnet_fp32.onnx','recognizer_svtr_lcnet_cyr12_fp32.onnx','recognizer_svtr_fp32.onnx','recognizer_svtr_cyr12_fp32.onnx','recognizer_charset.txt','recognizer_charset_cyr12.txt','table_detect_v3_fp32.onnx','table_struct_split_v2_fp32.onnx','table_struct_split_merge_v2.pt']]; \
-[d('Shivin11/occular-lm-ru', f) for f in ['compact_lm.npz','unigrams.txt']]; \
-from occular import download_reading_order; download_reading_order(); \
-print('Occular weights preloaded')" && \
-    chown -R kag:kag /app/.cache
+# Веса OCR отдельной предзагрузкой больше не нужны: RapidOCR кладёт модели PP-OCRv5 внутрь пакета
+# (site-packages/rapidocr/models) при первом создании движка — это делает pip-слой выше, поэтому
+# образ остаётся пригодным для работы без сети. Ранее здесь качались веса Occular (Shivin11/*).
 
 # git и его зависимости больше не нужны — чистим (без chown в этом слое,
 # иначе overlayfs снова скопирует файлы наверх).

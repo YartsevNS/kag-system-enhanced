@@ -150,15 +150,25 @@ def raw_lines_from_engine(image: bytes) -> List[Dict[str, Any]]:
     Формат строк у обоих движков один (`text`, `quad`, `confidence`), поэтому вызывающий код не меняется.
     """
     try:
-        from src.indexing.ocr_client import lines_from_service, service_available, service_enabled
+        from src.indexing.ocr_client import (
+            lines_from_service,
+            lines_local,
+            service_available,
+            service_enabled,
+        )
 
         if service_enabled() and service_available():
             lines = lines_from_service(image)
             if lines:
                 return lines
-            logger.debug("[tables] служба OCR не вернула строк — откат на прежний движок")
+            logger.debug("[tables] служба OCR не вернула строк — пробую локальный движок")
+        # Локальный запасной путь (PP-OCRv5 в контейнере): нужен, чтобы после удаления весов Occular
+        # недоступная служба не оставляла сканы без распознавания вовсе.
+        lines = lines_local(image)
+        if lines:
+            return lines
     except Exception as e:  # noqa: BLE001 — сбой клиента службы не должен ломать разбор
-        logger.debug(f"[tables] служба OCR недоступна, работаю прежним движком: {e}")
+        logger.debug(f"[tables] движок службы недоступен, работаю прежним движком: {e}")
     return _raw_lines_from_occular(image)
 
 
@@ -231,14 +241,27 @@ def make_cell_recognizer() -> Optional[Any]:
         return _cell_recognizer
 
     try:
-        from src.indexing.ocr_client import cells_from_service, service_available, service_enabled
+        from src.indexing.ocr_client import (
+            cells_from_service,
+            cells_local,
+            service_available,
+            service_enabled,
+        )
 
         if service_enabled() and service_available():
             def recognize_via_service(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
-                return cells_from_service(image, list(quads))
+                got = cells_from_service(image, list(quads))
+                return got or cells_local(image, list(quads))
 
             _cell_recognizer = recognize_via_service
             logger.info("[tables] распознавание ячеек: служба PP-OCRv5")
+            return _cell_recognizer
+        if cells_local:
+            def recognize_local(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
+                return cells_local(image, list(quads))
+
+            _cell_recognizer = recognize_local
+            logger.info("[tables] распознавание ячеек: локальный PP-OCRv5")
             return _cell_recognizer
     except Exception as e:  # noqa: BLE001 — без службы работает прежний распознаватель
         logger.debug(f"[tables] служба OCR для ячеек недоступна: {e}")

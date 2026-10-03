@@ -259,10 +259,114 @@ class HybridDocumentParser:
         
         return doc
     
+    def _ocr_service_ready(self) -> bool:
+        """Готов ли распознаватель: служба PP-OCRv5 на сервере моделей либо локальный PP-OCRv5."""
+        try:
+            from src.indexing.ocr_client import local_available, service_available, service_enabled
+
+            if service_enabled() and service_available():
+                return True
+            return bool(local_available())
+        except Exception as e:  # noqa: BLE001 — нет клиента движка: работаем прежним путём
+            logger.debug(f"движок OCR недоступен: {type(e).__name__}: {str(e)[:80]}")
+            return False
+
+    def _text_from_service(self, image_bytes: bytes) -> Optional[str]:
+        """Текст страницы от движка PP-OCRv5 с порядком чтения.
+
+        Порядок выбора: служба на сервере моделей → локальный движок в контейнере → None (тогда вызывающий
+        код идёт прежним путём, на Occular). None означает «движок не ответил» — это не то же самое, что
+        пустая страница.
+
+        Порядок чтения здесь обязателен: строки приходят в порядке распознавания («цио- прослеживаемости
+        нальное» — так было до этой правки), и без сборки по геометрии текст уходит во фрагменты кашей.
+        """
+        try:
+            from src.indexing.ocr_client import (
+                lines_from_service,
+                lines_local,
+                service_available,
+                service_enabled,
+            )
+
+            lines: List[Dict[str, Any]] = []
+            if service_enabled() and service_available():
+                lines = lines_from_service(image_bytes)
+            if not lines:
+                lines = lines_local(image_bytes)
+        except Exception as e:  # noqa: BLE001 — сбой движка не должен ломать разбор документа
+            logger.debug(f"движок OCR не ответил: {type(e).__name__}: {str(e)[:80]}")
+            return None
+        if not lines:
+            return ""            # движок ответил, но текста на странице нет — это не сбой
+
+        try:
+            from src.indexing.reading_order import order_page
+
+            ordered = order_page(lines)
+            if ordered.text.strip():
+                return ordered.text
+        except Exception as e:  # noqa: BLE001 — сборка по геометрии не критична для самого текста
+            logger.debug(f"порядок чтения не применён: {e}")
+        # Запасной порядок: сверху вниз, при близкой высоте — слева направо.
+        def _key(line: Dict[str, Any]) -> tuple:
+            points = line.get("quad") or [[0.0, 0.0]]
+            ys = [float(p[1]) for p in points]
+            xs = [float(p[0]) for p in points]
+            return (round(min(ys) / 10.0), min(xs))
+
+        return "\n".join(str(l.get("text") or "") for l in sorted(lines, key=_key)
+                         if str(l.get("text") or "").strip())
+
+    def _render_pdf_pages(self, file_path: str) -> List[bytes]:
+        """Отрендерить страницы PDF в PNG: служба распознаёт изображения, а не PDF."""
+        import fitz
+
+        out: List[bytes] = []
+        with fitz.open(file_path) as doc:
+            for page in doc:
+                out.append(page.get_pixmap(dpi=int(self._dpi or 200)).tobytes("png"))
+        return out
+
+    def _pages_text_from_service(self, file_path: str) -> Optional[List[str]]:
+        """Текст всех страниц от службы OCR. None — служба не применима, работает прежний движок."""
+        if not self._ocr_service_ready():
+            return None
+        path = Path(file_path)
+        try:
+            pages = self._render_pdf_pages(str(path)) if path.suffix.lower() == ".pdf" else [path.read_bytes()]
+        except Exception as e:  # noqa: BLE001 — файл не отрендерился: идём прежним путём
+            logger.debug(f"страницы для службы OCR не подготовлены: {type(e).__name__}: {str(e)[:80]}")
+            return None
+        if not pages:
+            return None
+        texts: List[str] = []
+        for image in pages:
+            text = self._text_from_service(image)
+            if text is None:
+                return None      # служба отвалилась на одной из страниц — откатываемся целиком
+            texts.append(text)
+        return texts
+
     def _parse_with_ocular_only(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
-        """Pure Occular-ocr parsing (optimized for Russian)."""
+        """Распознавание скана или картинки: служба OCR (PP-OCRv5), иначе прежний движок (Occular)."""
         doc = ParsedDocument(filename=filename, parse_method="ocular_only")
-        
+
+        # Путь службы: то же распознавание, но движок вынесен на сервер моделей и лицензионно чист.
+        service_pages = self._pages_text_from_service(file_path)
+        if service_pages is not None:
+            for page_num, text in enumerate(service_pages, 1):
+                doc.pages.append(ParsedPage(page_num=page_num, text=text))
+                doc.full_text += text + "\n\n"
+            doc.metadata = {
+                "file_hash": file_hash,
+                "page_count": len(doc.pages),
+                "format": Path(file_path).suffix.lower(),
+                "ocr_engine": "service-ppocrv5",
+            }
+            logger.info(f"служба OCR: parsed {filename}, {len(doc.pages)} pages, {len(doc.full_text)} chars")
+            return doc
+
         try:
             pdf = Path(file_path).suffix.lower() == '.pdf'
             if pdf:
@@ -306,8 +410,12 @@ class HybridDocumentParser:
         return doc
 
     def parse_ocular_only(self, file_path: str) -> Optional[ParsedDocument]:
-        """Occular-ocr без Docling. Быстрее и стабильнее для русского текста."""
-        if not self._ocular_available:
+        """Распознавание без Docling: служба OCR (PP-OCRv5) либо прежний Occular.
+
+        Проверка «есть ли движок» теперь про два движка: если работает служба, Occular не нужен — иначе
+        после удаления его весов из образа сканы перестали бы разбираться вовсе.
+        """
+        if not self._ocular_available and not self._ocr_service_ready():
             return None
         path = Path(file_path)
         return self._parse_with_ocular_only(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())

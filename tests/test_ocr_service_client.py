@@ -51,9 +51,14 @@ def _config(enabled=True, url="http://models:8020", timeout_s=120):
 
 
 @pytest.fixture(autouse=True)
-def _clean_probe_cache():
-    """Кэш доступности — глобальный; между тестами его надо сбрасывать, иначе тесты влияют друг на друга."""
+def _clean_probe_cache(monkeypatch):
+    """Кэш доступности — глобальный; между тестами его надо сбрасывать, иначе тесты влияют друг на друга.
+
+    Локальный движок гасим: в тестовой среде он либо отсутствует, либо полез бы качать модели.
+    """
     ocr_client.reset_probe()
+    monkeypatch.setattr(ocr_client, "local_available", lambda: False)
+    monkeypatch.setattr(ocr_client, "lines_local", lambda image: [])
     yield
     ocr_client.reset_probe()
 

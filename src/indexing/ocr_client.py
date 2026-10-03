@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -193,6 +194,142 @@ def _quad_points(quad: Any) -> List[List[float]]:
         arr = np.asarray(quad, dtype=float).reshape(-1, 2)
         return [[float(p[0]), float(p[1])] for p in arr[:4]]
     except Exception:  # noqa: BLE001
+        return []
+
+
+# ── Локальный движок: запасной путь, когда службы нет ───────────────────────────────────────────
+# Зачем: служба живёт на другом сервере. Если она недоступна, а Occular из образа убран (веса ~700 МБ
+# и torch ~0,9 ГБ), скан остался бы без распознавания вовсе. Поэтому в образ ставится тот же PP-OCRv5
+# (RapidOCR), но локально: лицензионно чисто, работает без сети, медленнее службы, но страницу не теряет.
+_local_engine: Any = None
+_local_cells_engine: Any = None
+_local_failed = False
+_local_lock = threading.Lock()
+
+CELLS_TARGET_H = 40
+CELLS_MAX_SCALE = 4.0
+
+
+def local_available() -> bool:
+    """Есть ли в контейнере локальный движок (проверка импорта, без сборки модели)."""
+    try:
+        import rapidocr  # noqa: F401
+
+        return True
+    except Exception:  # noqa: BLE001 — локального движка нет: работаем службой или прежним путём
+        return False
+
+
+def _build_local(cells: bool):
+    """Собрать локальный движок PP-OCRv5. Для вырезок — без детектора (иначе пусто, проверено 03.10.2026)."""
+    from rapidocr import RapidOCR
+    from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+
+    params: Dict[str, Any] = {
+        "Rec.ocr_version": OCRVersion.PPOCRV5,
+        "Rec.lang_type": LangRec.CYRILLIC,
+        "Rec.model_type": ModelType.MOBILE,
+    }
+    if cells:
+        params["Global.use_det"] = False
+    return RapidOCR(params=params)
+
+
+def _as_array(image: bytes):
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    return np.array(Image.open(io.BytesIO(image)).convert("RGB"))
+
+
+def lines_local(image: bytes) -> List[Dict[str, Any]]:
+    """Строки страницы локальным PP-OCRv5. Пустой список — движка нет или распознать не удалось."""
+    global _local_engine, _local_failed
+    if _local_failed:
+        return []
+    try:
+        if _local_engine is None:
+            with _local_lock:
+                if _local_engine is None:
+                    _local_engine = _build_local(cells=False)
+        array = _as_array(image)
+        with _local_lock:
+            out = _local_engine(array)
+    except Exception as e:  # noqa: BLE001 — без локального движка остаётся прежний путь
+        _local_failed = True
+        logger.debug(f"[ocr-service] локальное распознавание недоступно: {type(e).__name__}: {str(e)[:100]}")
+        return []
+
+    texts = [str(t) for t in (getattr(out, "txts", None) or [])]
+    boxes = getattr(out, "boxes", None)
+    scores = getattr(out, "scores", None)
+    lines: List[Dict[str, Any]] = []
+    for i, text in enumerate(texts):
+        if not text.strip():
+            continue
+        line: Dict[str, Any] = {"text": text, "confidence": 0.0, "raw_scale": 1.0}
+        try:
+            if boxes is not None and len(boxes) > i:
+                import numpy as np
+
+                arr = np.asarray(boxes[i], dtype=float).reshape(-1, 2)
+                line["quad"] = [[float(p[0]), float(p[1])] for p in arr]
+        except Exception:  # noqa: BLE001 — рамка не критична для текста
+            pass
+        try:
+            if scores is not None and len(scores) > i:
+                line["confidence"] = float(scores[i])
+        except Exception:  # noqa: BLE001
+            pass
+        lines.append(line)
+    return lines
+
+
+def cells_local(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
+    """Текст вырезанных ячеек локальным распознавателем (без детектора, с увеличением мелких вырезок)."""
+    global _local_cells_engine, _local_failed
+    if _local_failed or not len(quads):
+        return []
+    try:
+        import cv2
+        import numpy as np
+
+        if _local_cells_engine is None:
+            with _local_lock:
+                if _local_cells_engine is None:
+                    _local_cells_engine = _build_local(cells=True)
+        height, width = image.shape[:2]
+        out: List[Tuple[str, float]] = []
+        with _local_lock:
+            for quad in quads:
+                try:
+                    points = np.asarray(quad, dtype=float).reshape(-1, 2)
+                    x0 = max(0, int(points[:, 0].min()))
+                    x1 = min(width, int(np.ceil(points[:, 0].max())))
+                    y0 = max(0, int(points[:, 1].min()))
+                    y1 = min(height, int(np.ceil(points[:, 1].max())))
+                    crop = image[y0:y1, x0:x1]
+                    if crop.size == 0 or crop.shape[0] < 3 or crop.shape[1] < 3:
+                        out.append(("", 0.0))
+                        continue
+                    if crop.shape[0] < CELLS_TARGET_H:
+                        factor = min(CELLS_MAX_SCALE, CELLS_TARGET_H / max(1, crop.shape[0]))
+                        crop = cv2.resize(crop, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+                    result = _local_cells_engine(crop)
+                    text = result.txts[0] if getattr(result, "txts", None) else ""
+                    score = 0.0
+                    scores = getattr(result, "scores", None)
+                    if scores is not None and len(scores):
+                        score = float(scores[0])
+                    out.append((str(text or ""), score))
+                except Exception:  # noqa: BLE001 — одна плохая вырезка не роняет пачку
+                    out.append(("", 0.0))
+        return out
+    except Exception as e:  # noqa: BLE001
+        _local_failed = True
+        logger.debug(f"[ocr-service] локальные вырезки недоступны: {type(e).__name__}: {str(e)[:100]}")
         return []
 
 
