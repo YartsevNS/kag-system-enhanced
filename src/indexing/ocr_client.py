@@ -87,6 +87,21 @@ def service_enabled() -> bool:
     return bool(get_service_config().get("enabled"))
 
 
+def cells_refine_enabled() -> bool:
+    """Читать ли ячейки таблиц вырезками — тогда к ним применяется выбранный язык ячеек.
+
+    По умолчанию выключено: основной текст ячеек приходит из распознавания строк страницы (один проход
+    OCR, быстрее), а вырезки — способ применить к ячейкам отдельную модель (см. table_grid.refine_table_cells).
+    """
+    try:
+        from src.api.services.config_store import config_store
+
+        raw = config_store.get("ocr", "settings") or {}
+        return bool(isinstance(raw, dict) and raw.get("cells_refine", False))
+    except Exception:  # noqa: BLE001 — без настроек считаем опцию выключенной
+        return False
+
+
 def reset_probe() -> None:
     """Сбросить кэш доступности (после поднятия службы — чтобы конвейер увидел её сразу)."""
     global _available, _checked_at

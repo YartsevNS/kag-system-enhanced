@@ -333,7 +333,24 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
             continue
         scaled_lines.append({"text": line["text"], "quad": arr.tolist()})
 
-    table = fill_cells(prepared, grid, scaled_lines, recognize_cells=make_cell_recognizer())
+    recognizer = make_cell_recognizer()
+    table = fill_cells(prepared, grid, scaled_lines, recognize_cells=recognizer)
+    # Дочитывание ячеек вырезками — осознанная опция (по умолчанию выключена). Включает её смысл только
+    # с отдельным движком для ячеек: тогда текст в ячейках читает выбранная для ячеек модель (например,
+    # eslav, которая лучше берёт числа), а не общий проход по строкам страницы.
+    if recognizer is not None:
+        try:
+            from src.indexing.ocr_client import cells_refine_enabled
+
+            if cells_refine_enabled():
+                from src.indexing.table_grid import refine_table_cells, table_quality
+
+                changed = refine_table_cells(prepared, grid, table, recognizer)
+                if changed:
+                    table.notes.append(f"ячейки дочитаны вырезками: {changed}")
+                    table.quality = table_quality(table.rows)
+        except Exception as e:  # noqa: BLE001 — дочитывание не должно ломать разбор
+            logger.debug(f"[tables] дочитывание ячеек не выполнено: {type(e).__name__}: {str(e)[:80]}")
     table.seconds = round(time.time() - started, 1)
     reason = (f"сетка по линиям: {grid.n_rows} строк × до {grid.max_cols} колонок, "
               f"качество {table.quality:.2f}, {time.time() - started:.1f} с")

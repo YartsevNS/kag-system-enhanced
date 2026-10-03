@@ -331,6 +331,47 @@ def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
     return table
 
 
+def refine_table_cells(image: Any, grid: "Grid", table: RecoveredTable,
+                       recognize_cells: Callable[[Any, List[np.ndarray]], List[Tuple[str, float]]],
+                       min_height: float = MIN_CELL_PX) -> int:
+    """Перечитать текст ячеек по вырезкам — чтобы к ячейкам применить свой движок и язык.
+
+    Зачем это нужно: обычно текст ячеек приходит из распознавания СТРОК страницы (один проход OCR по
+    всему изображению — быстрее всего), и тогда отдельная модель для ячеек (например, «eslav» для цифр)
+    ни на что не влияет. Этот проход берёт bbox каждой ячейки прямо из сетки и распознаёт их пачкой тем
+    движком, который выбран для ячеек.
+
+    Возвращает число ячеек, текст которых заменён. По умолчанию НЕ вызывается: распознавание вырезки
+    на широкой ячейке может оказаться хуже распознавания всей строки, поэтому это осознанная опция.
+    """
+    quads: List[np.ndarray] = []
+    positions: List[Tuple[int, int]] = []
+    for ri, (y0, y1) in enumerate(grid.rows):
+        cut = grid.row_lines[ri]
+        for ci in range(len(cut) - 1):
+            x0 = cut[ci] + INSET
+            x1 = cut[ci + 1] - INSET
+            if x1 - x0 < MIN_CELL_PX or y1 - y0 < min_height:
+                continue
+            quads.append(np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32))
+            positions.append((ri, ci))
+    if not quads:
+        return 0
+    try:
+        got = recognize_cells(image, quads)
+    except Exception:  # noqa: BLE001 — дочитывание не должно ломать уже собранную таблицу
+        return 0
+    changed = 0
+    for (ri, ci), item in zip(positions, got):
+        text = str(item[0] if isinstance(item, (list, tuple)) else item).strip()
+        if not text:
+            continue
+        if ri < len(table.rows) and ci < len(table.rows[ri]):
+            table.rows[ri][ci] = text
+            changed += 1
+    return changed
+
+
 def table_quality(rows: Sequence[Sequence[str]]) -> float:
     """Честная оценка таблицы вместо прежней заглушки 0,6.
 

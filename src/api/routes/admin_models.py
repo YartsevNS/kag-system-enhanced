@@ -2351,6 +2351,9 @@ class OcrSettingsRequest(BaseModel):
     # eslav читает числа и названия позиций (4 из 6), но портит прозу.
     service_text_lang: Optional[str] = None    # язык текста страницы: cyrillic | eslav
     service_cells_lang: Optional[str] = None   # язык вырезок ячеек таблиц: cyrillic | eslav
+    # Читать ячейки таблиц вырезками (по умолчанию выключено). Нужно, чтобы язык ячеек реально
+    # применялся: иначе текст ячеек приходит из распознавания строк страницы.
+    cells_refine: Optional[bool] = None
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
@@ -2361,6 +2364,7 @@ async def get_ocr_settings():
     cfg.setdefault("service_timeout_s", 120)
     cfg.setdefault("service_text_lang", "cyrillic")
     cfg.setdefault("service_cells_lang", "eslav")
+    cfg.setdefault("cells_refine", False)
     return cfg
 
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
@@ -2389,6 +2393,8 @@ async def save_ocr_settings(body: OcrSettingsRequest):
         lang = str(body.service_cells_lang).strip().lower()
         if lang in OCR_LANGUAGES:
             cfg["service_cells_lang"] = lang
+    if body.cells_refine is not None:
+        cfg["cells_refine"] = bool(body.cells_refine)
     config_store.set("ocr", "settings", cfg)
 
     # Сброс кэша доступности: включение движка должно вступать в силу сразу, а не через минуту.

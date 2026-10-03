@@ -854,6 +854,15 @@
                         <em>eslav</em> — 4 из 6 и «Балка» верно, но прозу портит («Счет-фатура»). Поэтому текст страницы и таблицы читают разные модели:
                         каждая своим языком. Настройка действует на новые задачи — уже обработанные документы нужно переобработать.
                     </div>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+                        <input type="checkbox" id="ocr-cells-refine" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                        <span><strong>Читать ячейки таблиц вырезками</strong> (тогда язык ячеек применяется)</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px;line-height:1.5">
+                        Обычно текст ячеек берётся из общего распознавания строк страницы — это быстрее, но тогда выбранный выше
+                        «язык ячеек» ни на что не влияет. Включите, если таблицы со сканов читаются плохо: каждая ячейка
+                        распознаётся своей вырезкой выбранной моделью (+несколько секунд на таблицу).
+                    </div>
                     <div id="ocr-service-state" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
                 </div>
             </div>
@@ -3307,6 +3316,7 @@ async function loadOcrSettings() {
     document.getElementById('ocr-service-enabled').checked = d.service_enabled || false;
     document.getElementById('ocr-text-lang').value = d.service_text_lang || 'cyrillic';
     document.getElementById('ocr-cells-lang').value = d.service_cells_lang || 'eslav';
+    document.getElementById('ocr-cells-refine').checked = d.cells_refine || false;
     loadOcrServiceState();
   } catch(e) {}
 }
@@ -3333,7 +3343,8 @@ async function saveOcrSettings() {
     table_model: document.getElementById('ocr-table-model').value || 'pymupdf',
     service_enabled: document.getElementById('ocr-service-enabled').checked,
     service_text_lang: document.getElementById('ocr-text-lang').value,
-    service_cells_lang: document.getElementById('ocr-cells-lang').value
+    service_cells_lang: document.getElementById('ocr-cells-lang').value,
+    cells_refine: document.getElementById('ocr-cells-refine').checked
   };
   try {
     var r = await fetch('/api/v1/admin/models/ocr-settings', {

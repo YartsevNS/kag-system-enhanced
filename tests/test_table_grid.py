@@ -134,3 +134,29 @@ def test_tables_not_in_fragments_by_default():
 
     assert DEFAULTS.get("tables_in_fragments") is False
     assert tables_in_fragments() is False
+
+
+def test_refine_cells_reads_each_cell_by_its_own_crop():
+    """Дочитывание ячеек: текст каждой ячейки берётся из её вырезки — так к ячейкам применяется свой язык.
+
+    Проверяем главное: запросы идут по bbox ЯЧЕЕК сетки (а не по строкам), и ответ подставляется на место.
+    """
+    from src.indexing.table_grid import Grid, refine_table_cells
+    from src.indexing.table_recovery import RecoveredTable
+
+    grid = Grid(rows=[(10.0, 40.0), (40.0, 70.0)],
+                row_lines=[[0.0, 100.0, 200.0], [0.0, 100.0, 200.0]],
+                lines_h=[10.0, 40.0, 70.0], lines_v=[0.0, 100.0, 200.0],
+                bbox=(0.0, 10.0, 200.0, 70.0))
+    table = RecoveredTable(rows=[["мусор", "мусор"], ["мусор", "мусор"]], source="occular-grid")
+    seen = []
+
+    def fake_recognize(image, quads):
+        for q in quads:
+            seen.append((float(q[:, 0].min()), float(q[:, 0].max())))
+        return [("13 959,9", 0.9), ("796", 0.9), ("2", 0.9), ("шт", 0.9)]
+
+    changed = refine_table_cells(None, grid, table, fake_recognize)
+    assert changed == 4
+    assert len(seen) == 4, "по одной вырезке на каждую ячейку сетки"
+    assert table.rows[0][0] == "13 959,9" and table.rows[0][1] == "796"
