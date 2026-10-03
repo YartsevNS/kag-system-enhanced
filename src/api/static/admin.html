@@ -824,6 +824,38 @@
                         Таблицы всегда попадают в Qdrant (markdown) и document_tables (HTML/rows).
                     </div>
                 </div>
+                <div class="form-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="ocr-service-enabled" onchange="saveOcrSettings()" style="accent-color:var(--accent);width:18px;height:18px">
+                        <span><strong>Распознавать службой PP-OCRv5</strong> (сервер моделей)</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text4);margin-top:4px;margin-left:26px;line-height:1.5">
+                        <strong>Выключено:</strong> распознаёт локальный движок в контейнере — тот же PP-OCRv5, но на CPU прода (медленнее, зато без сети).<br>
+                        <strong>Включено:</strong> считает сервер моделей (быстрее). Если он недоступен, конвейер сам вернётся к локальному движку — документ не потеряется.
+                    </div>
+                    <div style="display:flex;gap:12px;margin-top:10px">
+                        <div style="flex:1">
+                            <label style="font-size:12px;color:var(--text3)">Язык текста страницы</label>
+                            <select id="ocr-text-lang" onchange="saveOcrSettings()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                                <option value="cyrillic">cyrillic — чище на обычном тексте (по умолчанию)</option>
+                                <option value="eslav">eslav — лучше читает числа</option>
+                            </select>
+                        </div>
+                        <div style="flex:1">
+                            <label style="font-size:12px;color:var(--text3)">Язык ячеек таблиц</label>
+                            <select id="ocr-cells-lang" onchange="saveOcrSettings()" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
+                                <option value="eslav">eslav — читает числа и позиции (по умолчанию)</option>
+                                <option value="cyrillic">cyrillic — чище текст в ячейках</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text4);margin-top:6px;line-height:1.5">
+                        <strong>Почему языков два.</strong> Замер 03.10.2026 на накладной: <em>cyrillic</em> нашёл 1 контрольное число из 6 и не распознал «Балка»,
+                        <em>eslav</em> — 4 из 6 и «Балка» верно, но прозу портит («Счет-фатура»). Поэтому текст страницы и таблицы читают разные модели:
+                        каждая своим языком. Настройка действует на новые задачи — уже обработанные документы нужно переобработать.
+                    </div>
+                    <div id="ocr-service-state" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+                </div>
             </div>
             <div class="form-group" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-s)">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -3272,6 +3304,25 @@ async function loadOcrSettings() {
     document.getElementById('ocr-summarize').checked = d.enable_summarization || false;
     document.getElementById('ocr-dpi-val').textContent = d.dpi || 200;
     document.getElementById('ocr-table-model').value = d.table_model || 'pymupdf';
+    document.getElementById('ocr-service-enabled').checked = d.service_enabled || false;
+    document.getElementById('ocr-text-lang').value = d.service_text_lang || 'cyrillic';
+    document.getElementById('ocr-cells-lang').value = d.service_cells_lang || 'eslav';
+    loadOcrServiceState();
+  } catch(e) {}
+}
+async function loadOcrServiceState() {
+  var box = document.getElementById('ocr-service-state');
+  if (!box) return;
+  try {
+    var r = await fetch('/api/v1/admin/models/ocr-service?check=true', { credentials: 'include' });
+    var d = await r.json();
+    var langs = 'текст: ' + (d.text_lang || '—') + ', ячейки: ' + (d.cells_lang || '—');
+    if (d.reachable) {
+      box.innerHTML = '<span style="color:var(--green)">●</span> Служба доступна: ' + (d.engine || '') +
+                      ' · ' + langs + (d.warm ? ' · прогрета' : ' · первый запрос будет медленнее');
+    } else {
+      box.innerHTML = '<span style="color:var(--yellow,#d19a00)">●</span> Служба не отвечает — распознаёт локальный движок. ' + langs;
+    }
   } catch(e) {}
 }
 async function saveOcrSettings() {
@@ -3279,7 +3330,10 @@ async function saveOcrSettings() {
     force_ocr: document.getElementById('ocr-force').checked,
     enable_summarization: document.getElementById('ocr-summarize').checked,
     dpi: parseInt(document.getElementById('ocr-dpi').value) || 200,
-    table_model: document.getElementById('ocr-table-model').value || 'pymupdf'
+    table_model: document.getElementById('ocr-table-model').value || 'pymupdf',
+    service_enabled: document.getElementById('ocr-service-enabled').checked,
+    service_text_lang: document.getElementById('ocr-text-lang').value,
+    service_cells_lang: document.getElementById('ocr-cells-lang').value
   };
   try {
     var r = await fetch('/api/v1/admin/models/ocr-settings', {
@@ -3291,6 +3345,7 @@ async function saveOcrSettings() {
     if (r.ok) {
       document.getElementById('ocr-settings-status').innerHTML = '<span style="color:var(--green)">✅ Сохранено</span>';
       setTimeout(function(){ document.getElementById('ocr-settings-status').innerHTML = ''; }, 2000);
+      loadOcrServiceState();
     }
   } catch(e) {}
 }

@@ -37,13 +37,26 @@ PROBE_TIMEOUT_S = 3.0
 PROBE_TTL_S = 60.0            # как часто перепроверять недоступную службу
 MAX_CELLS_PER_CALL = 80       # предел вырезок в одном запросе: страховка от гигантских таблиц
 
+# Языки PP-OCRv5 для русского. Оба — про кириллицу, но с разными сильными сторонами (замер 03.10.2026):
+#   cyrillic — чище на обычной прозе («Счет-фактура»);
+#   eslav    — читает числа и названия позиций («Балка», 4 контрольных числа из 6 против 1).
+LANGUAGES = ("cyrillic", "eslav")
+DEFAULT_TEXT_LANG = "cyrillic"
+DEFAULT_CELLS_LANG = "eslav"
+
 _available: Optional[bool] = None
 _checked_at: float = 0.0
 
 
 def get_service_config() -> Dict[str, Any]:
-    """Настройки OCR-службы. Ошибка чтения настроек = служба выключена (поведение как раньше)."""
-    cfg: Dict[str, Any] = {"enabled": False, "url": DEFAULT_URL, "timeout_s": DEFAULT_TIMEOUT_S}
+    """Настройки OCR-службы. Ошибка чтения настроек = служба выключена (поведение как раньше).
+
+    Языков два, и это не прихоть: замер 03.10.2026 на накладной дал «cyrillic» 1 контрольное число из 6
+    (и не нашёл «Балка»), а «eslav» — 4 из 6 (но прозу портит: «Счет-фатура»). Поэтому текст страницы и
+    вырезки ячеек распознаются разными моделями.
+    """
+    cfg: Dict[str, Any] = {"enabled": False, "url": DEFAULT_URL, "timeout_s": DEFAULT_TIMEOUT_S,
+                           "text_lang": DEFAULT_TEXT_LANG, "cells_lang": DEFAULT_CELLS_LANG}
     try:
         from src.api.services.config_store import config_store
 
@@ -57,6 +70,12 @@ def get_service_config() -> Dict[str, Any]:
                 cfg["timeout_s"] = max(5, min(1800, int(raw.get("service_timeout_s") or DEFAULT_TIMEOUT_S)))
             except (TypeError, ValueError):
                 pass
+            text_lang = str(raw.get("service_text_lang") or "").strip().lower()
+            if text_lang in LANGUAGES:
+                cfg["text_lang"] = text_lang
+            cells_lang = str(raw.get("service_cells_lang") or "").strip().lower()
+            if cells_lang in LANGUAGES:
+                cfg["cells_lang"] = cells_lang
     except Exception as e:  # noqa: BLE001 — без настроек работаем как до службы
         logger.debug(f"[ocr-service] настройки недоступны, служба выключена: {e}")
         cfg["enabled"] = False
@@ -119,7 +138,7 @@ def lines_from_service(image: bytes, *, timeout_s: Optional[float] = None) -> Li
     cfg = get_service_config()
     if not cfg["enabled"]:
         return []
-    data = _post("/ocr", image, "image/png", timeout_s or cfg["timeout_s"])
+    data = _post(f"/ocr?lang={cfg['text_lang']}", image, "image/png", timeout_s or cfg["timeout_s"])
     if not data:
         return []
     out: List[Dict[str, Any]] = []
@@ -168,7 +187,8 @@ def cells_from_service(image: Any, quads: Sequence[Any], *, timeout_s: Optional[
     items = list(quads)
     for start in range(0, len(items), MAX_CELLS_PER_CALL):
         chunk = items[start:start + MAX_CELLS_PER_CALL]
-        payload = {"image_b64": image_b64, "quads": [_quad_points(q) for q in chunk]}
+        payload = {"image_b64": image_b64, "quads": [_quad_points(q) for q in chunk],
+                   "lang": cfg["cells_lang"]}   # ячейки читает та модель, что лучше берёт числа (eslav)
         data = _post("/cells", json.dumps(payload).encode(), "application/json",
                      timeout_s or cfg["timeout_s"])
         if not data:
@@ -201,8 +221,8 @@ def _quad_points(quad: Any) -> List[List[float]]:
 # Зачем: служба живёт на другом сервере. Если она недоступна, а Occular из образа убран (веса ~700 МБ
 # и torch ~0,9 ГБ), скан остался бы без распознавания вовсе. Поэтому в образ ставится тот же PP-OCRv5
 # (RapidOCR), но локально: лицензионно чисто, работает без сети, медленнее службы, но страницу не теряет.
-_local_engine: Any = None
-_local_cells_engine: Any = None
+_local_engines: Dict[str, Any] = {}          # язык -> движок страницы
+_local_cells_engines: Dict[str, Any] = {}    # язык -> движок вырезок
 _local_failed = False
 _local_lock = threading.Lock()
 
@@ -220,19 +240,34 @@ def local_available() -> bool:
         return False
 
 
-def _build_local(cells: bool):
-    """Собрать локальный движок PP-OCRv5. Для вырезок — без детектора (иначе пусто, проверено 03.10.2026)."""
+def _build_local(cells: bool, lang: str):
+    """Собрать локальный движок PP-OCRv5 на нужном языке.
+
+    Для вырезок — без детектора: на вырезке одной строки детектор не находит текст вовсе (проверено
+    03.10.2026). Язык берётся из настроек: текст — cyrillic, ячейки — eslav.
+    """
     from rapidocr import RapidOCR
     from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
 
+    lang_enum = {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
     params: Dict[str, Any] = {
         "Rec.ocr_version": OCRVersion.PPOCRV5,
-        "Rec.lang_type": LangRec.CYRILLIC,
+        "Rec.lang_type": lang_enum,
         "Rec.model_type": ModelType.MOBILE,
     }
     if cells:
         params["Global.use_det"] = False
     return RapidOCR(params=params)
+
+
+def _local_engine_for(cells: bool, lang: str):
+    """Движок локального распознавания для языка: собирается один раз на процесс."""
+    cache = _local_cells_engines if cells else _local_engines
+    if lang not in cache:
+        with _local_lock:
+            if lang not in cache:
+                cache[lang] = _build_local(cells=cells, lang=lang)
+    return cache[lang]
 
 
 def _as_array(image: bytes):
@@ -246,17 +281,14 @@ def _as_array(image: bytes):
 
 def lines_local(image: bytes) -> List[Dict[str, Any]]:
     """Строки страницы локальным PP-OCRv5. Пустой список — движка нет или распознать не удалось."""
-    global _local_engine, _local_failed
+    global _local_failed
     if _local_failed:
         return []
     try:
-        if _local_engine is None:
-            with _local_lock:
-                if _local_engine is None:
-                    _local_engine = _build_local(cells=False)
+        engine = _local_engine_for(cells=False, lang=get_service_config()["text_lang"])
         array = _as_array(image)
         with _local_lock:
-            out = _local_engine(array)
+            out = engine(array)
     except Exception as e:  # noqa: BLE001 — без локального движка остаётся прежний путь
         _local_failed = True
         logger.debug(f"[ocr-service] локальное распознавание недоступно: {type(e).__name__}: {str(e)[:100]}")
@@ -289,17 +321,14 @@ def lines_local(image: bytes) -> List[Dict[str, Any]]:
 
 def cells_local(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
     """Текст вырезанных ячеек локальным распознавателем (без детектора, с увеличением мелких вырезок)."""
-    global _local_cells_engine, _local_failed
+    global _local_failed
     if _local_failed or not len(quads):
         return []
     try:
         import cv2
         import numpy as np
 
-        if _local_cells_engine is None:
-            with _local_lock:
-                if _local_cells_engine is None:
-                    _local_cells_engine = _build_local(cells=True)
+        engine = _local_engine_for(cells=True, lang=get_service_config()["cells_lang"])
         height, width = image.shape[:2]
         out: List[Tuple[str, float]] = []
         with _local_lock:
@@ -317,7 +346,7 @@ def cells_local(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
                     if crop.shape[0] < CELLS_TARGET_H:
                         factor = min(CELLS_MAX_SCALE, CELLS_TARGET_H / max(1, crop.shape[0]))
                         crop = cv2.resize(crop, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
-                    result = _local_cells_engine(crop)
+                    result = engine(crop)
                     text = result.txts[0] if getattr(result, "txts", None) else ""
                     score = 0.0
                     scores = getattr(result, "scores", None)
@@ -340,12 +369,15 @@ def ocr_service_status(check_service: bool = False) -> Dict[str, Any]:
         "enabled": cfg["enabled"],
         "url": cfg["url"],
         "timeout_s": cfg["timeout_s"],
+        "text_lang": cfg["text_lang"],
+        "cells_lang": cfg["cells_lang"],
+        "languages": list(LANGUAGES),
         "reachable": None,
         "engine": None,
         "detail": "",
     }
     if not check_service:
-        status["detail"] = "служба выключена — распознаёт прежний движок (Occular)" if not cfg["enabled"] \
+        status["detail"] = "служба выключена — распознаёт локальный движок в контейнере" if not cfg["enabled"] \
             else "служба включена"
         return status
     try:
@@ -354,9 +386,11 @@ def ocr_service_status(check_service: bool = False) -> Dict[str, Any]:
         status["reachable"] = str(data.get("status") or "") == "ok"
         status["engine"] = data.get("engine")
         status["lang"] = data.get("lang")
+        status["service_loaded_page"] = data.get("loaded_page")
+        status["service_loaded_cells"] = data.get("loaded_cells")
         status["warm"] = bool(data.get("ready"))
-        status["detail"] = f"служба доступна ({status['engine']})" if status["reachable"] \
-            else "служба ответила, но статус не ok"
+        status["detail"] = f"служба доступна ({status['engine']}; языки: {', '.join(data.get('languages') or [])})" \
+            if status["reachable"] else "служба ответила, но статус не ok"
     except Exception as e:  # noqa: BLE001
         status["reachable"] = False
         status["detail"] = f"служба недоступна: {type(e).__name__}: {str(e)[:120]}"

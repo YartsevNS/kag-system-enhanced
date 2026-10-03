@@ -2328,6 +2328,10 @@ async def save_theme(body: ThemeRequest):
     return {"status": "ok", "theme": body.theme}
 
 # OCR Settings API
+# Языки PP-OCRv5 для русского: cyrillic (чище на прозе) и eslav (читает числа и позиции таблиц).
+OCR_LANGUAGES = ("cyrillic", "eslav")
+
+
 class OcrSettingsRequest(BaseModel):
     force_ocr: bool = False
     dpi: int = 200
@@ -2342,6 +2346,11 @@ class OcrSettingsRequest(BaseModel):
     service_enabled: Optional[bool] = None
     service_url: Optional[str] = None
     service_timeout_s: Optional[int] = None
+    # Язык распознавания — ДВА поля, и это не дублирование (замер 03.10.2026 на накладной):
+    # cyrillic читает прозу чище, но на плотной таблице дал 1 контрольное число из 6;
+    # eslav читает числа и названия позиций (4 из 6), но портит прозу.
+    service_text_lang: Optional[str] = None    # язык текста страницы: cyrillic | eslav
+    service_cells_lang: Optional[str] = None   # язык вырезок ячеек таблиц: cyrillic | eslav
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
@@ -2350,6 +2359,8 @@ async def get_ocr_settings():
     cfg.setdefault("service_enabled", False)
     cfg.setdefault("service_url", "http://192.168.50.41:8020")
     cfg.setdefault("service_timeout_s", 120)
+    cfg.setdefault("service_text_lang", "cyrillic")
+    cfg.setdefault("service_cells_lang", "eslav")
     return cfg
 
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
@@ -2369,6 +2380,15 @@ async def save_ocr_settings(body: OcrSettingsRequest):
         cfg["service_url"] = str(body.service_url).strip().rstrip("/")
     if body.service_timeout_s is not None:
         cfg["service_timeout_s"] = int(body.service_timeout_s)
+    # Язык принимаем только из известных: опечатка в настройке не должна ломать распознавание.
+    if body.service_text_lang is not None:
+        lang = str(body.service_text_lang).strip().lower()
+        if lang in OCR_LANGUAGES:
+            cfg["service_text_lang"] = lang
+    if body.service_cells_lang is not None:
+        lang = str(body.service_cells_lang).strip().lower()
+        if lang in OCR_LANGUAGES:
+            cfg["service_cells_lang"] = lang
     config_store.set("ocr", "settings", cfg)
 
     # Сброс кэша доступности: включение движка должно вступать в силу сразу, а не через минуту.

@@ -54,7 +54,8 @@ def _parser() -> HybridDocumentParser:
 
 
 def _config(enabled=True):
-    return {"enabled": enabled, "url": "http://models:8020", "timeout_s": 120}
+    return {"enabled": enabled, "url": "http://models:8020", "timeout_s": 120,
+            "text_lang": "cyrillic", "cells_lang": "eslav"}
 
 
 @pytest.fixture(autouse=True)

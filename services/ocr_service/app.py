@@ -1,22 +1,29 @@
-"""Сервис OCR для KAG: PP-OCRv5 с кириллическим распознавателем (RapidOCR/ONNX, CPU).
+"""Сервис OCR для KAG: PP-OCRv5 (RapidOCR/ONNX, CPU) — строки страницы и текст вырезанных ячеек.
 
-Зачем: наш конвейер должен уметь брать OCR-строки не только из Occular. Движок вынесен отдельным сервисом,
-как модель зрения, — тогда его можно менять и подключать/отключать без пересборки конвейера, а позже добавить
-PaddleOCR-VL на GPU тем же интерфейсом.
+Зачем отдельный сервис: движок распознавания надо менять и подключать/отключать без пересборки
+конвейера, а позже добавить PaddleOCR-VL на GPU тем же интерфейсом.
 
-Что важно знать (проверено 28.09.2026):
-  * по умолчанию RapidOCR берёт PP-OCRv6, а он кириллицу НЕ поддерживает — нужен явный выбор PP-OCRv5 и языка
-    (eslav или cyrillic) ПЕРЕЧИСЛЕНИЯМИ, иначе конструктор падает;
-  * библиотека не потокобезопасна (одна модель в процессе, результат живёт до следующего вызова) — поэтому
-    инференс сериализован блокировкой, а сервис однопоточный по факту обработки;
-  * на CPU страница счёта-фактуры обрабатывается ~3 секунды (против ~32 у Occular).
+ДВА ЯЗЫКА — ЭТО НЕ ПРИХОТЬ (замер 03.10.2026 на накладной, scripts/compare_lang.py):
+  * `cyrillic` читает прозу чище («Счет-фактура»), но на плотной таблице путает похожие символы:
+    контрольных чисел 1 из 6, название позиции «Балка» не нашлось;
+  * `eslav` читает числа и названия позиций (4 из 6 контрольных чисел, «Балка» найдена), но прозу
+    портит («Счет-фатура», «23 ион 2025 г.»).
+Поэтому язык — параметр запроса: текст страницы распознаём одним, вырезки ячеек таблиц — другим.
+Так один и тот же сервис даёт лучшее из двух моделей.
+
+Что важно знать (проверено 28.09.2026 и 03.10.2026):
+  * по умолчанию RapidOCR берёт PP-OCRv6, а он кириллицу НЕ поддерживает — нужен явный выбор PP-OCRv5 и
+    языка ПЕРЕЧИСЛЕНИЯМИ, иначе конструктор падает;
+  * библиотека не потокобезопасна: инференс сериализован блокировкой, сервис однопоточный по факту;
+  * на вырезке одной строки детектор текста не находит ничего — вырезки распознаёт движок БЕЗ детектора
+    (Global.use_det=False) с увеличением до ~40 px по высоте.
 
 Запуск на сервере моделей:
-    ./.venv/bin/python ocr_service.py --port 8020 --lang cyrillic
+    ./.venv/bin/python ocr_service.py --port 8020 --lang cyrillic --warmup
 Проверка:
     curl -s http://127.0.0.1:8020/health
-    curl -s --data-binary @scan.png -H 'Content-Type: image/png' http://127.0.0.1:8020/ocr
-    curl -s -H 'Content-Type: application/json' -d '{"image_b64":"...","quads":[[[0,0],[10,0],[10,5],[0,5]]]}' \
+    curl -s --data-binary @scan.png -H 'Content-Type: image/png' "http://127.0.0.1:8020/ocr?lang=cyrillic"
+    curl -s -H 'Content-Type: application/json' -d '{"image_b64":"...","quads":[[[0,0],[10,0],[10,5],[0,5]]],"lang":"eslav"}' \
         http://127.0.0.1:8020/cells
 """
 from __future__ import annotations
@@ -27,27 +34,41 @@ import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlparse
 
 LANG_CHOICES = ("cyrillic", "eslav")
-_engine = None
-_cells_engine = None
-_lang = "cyrillic"
+DEFAULT_LANG = "cyrillic"
+
+_engines: Dict[str, Any] = {}          # язык -> движок страницы (с детектором)
+_cells_engines: Dict[str, Any] = {}    # язык -> движок вырезок (без детектора)
+_default_lang = DEFAULT_LANG
 _lock = threading.Lock()
 
 CELLS_TARGET_H = 40       # целевая высота строки для распознавания вырезок
 CELLS_MAX_SCALE = 4.0     # предел увеличения: выше — только медленнее, текст не улучшается
 
 
+def _lang_enum(lang: str):
+    from rapidocr.utils.typings import LangRec
+
+    return {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
+
+
+def _normalize_lang(lang: Optional[str]) -> str:
+    """Привести запрошенный язык к поддерживаемому; неизвестный — язык по умолчанию (сервис не падает)."""
+    value = str(lang or "").strip().lower()
+    return value if value in LANG_CHOICES else _default_lang
+
+
 def build_engine(lang: str):
     """Собрать движок страницы: PP-OCRv5 + нужный язык + mobile. Значения — перечисления, строки не принимаются."""
     from rapidocr import RapidOCR
-    from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+    from rapidocr.utils.typings import ModelType, OCRVersion
 
-    lang_enum = {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
     return RapidOCR(params={
         "Rec.ocr_version": OCRVersion.PPOCRV5,
-        "Rec.lang_type": lang_enum,
+        "Rec.lang_type": _lang_enum(lang),
         "Rec.model_type": ModelType.MOBILE,
     })
 
@@ -55,37 +76,48 @@ def build_engine(lang: str):
 def build_cells_engine(lang: str):
     """Движок для вырезанных ячеек: БЕЗ детектора текста.
 
-    Проверено 03.10.2026 на накладной: на вырезке одной строки детектор не находит текст вовсе —
-    пусто и без увеличения, и при увеличении ×2..×4 (детектору нужен контекст страницы). Без детектора
-    та же вырезка читается («Универсальный», «Исправление №», «15855», «23 июня 2025 г.»), а при
-    увеличении до ~40 px по высоте — уверенно.
+    На вырезке одной строки детектор не находит текст вовсе — ни без увеличения, ни при ×2..×4
+    (детектору нужен контекст страницы). Без детектора та же вырезка читается, а с увеличением
+    до ~40 px — уверенно.
     """
     from rapidocr import RapidOCR
-    from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+    from rapidocr.utils.typings import ModelType, OCRVersion
 
-    lang_enum = {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
     return RapidOCR(params={
         "Rec.ocr_version": OCRVersion.PPOCRV5,
-        "Rec.lang_type": lang_enum,
+        "Rec.lang_type": _lang_enum(lang),
         "Rec.model_type": ModelType.MOBILE,
         "Global.use_det": False,
     })
 
 
-def recognize(image_bytes: bytes) -> Dict[str, Any]:
+def get_engine(lang: str):
+    """Движок страницы для языка: собирается при первом запросе этого языка и живёт в процессе."""
+    if lang not in _engines:
+        _engines[lang] = build_engine(lang)
+    return _engines[lang]
+
+
+def get_cells_engine(lang: str):
+    """Движок вырезок для языка: собирается при первом запросе этого языка."""
+    if lang not in _cells_engines:
+        _cells_engines[lang] = build_cells_engine(lang)
+    return _cells_engines[lang]
+
+
+def recognize(image_bytes: bytes, lang: Optional[str] = None) -> Dict[str, Any]:
     """Распознать изображение. Возвращает строки с текстом и рамками — формат совпадает с нашим OCR."""
-    global _engine
-    import numpy as np
-    from PIL import Image
     import io
 
-    if _engine is None:
-        _engine = build_engine(_lang)
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    array = np.array(image)
+    import numpy as np
+    from PIL import Image
+
+    lang = _normalize_lang(lang)
+    engine = get_engine(lang)
+    array = np.array(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
     with _lock:                                   # RapidOCR не потокобезопасен — сериализуем
         started = time.time()
-        out = _engine(array)
+        out = engine(array)
         seconds = round(time.time() - started, 2)
 
     texts: List[str] = [str(t) for t in (getattr(out, "txts", None) or [])]
@@ -112,19 +144,16 @@ def recognize(image_bytes: bytes) -> Dict[str, Any]:
             # понимает, что координаты уже в системе присланного изображения и пересчёт не нужен.
             item["raw_scale"] = 1.0
             lines.append(item)
-    return {"engine": f"rapidocr-ppocrv5-{_lang}", "seconds": seconds, "lines": lines,
+    return {"engine": f"rapidocr-ppocrv5-{lang}", "lang": lang, "seconds": seconds, "lines": lines,
             "cyrillic_chars": len(re.findall(r"[А-Яа-яЁё]", " ".join(texts)))}
 
 
-def recognize_cells(payload: Dict[str, Any]) -> Dict[str, Any]:
+def recognize_cells(payload: Dict[str, Any], lang: Optional[str] = None) -> Dict[str, Any]:
     """Распознать текст в вырезанных ячейках: на вход изображение страницы (base64 PNG) и рамки.
 
     Зачем одним запросом, а не вырезкой на ячейку: вырезок в таблице десятки, отдельное сетевое
-    обращение на каждую было бы в разы дороже самого распознавания. Движок — распознаватель БЕЗ
-    детектора: детектору нужна страница целиком, на вырезке одной строки он не находит текст вовсе
-    (проверено 03.10.2026). Мелкие вырезки увеличиваются до ~40 px по высоте.
+    обращение на каждую было бы в разы дороже самого распознавания.
     """
-    global _engine, _cells_engine
     import base64 as _b64
     import io
 
@@ -132,14 +161,14 @@ def recognize_cells(payload: Dict[str, Any]) -> Dict[str, Any]:
     import numpy as np
     from PIL import Image
 
+    lang = _normalize_lang(payload.get("lang") or lang)
     raw = _b64.b64decode(payload.get("image_b64") or "")
     if not raw:
         return {"error": "нет изображения страницы"}
     quads = payload.get("quads") or []
     if not isinstance(quads, list) or not quads:
         return {"error": "нет рамок ячеек"}
-    if _cells_engine is None:
-        _cells_engine = build_cells_engine(_lang)
+    engine = get_cells_engine(lang)
     array = np.array(Image.open(io.BytesIO(raw)).convert("RGB"))
     height, width = array.shape[:2]
     started = time.time()
@@ -162,22 +191,21 @@ def recognize_cells(payload: Dict[str, Any]) -> Dict[str, Any]:
                 if crop.shape[0] < CELLS_TARGET_H:
                     scale = min(CELLS_MAX_SCALE, CELLS_TARGET_H / max(1, crop.shape[0]))
                     crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-                out = _cells_engine(crop)
+                out = engine(crop)
                 text = out.txts[0] if getattr(out, "txts", None) else ""
                 score = 0.0
                 scores = getattr(out, "scores", None)
                 if scores is not None and len(scores):
                     score = float(scores[0])
-                texts.append({"text": str(text or ""), "confidence": score,
-                              "scale": round(scale, 2)})
+                texts.append({"text": str(text or ""), "confidence": score, "scale": round(scale, 2)})
             except Exception as e:  # noqa: BLE001 — одна плохая рамка не должна ронять пачку
                 texts.append({"text": "", "confidence": 0.0, "error": f"{type(e).__name__}"})
-    return {"engine": f"rapidocr-ppocrv5-{_lang}", "seconds": round(time.time() - started, 2),
-            "texts": texts}
+    return {"engine": f"rapidocr-ppocrv5-{lang}", "lang": lang,
+            "seconds": round(time.time() - started, 2), "texts": texts}
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "kag-ocr/1.0"
+    server_version = "kag-ocr/2.0"
 
     def _json(self, payload: Dict[str, Any], code: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -187,14 +215,25 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _query_lang(self) -> Optional[str]:
+        """Язык из строки запроса (?lang=eslav). Неизвестный игнорируем — ответит язык по умолчанию."""
+        try:
+            params = parse_qs(urlparse(self.path).query)
+            return (params.get("lang") or [None])[0]
+        except Exception:  # noqa: BLE001 — разбор запроса не должен ломать ответ
+            return None
+
     def do_GET(self) -> None:  # noqa: N802 — так требует BaseHTTPRequestHandler
         if self.path.startswith("/health"):
-            self._json({"status": "ok", "engine": f"rapidocr-ppocrv5-{_lang}", "lang": _lang,
-                        "ready": _engine is not None})
+            self._json({"status": "ok", "engine": f"rapidocr-ppocrv5-{_default_lang}",
+                        "lang": _default_lang, "languages": list(LANG_CHOICES),
+                        "loaded_page": sorted(_engines), "loaded_cells": sorted(_cells_engines),
+                        "ready": bool(_engines)})
         else:
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        lang = self._query_lang()
         if self.path.startswith("/cells"):
             length = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(length) if length else b""
@@ -202,7 +241,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "пустое тело: передайте JSON с изображением и рамками"}, 400)
                 return
             try:
-                self._json(recognize_cells(json.loads(data)))
+                self._json(recognize_cells(json.loads(data), lang))
             except Exception as e:  # noqa: BLE001 — сервис обязан отвечать, а не падать
                 self._json({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 500)
             return
@@ -215,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "пустое тело: передайте изображение"}, 400)
             return
         try:
-            self._json(recognize(data))
+            self._json(recognize(data, lang))
         except Exception as e:  # noqa: BLE001 — сервис обязан отвечать, а не падать
             self._json({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 500)
 
@@ -224,18 +263,22 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    global _lang
-    ap = argparse.ArgumentParser(description="OCR-сервис KAG (PP-OCRv5 + кириллица)")
+    global _default_lang
+    ap = argparse.ArgumentParser(description="OCR-сервис KAG (PP-OCRv5: cyrillic/eslav)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8020)
-    ap.add_argument("--lang", default="cyrillic", choices=LANG_CHOICES)
-    ap.add_argument("--warmup", action="store_true", help="прогреть движок при старте")
+    ap.add_argument("--lang", default=DEFAULT_LANG, choices=LANG_CHOICES,
+                    help="язык по умолчанию, если в запросе не передан ?lang=")
+    ap.add_argument("--warmup", action="store_true",
+                    help="прогреть оба языка (текст и вырезки), чтобы первый запрос был быстрым")
     args = ap.parse_args()
-    _lang = args.lang
+    _default_lang = args.lang
     if args.warmup:
-        build_engine(_lang)
-        print(f"[ocr] движок прогрет: PP-OCRv5/{_lang}/mobile", flush=True)
-    print(f"[ocr] слушаю {args.host}:{args.port}, язык {_lang}", flush=True)
+        for lang in LANG_CHOICES:
+            build_engine(lang)
+            build_cells_engine(lang)
+        print(f"[ocr] движки прогреты: {', '.join(LANG_CHOICES)} (текст и вырезки)", flush=True)
+    print(f"[ocr] слушаю {args.host}:{args.port}, язык по умолчанию {_default_lang}", flush=True)
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
     return 0
 

@@ -47,7 +47,8 @@ def _router(routes):
 
 
 def _config(enabled=True, url="http://models:8020", timeout_s=120):
-    return {"enabled": enabled, "url": url, "timeout_s": timeout_s}
+    return {"enabled": enabled, "url": url, "timeout_s": timeout_s,
+            "text_lang": "cyrillic", "cells_lang": "eslav"}
 
 
 @pytest.fixture(autouse=True)
@@ -187,4 +188,45 @@ def test_status_without_check_makes_no_call(monkeypatch):
     monkeypatch.setattr(ocr_client.urllib.request, "urlopen", explode)
     status = ocr_client.ocr_service_status(check_service=False)
     assert status["enabled"] is False
-    assert "прежний движок" in status["detail"]
+    assert "локальный движок" in status["detail"]
+
+
+def test_default_languages_are_split():
+    """По умолчанию текст и ячейки идут разными языками — из замера на накладной (см. ocr_client)."""
+    assert ocr_client.DEFAULT_TEXT_LANG == "cyrillic"
+    assert ocr_client.DEFAULT_CELLS_LANG == "eslav"
+    assert ocr_client.LANGUAGES == ("cyrillic", "eslav")
+
+
+def test_text_requests_use_text_language(monkeypatch):
+    """Запрос строк страницы уходит с языком текста: иначе настройка в админке ни на что не влияет."""
+    seen = {}
+
+    def fake(url, *a, **k):
+        seen["url"] = getattr(url, "full_url", str(url))
+        return _FakeResponse({"lines": [{"text": "строка", "quad": [[0, 0], [1, 0], [1, 1], [0, 1]],
+                                         "confidence": 0.9}]})
+
+    monkeypatch.setattr(ocr_client, "get_service_config",
+                        lambda: {**_config(), "text_lang": "eslav", "cells_lang": "cyrillic"})
+    monkeypatch.setattr(ocr_client.urllib.request, "urlopen", fake)
+    ocr_client.lines_from_service(b"image")
+    assert "lang=eslav" in seen["url"]
+
+
+def test_cells_requests_carry_cells_language(monkeypatch):
+    """Запрос вырезок несёт язык ячеек в теле — служба выбирает модель по нему."""
+    seen = {}
+
+    def fake(request, *a, **k):
+        seen["body"] = json.loads(request.data.decode())
+        return _FakeResponse({"texts": [{"text": "13 959,9", "confidence": 0.9}]})
+
+    monkeypatch.setattr(ocr_client, "get_service_config",
+                        lambda: {**_config(), "text_lang": "cyrillic", "cells_lang": "eslav"})
+    monkeypatch.setattr(ocr_client.urllib.request, "urlopen", fake)
+
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    quads = [np.array([[0, 0], [5, 0], [5, 5], [0, 5]], dtype=float)]
+    ocr_client.cells_from_service(image, quads)
+    assert seen["body"]["lang"] == "eslav"
