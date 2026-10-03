@@ -16,6 +16,8 @@ PaddleOCR-VL на GPU тем же интерфейсом.
 Проверка:
     curl -s http://127.0.0.1:8020/health
     curl -s --data-binary @scan.png -H 'Content-Type: image/png' http://127.0.0.1:8020/ocr
+    curl -s -H 'Content-Type: application/json' -d '{"image_b64":"...","quads":[[[0,0],[10,0],[10,5],[0,5]]]}' \
+        http://127.0.0.1:8020/cells
 """
 from __future__ import annotations
 
@@ -29,12 +31,16 @@ from typing import Any, Dict, List
 
 LANG_CHOICES = ("cyrillic", "eslav")
 _engine = None
+_cells_engine = None
 _lang = "cyrillic"
 _lock = threading.Lock()
 
+CELLS_TARGET_H = 40       # целевая высота строки для распознавания вырезок
+CELLS_MAX_SCALE = 4.0     # предел увеличения: выше — только медленнее, текст не улучшается
+
 
 def build_engine(lang: str):
-    """Собрать движок: PP-OCRv5 + нужный язык + mobile. Значения — перечисления, строки не принимаются."""
+    """Собрать движок страницы: PP-OCRv5 + нужный язык + mobile. Значения — перечисления, строки не принимаются."""
     from rapidocr import RapidOCR
     from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
 
@@ -43,6 +49,26 @@ def build_engine(lang: str):
         "Rec.ocr_version": OCRVersion.PPOCRV5,
         "Rec.lang_type": lang_enum,
         "Rec.model_type": ModelType.MOBILE,
+    })
+
+
+def build_cells_engine(lang: str):
+    """Движок для вырезанных ячеек: БЕЗ детектора текста.
+
+    Проверено 03.10.2026 на накладной: на вырезке одной строки детектор не находит текст вовсе —
+    пусто и без увеличения, и при увеличении ×2..×4 (детектору нужен контекст страницы). Без детектора
+    та же вырезка читается («Универсальный», «Исправление №», «15855», «23 июня 2025 г.»), а при
+    увеличении до ~40 px по высоте — уверенно.
+    """
+    from rapidocr import RapidOCR
+    from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+
+    lang_enum = {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
+    return RapidOCR(params={
+        "Rec.ocr_version": OCRVersion.PPOCRV5,
+        "Rec.lang_type": lang_enum,
+        "Rec.model_type": ModelType.MOBILE,
+        "Global.use_det": False,
     })
 
 
@@ -82,9 +108,72 @@ def recognize(image_bytes: bytes) -> Dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass
         if item["text"].strip():
+            # Строки распознаны на изображении, которое прислали (масштаб 1): клиент по этому признаку
+            # понимает, что координаты уже в системе присланного изображения и пересчёт не нужен.
+            item["raw_scale"] = 1.0
             lines.append(item)
     return {"engine": f"rapidocr-ppocrv5-{_lang}", "seconds": seconds, "lines": lines,
             "cyrillic_chars": len(re.findall(r"[А-Яа-яЁё]", " ".join(texts)))}
+
+
+def recognize_cells(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Распознать текст в вырезанных ячейках: на вход изображение страницы (base64 PNG) и рамки.
+
+    Зачем одним запросом, а не вырезкой на ячейку: вырезок в таблице десятки, отдельное сетевое
+    обращение на каждую было бы в разы дороже самого распознавания. Движок — распознаватель БЕЗ
+    детектора: детектору нужна страница целиком, на вырезке одной строки он не находит текст вовсе
+    (проверено 03.10.2026). Мелкие вырезки увеличиваются до ~40 px по высоте.
+    """
+    global _engine, _cells_engine
+    import base64 as _b64
+    import io
+
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    raw = _b64.b64decode(payload.get("image_b64") or "")
+    if not raw:
+        return {"error": "нет изображения страницы"}
+    quads = payload.get("quads") or []
+    if not isinstance(quads, list) or not quads:
+        return {"error": "нет рамок ячеек"}
+    if _cells_engine is None:
+        _cells_engine = build_cells_engine(_lang)
+    array = np.array(Image.open(io.BytesIO(raw)).convert("RGB"))
+    height, width = array.shape[:2]
+    started = time.time()
+    texts: List[Dict[str, Any]] = []
+    with _lock:
+        for quad in quads:
+            try:
+                points = np.asarray(quad, dtype=float).reshape(-1, 2)
+                x0 = max(0, int(points[:, 0].min()))
+                x1 = min(width, int(np.ceil(points[:, 0].max())))
+                y0 = max(0, int(points[:, 1].min()))
+                y1 = min(height, int(np.ceil(points[:, 1].max())))
+                crop = array[y0:y1, x0:x1]
+                if crop.size == 0 or crop.shape[0] < 3 or crop.shape[1] < 3:
+                    texts.append({"text": "", "confidence": 0.0})
+                    continue
+                # Мелкую вырезку увеличиваем: распознаватель читает строку высотой ~40 px, а на скане
+                # строка бывает 13–15 px. Предел увеличения — чтобы не платить временем впустую.
+                scale = 1.0
+                if crop.shape[0] < CELLS_TARGET_H:
+                    scale = min(CELLS_MAX_SCALE, CELLS_TARGET_H / max(1, crop.shape[0]))
+                    crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                out = _cells_engine(crop)
+                text = out.txts[0] if getattr(out, "txts", None) else ""
+                score = 0.0
+                scores = getattr(out, "scores", None)
+                if scores is not None and len(scores):
+                    score = float(scores[0])
+                texts.append({"text": str(text or ""), "confidence": score,
+                              "scale": round(scale, 2)})
+            except Exception as e:  # noqa: BLE001 — одна плохая рамка не должна ронять пачку
+                texts.append({"text": "", "confidence": 0.0, "error": f"{type(e).__name__}"})
+    return {"engine": f"rapidocr-ppocrv5-{_lang}", "seconds": round(time.time() - started, 2),
+            "texts": texts}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -106,6 +195,17 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path.startswith("/cells"):
+            length = int(self.headers.get("Content-Length") or 0)
+            data = self.rfile.read(length) if length else b""
+            if not data:
+                self._json({"error": "пустое тело: передайте JSON с изображением и рамками"}, 400)
+                return
+            try:
+                self._json(recognize_cells(json.loads(data)))
+            except Exception as e:  # noqa: BLE001 — сервис обязан отвечать, а не падать
+                self._json({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 500)
+            return
         if not self.path.startswith("/ocr"):
             self._json({"error": "not found"}, 404)
             return

@@ -576,11 +576,11 @@ class DocumentService:
                 if str(file_path).lower().endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")):
                     try:
                         from src.indexing.reading_order import order_page
-                        from src.indexing.table_strategy import _raw_lines_from_occular
+                        from src.indexing.table_strategy import raw_lines_from_engine
 
                         with open(file_path, "rb") as _f:
                             _img_bytes = _f.read()
-                        _lines = _raw_lines_from_occular(_img_bytes)
+                        _lines = raw_lines_from_engine(_img_bytes)
                         if _lines:
                             _page_order = order_page(_lines)
                             if _page_order.text.strip():

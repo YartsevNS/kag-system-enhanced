@@ -1,17 +1,24 @@
 """Единая схема распознавания таблиц для страниц, где текстовый слой не помог.
 
-Порядок и обоснование (замеры 27.09.2026, сервер моделей 41):
+Порядок и обоснование (замеры 27.09.2026 и 03.10.2026, сервер моделей 41):
 
-  1. **Свой Occular** (`TableRecognizer`) — первый шаг, потому что он быстрый и детерминированный:
-     структура таблицы берётся по геометрии, объединённые ячейки приходят как `rowspan`/`colspan`.
-     На квитанции: 2 таблицы за 0,6 с, сетки 8×9 и 21×13, после раскладки текста в ячейках числа
-     («Итого к оплате 12 503,51», «Капитальный ремонт 83,4 м2 | 25,8 | 2 133,3»).
-     Ограничение по устройству: детектор ищет ЛИНИИ, поэтому таблицу, нарисованную цветными заливками
-     без рамок, он не видит (0 таблиц даже с полными моделями).
+  1. **Своя сетка по линиям** (`table_grid`) — первый шаг: она детерминированная и быстрая (доли секунды).
+     Линии бланка видны отлично, а библиотечная модель структуры на плотных сканах ломает строки
+     (23 из 30 нулевой высоты). Объединённые ячейки получаются сами: в полосе учитываются только реально
+     нарисованные вертикальные линии. Текст в ячейки кладёт выбранный движок OCR (служба PP-OCRv5 или Occular).
 
-  2. **Модель зрения (VL) через API** — только если первый шаг не дал таблиц И опция включена в админке.
-     Она читает таблицу без линий и возвращает markdown с числами. Дорогая (десятки секунд на CPU),
-     поэтому по умолчанию выключена, а выключенная — страница просто пропускается.
+  2. **Библиотечный разбор** (TableRecognizer из Occular) — только пока движок прежний. Он ищет те же ЛИНИИ,
+     поэтому там, где сетка не нашлась, он бесполезен (0 таблиц даже с полными моделями). Со включённой
+     службой PP-OCRv5 этот шаг пропускается: его работу закрывают своя сетка и модель зрения.
+
+  3. **Модель зрения (VL) через API** — только если первый шаг не дал таблиц И опция включена в админке.
+     Она читает таблицу без линий (скриншоты Excel с цветными заливками) и возвращает markdown с числами.
+     Дорогая (десятки секунд на CPU), поэтому по умолчанию выключена, а выключенная — страница просто
+     пропускается.
+
+Движок OCR выбирается настройкой (`ocr/settings.service_enabled`): служба PP-OCRv5 на сервере моделей
+(замер на одном хосте: 28,0 с и 4 контрольных числа против 43,9 с и 3 чисел у Occular) либо прежний
+Occular в контейнере. Недоступная служба — откат на прежний движок с честной причиной, а не потеря страницы.
 
 Модуль не бросает исключений и не теряет страницы: любой сбой шага превращается в причину в отчёте.
 """
@@ -135,6 +142,26 @@ def _raw_lines_from_occular(image: bytes) -> List[Dict[str, Any]]:
                 pass
 
 
+def raw_lines_from_engine(image: bytes) -> List[Dict[str, Any]]:
+    """Строки OCR страницы от выбранного движка: служба PP-OCRv5, иначе прежний (Occular).
+
+    Зачем переключатель, а не замена: движок — настройка, а не код. Пока служба выключена в админке,
+    конвейер обязан работать ровно как раньше; недоступная служба — тоже откат, а не потеря страницы.
+    Формат строк у обоих движков один (`text`, `quad`, `confidence`), поэтому вызывающий код не меняется.
+    """
+    try:
+        from src.indexing.ocr_client import lines_from_service, service_available, service_enabled
+
+        if service_enabled() and service_available():
+            lines = lines_from_service(image)
+            if lines:
+                return lines
+            logger.debug("[tables] служба OCR не вернула строк — откат на прежний движок")
+    except Exception as e:  # noqa: BLE001 — сбой клиента службы не должен ломать разбор
+        logger.debug(f"[tables] служба OCR недоступна, работаю прежним движком: {e}")
+    return _raw_lines_from_occular(image)
+
+
 def _lines_from_occular(image: bytes) -> List[OcrLine]:
     """Строки текста с координатами от Occular (конвейер с порядком чтения, если модель есть)."""
     import tempfile
@@ -193,14 +220,29 @@ _cell_recognizer_failed = False
 
 
 def make_cell_recognizer() -> Optional[Any]:
-    """Распознаватель Occular для вырезанных ячеек: один экземпляр на процесс.
+    """Распознаватель вырезанных ячеек: служба PP-OCRv5, иначе прежний (Occular), один экземпляр на процесс.
 
-    Проверено 27.09.2026: на вырезке строки он даёт тот же текст, что полный конвейер (уверенность 0,78–0,97),
-    но принимает сразу список рамок — то есть все ячейки распознаются одним вызовом (~50 мс на ячейку).
+    Проверено 27.09.2026: на вырезке строки Occular даёт тот же текст, что полный конвейер (уверенность
+    0,78–0,97), но принимает сразу список рамок — то есть все ячейки распознаются одним вызовом
+    (~50 мс на ячейку). Служба делает то же самое пачкой: изображение страницы + список рамок.
     """
     global _cell_recognizer, _cell_recognizer_failed
     if _cell_recognizer is not None or _cell_recognizer_failed:
         return _cell_recognizer
+
+    try:
+        from src.indexing.ocr_client import cells_from_service, service_available, service_enabled
+
+        if service_enabled() and service_available():
+            def recognize_via_service(image: Any, quads: Sequence[Any]) -> List[Tuple[str, float]]:
+                return cells_from_service(image, list(quads))
+
+            _cell_recognizer = recognize_via_service
+            logger.info("[tables] распознавание ячеек: служба PP-OCRv5")
+            return _cell_recognizer
+    except Exception as e:  # noqa: BLE001 — без службы работает прежний распознаватель
+        logger.debug(f"[tables] служба OCR для ячеек недоступна: {e}")
+
     try:
         from occular import CRNNRecognizerONNX
 
@@ -250,7 +292,7 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
     scale = float(grid.scale or 1.0)
     if raw_lines is None:
         ok, buf = cv2.imencode(".png", prepared)
-        lines = _raw_lines_from_occular(buf.tobytes() if ok else image)
+        lines = raw_lines_from_engine(buf.tobytes() if ok else image)
         scale = 1.0                     # строки получены уже в системе координат сетки
     else:
         lines = list(raw_lines)         # координаты извне — переводим в масштаб сетки
@@ -294,8 +336,22 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
         return {"tables": grid_tables, "technique": "occular-grid", "reason": grid_reason,
                 "seconds": round(time.time() - started, 1)}
 
-    tables, reason = recognize_occular_tables(image, ocr_lines=ocr_lines, recognizer=recognizer)
-    reason = f"{grid_reason}; библиотечный разбор: {reason}"
+    # Библиотечный разбор (TableRecognizer из Occular) — только пока движок прежний. Он сам ищет ЛИНИИ,
+    # поэтому на страницах без сетки бесполезен (0 таблиц даже с полными моделями, проверено 27.09.2026),
+    # а когда работает служба PP-OCRv5, держать его в конвейере незачем: линованные бланки разбирает своя
+    # сетка, безлинейные — модель зрения (подключаемая опция).
+    try:
+        from src.indexing.ocr_client import service_enabled
+
+        _service_on = service_enabled()
+    except Exception:  # noqa: BLE001 — настройки недоступны: ведём себя как раньше
+        _service_on = False
+
+    if _service_on:
+        tables, reason = [], f"{grid_reason}; библиотечный разбор пропущен (движок — служба PP-OCRv5)"
+    else:
+        tables, reason = recognize_occular_tables(image, ocr_lines=ocr_lines, recognizer=recognizer)
+        reason = f"{grid_reason}; библиотечный разбор: {reason}"
     if tables:
         return {"tables": tables, "technique": "occular-grid", "reason": reason,
                 "seconds": round(time.time() - started, 1)}

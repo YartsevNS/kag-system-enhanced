@@ -2336,21 +2336,55 @@ class OcrSettingsRequest(BaseModel):
     # pymupdf — быстрый, встроенный find_tables; docling — TableFormer (нужен
     # рабочий layout); granite — Granite Vision на кластере (таблицы → HTML/JSON)
     table_model: str = "pymupdf"
+    # Движок OCR: служба PP-OCRv5 на сервере моделей (RapidOCR/ONNX, кириллица). Замер 03.10.2026 на
+    # одном хосте (прод): 28,0 с и 4 контрольных числа против 43,9 с и 3 чисел у Occular, а весов в
+    # образе — на сотни мегабайт меньше. Выключено — распознаёт прежний движок (Occular в контейнере).
+    service_enabled: Optional[bool] = None
+    service_url: Optional[str] = None
+    service_timeout_s: Optional[int] = None
 
 @router.get("/ocr-settings", summary="Получить настройки OCR")
 async def get_ocr_settings():
     cfg = config_store.get("ocr", "settings") or {"force_ocr": False, "dpi": 200}
     cfg.setdefault("table_model", "pymupdf")
+    cfg.setdefault("service_enabled", False)
+    cfg.setdefault("service_url", "http://192.168.50.41:8020")
+    cfg.setdefault("service_timeout_s", 120)
     return cfg
 
 @router.post("/ocr-settings", summary="Сохранить настройки OCR")
 async def save_ocr_settings(body: OcrSettingsRequest):
-    config_store.set("ocr", "settings", {
+    # Сохраняем ТОЛЬКО свои ключи поверх существующего словаря: в этом же namespace могут лежать
+    # другие поля (deskew, reading_order), и перезапись целиком их бы стёрла.
+    existing = config_store.get("ocr", "settings") or {}
+    cfg = dict(existing) if isinstance(existing, dict) else {}
+    cfg.update({
         "force_ocr": body.force_ocr, "dpi": body.dpi,
         "enable_summarization": body.enable_summarization,
         "table_model": body.table_model or "pymupdf",
     })
+    if body.service_enabled is not None:
+        cfg["service_enabled"] = bool(body.service_enabled)
+    if body.service_url is not None:
+        cfg["service_url"] = str(body.service_url).strip().rstrip("/")
+    if body.service_timeout_s is not None:
+        cfg["service_timeout_s"] = int(body.service_timeout_s)
+    config_store.set("ocr", "settings", cfg)
+
+    # Сброс кэша доступности: включение движка должно вступать в силу сразу, а не через минуту.
+    try:
+        from src.indexing.ocr_client import reset_probe
+        reset_probe()
+    except Exception:  # noqa: BLE001 — сброс кэша не критичен для сохранения
+        pass
     return {"status": "ok"}
+
+
+@router.get("/ocr-service", summary="Движок OCR: состояние службы PP-OCRv5")
+async def get_ocr_service(check: bool = False):
+    """Настройки движка + (по запросу) доступность службы: та же логика, что у опции VL-таблиц."""
+    from src.indexing.ocr_client import ocr_service_status
+    return await asyncio.to_thread(ocr_service_status, check)
 
 
 # ── Таблицы: распознавание моделью зрения (VL) через API — ПОДКЛЮЧАЕМАЯ опция ────────────────
