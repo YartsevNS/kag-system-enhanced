@@ -249,10 +249,13 @@ body {
 
 /* Keyboard hint */
 .kbd-hint {
-  position: fixed; bottom: 12px; left: 260px;
+  /* Поднята на 10 px от нижнего края (было 12 px — по просьбе владельца отступ увеличен) и больше
+     не исчезает: она слегка прозрачная, при наведении показывается полностью. */
+  position: fixed; bottom: 22px; left: 260px;
   font-size: 11px; color: var(--text4);
-  opacity: 0; transition: opacity 0.3s;
+  opacity: 0.55; transition: opacity 0.2s;
 }
+.kbd-hint:hover { opacity: 1; }
 .kbd-hint kbd {
   background: var(--surface); border: 1px solid var(--border-s);
   border-radius: 3px; padding: 1px 5px;
@@ -745,9 +748,11 @@ function showError(msg) {
 }
 
 function showKbdHints() {
+  // Подсказка остаётся на экране всегда (по просьбе владельца): она лишь слегка прозрачная, чтобы не
+  // мешать чтению документа, и становится полностью видимой при наведении. Раньше она исчезала сама
+  // через 6 секунд — после этого о горячих клавишах забываешь.
   const hint = document.getElementById('kbd-hint');
-  hint.style.opacity = '1';
-  setTimeout(function() { hint.style.opacity = '0'; }, 6000);
+  if (hint) hint.style.opacity = '';
 }
 
 function fadeOut(el) {
