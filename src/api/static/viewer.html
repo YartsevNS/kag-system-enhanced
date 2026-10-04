@@ -403,6 +403,12 @@ async function init() {
     // в карточке документа: по расширению файла этого не видно.
     const hasSearchable = currentDoc.searchable_pdf === true;
 
+    // Скан показываем 1:1 (100%): исходник у сканов обычно небольшой (например, 724×1024 пикселей), и при
+    // 150% браузер растягивает его, картинка выглядит мыльной. При 100% пиксель исходника = пиксель экрана.
+    if (hasSearchable) {
+      scale = 1.0;
+    }
+
     if (isPdf || hasSearchable) {
       viewMode = 'pdf';
       const ok = await initPdfViewer();
