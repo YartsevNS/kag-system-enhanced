@@ -16,6 +16,7 @@ from pathlib import Path
 import uuid
 import time
 import os
+import json
 import hashlib
 import asyncio
 from dataclasses import dataclass, field
@@ -694,6 +695,26 @@ class DocumentService:
                     logger.info(f"Markdown сохранён: {md_path} ({len(md_text)} симв)")
                 except Exception as e:
                     logger.warning(f"Markdown не создан: {e}")
+                # Строки OCR с координатами — для выделяемого текстового слоя в просмотрщике.
+                # Зачем: у скана нет текстового слоя PDF, и раньше текст нельзя было выделить на изображении;
+                # теперь просмотрщик накладывает строки поверх картинки (как textLayer у pdf.js).
+                try:
+                    if _img_lines:
+                        from PIL import Image as _PILImage
+
+                        with _PILImage.open(file_path) as _im:
+                            _size = _im.size
+                        _lines_path = self._ocr_dir / f"{document_id}_{record.filename}.lines.json"
+                        _lines_path.write_text(json.dumps({
+                            "width": _size[0], "height": _size[1],
+                            "lines": [{"text": l.get("text"), "quad": l.get("quad")}
+                                      for l in _img_lines if l.get("text") and l.get("quad")],
+                        }, ensure_ascii=False), encoding="utf-8")
+                        logger.info(f"Строки OCR с координатами сохранены: {_lines_path} "
+                                    f"({len(_img_lines)} строк)")
+                except Exception as e:  # noqa: BLE001 — слой не должен ломать обработку документа
+                    logger.warning(f"Строки OCR с координатами не сохранены: {e}")
+
             except Exception as e:
                 logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
                 from src.indexing.parsers import document_parser

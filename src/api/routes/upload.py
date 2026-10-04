@@ -2283,6 +2283,29 @@ async def view_ocr_markdown(
 
 
 
+@router.get("/{document_id}/ocr/lines", summary="Строки OCR с координатами (текстовый слой скана)")
+async def get_ocr_lines(
+    document_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Строки распознавания с координатами — просмотрщик накладывает их на изображение.
+
+    Зачем отдельный ответ: у скана нет текстового слоя PDF, поэтому текст нельзя было выделить на самом
+    изображении. Координаты строк (четырёхточечные рамки) сохраняются при обработке, и просмотрщик строит
+    из них слой поверх картинки — выделение и копирование работают как в PDF с текстовым слоем.
+    """
+    ensure_can_read(document_id, current_user)
+    from src.api.services.document_service import document_service
+    from fastapi.responses import JSONResponse
+    record = document_service.get_document_status(document_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    path = document_service._ocr_dir / f"{document_id}_{record.filename}.lines.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Строки OCR не найдены")
+    return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+
+
 @router.post("/{document_id}/reprocess-ocr", summary="Пересоздать OCR/Markdown для документа")
 async def reprocess_ocr(
     document_id: str,

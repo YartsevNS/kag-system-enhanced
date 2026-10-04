@@ -330,20 +330,6 @@ body {
   <div class="meta-bar" id="meta-bar"></div>
   <!-- Таблицы документа: восстановленные разбором (свой OCR или модель зрения). Раньше их не было видно
        именно здесь, из-за чего казалось, что таблица вовсе не распознана. -->
-  <details id="viewer-tables" style="display:none;margin:8px 0 4px 0">
-    <summary style="cursor:pointer;font-size:13px;font-weight:600" id="viewer-tables-summary">Таблицы документа</summary>
-    <div id="viewer-tables-body" style="margin-top:8px"></div>
-  </details>
-  <details id="viewer-text" style="display:none;margin:8px 0 4px 0">
-    <summary style="cursor:pointer;font-size:13px;font-weight:600" id="viewer-text-summary">Распознанный текст</summary>
-    <div style="margin-top:8px">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <button type="button" id="viewer-text-copy" style="font-size:12px;padding:4px 10px;cursor:pointer">Скопировать текст</button>
-        <span id="viewer-text-hint" style="font-size:11px;color:#888"></span>
-      </div>
-      <pre id="viewer-text-body" style="white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow:auto;background:#f7f7f8;border:1px solid #e3e3e6;border-radius:6px;padding:10px;font-size:12.5px;line-height:1.45;user-select:text;-webkit-user-select:text"></pre>
-    </div>
-  </details>
   <div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div>
 
   <div class="viewer" id="viewer">
@@ -475,6 +461,8 @@ async function initImageViewer() {
   setDisplay('zoom-controls', '');
   imageZoom = 1;
   applyImageZoom();
+  // Текстовый слой страницы: строки OCR накладываются на изображение (как textLayer у pdf.js).
+  loadOcrLayer(wrap, img);
 }
 
 function applyImageZoom() {
@@ -485,6 +473,7 @@ function applyImageZoom() {
   const base = stage && stage.parentElement ? stage.parentElement.clientWidth : img.clientWidth;
   img.style.width = Math.round(base * imageZoom) + 'px';
   setText('zoom-label', Math.round(imageZoom * 100) + '%');
+  updateOcrLayerScale();          // текстовый слой должен следовать за масштабом
 }
 
 async function initTextViewer() {
@@ -950,91 +939,69 @@ async function saveEdit() {
   }
 }
 
-// таблицы в просмотрщике v2: код внутри script, страница его не печатает
-// ── Таблицы документа в просмотрщике ────────────────────────────────────────────────────────
+// ── Наложение на изображение скана: выделяемый текст поверх страницы ─────────────────────────
+// Требование владельца: текст должен вести себя как текстовый слой PDF — лежать на самом документе и
+// выделяться мышью, а не жить отдельной вкладкой. Строки распознавания с координатами приходят из
+// /ocr/lines (сохраняются при обработке), здесь превращаются в прозрачные боксы по границам строк.
 function viewerEsc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function loadViewerTables() {
-  const box = document.getElementById('viewer-tables');
-  const body = document.getElementById('viewer-tables-body');
-  const summary = document.getElementById('viewer-tables-summary');
-  if (!box || !body || !docId) return;
+function pct(v, total) { return (v / total * 100).toFixed(3) + '%'; }
+
+// Высота шрифта в слое пересчитывается под текущий масштаб изображения: боксы строк растянуты
+// процентами, а размер текста в px нужно пересчитать, иначе выделение «съезжает» при зуме.
+function updateOcrLayerScale() {
+  const img = document.getElementById('page-image');
+  const layer = document.getElementById('ocr-layer');
+  if (!img || !layer) return;
+  const imgW = parseFloat(layer.dataset.imgW || '0') || img.naturalWidth || 1;
+  const scale = (img.clientWidth || imgW) / imgW;
+  layer.querySelectorAll('span[data-h]').forEach(function (sp) {
+    sp.style.fontSize = Math.max(1, parseFloat(sp.dataset.h) * scale) + 'px';
+  });
+}
+
+async function loadOcrLayer(stage, img) {
+  if (!stage || !img || !docId) return;
   try {
-    const r = await fetch('/api/v1/upload/' + encodeURIComponent(docId) + '/tables', { credentials: 'include' });
-    if (!r.ok) return;
+    const r = await fetch('/api/v1/upload/' + encodeURIComponent(docId) + '/ocr/lines', { credentials: 'include' });
+    if (!r.ok) return;                          // нет координат (старый документ — до переобработки)
     const d = await r.json();
-    const tables = (d && d.tables) || [];
-    if (!tables.length) return;                     // нет таблиц — блок не показываем, чтобы не мешать
-    box.style.display = '';
-    summary.textContent = 'Таблицы документа: ' + tables.length + ' (распознаны отдельным шагом)';
-    let html = '';
-    tables.forEach((t, i) => {
-      const heads = t.headers || [];
-      const rows = t.rows || [];
-      html += '<div style="border:1px solid var(--border, #333);border-radius:6px;padding:8px;margin-bottom:10px">'
-        + '<div style="font-size:11px;color:var(--text3, #898989);margin-bottom:6px">Таблица ' + (i + 1)
-        + ' · страница ' + (t.page_num || 1)
-        + ' · строк ' + (t.row_count || rows.length)
-        + ' · качество ' + (t.quality != null ? t.quality : '—')
-        + ' · распознано: ' + viewerEsc(t.model || '—') + '</div>'
-        + '<div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;min-width:100%">';
-      if (heads.length) {
-        html += '<thead><tr>' + heads.map(h2 => '<th style="border:1px solid var(--border, #333);padding:4px 6px;text-align:left">'
-          + viewerEsc(h2) + '</th>').join('') + '</tr></thead>';
-      }
-      html += '<tbody>' + rows.slice(0, 25).map(rr => '<tr>' + (rr || []).map(c =>
-        '<td style="border:1px solid var(--border, #333);padding:4px 6px;vertical-align:top"'
-        + (String(c).trim() && /^[\d\s.,%:+-]+$/.test(String(c).trim()) ? ' style="text-align:right;border:1px solid var(--border, #333);padding:4px 6px"' : '')
-        + '>' + viewerEsc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
-      if (rows.length > 25) html += '<div style="font-size:11px;color:var(--text3, #898989);margin-top:4px">показаны первые 25 строк из ' + rows.length + '</div>';
-      html += '</div>';
+    const lines = (d && d.lines) || [];
+    const W = d.width || img.naturalWidth || 0;
+    const H = d.height || img.naturalHeight || 0;
+    if (!lines.length || !W || !H) return;
+
+    const layer = document.createElement('div');
+    layer.id = 'ocr-layer';
+    layer.dataset.imgW = String(W);
+    layer.dataset.imgH = String(H);
+    layer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;'
+      + 'user-select:text;-webkit-user-select:text;';
+    lines.forEach(function (line) {
+      const quad = line.quad || [];
+      if (!quad.length) return;
+      const xs = quad.map(p => p[0]), ys = quad.map(p => p[1]);
+      const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+      const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+      const span = document.createElement('span');
+      span.textContent = (line.text || '') + ' ';
+      span.dataset.h = String(Math.max(1, y1 - y0));
+      // color:transparent — строка невидима (её видно на самом скане), но выделяется и копируется.
+      span.style.cssText = 'position:absolute;white-space:pre;color:transparent;cursor:text;overflow:hidden;'
+        + 'left:' + pct(x0, W) + ';top:' + pct(y0, H) + ';'
+        + 'width:' + pct(Math.max(1, x1 - x0), W) + ';height:' + pct(Math.max(1, y1 - y0), H) + ';'
+        + 'line-height:1;';
+      layer.appendChild(span);
     });
-    body.innerHTML = html;
-  } catch (e) { /* таблицы не показываем — это не ошибка просмотра */ }
+    stage.appendChild(layer);
+    updateOcrLayerScale();
+  } catch (e) { /* слой не обязателен для просмотра */ }
 }
 
-async function loadViewerText() {
-  // Текст документа берём из чанков: он есть всегда (даже для картинки, где нет текстового слоя PDF),
-  // и его можно выделять и копировать — раньше на сканах выделять было нечего.
-  const box = document.getElementById('viewer-text');
-  const body = document.getElementById('viewer-text-body');
-  const summary = document.getElementById('viewer-text-summary');
-  const hint = document.getElementById('viewer-text-hint');
-  if (!box || !body || !docId) return;
-  try {
-    const r = await fetch('/api/v1/upload/' + encodeURIComponent(docId) + '/chunks?limit=200', { credentials: 'include' });
-    if (!r.ok) return;
-    const d = await r.json();
-    const chunks = (d && d.chunks) || [];
-    const text = chunks.map(c => (c.text || '')).filter(t => t && t.trim()).join('\n\n');
-    if (!text.trim()) return;
-    box.style.display = '';
-    summary.textContent = 'Распознанный текст (' + text.length + ' символов)';
-    body.textContent = text;                       // textContent: выделяемо и безопасно (без HTML)
-    hint.textContent = chunks.length > 200 ? 'показаны первые 200 фрагментов' : '';
-  } catch (e) { /* текст не показываем — это не ошибка просмотра */ }
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-  const copy = document.getElementById('viewer-text-copy');
-  if (copy) copy.addEventListener('click', async function () {
-    const body = document.getElementById('viewer-text-body');
-    if (!body) return;
-    try { await navigator.clipboard.writeText(body.textContent || ''); copy.textContent = 'Скопировано'; }
-    catch (e) { copy.textContent = 'Не удалось скопировать'; }
-    setTimeout(function () { copy.textContent = 'Скопировать текст'; }, 1500);
-  });
-});
-
-if (docId) {
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () {
-    loadViewerTables();
-    loadViewerText();
-  });
-  else { loadViewerTables(); loadViewerText(); }
-}
+// Текстовый слой грузится из initImageViewer: сцена и картинка создаются там, поэтому загрузка
+// не привязана к DOMContentLoaded (иначе слой не нашёл бы изображение).
 </script>
 <!-- Модалка редактирования -->
 <div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()">
