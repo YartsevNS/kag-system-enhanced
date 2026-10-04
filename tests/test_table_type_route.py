@@ -114,11 +114,28 @@ def test_merge_cell_lines_reads_left_to_right_within_a_row():
     assert route_mod.merge_cell_lines(cell, lines) == "первый второй"
 
 
-def test_merge_cell_lines_counts_line_overlapping_cell_mostly():
-    """Строка, чей центр вне ячейки, но которая перекрывает её больше половины, в ячейку попадает."""
+def test_merge_cell_lines_takes_line_that_overflows_sideways():
+    """Строка, вылезающая за рамку по ШИРИНЕ, но стоящая внутри по высоте, в ячейку попадает."""
     cell = (0.0, 0.0, 100.0, 100.0)
-    lines = [line("заходящая", 60, -30, 140, -10)]     # центр (100, -20) — вне; перекрытие 40 из 80 = 0.5
+    lines = [line("заходящая", 60, 40, 140, 60)]      # центр по X вне, по Y внутри, перекрытие 40 из 80
     assert route_mod.merge_cell_lines(cell, lines) == "заходящая"
+
+
+def test_merge_cell_lines_ignores_line_from_neighbour_row():
+    """Строка из соседнего ряда НЕ должна попадать в ячейку, даже если перекрывается по ширине.
+
+    Живой промах: в ячейку первой строки набивался текст со всей колонки, потому что проверялась
+    только горизонталь. Теперь высота обязательна.
+    """
+    cell = (0.0, 0.0, 100.0, 40.0)
+    lines = [line("чужая строка", 10, 200, 90, 220)]
+    assert route_mod.merge_cell_lines(cell, lines) == ""
+
+
+def test_merge_cell_lines_ignores_line_above_cell():
+    cell = (0.0, 0.0, 100.0, 100.0)
+    lines = [line("над ячейкой", 60, -30, 140, -10)]   # по высоте пересечения нет
+    assert route_mod.merge_cell_lines(cell, lines) == ""
 
 
 def test_merge_cells_walks_all_boxes():

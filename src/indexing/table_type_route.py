@@ -166,10 +166,17 @@ def merge_cell_lines(cell_box: Sequence[float], lines: Sequence[Any],
 
     Почему не «один блок с максимальным перекрытием»: в прозаических таблицах ячейка содержит абзац
     из нескольких визуальных строк, и выбор одного блока молча теряет остальной текст (на конспекте
-    13611481-3 это 4-5 строк на ячейку). Берём блоки, чей центр внутри рамки ИЛИ которые перекрывают
-    её больше чем наполовину своей ширины, и склеиваем сверху вниз, слева направо.
+    13611481-3 это 4-5 строк на ячейку). Берём блоки, относящиеся к ячейке, и склеиваем сверху вниз,
+    слева направо.
 
-    Строки одного ряда определяются по ПЕРЕКРЫТИЮ высот, а не по округлению центра: округление
+    Признак принадлежности блоку ячейке (оба условия обязательны):
+    * ПО ВЫСОТЕ блок должен пересекать ячейку не меньше чем на половину своей высоты — иначе строка из
+      соседнего ряда попадала в ячейку (поймано на живой странице: в ячейку первой строки набился текст
+      со всей колонки, потому что проверялась только ширина);
+    * ПО ШИРИНЕ центр блока внутри ячейки ЛИБО перекрытие ≥ половины ширины блока (текст ячейки может
+      слегка вылезать за рамку).
+
+    Ряды внутри ячейки определяются по перекрытию высот, а не по округлению центра: округление
     раскидывало соседей по разным полосам из-за разницы в пару пикселей (поймано тестом).
     """
     picked: List[Tuple[Sequence[float], str]] = []
@@ -178,13 +185,18 @@ def merge_cell_lines(cell_box: Sequence[float], lines: Sequence[Any],
         if b is None:
             continue
         cx, cy = center(b)
-        inside = cell_box[0] <= cx <= cell_box[2] and cell_box[1] <= cy <= cell_box[3]
+        line_height = max(1.0, b[3] - b[1])
+        v_overlap = max(0.0, min(cell_box[3], b[3]) - max(cell_box[1], b[1]))
+        if v_overlap < min_overlap * line_height:
+            continue
         width = max(1.0, b[2] - b[0])
-        overlap = max(0.0, min(cell_box[2], b[2]) - max(cell_box[0], b[0]))
-        if inside or overlap / width >= min_overlap:
-            text = line_text(line).strip()
-            if text:
-                picked.append((b, text))
+        h_overlap = max(0.0, min(cell_box[2], b[2]) - max(cell_box[0], b[0]))
+        inside = cell_box[0] <= cx <= cell_box[2]
+        if not (inside or h_overlap / width >= min_overlap):
+            continue
+        text = line_text(line).strip()
+        if text:
+            picked.append((b, text))
 
     if not picked:
         return ""
@@ -193,7 +205,7 @@ def merge_cell_lines(cell_box: Sequence[float], lines: Sequence[Any],
     rows: List[List[Tuple[Sequence[float], str]]] = []
     for box, text in picked:
         for row in rows:
-            row_top = min(b[0][1] for b in row)  # noqa: F841 (оставляем форму для наглядности)
+            row_top = min(b[0][1] for b in row)
             row_bottom = max(b[0][3] for b in row)
             height = min(row_bottom - row_top, box[3] - box[1])
             shift = min(row_bottom, box[3]) - max(row_top, box[1])
