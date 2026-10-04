@@ -23,25 +23,82 @@ docker-compose up -d
 
 ### Порядок сборки образов (kag-base → тонкие)
 
-api/worker/mcp наследуют общий базовый образ `kre44et/kag-base:<tag>`
-(python + apt + venv + requirements + Occular + Playwright + веса).
+api/worker/mcp наследуют общий базовый образ `kre44et/kag-base:<tag>`: python 3.11-slim + apt +
+requirements + **RapidOCR/PP-OCRv5 с предзагруженными весами** + Playwright Chromium.
+Occular, torch и pyctcdecode из базы УБРАНЫ (лицензия OpenRAIL-M и ~1,7 ГБ веса).
 Порядок строгий:
 
 ```bash
-# 1. База — ТОЛЬКО при изменении requirements.txt / весов (долго, ~30-40 мин)
-docker build -t kre44et/kag-base:2026.09.07 -f docker/base/Dockerfile .
-docker push kre44et/kag-base:2026.09.07
+# 1. База — ТОЛЬКО при изменении requirements.txt / весов / Dockerfile базы (~5-10 минут)
+docker build -f docker/base/Dockerfile -t kre44et/kag-base:<TAG> .
+docker push kre44et/kag-base:<TAG>
 
-# 2. Тонкие образы — при любом изменении кода (быстро, секунды)
-docker build -t kre44et/kag-api:2026.09.07 -f Dockerfile .
-docker build -t kre44et/kag-worker:2026.09.07 -f Dockerfile.worker .
-docker build -t kre44et/kag-mcp:2026.09.07 -f Dockerfile.mcp .
-docker push kre44et/kag-api:2026.09.07
-docker push kre44et/kag-worker:2026.09.07
-docker push kre44et/kag-mcp:2026.09.07
+# 2. Тонкие образы — при любом изменении кода (секунды).
+#    ОБЯЗАТЕЛЬНО сначала обновить FROM в git (Dockerfile, Dockerfile.worker, Dockerfile.mcp),
+#    а НЕ правкой в worktree стенда — иначе образ соберётся от старой базы.
+docker build -t kre44et/kag-api:<TAG> -f Dockerfile .
+docker build -t kre44et/kag-worker:<TAG> -f Dockerfile.worker .
+docker build -t kre44et/kag-mcp:<TAG> -f Dockerfile.mcp .
+docker push kre44et/kag-api:<TAG> && docker push kre44et/kag-worker:<TAG> && docker push kre44et/kag-mcp:<TAG>
+
+# 3. На стенде: теги в docker-compose.yml, затем
+docker-compose up -d --force-recreate api worker worker-maintenance mcp-server
+
+# 4. Проверка: api=200, mcp=200, docker ps — все healthy
 ```
 
+**Предзагрузка весов обязана покрывать ОБА языка**: текст страницы — `cyrillic`, текст ячеек —
+`eslav`. Если весов языка в образе нет, RapidOCR тянет их в рантайме с modelscope.cn и в контейнере
+падает с PermissionError (пишет в site-packages, принадлежащий root) — в закрытом контуре путь
+ячеек становится мёртвым. Проверка после сборки:
+`docker run --rm -e HF_HUB_OFFLINE=1 --entrypoint sh kre44et/kag-base:<TAG> -c 'ls /usr/local/lib/python3.11/site-packages/rapidocr/models/'`
+— должно быть 5 файлов: оба распознавателя (cyrillic и eslav), детектор, классификатор поворота и
+распознаватель PP-OCRv6 (в нашей схеме не задействован).
+
 Экономия: api/worker/mcp делят один тяжёлый базовый слой вместо ~7 ГБ дублей.
+Текущие теги (04.10.2026): `kag-base`, `kag-api`, `kag-worker`, `kag-mcp` = **2026.10.04.2**.
+
+## Состав стенда 18 (проверено 04.10.2026)
+
+Всего **13 контейнеров**: 5 образов наши (`kre44et`), 8 — сторонние.
+
+Наш код:
+
+| Контейнер | Образ | Назначение |
+|---|---|---|
+| `kag-api` | kre44et/kag-api:2026.10.04.2 | FastAPI: API, веб-страницы, чат (внутр. порт 8000) |
+| `kag-system_worker_1` | kre44et/kag-worker:2026.10.04.2 | Celery: обработка документов (разбор, OCR, чанки, векторы, граф) |
+| `kag-system_worker-maintenance_1` | kre44et/kag-worker:2026.10.04.2 | Celery: обслуживание — скан сирот, кандидаты алиасов, ночные задачи |
+| `kag-mcp` | kre44et/kag-mcp:2026.10.04.2 | MCP-сервер (порт 8001) |
+| `kag-neo4j` | kre44et/dozerdb:5.26.27.0 | Neo4j CE 5.26 + DozerDB + APOC — граф знаний (7474/7687) |
+
+Инфраструктура (сторонние образы):
+
+| Контейнер | Образ | Роль |
+|---|---|---|
+| `kag-nginx` | nginx:1.25-alpine | вход 80/443, прокси на api (qd.gostsecret.ru) |
+| `kag-kag-db` | postgres:16-alpine | документы, настройки, пользователи, чаты |
+| `kag-qdrant` | qdrant/qdrant:v1.12.1 | векторное хранилище (фрагменты, карточки) 6333/6334 |
+| `kag-redis` | redis:7-alpine | очередь Celery и замки QueueGuard (6379) |
+| `kag-keycloak` | keycloak:24.0 | SSO-вход и пользователи (8080) |
+| `kag-prometheus` | prom/prometheus:v2.49.0 | метрики (9090) |
+| `kag-grafana` | grafana/grafana:10.2.0 | дашборды (3000) |
+| `kag-gigachat-proxy` | ghcr.io/ai-forever/gpt2giga | мост к GigaChat |
+
+Данные живут ВНЕ контейнеров — смена образов их не трогает:
+- тома: `kag-system_neo4j_data`, `kag-system_kag_db_data`, `kag-system_qdrant_data`,
+  `kag-system_redis_data`, `kag-system_prometheus_data`, `kag-system_grafana_data`,
+  `kag-system_loki_data` (том есть, контейнера Loki нет — см. техдолг по наблюдаемости),
+  `kag-system_neo4j_logs`;
+- каталоги: `./data` (uploads, ocr_results, models) и `./user_data`.
+
+Внешние зависимости стенда:
+- **служба OCR PP-OCRv5 на сервере моделей 41 (:8020) — ускоритель, а не зависимость**: тот же
+  движок с весами обоих языков вшит в `kag-base` и работает офлайн (проверено 04.10.2026 при
+  `HF_HUB_OFFLINE=1`: та же накладная — 292 строки локально против 292 строк через службу;
+  по времени локально ~18 с против ~3 с). Если служба недоступна, скан распознаётся локально;
+- провайдеры LLM для чата/анализа документов/графа/классификации — настраиваются в админке;
+- Ollama на 41 с моделями зрения — опция «таблицы без линий» (по умолчанию выключена).
 
 ## Бэкап документов (2026-08-24)
 
