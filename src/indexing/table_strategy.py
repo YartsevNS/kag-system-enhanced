@@ -434,9 +434,48 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".tif", ".bmp")
 
 
+def render_document_pages(file_path: str, dpi: int = 200) -> List[bytes]:
+    """Страницы документа как PNG-байты: картинка читается как есть, PDF рендерится.
+
+    Зачем: скан бывает не только .png/.jpg, но и PDF без текстового слоя (сканы из МФУ, выгрузки
+    из ЭДО). OCR и таблицы должны работать с ИЗОБРАЖЕНИЕМ страницы одинаково для обоих случаев.
+    """
+    from pathlib import Path
+
+    path = Path(file_path)
+    if path.suffix.lower() != ".pdf":
+        return [path.read_bytes()]
+    import fitz
+
+    out: List[bytes] = []
+    doc = fitz.open(str(path))
+    for page in doc:
+        out.append(page.get_pixmap(dpi=dpi).tobytes("png"))
+    doc.close()
+    return out
+
+
+def has_text_layer(file_path: str, min_chars_per_page: int = 200) -> bool:
+    """Есть ли у PDF текстовый слой. Для картинок — всегда False (слоя нет по определению)."""
+    from pathlib import Path
+
+    path = Path(file_path)
+    if path.suffix.lower() != ".pdf":
+        return False
+    import fitz
+
+    doc = fitz.open(str(path))
+    try:
+        pages = max(1, doc.page_count)
+        chars = sum(len(page.get_text("text") or "") for page in doc)
+    finally:
+        doc.close()
+    return chars >= min_chars_per_page * pages
+
+
 def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optional[Dict[str, Any]] = None,
                                       raw_lines: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    """Восстановить таблицы для документа-картинки и вписать их в разбор документа.
+    """Восстановить таблицы для документа-изображения (картинка ИЛИ скан-PDF) и вписать в разбор.
 
     Зачем именно так: дальше по конвейеру уже работает `_save_document_tables` — он берёт
     `parsed.pages[].tables` и сохраняет их в document_tables + строчный слой. Поэтому восстановленные
@@ -446,18 +485,24 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
     from pathlib import Path
 
     path = Path(file_path)
-    if path.suffix.lower() not in IMAGE_SUFFIXES:
-        return {"applied": False, "reason": "не картинка — этот путь только для изображений",
-                "saved": 0}
+    suffix = path.suffix.lower()
 
     pages = getattr(parsed, "pages", None) or []
     if not pages:
         return {"applied": False, "reason": "в разборе документа нет страниц", "saved": 0}
 
+    # Скан — это не только .png/.jpg: PDF без текстового слоя обязан идти тем же путём, иначе
+    # смета-скан остаётся без таблиц (проверено 04.10.2026 на «Договор от 09.11.2020»).
+    if suffix not in IMAGE_SUFFIXES and suffix != ".pdf":
+        return {"applied": False, "reason": f"формат {suffix or '?'} не поддержан для таблиц", "saved": 0}
+    if suffix == ".pdf" and has_text_layer(str(path)):
+        return {"applied": False, "reason": "у PDF есть текстовый слой — таблицы берёт парсер PDF",
+                "saved": 0}
+
     try:
-        image = path.read_bytes()
+        image = render_document_pages(str(path))[0]
     except Exception as e:  # noqa: BLE001
-        return {"applied": False, "reason": f"файл не прочитан: {e}", "saved": 0}
+        return {"applied": False, "reason": f"страницу не удалось отрисовать: {e}", "saved": 0}
 
     report = recover_tables(image, page=getattr(pages[0], "page_num", 1) or 1, config=config,
                             raw_lines=raw_lines)

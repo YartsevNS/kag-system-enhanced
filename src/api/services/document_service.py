@@ -574,14 +574,23 @@ class DocumentService:
                 # Без этого текст уходит во фрагменты в порядке распознавания строк («цио- прослеживаемости
                 # нальное) и 16 le и 126 12 6 22,10») — так было и до таблиц. Модель не нужна: строки
                 # группируются в колонки и полосы по координатам, ячейки одной высоты читаются слева направо.
-                _img_lines = None            # строки распознавания картинки (для порядка чтения и таблиц)
-                if str(file_path).lower().endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")):
+                _img_lines = None            # строки распознавания страницы (для порядка чтения и таблиц)
+                _suffix = str(file_path).lower().rsplit(".", 1)[-1]
+                _image_doc = _suffix in ("png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp")
+                if not _image_doc and _suffix == "pdf":
+                    # Скан в PDF (сканы из МФУ, выгрузки ЭДО): текстового слоя нет — значит страницу
+                    # распознаём так же, как картинку. Раньше такие документы молча проходили мимо
+                    # и порядка чтения, и табличной ветки (найдено 04.10.2026 на скане сметы).
+                    from src.indexing.table_strategy import has_text_layer
+
+                    _image_doc = not has_text_layer(str(file_path))
+                if _image_doc:
                     try:
                         from src.indexing.reading_order import order_page
-                        from src.indexing.table_strategy import raw_lines_from_engine
+                        from src.indexing.table_strategy import (raw_lines_from_engine,
+                                                                render_document_pages)
 
-                        with open(file_path, "rb") as _f:
-                            _img_bytes = _f.read()
+                        _img_bytes = render_document_pages(str(file_path))[0]
                         _lines = raw_lines_from_engine(_img_bytes)
                         _img_lines = _lines          # строки пригодятся и табличному пути (предохранитель VL)
                         if _lines:
