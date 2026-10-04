@@ -260,9 +260,14 @@ def _build_local(cells: bool, lang: str):
 
     Для вырезок — без детектора: на вырезке одной строки детектор не находит текст вовсе (проверено
     03.10.2026). Язык берётся из настроек: текст — cyrillic, ячейки — eslav.
+    Движок инференса может быть OpenVINO (настройка `ocr/settings.engine`), см. ocr_engine.
     """
     from rapidocr import RapidOCR
     from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+
+    from src.indexing import ocr_engine
+
+    ocr_engine.enable_if_configured()  # подмена провайдера ДО сборки сессий
 
     lang_enum = {"cyrillic": LangRec.CYRILLIC, "eslav": LangRec.ESLAV}[lang]
     params: Dict[str, Any] = {
