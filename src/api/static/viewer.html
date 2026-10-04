@@ -399,17 +399,18 @@ async function init() {
     const isImage = /\.(png|jpe?g|tiff?|bmp|webp)$/.test(fname) || ftype.startsWith('image/');
 
     // Для сканов и картинок сервер отдаёт PDF с невидимым текстовым слоем (если он собран) — тогда текст
-    // выделяется прямо на странице силами pdf.js, как у обычного PDF с текстовым слоем. Поэтому тип
-    // смотрим по фактическому ответу, а не по расширению файла.
-    let servedPdf = false;
-    try {
-      const head = await fetch(API + '/upload/' + docId + '/preview', { method: 'HEAD', credentials: 'include' });
-      servedPdf = ((head.headers.get('content-type') || '').toLowerCase()).includes('pdf');
-    } catch (e) { /* если проверить не удалось — работаем как раньше */ }
+    // выделяется прямо на странице силами pdf.js, как у обычного PDF с текстовым слоем. Признак приходит
+    // в карточке документа: по расширению файла этого не видно.
+    const hasSearchable = currentDoc.searchable_pdf === true;
 
-    if (isPdf || servedPdf) {
+    if (isPdf || hasSearchable) {
       viewMode = 'pdf';
-      await initPdfViewer();
+      const ok = await initPdfViewer();
+      if (ok === false && isImage) {
+        // pdf.js не осилил (например, файл не отдан) — показываем саму картинку, а не пустой экран.
+        viewMode = 'image';
+        await initImageViewer();
+      }
       showKbdHints();
     } else if (isImage) {
       viewMode = 'image';
@@ -430,7 +431,13 @@ async function init() {
 
 async function initPdfViewer() {
   const previewUrl = API + '/upload/' + docId + '/preview';
-  pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
+  try {
+    pdfDoc = await pdfjsLib.getDocument(previewUrl).promise;
+  } catch (e) {
+    // Просмотрщик не должен показывать пустой (чёрный) экран: говорим причину и оставляем картинку.
+    console.warn('pdf.js не открыл документ:', e);
+    return false;
+  }
 
   document.getElementById('page-total').textContent = '/ ' + pdfDoc.numPages;
   document.getElementById('page-num').max = pdfDoc.numPages;
@@ -441,6 +448,7 @@ async function initPdfViewer() {
   if (!(initPage >= 1)) initPage = 1;
   if (initPage > pdfDoc.numPages) initPage = pdfDoc.numPages;
   renderPage(initPage);
+  return true;
 }
 
 async function initImageViewer() {

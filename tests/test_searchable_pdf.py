@@ -105,3 +105,19 @@ def test_quad_box_accepts_four_points_and_flat_form():
     assert box == (1.0, 2.0, 5.0, 8.0)
     assert searchable_pdf._quad_box([1, 2, 5, 8]) == (1.0, 2.0, 5.0, 8.0)
     assert searchable_pdf._quad_box([]) is None
+
+
+def test_viewer_opens_searchable_pdf_and_has_fallback():
+    """Регрессия: просмотрщик обязан узнавать про searchable PDF из карточки документа.
+
+    Ошибка, которую это защищает (04.10.2026): просмотрщик определял тип по HEAD-запросу к /preview,
+    HEAD отвечал 405, и скан открывался как картинка — а сервер отдавал PDF, поэтому на экране был
+    пустой (чёрный) экран. Теперь признак приходит в карточке, и есть запасной путь «показать картинку».
+    """
+    from pathlib import Path
+
+    html = Path("src/api/static/viewer.html").read_text(encoding="utf-8")
+    assert "currentDoc.searchable_pdf" in html, "признак PDF со слоем должен браться из карточки документа"
+    assert "initImageViewer" in html, "должен оставаться запасной путь — показать картинку"
+    # Гадание по HEAD-запросу недопустимо: этот способ уже один раз сломал просмотрщик.
+    assert "method: 'HEAD'" not in html

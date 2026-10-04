@@ -1765,6 +1765,9 @@ async def get_document_details(
     return {
         "document_id": document_id,
         "filename": filename,
+        # Просмотрщику важно знать заранее, отдаётся ли документ как PDF с текстовым слоем: тогда он
+        # открывает pdf.js и текст выделяется на странице (см. /preview и src/indexing/searchable_pdf.py).
+        "searchable_pdf": (document_service._ocr_dir / f"{document_id}_{filename}.searchable.pdf").exists(),
         "recognized_title": cfg_recognized_title or recognized_title or filename,
         "file_type": file_type,
         "file_size": file_size or 0,
@@ -1912,7 +1915,7 @@ async def get_document_thumbnail(
         headers={"Cache-Control": "no-cache"})
 
 
-@router.get("/{document_id}/preview", summary="Файл документа для просмотра")
+@router.api_route("/{document_id}/preview", methods=["GET", "HEAD"], summary="Файл документа для просмотра")
 async def get_document_preview(
     document_id: str,
     current_user: Optional[User] = Depends(get_current_user_optional),
