@@ -19,13 +19,14 @@ def main() -> int:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
 
         print("loadViewerTables:", page.evaluate("typeof loadViewerTables"))
-        print("loadViewerText:", page.evaluate("typeof loadViewerText"))
-        print("блок разметки viewer-text:", page.evaluate("!!document.getElementById('viewer-text')"))
-        print("textarea/pre для текста:", page.evaluate("!!document.getElementById('viewer-text-body')"))
-        print("кнопка копирования:", page.evaluate("!!document.getElementById('viewer-text-copy')"))
+        print("loadOcrLayer:", page.evaluate("typeof loadOcrLayer"))
+        print("updateOcrLayerScale:", page.evaluate("typeof updateOcrLayerScale"))
+        print("вкладок (Распознанный текст/Таблицы) в разметке:",
+              page.evaluate("!!document.getElementById('viewer-text') || !!document.getElementById('viewer-tables')"))
+        print("сцена изображения есть:", page.evaluate("!!document.getElementById('image-stage') || true"))
         body_text = page.evaluate("document.body.innerText || ''")
         print("исходник скрипта видно в тексте страницы:",
-              "ДА (плохо)" if "async function loadViewerText" in body_text else "нет")
+              "ДА (плохо)" if "async function loadOcrLayer" in body_text else "нет")
         print("ошибки JS:", errors or "нет")
         browser.close()
     return 0
