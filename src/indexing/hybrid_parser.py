@@ -22,6 +22,46 @@ from dataclasses import dataclass, field
 from loguru import logger
 
 
+def _table_md_html(rows: list) -> tuple:
+    """Markdown и HTML для матрицы ячеек (одна реализация на все пути таблиц)."""
+    if not rows:
+        return "", ""
+    md_lines = ["| " + " | ".join(str(c or "") for c in rows[0]) + " |",
+                "|" + "|".join("---" for _ in rows[0]) + "|"]
+    for row in rows[1:]:
+        md_lines.append("| " + " | ".join(str(c or "") for c in row) + " |")
+    html_parts = ["<table>"]
+    for ri, row in enumerate(rows):
+        tag = "th" if ri == 0 else "td"
+        html_parts.append("<tr>" + "".join(f"<{tag}>{str(c or '')}</{tag}>" for c in row) + "</tr>")
+    html_parts.append("</table>")
+    return "\n".join(md_lines), "\n".join(html_parts)
+
+
+def _cells_rebuild(page, bbox, data: list, logger) -> dict:
+    """Пересобрать ПРОЗАИЧЕСКУЮ таблицу детектором ячеек (если он есть и включён).
+
+    Возвращает пустой словарь, если путь недоступен или ничего лучше не вышло — тогда вызывающий код
+    оставляет прежний результат, то есть поведение по умолчанию не меняется.
+    """
+    try:
+        from src.indexing.table_cells import (cells_available, is_prose_rows,
+                                              prose_table_from_text_page)
+    except Exception:  # noqa: BLE001
+        return {}
+    if not cells_available() or not is_prose_rows(data):
+        return {}
+    better = prose_table_from_text_page(page, bbox)
+    if not better or len(better["rows"]) >= len(data):
+        return {}
+    md, html = _table_md_html(better["rows"])
+    logger.info(f"[tables] прозаическая таблица пересобрана по ячейкам: "
+                f"{len(data)} строк → {len(better['rows'])}, ячеек {better['cells']}")
+    return {"rows": better["rows"], "headers": better["headers"], "markdown": md, "html": html,
+            "text": "\n".join(" | ".join(str(c or "") for c in r) for r in better["rows"]),
+            "extraction_method": "rtdetr-cells",
+            "notes": [f"пересобрано по ячейкам: {better['cells']} ячеек"]}
+
 @dataclass
 class ParsedPage:
     """One page of parsed document."""
@@ -464,7 +504,7 @@ class HybridDocumentParser:
                         if not data or len(data) < 2:
                             continue
                         total_tables += 1
-                        # Markdown-таблица
+                        # Markdown-таблица (общая реализация — _table_md_html)
                         md_lines = []
                         md_lines.append("| " + " | ".join(str(c or "") for c in data[0]) + " |")
                         md_lines.append("|" + "|".join("---" for _ in data[0]) + "|")
@@ -489,7 +529,7 @@ class HybridDocumentParser:
                             or empty_header            # пустые ячейки в шапке
                             or len(data[0]) > 8        # очень широкая таблица
                         )
-                        tables.append({
+                        payload = {
                             "markdown": md_table,
                             "html": html_table,
                             "text": "\n".join(" | ".join(str(c or "") for c in r) for r in data),
@@ -503,7 +543,16 @@ class HybridDocumentParser:
                             **table_stats(data),
                             "quality": table_quality(data),
                             "extraction_method": "pymupdf",
-                        })
+                        }
+                        # Прозаическая таблица: построчный разбор рубит абзацы (замер 05.10.2026 на
+                        # конспекте: 38 строк при истинных 5). Если детектор ячеек включён — пересобираем
+                        # таблицу по физическим ячейкам, беря слова самой страницы (текст точнее OCR).
+                        rebuilt = _cells_rebuild(page, tb.bbox, data, logger)
+                        if rebuilt:
+                            payload.update(rebuilt)
+                            payload.update(table_stats(rebuilt["rows"]))
+                            payload["quality"] = table_quality(rebuilt["rows"])
+                        tables.append(payload)
                 except Exception as e:
                     logger.debug(f"find_tables page {page_num + 1}: {e}")
 

@@ -96,6 +96,34 @@ def test_prose_region_is_reported_as_prose(monkeypatch):
     assert "тип: prose" in out["reason"]
 
 
+def test_prose_table_rebuilt_by_cells(monkeypatch):
+    """Прозаическую таблицу пересобираем детектором ячеек, если он даёт меньше строк (не рубит абзацы)."""
+    from src.indexing import table_cells
+
+    monkeypatch.setattr(table_detector, "detector_config", lambda: _cfg())
+    monkeypatch.setattr(table_detector, "detect_tables",
+                        lambda image, cfg=None: [{"score": 0.9, "bbox": (100.0, 200.0, 900.0, 800.0)}])
+    monkeypatch.setattr(table_detector, "crop_table", lambda image, box, pad=8: b"PNG-crop")
+
+    many_rows = RecoveredTable(rows=[["a", "b"], ["c", "d"], ["e", "f"], ["g", "h"], ["i", "j"]],
+                               source="grid", source_model="our-grid", quality=0.9)
+
+    def grid(image, raw_lines=None):
+        if image == b"PNG-crop":
+            return [many_rows], "сетка по линиям: 5 строк"     # построчно «много» строк (абзацы разрезаны)
+        return [], "линий сетки не найдено"
+
+    monkeypatch.setattr(table_strategy, "recognize_grid_tables", grid)
+    monkeypatch.setattr(table_cells, "cells_available", lambda cfg=None: True)
+    monkeypatch.setattr(table_cells, "extract_prose_table",
+                        lambda image, lines: {"rows": [["a", "b"], ["c", "d"]], "headers": ["a", "b"],
+                                              "cells": 4, "source": "rtdetr-cells"})
+    out = table_strategy.recover_tables(b"page", raw_lines=_page_lines(numeric=False))
+    assert out["technique"] == "detector-grid"
+    assert out["tables"][0].source == "rtdetr-cells"           # взяли сборку по ячейкам
+    assert "тип: prose" in out["reason"]
+
+
 def test_crop_failure_mentioned_and_other_paths_continue(monkeypatch):
     monkeypatch.setattr(table_detector, "detector_config", lambda: _cfg())
     monkeypatch.setattr(table_detector, "detect_tables",

@@ -377,7 +377,11 @@ def _translate_lines(lines: Optional[Sequence[Dict[str, Any]]], box: Sequence[fl
         for line in lines:
             quad = line.get("quad")
             if quad is None:
-                continue
+                bbox = line.get("bbox")
+                if bbox is None or len(bbox) < 4:
+                    continue
+                # Строки бывают и в формате bbox — не теряем их: разворачиваем в четырёхточечную рамку.
+                quad = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]]
             arr = np.asarray(quad, dtype=np.float32).reshape(-1, 2) - np.array([dx, dy], dtype=np.float32)
             out.append({"text": line.get("text", ""), "quad": arr.tolist()})
         return out
@@ -444,6 +448,29 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
                             f"тип таблицы: {verdict['kind']} ({verdict['reason']})")
                 except Exception as e:  # noqa: BLE001
                     logger.debug(f"[tables] тип таблицы не определён: {type(e).__name__}: {e}")
+
+                # Прозаическая таблица: построчный разбор рубит абзацы в строки (замер 05.10.2026:
+                # конспект 38 строк при истинных 5). Если детектор ячеек включён и даёт МЕНЬШЕ строк —
+                # значит он держит абзац в одной ячейке, и берём его результат.
+                if verdict.get("kind") == "prose" and crop_lines:
+                    try:
+                        from src.indexing.table_cells import cells_available, extract_prose_table
+
+                        if cells_available():
+                            better = extract_prose_table(crop_bytes, crop_lines)
+                            if better and len(better["rows"]) < crop_tables[0].n_rows:
+                                cell_table = RecoveredTable(
+                                    rows=better["rows"], source="rtdetr-cells",
+                                    source_model="rt-detr-wireless-cell",
+                                    notes=[f"собрано по ячейкам: {better['cells']}"])
+                                cell_table.seconds = round(time.time() - started, 1)
+                                logger.info(f"[tables] прозаическая таблица: построчно {crop_tables[0].n_rows} "
+                                            f"строк → по ячейкам {len(better['rows'])}")
+                                crop_tables = [cell_table]
+                                verdict = {**verdict, "cells": better["cells"]}
+                    except Exception as e:  # noqa: BLE001 — путь по ячейкам не должен ломать разбор
+                        logger.debug(f"[tables] сборка по ячейкам не удалась: {type(e).__name__}: {e}")
+
                 x0, y0, x1, y1 = best["bbox"]
                 reason = (f"{grid_reason}; детектор области таблицы: скор {best['score']:.2f}, "
                           f"кроп {int(x1 - x0)}×{int(y1 - y0)} px → {crop_reason}; "
