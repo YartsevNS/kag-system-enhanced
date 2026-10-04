@@ -102,12 +102,18 @@ def api(path: str, payload: dict | None = None, timeout: int = 120) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
-def chat(prompt: str, model: str, max_tokens: int, purpose: str) -> tuple[str, float]:
+def chat(prompt: str, model: str, max_tokens: int, purpose: str,
+         extra: dict | None = None) -> tuple[str, float]:
     used = spent_today()
     if used >= DAILY_LIMIT:
         sys.exit(f"дневной лимит исчерпан: потрачено {used:.2f} ₽ из {DAILY_LIMIT:.2f} ₽")
-    res = api("/chat/completions", {"model": model, "max_tokens": max_tokens, "temperature": 0.0,
-                                    "messages": [{"role": "user", "content": prompt}]})
+    body = {"model": model, "max_tokens": max_tokens, "temperature": 0.0,
+            "messages": [{"role": "user", "content": prompt}]}
+    # extra — дополнительные поля тела запроса (например response_format или стоп-последовательности),
+    # когда конкретному замеру нужен не только текст ответа.
+    if extra:
+        body.update(extra)
+    res = api("/chat/completions", body)
     answer = (res.get("choices") or [{}])[0].get("message", {}).get("content", "")
     usage = res.get("usage") or {}
     cost = float(usage.get("cost_rub") or 0)
