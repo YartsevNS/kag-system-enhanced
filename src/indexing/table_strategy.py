@@ -359,6 +359,33 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
     return [table], reason
 
 
+def _translate_lines(lines: Optional[Sequence[Dict[str, Any]]], box: Sequence[float],
+                     pad: int) -> List[Dict[str, Any]]:
+    """Перевести строки страницы в координаты кропа (вычесть его начало).
+
+    Нужно, чтобы не гонять распознавание дважды: строки страницы уже есть, а сетка по кропу работает
+    в его системе координат.
+    """
+    if not lines:
+        return []
+    try:
+        import numpy as np
+
+        dx = max(0.0, float(box[0]) - pad)
+        dy = max(0.0, float(box[1]) - pad)
+        out: List[Dict[str, Any]] = []
+        for line in lines:
+            quad = line.get("quad")
+            if quad is None:
+                continue
+            arr = np.asarray(quad, dtype=np.float32).reshape(-1, 2) - np.array([dx, dy], dtype=np.float32)
+            out.append({"text": line.get("text", ""), "quad": arr.tolist()})
+        return out
+    except Exception as e:  # noqa: BLE001 — не смогли — пусть сетка распознает кроп сама
+        logger.debug(f"[tables] строки в координаты кропа не переведены: {e}")
+        return []
+
+
 def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = None, page: int = 0,
                    recognizer: Any = None, vlm_caller: Any = None,
                    config: Optional[Dict[str, Any]] = None,
@@ -373,12 +400,59 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
     сетка (точнее по координатам) и работает предохранитель перед дорогим вызовом модели зрения.
     """
     started = time.time()
+    detector_note = ""
+
     # Сначала свой разбор по линиям бланка: он даёт ячейки с текстом (библиотечная модель структуры
     # на плотных сканах ломает строки — 23 из 30 нулевой высоты, проверено 27.09.2026).
     grid_tables, grid_reason = recognize_grid_tables(image, raw_lines=raw_lines)
     if grid_tables:
         return {"tables": grid_tables, "technique": "occular-grid", "reason": grid_reason,
                 "seconds": round(time.time() - started, 1)}
+
+    # ── Второй шанс (опция, по умолчанию выключена): найти ОБЛАСТЬ таблицы и разобрать кроп, а не
+    # страницу. Порядок именно такой, потому что кроп — не замена, а лекарство от конкретной болезни:
+    # замер 04.10.2026 на чистом скане-бланке сетка по СТРАНИЦЕ дала 8×3 с качеством 0,98, а по кропу
+    # того же бланка — 9×5 с качеством 0,59 (обрезанные линии путают детектор линий). Кроп нужен там,
+    # где страница не сводится к одной таблице: мешает окружающий текст, или таблица прозаическая.
+    try:
+        from src.indexing import table_detector
+
+        boxes = table_detector.detect_tables(image)
+    except Exception as e:  # noqa: BLE001 — детектор не должен ломать разбор страницы
+        logger.debug(f"[tables] этап детектора пропущен: {type(e).__name__}: {e}")
+        boxes = None
+
+    if boxes:
+        cfg_det = table_detector.detector_config()
+        pad = int(cfg_det.get("pad") or 8)
+        best = boxes[0]
+        crop_bytes = table_detector.crop_table(image, best["bbox"], pad=pad)
+        if crop_bytes:
+            crop_lines = _translate_lines(raw_lines, best["bbox"], pad)
+            crop_tables, crop_reason = recognize_grid_tables(crop_bytes, raw_lines=crop_lines or None)
+            if crop_tables:
+                # Тип таблицы — по блокам, попавшим в область (числовая/прозаическая). Он нужен, чтобы
+                # понимать, можно ли верить построчному разбору: прозаическую таблицу он дробит.
+                verdict = {"kind": "?", "reason": "тип не определён"}
+                try:
+                    from src.indexing.table_type_route import lines_in_box, route
+
+                    in_box = lines_in_box(raw_lines or [], best["bbox"])
+                    if in_box:
+                        verdict = route(in_box)
+                        crop_tables[0].notes.append(
+                            f"тип таблицы: {verdict['kind']} ({verdict['reason']})")
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(f"[tables] тип таблицы не определён: {type(e).__name__}: {e}")
+                x0, y0, x1, y1 = best["bbox"]
+                reason = (f"{grid_reason}; детектор области таблицы: скор {best['score']:.2f}, "
+                          f"кроп {int(x1 - x0)}×{int(y1 - y0)} px → {crop_reason}; "
+                          f"тип: {verdict['kind']}")
+                return {"tables": crop_tables, "technique": "detector-grid", "reason": reason,
+                        "seconds": round(time.time() - started, 1)}
+            detector_note = f"детектор дал кроп, но {crop_reason}"
+    if detector_note:
+        grid_reason = f"{detector_note}; {grid_reason}"
 
     # Библиотечный разбор (TableRecognizer из Occular) — только пока движок прежний. Он сам ищет ЛИНИИ,
     # поэтому на страницах без сетки бесполезен (0 таблиц даже с полными моделями, проверено 27.09.2026),
