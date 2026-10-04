@@ -490,9 +490,19 @@ class HybridDocumentParser:
                 # Иначе таблицы «склеятся» в плоский текст без структуры.
                 try:
                     from src.indexing.table_ids import table_quality, table_stats
+                    from src.indexing.table_rects import (extract_tables_from_vectors,
+                                                         tables_to_payload)
 
-                    found = page.find_tables()
-                    for tb in found.tables:
+                    # Сначала ВЕКТОРНАЯ сетка: в электронных PDF ячейки нарисованы
+                    # прямоугольниками, и это точнее эвристики по тексту (find_tables на
+                    # таблице с абзацами в ячейках рубит строки — замер 04.10.2026).
+                    page_tables = tables_to_payload(page, extract_tables_from_vectors(page))
+                    if page_tables:
+                        total_tables += len(page_tables)
+                        tables.extend(page_tables)
+
+                    found_tables = [] if page_tables else page.find_tables().tables
+                    for tb in found_tables:
                         data = tb.extract()  # 2D массив ячеек
                         if not data or len(data) < 2:
                             continue
