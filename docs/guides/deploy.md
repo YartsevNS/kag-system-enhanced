@@ -43,6 +43,11 @@ docker push kre44et/kag-api:<TAG> && docker push kre44et/kag-worker:<TAG> && doc
 
 # 3. На стенде: теги в docker-compose.yml, затем
 docker-compose up -d --force-recreate api worker worker-maintenance mcp-server
+#    ВНИМАНИЕ (проверено 04.10.2026): compose v1 без --no-deps пересоздаёт и ЗАВИСИМОСТИ api —
+#    postgres, redis, qdrant перезапускаются вместе с ним (в том прогоне были «Up 6 days»,
+#    стали «Up 2 minutes»). Данные в томах при этом целы (248 документов, граф, 10 278 точек),
+#    но очередь Celery в redis обнуляется, а идущая обработка потеряет замок QueueGuard.
+#    Если прерывать БД/очередь нельзя — добавлять --no-deps.
 
 # 4. Проверка: api=200, mcp=200, docker ps — все healthy
 ```
