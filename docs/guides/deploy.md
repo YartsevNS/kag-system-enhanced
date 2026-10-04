@@ -82,7 +82,7 @@ docker-compose up -d --force-recreate api worker worker-maintenance mcp-server
 | Контейнер | Образ | Роль |
 |---|---|---|
 | `kag-nginx` | nginx:1.25-alpine | вход 80/443, прокси на api (qd.gostsecret.ru) |
-| `kag-kag-db` | postgres:16-alpine | документы, настройки, пользователи, чаты |
+| `kag-postgres` | postgres:16-alpine | документы, настройки, пользователи, чаты |
 | `kag-qdrant` | qdrant/qdrant:v1.12.1 | векторное хранилище (фрагменты, карточки) 6333/6334 |
 | `kag-redis` | redis:7-alpine | очередь Celery и замки QueueGuard (6379) |
 | `kag-keycloak` | keycloak:24.0 | SSO-вход и пользователи (8080) |
@@ -185,7 +185,7 @@ docker start kag-worker
 docker ps --format '{{.Names}} {{.Status}}' | grep -E 'worker|api'
 docker logs kag-worker --since 2m | grep -E 'ready|Recovery|error'
 docker exec kag-redis redis-cli -n 1 LLEN documents
-docker exec kag-kag-db psql -U kag -d kag -t -c "SELECT status, count(*) FROM documents GROUP BY status;"
+docker exec kag-postgres psql -U kag -d kag -t -c "SELECT status, count(*) FROM documents GROUP BY status;"
 ```
 
 ## Секреты: только в .env (2026-09-13)

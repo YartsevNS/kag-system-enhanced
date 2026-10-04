@@ -41,7 +41,7 @@ docker exec kag-redis redis-cli -n 1 LLEN documents
 # Замки QueueGuard
 docker exec kag-redis redis-cli -n 1 KEYS 'qguard:*'
 # Статусы
-docker exec kag-kag-db psql -U kag -d kag -t -c "SELECT status, count(*) FROM documents GROUP BY status;"
+docker exec kag-postgres psql -U kag -d kag -t -c "SELECT status, count(*) FROM documents GROUP BY status;"
 # Логи worker
 docker logs -f kag-worker
 ```

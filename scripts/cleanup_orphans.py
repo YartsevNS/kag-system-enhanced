@@ -145,7 +145,7 @@ def main() -> int:
     ap.add_argument("--qdrant-key", default=os.environ.get("QDRANT_API_KEY", ""),
                     help="по умолчанию $QDRANT_API_KEY (не передавать аргументом — видно в ps)")
     ap.add_argument("--collection", default="kag_documents")
-    ap.add_argument("--db-container", default="kag-kag-db")
+    ap.add_argument("--db-container", default="kag-postgres")
     ap.add_argument("--db-user", default="kag")
     ap.add_argument("--db-name", default="kag")
     ap.add_argument("--db-password", default=os.environ.get("KAG_DB_PASSWORD", ""))

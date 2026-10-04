@@ -14,7 +14,7 @@
 | `kag-mcp` | MCP-сервер | 8001 |
 | `kag-qdrant` | Векторная БД | 6333/6334 |
 | `kag-redis` | Кэш + Celery broker (**db=1** для очереди) | 6379 |
-| `kag-kag-db` | PostgreSQL 16 (kag + keycloak) | 5432 |
+| `kag-postgres` | PostgreSQL 16 (kag + keycloak) | 5432 |
 | `kag-neo4j` | Граф знаний | 7474/7687 |
 | `kag-keycloak` | IdP (SSO) | 8080 (только 127.0.0.1) |
 | `kag-nginx` | Единственная точка входа | 80/443 |
@@ -61,7 +61,7 @@
 
 ## 3. Базы данных
 
-### PostgreSQL (kag-kag-db)
+### PostgreSQL (kag-postgres)
 - Таблицы: `documents` (24 колонки), `users`, `chat_sessions`, `chat_messages`, `system_configs` (config_store)
 - **config_store** = только настройки (web_monitor sources/state/history, chunking, function_map, providers)
 - **DocumentRepository** = документы (SQL — источник истины)

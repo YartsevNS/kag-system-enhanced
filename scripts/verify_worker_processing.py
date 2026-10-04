@@ -28,7 +28,7 @@ def req(method: str, path: str, token: str = "", payload: dict | None = None) ->
 
 def psql(sql: str) -> str:
     """Запрос к базе через docker (скрипт запускается на хосте стенда)."""
-    for cmd in (["docker", "exec", "kag-kag-db", "psql", "-U", "kag", "-d", "kag", "-t", "-A", "-c", sql],
+    for cmd in (["docker", "exec", "kag-postgres", "psql", "-U", "kag", "-d", "kag", "-t", "-A", "-c", sql],
                 ["psql", "-U", "kag", "-d", "kag", "-t", "-A", "-c", sql]):
         try:
             out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
