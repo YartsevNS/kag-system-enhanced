@@ -72,6 +72,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir rapidocr && \
     (pip uninstall -y opencv-python || true) && \
     pip install --no-cache-dir --force-reinstall --no-deps opencv-python-headless==4.12.0.88 && \
+    # OpenVINO-провайдер обязан победить на диске: обычный onnxruntime тянут и requirements, и
+    # rapidocr/flashrank, а последний установленный пакет перезаписывает каталог модуля (проверено:
+    # в первой сборке оказался onnxruntime 1.30.0 без OpenVINO). Ставим OV-сборку ПОСЛЕДНЕЙ и сразу
+    # проверяем провайдер — иначе сборка падает, а не теряет ускорение 1,6-2,35x тихо.
+    pip install --no-cache-dir --force-reinstall --no-deps onnxruntime-openvino==1.24.1 && \
+    python -c "import onnxruntime as ort; \
+assert 'OpenVINOExecutionProvider' in ort.get_available_providers(), ort.get_available_providers(); \
+print('OpenVINO EP доступен, onnxruntime', ort.__version__)" && \
     python -c "from rapidocr import RapidOCR; from rapidocr.utils.typings import LangRec, ModelType, OCRVersion;\
 base={'Rec.ocr_version': OCRVersion.PPOCRV5, 'Rec.lang_type': LangRec.CYRILLIC, 'Rec.model_type': ModelType.MOBILE};\
 RapidOCR(params=dict(base)); RapidOCR(params=dict(base, **{'Global.use_det': False}));\
