@@ -97,6 +97,25 @@ docker-compose up -d --force-recreate api worker worker-maintenance mcp-server
   `kag-system_neo4j_logs`;
 - каталоги: `./data` (uploads, ocr_results, models) и `./user_data`.
 
+### Правило имён контейнеров: `kag-<роль>`
+
+`kag-api`, `kag-mcp`, `kag-nginx`, `kag-postgres`, `kag-qdrant`, `kag-redis`, `kag-neo4j`,
+`kag-keycloak`, `kag-prometheus`, `kag-grafana`, `kag-loki`, `kag-otel-collector`,
+`kag-gigachat-proxy`. Префикс обязателен: имя контейнера уникально на ХОСТЕ, а продукт ставится на
+чужие серверы, где рядом могут жить другие стеки (голые `postgres`, `redis`, `nginx` столкнутся).
+
+**Исключение — `worker` и `worker-maintenance`:** им `container_name` НЕ задаётся, иначе ломается
+масштабирование `--scale worker=N` (имена контейнеров уникальны). Compose называет их
+`kag-system_worker_<N>` и `kag-system_worker-maintenance_<N>` — по имени проекта. Это не недосмотр,
+а требование масштабирования (фича есть в админке).
+
+Переименование `container_name` НЕ затрагивает имена сервисов, а именно по ним контейнеры видят друг
+друга: prometheus скрейпит `api:8000`, grafana ходит на `http://prometheus:9090` и `http://loki:3100`,
+nginx — на upstream по именам сервисов, api — на `kag-db`, `qdrant`, `redis`, `neo4j`.
+
+04.10.2026 контейнер БД переименован `kag-kag-db` → `kag-postgres` (том `kag-system_kag_db_data` не
+менялся, данные целы: 248 документов, 873 таблицы, база Keycloak на месте).
+
 Внешние зависимости стенда:
 - **служба OCR PP-OCRv5 на сервере моделей 41 (:8020) — ускоритель, а не зависимость**: тот же
   движок с весами обоих языков вшит в `kag-base` и работает офлайн (проверено 04.10.2026 при
