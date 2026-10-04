@@ -1,17 +1,17 @@
 """
-Hybrid Document Parser: Docling (layout/structure) + Occular-ocr (Russian text).
+Парсер документов: текстовый слой (PyMuPDF) → распознавание страниц (PP-OCRv5) → таблицы.
+
+Движка Occular в системе нет: его веса (OpenRAIL-M, ~1,7 ГБ) из образа удалены. Метка пути скана
+называется `scan_ocr` (раньше `ocular_only`) — историческое имя не должно выглядеть как живой движок.
 
 Architecture:
   PDF/DOCX/Image
-    → Docling Standard Pipeline (CPU)
-        ├─ Layout analysis: text blocks, tables, images, formulas
-        ├─ Reading order detection
-        └─ Table structure extraction
-    → Occular-ocr (CPU, Russian-optimized)
-        └─ Text recognition in detected regions (93.7% accuracy)
+    → PyMuPDF: текстовый слой, если он есть (мгновенно, без OCR)
+    → служба PP-OCRv5 на сервере моделей, иначе локальный PP-OCRv5 в контейнере
+        └─ строки страницы с координатами (таблицы, поисковый PDF, чанки)
     → Structured output: Markdown with tables, images, formulas
 
-Fallback: pure Occular-ocr if Docling fails.
+Fallback: чтение файла как текста, если распознавателя нет вовсе.
 """
 
 import hashlib
@@ -39,13 +39,13 @@ class ParsedDocument:
     pages: List[ParsedPage] = field(default_factory=list)
     full_text: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
-    parse_method: str = "unknown"  # "docling+ocular", "ocular_only", "docling_only"
+    parse_method: str = "unknown"  # "docling", "scan_ocr", "pymupdf", "fallback"
 
     def to_markdown(self) -> str:
         """
         Собрать Markdown из распознанного документа.
 
-        Приоритет: layout (от Docling) + таблицы + распознанный текст (от Occular).
+        Приоритет: layout (от Docling) + таблицы + распознанный текст страницы.
         Если layout есть — используем его для заголовков и структуры.
         Если нет — просто full_text.
         """
@@ -95,7 +95,7 @@ class ParsedDocument:
 
 class HybridDocumentParser:
     """
-    Hybrid parser combining Docling's layout analysis with Occular-ocr's
+    Парсер документов: текстовый слой PyMuPDF, распознавание PP-OCRv5 (служба или локально).
     Russian-optimized text recognition.
     
     CPU-only. No GPU required.
@@ -110,10 +110,8 @@ class HybridDocumentParser:
             ocr_cfg = config_store.get("ocr", "settings") or {}
             self._force_ocr = force_ocr if force_ocr is not None else ocr_cfg.get("force_ocr", False)
             self._dpi = dpi if dpi is not None else ocr_cfg.get("dpi", 200)
-            # Новые возможности Occular-ocr (main): выравнивание сканов и
-            # многоколоночные макеты. По умолчанию ВКЛЮЧЕНЫ — заметно
-            # улучшают качество OCR (особенно таблицы). Настраиваются в
-            # админке (OCR settings).
+            # Выравнивание сканов (deskew) и разбор многоколоночных макетов: по умолчанию включены,
+            # заметно помогают на таблицах. Настраиваются в админке (настройки OCR).
             self._deskew = ocr_cfg.get("deskew", True)
             self._reading_order = ocr_cfg.get("reading_order", True)
         except Exception:
@@ -132,41 +130,20 @@ class HybridDocumentParser:
             self._docling_available = True
             logger.info("Docling Standard pipeline initialized (CPU)")
         except Exception as e:
-            logger.warning(f"Docling not available: {e}. Using Occular-ocr only.")
+            logger.warning(f"Docling недоступен ({e}) — работаем без него")
             self._docling_converter = None
         
-        # Try Occular-ocr
-        # Проверяем веса: сначала в /app/data/weights (persist volume), потом в пакете
-        weights_pkg = Path("/opt/venv/lib/python3.11/site-packages/ocr_skel/weights")
-        weights_data = Path("/app/data/weights")
-        required = ["dbnet.onnx", "dbnet_weights.pth", "crnn_encoder.onnx", "crnn_mobilenet_large.pth"]
-        if weights_pkg.exists() and weights_data.exists():
-            for f in required:
-                if not (weights_pkg / f).is_file() and (weights_data / f).is_file():
-                    import shutil
-                    shutil.copy2(str(weights_data / f), str(weights_pkg / f))
-                    logger.info(f"  Copied weight from persist: {f}")
-        try:
-            from ocr_skel import OCRPipeline
-            # Новые версии Occular-ocr: deskew (выравнивание сканов) и
-            # reading_order (многоколоночные макеты) — заметно улучшают
-            # качество, особенно таблицы. Включены по умолчанию.
-            self._ocular = OCRPipeline(
-                gpu=False,
-                deskew=self._deskew,
-                reading_order=self._reading_order,
-            )
-            self._ocular_available = True
-            logger.info("Occular-ocr initialized (CPU)")
-        except Exception as e:
-            logger.warning(f"Occular-ocr not available: {e}")
-            self._ocular = None
+        # Движка Occular в системе НЕТ и не будет: его веса (OpenRAIL-M, ~1,7 ГБ) из образа удалены,
+        # пакета ocr_skel в образе нет. Сканы распознаёт служба PP-OCRv5 на сервере моделей, а без неё —
+        # локальный PP-OCRv5 в контейнере. Флаги оставлены только ради совместимости вызовов.
+        self._ocular = None
+        self._ocular_available = False
     
     def parse(self, file_path: str) -> ParsedDocument:
         """
         Parse a document using the best available method.
         
-        Priority: Docling layout + Occular-ocr text > Docling only > Occular only.
+        Priority: Docling layout + OCR text > scan OCR only.
         """
         path = Path(file_path)
         filename = path.name
@@ -176,14 +153,13 @@ class HybridDocumentParser:
         
         if self._docling_available:
             return self._parse_with_docling(file_path, filename, file_hash)
-        elif self._ocular_available:
-            return self._parse_with_ocular_only(file_path, filename, file_hash)
-        else:
-            return self._parse_fallback(file_path, filename, file_hash)
+        if self._ocr_service_ready():
+            return self._parse_scan_ocr(file_path, filename, file_hash)
+        return self._parse_fallback(file_path, filename, file_hash)
     
     def _parse_with_docling(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
-        """Use Docling for structure + Occular-ocr for Russian text."""
-        doc = ParsedDocument(filename=filename, parse_method="docling+ocular")
+        """Разбор структуры Docling (если он есть в системе) + распознавание текста страницы."""
+        doc = ParsedDocument(filename=filename, parse_method="docling")
         
         try:
             # Step 1: Docling layout analysis
@@ -227,12 +203,12 @@ class HybridDocumentParser:
                         page_text_parts.append(f"$${formula}$$")
                     
                     else:
-                        # Text block: use Occular-ocr if available for better Russian
+                        # Текстовый блок: если распознанный текст пустой/битый — дочитываем регион OCR
                         text = getattr(item, 'text', '')
                         bbox = getattr(item, 'bbox', None)
-                        
-                        # If text is short/unreadable and we have Occular, try OCR
-                        if self._ocular_available and self._needs_ocr(text, filename):
+
+                        # If text is short/unreadable and OCR is ready, try OCR
+                        if self._ocr_service_ready() and self._needs_ocr(text, filename):
                             if bbox:
                                 ocr_text = self._ocr_region(file_path, bbox, page_idx)
                                 if ocr_text and len(ocr_text) > len(text) * 0.5:
@@ -246,16 +222,15 @@ class HybridDocumentParser:
                 doc.pages.append(parsed_page)
             
             doc.full_text = '\n\n--- PAGE BREAK ---\n\n'.join(full_parts)
-            logger.info(f"Docling+Occular: parsed {filename}, {len(doc.pages)} pages, {len(doc.full_text)} chars")
+            logger.info(f"Docling+OCR: parsed {filename}, {len(doc.pages)} pages, {len(doc.full_text)} chars")
             
         except Exception as e:
             logger.error(f"Docling parsing failed for {filename}: {e}")
-            # Fallback to Occular-ocr only
-            if self._ocular_available:
-                logger.info(f"Falling back to Occular-ocr for {filename}")
-                return self._parse_with_ocular_only(file_path, filename, file_hash)
-            else:
-                raise
+            # Откат на распознавание страниц (служба PP-OCRv5 или локальный движок)
+            if self._ocr_service_ready():
+                logger.info(f"Falling back to scan OCR for {filename}")
+                return self._parse_scan_ocr(file_path, filename, file_hash)
+            raise
         
         return doc
     
@@ -275,7 +250,7 @@ class HybridDocumentParser:
         """Текст страницы от движка PP-OCRv5 с порядком чтения.
 
         Порядок выбора: служба на сервере моделей → локальный движок в контейнере → None (тогда вызывающий
-        код идёт прежним путём, на Occular). None означает «движок не ответил» — это не то же самое, что
+        распознаватель читается локально. None означает «движок не ответил» — это не то же самое, что
         пустая страница.
 
         Порядок чтения здесь обязателен: строки приходят в порядке распознавания («цио- прослеживаемости
@@ -348,9 +323,13 @@ class HybridDocumentParser:
             texts.append(text)
         return texts
 
-    def _parse_with_ocular_only(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
-        """Распознавание скана или картинки: служба OCR (PP-OCRv5), иначе прежний движок (Occular)."""
-        doc = ParsedDocument(filename=filename, parse_method="ocular_only")
+    def _parse_scan_ocr(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
+        """Распознавание скана или картинки: служба PP-OCRv5, иначе локальный PP-OCRv5 в контейнере.
+
+        Метка пути — `scan_ocr`. Раньше здесь стоял движок Occular и метка `ocular_only`; движок удалён
+        из образа, метка переименована, чтобы имя пути не выдавало вендора, которого в системе нет.
+        """
+        doc = ParsedDocument(filename=filename, parse_method="scan_ocr")
 
         # Путь службы: то же распознавание, но движок вынесен на сервер моделей и лицензионно чист.
         service_pages = self._pages_text_from_service(file_path)
@@ -367,35 +346,10 @@ class HybridDocumentParser:
             logger.info(f"служба OCR: parsed {filename}, {len(doc.pages)} pages, {len(doc.full_text)} chars")
             return doc
 
-        try:
-            pdf = Path(file_path).suffix.lower() == '.pdf'
-            if pdf:
-                pages = self._ocular.process_pdf(file_path, dpi=self._dpi)
-                for page_data in pages:
-                    # process_pdf возвращает [{"page": N, "method": "...", "results": [...]}]
-                    results = page_data.get('results', []) if isinstance(page_data, dict) else []
-                    text = '\n'.join(r.get('text', '') for r in results if isinstance(r, dict) and r.get('text'))
-                    page_num = page_data.get('page', len(doc.pages) + 1) if isinstance(page_data, dict) else len(doc.pages) + 1
-                    doc.pages.append(ParsedPage(page_num=page_num, text=text))
-                    doc.full_text += text + '\n\n'
-            else:
-                results = self._ocular.process_image(file_path)
-                text = '\n'.join(r['text'] for r in results if isinstance(r, dict))
-                doc.pages.append(ParsedPage(page_num=1, text=text))
-                doc.full_text = text
-            
-            doc.metadata = {
-                "file_hash": file_hash,
-                "page_count": len(doc.pages),
-                "format": Path(file_path).suffix.lower(),
-            }
-            logger.info(f"Occular-ocr: parsed {filename}, {len(doc.pages)} pages, {len(doc.full_text)} chars")
-            
-        except Exception as e:
-            logger.error(f"Occular-ocr failed for {filename}: {e}")
-            return self._parse_fallback(file_path, filename, file_hash)
-        
-        return doc
+        # Дальше идёт откат: служба не ответила и локального распознавателя в контейнере нет
+        # (локальный PP-OCRv5 вызывается внутри _text_from_service, когда служба недоступна).
+        logger.warning(f"страницы не распознаны для {filename}: служба OCR и локальный движок недоступны")
+        return self._parse_fallback(file_path, filename, file_hash)
     
     def _parse_fallback(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
         """Last-resort fallback: read as plain text."""
@@ -409,27 +363,30 @@ class HybridDocumentParser:
             doc.full_text = f"[Unable to parse {filename}]"
         return doc
 
-    def parse_ocular_only(self, file_path: str) -> Optional[ParsedDocument]:
-        """Распознавание без Docling: служба OCR (PP-OCRv5) либо прежний Occular.
+    def parse_scan_ocr(self, file_path: str) -> Optional[ParsedDocument]:
+        """Распознавание без текстового слоя: служба PP-OCRv5, иначе локальный PP-OCRv5.
 
-        Проверка «есть ли движок» теперь про два движка: если работает служба, Occular не нужен — иначе
-        после удаления его весов из образа сканы перестали бы разбираться вовсе.
+        None означает «распознавателя нет» — вызывающий код уйдёт на другой путь. Движка Occular в
+        системе нет; старое имя метода оставлено псевдонимом, чтобы не ломать внешние вызовы.
         """
-        if not self._ocular_available and not self._ocr_service_ready():
+        if not self._ocr_service_ready():
             return None
         path = Path(file_path)
-        return self._parse_with_ocular_only(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())
+        return self._parse_scan_ocr(str(path), path.name, hashlib.sha256(path.read_bytes()).hexdigest())
+
+    # Совместимость: прежнее имя (метка пути раньше называлась ocular_only).
+    parse_ocular_only = parse_scan_ocr
 
     def parse_pymupdf_first(self, file_path: str) -> Optional[ParsedDocument]:
         """PyMuPDF текстовый слой В ПРИОРИТЕТЕ — OCR не нужен.
 
         Зачем: электронные PDF (Word/госконтора) содержат текстовый слой —
-        PyMuPDF извлекает его мгновенно и без OOM (в отличие от Occular,
-        который рендерит страницы и прогоняет через нейросеть). Occular
+        PyMuPDF извлекает его мгновенно и без OOM (в отличие от распознавания,
+        которое рендерит страницы и прогоняет их через нейросеть). OCR
         остаётся для СКАНОВ (нет текстового слоя).
 
         Возвращает ParsedDocument (parse_method="pymupdf"), если текста
-        достаточно; None — если это скан (нужен Occular).
+        достаточно; None — если это скан (нужно распознавание страниц).
         """
         try:
             import fitz
@@ -628,7 +585,7 @@ class HybridDocumentParser:
         # Artifacts in PDF text layer
         if any(artifact in text for artifact in ['□□', '???', '□', 'â', 'Ã']):
             return True
-        # Docling found substantial clean text -> skip Occular
+        # Docling found substantial clean text -> skip OCR
         if len(text.strip()) > 100:
             return False
         # Russian text check
@@ -638,7 +595,7 @@ class HybridDocumentParser:
         return False
     
     def _ocr_region(self, file_path: str, bbox, page_idx: int) -> Optional[str]:
-        """Run Occular-ocr on a specific region of a page."""
+        """Распознать отдельный регион страницы (пока не реализовано — возвращает None)."""
         try:
             # For PDF, we can't easily crop by bbox, so use full page OCR
             # This is a simplification - in production, use pdf2image + crop
@@ -695,7 +652,7 @@ def route_document(file_path: str) -> Dict[str, Any]:
 
     Решение принимается эвристиками (без LLM — быстро):
     - расширение файла (PDF / DOCX / XLSX / CSV / TXT / MD)
-    - для PDF: наличие текстового слоя (fitz get_text) → PyMuPDF или Occular
+    - для PDF: наличие текстового слоя (fitz get_text) → PyMuPDF или распознавание страниц
     - содержание: плотность таблиц (find_tables), код (эвристика)
 
     Возвращает: {route, fallback, tables, code, reason}
@@ -718,13 +675,13 @@ def route_document(file_path: str) -> Dict[str, Any]:
             pages = len(doc)
             doc.close()
             if total_text < 500:
-                return {"route": "ocular", "fallback": "document_parser", "tables": False, "code": False,
+                return {"route": "scan_ocr", "fallback": "document_parser", "tables": False, "code": False,
                         "reason": f"скан: текстового слоя {total_text} симв"}
             # Таблицы/код — оценка (сам parse_pymupdf_first извлечёт детально)
-            return {"route": "pymupdf", "fallback": "ocular", "tables": True, "code": False,
+            return {"route": "pymupdf", "fallback": "scan_ocr", "tables": True, "code": False,
                     "reason": f"текстовый слой {total_text} симв, {pages} стр"}
         except Exception as e:
-            return {"route": "ocular", "fallback": "document_parser", "tables": False, "code": False,
+            return {"route": "scan_ocr", "fallback": "document_parser", "tables": False, "code": False,
                     "reason": f"fitz failed: {e}"}
 
     return {"route": "document_parser", "fallback": None, "tables": False, "code": False, "reason": "default"}

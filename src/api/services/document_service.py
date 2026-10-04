@@ -558,17 +558,17 @@ class DocumentService:
             record.progress = 30
             self._save_document_to_db(document_id)
             
-            # Парсинг: PyMuPDF (текстовый слой) → Occular-ocr (сканы) → DocumentParser.
-            # PyMuPDF мгновенно извлекает текстовый слой электронных PDF
-            # (без OOM); Occular — для сканов (рендер+нейросеть).
+            # Парсинг: PyMuPDF (текстовый слой) → распознавание страниц PP-OCRv5 (сканы) → DocumentParser.
+            # PyMuPDF мгновенно извлекает текстовый слой электронных PDF (без OOM);
+            # сканы читает служба PP-OCRv5 на сервере моделей, иначе локальный PP-OCRv5 в контейнере.
             try:
                 from src.indexing.hybrid_parser import get_hybrid_parser
                 from src.indexing.table_ids import make_table_id
 
                 hybrid = get_hybrid_parser()
-                parsed = hybrid.parse_pymupdf_first(str(file_path)) or hybrid.parse_ocular_only(str(file_path))
+                parsed = hybrid.parse_pymupdf_first(str(file_path)) or hybrid.parse_scan_ocr(str(file_path))
                 if not parsed:
-                    raise ValueError("PyMuPDF/Occular недоступны")
+                    raise ValueError("нет текстового слоя, а распознавание страниц недоступно")
 
                 # ── Порядок чтения для сканов: текст страницы собираем по геометрии ─────────────
                 # Без этого текст уходит во фрагменты в порядке распознавания строк («цио- прослеживаемости
@@ -754,7 +754,7 @@ class DocumentService:
                     logger.warning(f"searchable PDF не собран: {e}")
 
             except Exception as e:
-                logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
+                logger.warning(f"разбор страниц не удался ({e}), откат на DocumentParser")
                 from src.indexing.parsers import document_parser
                 parsed_doc = document_parser.parse(str(file_path), record.file_type)
                 segments = parsed_doc.get("segments", [])

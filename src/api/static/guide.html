@@ -132,10 +132,10 @@ a:hover{text-decoration:underline}
 <h2>📦 OCR и парсинг</h2>
 <div class="card">
   <h3>Движки распознавания</h3>
-  <p><span class="tag tag-green">Occular-ocr</span> — быстрый русский OCR (93.7% точность, CPU)<br>
-  <span class="tag tag-blue">Tesseract</span> — стандартный OCR (русский язык)<br>
-  <span class="tag tag-amber">Docling</span> — разметка и таблицы (CPU only)</p>
-  <p>Правило: Docling = структура, Occular-ocr = русский текст.</p>
+  <p><span class="tag tag-green">PyMuPDF</span> — текстовый слой электронных PDF (мгновенно)<br>
+  <span class="tag tag-blue">PP-OCRv5</span> — сканы: служба на сервере моделей, иначе локально в контейнере<br>
+  <span class="tag tag-amber">Своя сетка по линиям</span> — таблицы бланков (детерминированно, доли секунды)</p>
+  <p>Правило: есть текстовый слой — берём его; нет — распознаём страницу; таблицы собираем сами.</p>
 </div>
 
 <h2>🚢 Развёртывание</h2>

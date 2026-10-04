@@ -1,9 +1,10 @@
 """Тесты распознавания скана через службу OCR (парсер) — и без неё.
 
-Проверяем то, от чего зависит «уберем ли мы Occular из образа»:
+Проверяем:
   1. со включённой службой текст страницы приходит от неё, порядок чтения применяется;
-  2. выключенная служба не делает сетевых вызовов и уходит на прежний движок;
-  3. `parse_ocular_only` работает, даже если самого Occular в образе нет, — но только когда служба жива.
+  2. выключенная служба не делает сетевых вызовов;
+  3. путь скана называется `scan_ocr` (движка Occular в системе нет; старое имя — только псевдоним);
+  4. `parse_scan_ocr` работает при живом службе, даже если локального движка в контейнере нет.
 """
 from __future__ import annotations
 
@@ -101,16 +102,24 @@ def test_pages_text_from_service_none_when_disabled(monkeypatch, tmp_path):
     assert _parser()._pages_text_from_service(str(image)) is None
 
 
-def test_parse_ocular_only_without_occular_when_service_disabled(monkeypatch, tmp_path):
-    """Без движка вообще документ не разбирается — прежнее поведение сохранено."""
+def test_parse_scan_ocr_returns_none_when_no_engine(monkeypatch, tmp_path):
+    """Без распознавателя вообще документ не разбирается — прежнее поведение сохранено."""
+    image = tmp_path / "scan.png"
+    image.write_bytes(b"data")
+    monkeypatch.setattr(ocr_client, "get_service_config", lambda: _config(enabled=False))
+    assert _parser().parse_scan_ocr(str(image)) is None
+
+
+def test_old_name_is_alias(monkeypatch, tmp_path):
+    """Прежнее имя метода осталось псевдонимом — внешние вызовы не ломаются."""
     image = tmp_path / "scan.png"
     image.write_bytes(b"data")
     monkeypatch.setattr(ocr_client, "get_service_config", lambda: _config(enabled=False))
     assert _parser().parse_ocular_only(str(image)) is None
 
 
-def test_parse_ocular_only_works_with_service_and_no_occular(monkeypatch, tmp_path):
-    """Ключевое: при живом службе сканы разбираются даже после удаления весов Occular из образа."""
+def test_scan_path_labels_itself_scan_ocr(monkeypatch, tmp_path):
+    """Метка пути — scan_ocr, а не legacy-имя вендора: её видно в логах и разборах."""
     image = tmp_path / "scan.png"
     image.write_bytes(b"data")
     payload = {"lines": [{"text": "Счет-фактура №", "quad": [[10, 10], [200, 10], [200, 30], [10, 30]],
@@ -121,7 +130,8 @@ def test_parse_ocular_only_works_with_service_and_no_occular(monkeypatch, tmp_pa
         "/ocr": payload,
     }))
 
-    parsed = _parser().parse_ocular_only(str(image))
+    parsed = _parser().parse_scan_ocr(str(image))
     assert parsed is not None
     assert "Счет-фактура" in parsed.full_text
     assert parsed.metadata.get("ocr_engine") == "service-ppocrv5"
+    assert parsed.parse_method == "scan_ocr"           # метка не выдаёт вендора, которого нет в системе
