@@ -334,6 +334,16 @@ body {
     <summary style="cursor:pointer;font-size:13px;font-weight:600" id="viewer-tables-summary">Таблицы документа</summary>
     <div id="viewer-tables-body" style="margin-top:8px"></div>
   </details>
+  <details id="viewer-text" style="display:none;margin:8px 0 4px 0">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600" id="viewer-text-summary">Распознанный текст</summary>
+    <div style="margin-top:8px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <button type="button" id="viewer-text-copy" style="font-size:12px;padding:4px 10px;cursor:pointer">Скопировать текст</button>
+        <span id="viewer-text-hint" style="font-size:11px;color:#888"></span>
+      </div>
+      <pre id="viewer-text-body" style="white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow:auto;background:#f7f7f8;border:1px solid #e3e3e6;border-radius:6px;padding:10px;font-size:12.5px;line-height:1.45;user-select:text;-webkit-user-select:text"></pre>
+    </div>
+  </details>
   <div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div>
 
   <div class="viewer" id="viewer">
@@ -985,9 +995,45 @@ async function loadViewerTables() {
   } catch (e) { /* таблицы не показываем — это не ошибка просмотра */ }
 }
 
+async function loadViewerText() {
+  // Текст документа берём из чанков: он есть всегда (даже для картинки, где нет текстового слоя PDF),
+  // и его можно выделять и копировать — раньше на сканах выделять было нечего.
+  const box = document.getElementById('viewer-text');
+  const body = document.getElementById('viewer-text-body');
+  const summary = document.getElementById('viewer-text-summary');
+  const hint = document.getElementById('viewer-text-hint');
+  if (!box || !body || !docId) return;
+  try {
+    const r = await fetch('/api/v1/upload/' + encodeURIComponent(docId) + '/chunks?limit=200', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const chunks = (d && d.chunks) || [];
+    const text = chunks.map(c => (c.text || '')).filter(t => t && t.trim()).join('\n\n');
+    if (!text.trim()) return;
+    box.style.display = '';
+    summary.textContent = 'Распознанный текст (' + text.length + ' символов)';
+    body.textContent = text;                       // textContent: выделяемо и безопасно (без HTML)
+    hint.textContent = chunks.length > 200 ? 'показаны первые 200 фрагментов' : '';
+  } catch (e) { /* текст не показываем — это не ошибка просмотра */ }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const copy = document.getElementById('viewer-text-copy');
+  if (copy) copy.addEventListener('click', async function () {
+    const body = document.getElementById('viewer-text-body');
+    if (!body) return;
+    try { await navigator.clipboard.writeText(body.textContent || ''); copy.textContent = 'Скопировано'; }
+    catch (e) { copy.textContent = 'Не удалось скопировать'; }
+    setTimeout(function () { copy.textContent = 'Скопировать текст'; }, 1500);
+  });
+});
+
 if (docId) {
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadViewerTables);
-  else loadViewerTables();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () {
+    loadViewerTables();
+    loadViewerText();
+  });
+  else { loadViewerTables(); loadViewerText(); }
 }
 </script>
 <!-- Модалка редактирования -->

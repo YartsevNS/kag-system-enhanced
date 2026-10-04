@@ -22,10 +22,11 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from src.indexing.table_recovery import (
     RecoveredTable,
@@ -123,6 +124,27 @@ def _drop_repeats(rows: list) -> Tuple[list, int]:
             seen.add(key)
         out.append(row)
     return out, dropped
+
+
+def looks_like_table(lines: Optional[Sequence[Dict[str, Any]]]) -> bool:
+    """Дешёвый признак таблицы по уже распознанным строкам — чтобы не звать модель зрения зря.
+
+    Зачем: модель зрения — дорогая опция (десятки секунд на CPU). На скриншоте поисковой выдачи она
+    «нашла» таблицу за 72 с и вернула 5 строк мусора, который потом лёг в табличный слой. Признак
+    отсекает такие страницы ДО вызова: у таблицы есть строки с числами (количество, цена, сумма),
+    у обычного текста и списка ссылок — нет.
+
+    Возвращает True, если строк с числами-значениями достаточно, чтобы страница была похожа на таблицу.
+    """
+    if not lines:
+        return False
+    numeric_rows = 0
+    for line in lines:
+        text = str(line.get("text") or "")
+        # Число-значение: цифры с десятичным разделителем или длинная цифровая группа (код, сумма).
+        if re.search(r"\d+[.,]\d{2}\b", text) or re.search(r"\b\d{4,}\b", text):
+            numeric_rows += 1
+    return numeric_rows >= 3 and len(lines) >= 5
 
 
 def recognize_table(image: bytes, *, page: int = 0, config: Optional[Dict[str, Any]] = None

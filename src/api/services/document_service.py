@@ -573,6 +573,7 @@ class DocumentService:
                 # Без этого текст уходит во фрагменты в порядке распознавания строк («цио- прослеживаемости
                 # нальное) и 16 le и 126 12 6 22,10») — так было и до таблиц. Модель не нужна: строки
                 # группируются в колонки и полосы по координатам, ячейки одной высоты читаются слева направо.
+                _img_lines = None            # строки распознавания картинки (для порядка чтения и таблиц)
                 if str(file_path).lower().endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp")):
                     try:
                         from src.indexing.reading_order import order_page
@@ -581,6 +582,7 @@ class DocumentService:
                         with open(file_path, "rb") as _f:
                             _img_bytes = _f.read()
                         _lines = raw_lines_from_engine(_img_bytes)
+                        _img_lines = _lines          # строки пригодятся и табличному пути (предохранитель VL)
                         if _lines:
                             _page_order = order_page(_lines)
                             if _page_order.text.strip():
@@ -603,7 +605,7 @@ class DocumentService:
                 try:
                     from src.indexing.table_strategy import recover_tables_for_image_document
 
-                    _rec = recover_tables_for_image_document(parsed, str(file_path))
+                    _rec = recover_tables_for_image_document(parsed, str(file_path), raw_lines=_img_lines)
                     if _rec.get("applied"):
                         logger.info(f"{document_id}: восстановлено таблиц {_rec['saved']} ({_rec['reason']})")
                     elif _rec.get("reason"):

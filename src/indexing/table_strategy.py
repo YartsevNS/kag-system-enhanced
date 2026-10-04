@@ -361,17 +361,21 @@ def recognize_grid_tables(image: bytes, raw_lines: Optional[Sequence[Dict[str, A
 
 def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = None, page: int = 0,
                    recognizer: Any = None, vlm_caller: Any = None,
-                   config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Полная схема: сначала свой Occular, затем (если нужно и разрешено) модель зрения.
+                   config: Optional[Dict[str, Any]] = None,
+                   raw_lines: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Полная схема: сначала своя сетка по линиям, затем (если нужно и разрешено) модель зрения.
 
     Возвращает отчёт: список таблиц, каким путём получены, причина и время. Причина заполняется всегда —
     по ней в журнале видно, почему страница осталась без таблицы (выключенная опция не должна выглядеть
     как сбой распознавания).
+
+    `raw_lines` — уже распознанные строки страницы (если они есть у вызывающего кода): по ним строится
+    сетка (точнее по координатам) и работает предохранитель перед дорогим вызовом модели зрения.
     """
     started = time.time()
     # Сначала свой разбор по линиям бланка: он даёт ячейки с текстом (библиотечная модель структуры
     # на плотных сканах ломает строки — 23 из 30 нулевой высоты, проверено 27.09.2026).
-    grid_tables, grid_reason = recognize_grid_tables(image)
+    grid_tables, grid_reason = recognize_grid_tables(image, raw_lines=raw_lines)
     if grid_tables:
         return {"tables": grid_tables, "technique": "occular-grid", "reason": grid_reason,
                 "seconds": round(time.time() - started, 1)}
@@ -402,6 +406,21 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
                 "reason": f"{reason}; модель зрения выключена в админке — страница пропущена",
                 "seconds": round(time.time() - started, 1)}
 
+    # Предохранитель: модель зрения дорогая (десятки секунд на CPU), поэтому зовём её только если страница
+    # ХОТЬ ЧЕМ-ТО похожа на таблицу. Пример цены ошибки: скриншот поисковой выдачи — модель искала таблицу
+    # 72,3 с и вернула 5 строк мусора, который лёг в табличный слой документа (найдено 04.10.2026).
+    probe_lines = [{"text": str(l.get("text") or "")} for l in (raw_lines or [])]
+    if not probe_lines and ocr_lines:
+        probe_lines = [{"text": getattr(l, "text", "")} for l in ocr_lines]
+    if probe_lines:
+        from src.indexing.vlm_tables import looks_like_table
+
+        if not looks_like_table(probe_lines):
+            return {"tables": [], "technique": "none",
+                    "reason": f"{reason}; модель зрения не вызывалась — страница не похожа на таблицу "
+                              f"(строк {len(probe_lines)}, чисел-значений мало)",
+                    "seconds": round(time.time() - started, 1)}
+
     caller = vlm_caller or recognize_table
     table, vlm_reason = caller(image, page=page, config=cfg)
     if table is None:
@@ -415,8 +434,8 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tiff", ".tif", ".bmp")
 
 
-def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optional[Dict[str, Any]] = None
-                                      ) -> Dict[str, Any]:
+def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optional[Dict[str, Any]] = None,
+                                      raw_lines: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """Восстановить таблицы для документа-картинки и вписать их в разбор документа.
 
     Зачем именно так: дальше по конвейеру уже работает `_save_document_tables` — он берёт
@@ -440,7 +459,8 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
     except Exception as e:  # noqa: BLE001
         return {"applied": False, "reason": f"файл не прочитан: {e}", "saved": 0}
 
-    report = recover_tables(image, page=getattr(pages[0], "page_num", 1) or 1, config=config)
+    report = recover_tables(image, page=getattr(pages[0], "page_num", 1) or 1, config=config,
+                            raw_lines=raw_lines)
     if not report["tables"]:
         return {"applied": False, "reason": report["reason"], "saved": 0, "seconds": report["seconds"]}
 

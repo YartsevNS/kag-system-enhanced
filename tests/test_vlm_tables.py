@@ -53,6 +53,64 @@ def test_option_is_disabled_by_default():
     assert vlm_tables.get_vlm_tables_config()["enabled"] is False
 
 
+def test_looks_like_table_distinguishes_screenshot_from_invoice():
+    """Признак «похоже на таблицу»: у скриншота выдачи чисел-значений нет, у накладной — есть."""
+    screenshot = [{"text": t} for t in ["Режим ИИ", "Все", "Видео", "Картинки", "Покупки", "Новости", "Ещё"]]
+    invoice = [{"text": t} for t in [
+        "531299000202 | 1 | Балка MS Pro 120 | 796 | шт | 12 | 560,18 | 6722.10",
+        "531299060402 | 2 | Балка MS Pro 150 | 716 | шт | 22 | 634.56 | 13 959,92",
+        "831296060602 | 3 | Балка MS Pro 100 | 7316 | шт | 62 | 730,73 | 45 305,47",
+        "531299000212 | 4 | Балка MS Pro 90 | 786 | шт | 12 | 474,49 | 5693.90",
+        "531299000222 | 5 | Балка MS Pro 60 | 796 | шт | 14 | 380,10 | 5321.40",
+        "Итого",
+    ]]
+    assert vlm_tables.looks_like_table(screenshot) is False
+    assert vlm_tables.looks_like_table(invoice) is True
+    assert vlm_tables.looks_like_table([]) is False
+
+
+def test_vlm_not_called_when_page_is_not_a_table(monkeypatch):
+    """Главное: на странице без признаков таблицы модель зрения НЕ вызывается (иначе 72 с впустую)."""
+    from src.indexing.table_strategy import recover_tables
+
+    calls = []
+
+    def fake_caller(image, page=0, config=None):
+        calls.append(1)
+        return None, "модель зрения вызвана"
+
+    cfg = dict(vlm_tables.get_vlm_tables_config())
+    cfg["enabled"] = True
+    lines = [{"text": t} for t in ["Режим ИИ", "Все", "Видео", "Картинки", "Покупки", "Новости"]]
+    report = recover_tables(b"not-an-image", config=cfg, vlm_caller=fake_caller, raw_lines=lines)
+
+    assert not calls, "модель зрения не должна вызываться на странице без признаков таблицы"
+    assert "не похожа на таблицу" in report["reason"]
+
+
+def test_vlm_called_when_page_looks_like_table(monkeypatch):
+    """Обратная сторона: если числа в строках есть, предохранитель модель не блокирует."""
+    from src.indexing.table_strategy import recover_tables
+
+    calls = []
+
+    def fake_caller(image, page=0, config=None):
+        calls.append(1)
+        return None, "модель зрения вызвана (таблица не распознана)"
+
+    cfg = dict(vlm_tables.get_vlm_tables_config())
+    cfg["enabled"] = True
+    lines = [{"text": "531299000202 1 Балка 796 шт 12 560,18 6722.10"},
+             {"text": "531299060402 2 Балка 716 шт 22 634.56 13 959,92"},
+             {"text": "831296060602 3 Балка 7316 шт 62 730,73 45 305,47"},
+             {"text": "531299000212 4 Балка 786 шт 12 474,49 5693.90"},
+             {"text": "531299000222 5 Балка 796 шт 14 380,10 5321.40"},
+             {"text": "Итого"}]
+    recover_tables(b"not-an-image", config=cfg, vlm_caller=fake_caller, raw_lines=lines)
+
+    assert calls, "при признаках таблицы модель зрения должна вызываться"
+
+
 def test_disabled_option_makes_no_call(monkeypatch):
     def explode(*a, **k):
         raise AssertionError("при выключенной опции сетевой вызов недопустим")
@@ -226,7 +284,7 @@ def test_recovered_table_is_written_into_document_parse(tmp_path):
                            source="vlm", source_model="kag-qwen2vl:2b")
 
     orig = table_strategy.recover_tables
-    table_strategy.recover_tables = lambda image, page=0, config=None: {
+    table_strategy.recover_tables = lambda image, **kwargs: {
         "tables": [table], "technique": "vlm", "reason": "распознано", "seconds": 1.0}
     try:
         report = table_strategy.recover_tables_for_image_document(parsed, str(image), config={"enabled": True})
