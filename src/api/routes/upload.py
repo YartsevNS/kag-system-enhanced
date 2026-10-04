@@ -1927,6 +1927,20 @@ async def get_document_preview(
     if not file_path:
         raise HTTPException(status_code=404, detail="Файл не найден")
 
+    # Если для документа собран PDF с невидимым текстовым слоем (скан или картинка — там своего слоя нет),
+    # отдаём именно его: просмотрщик показывает страницу с выделением, копированием и поиском — ровно так
+    # же, как для PDF с текстовым слоем. Для PDF с настоящим слоем файл отдаётся как есть.
+    try:
+        record = document_service.get_document_status(document_id)
+        if record:
+            searchable = document_service._ocr_dir / f"{document_id}_{record.filename}.searchable.pdf"
+            if searchable.exists():
+                return FileResponse(searchable, media_type="application/pdf",
+                                    headers={"Content-Disposition": "inline",
+                                             "Cache-Control": "public, max-age=600"})
+    except Exception as e:  # noqa: BLE001 — просмотр не должен ломаться из-за этого шага
+        logger.warning(f"[preview] searchable PDF не отдан: {e}")
+
     # MIME по расширению, а не «pdf или octet-stream»
     import mimetypes
     media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"

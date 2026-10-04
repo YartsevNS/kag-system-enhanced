@@ -715,6 +715,27 @@ class DocumentService:
                 except Exception as e:  # noqa: BLE001 — слой не должен ломать обработку документа
                     logger.warning(f"Строки OCR с координатами не сохранены: {e}")
 
+                # PDF с невидимым текстовым слоем: просмотрщик отдаёт его pdf.js, и текст выделяется
+                # прямо на документе — как у PDF с текстовым слоем. Сборка: src/indexing/searchable_pdf.py
+                try:
+                    if _img_lines:
+                        from PIL import Image as _PILImage
+
+                        from src.indexing.searchable_pdf import build_searchable_pdf
+
+                        with _PILImage.open(file_path) as _im:
+                            _w, _h = _im.size
+                        _pdf_bytes = build_searchable_pdf([{
+                            "image": _img_bytes, "width": _w, "height": _h, "lines": list(_img_lines),
+                        }])
+                        if _pdf_bytes:
+                            _pdf_path = self._ocr_dir / f"{document_id}_{record.filename}.searchable.pdf"
+                            _pdf_path.write_bytes(_pdf_bytes)
+                            logger.info(f"searchable PDF сохранён: {_pdf_path} "
+                                        f"({round(len(_pdf_bytes) / 1024, 1)} КБ)")
+                except Exception as e:  # noqa: BLE001 — просмотр не должен зависеть от этого шага
+                    logger.warning(f"searchable PDF не собран: {e}")
+
             except Exception as e:
                 logger.warning(f"Occular-ocr failed ({e}), fallback to DocumentParser")
                 from src.indexing.parsers import document_parser
