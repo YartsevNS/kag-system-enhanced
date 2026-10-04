@@ -11,7 +11,7 @@
 # При изменении requirements.txt/весов — пересобрать kag-base
 # (docker/base/Dockerfile), затем этот образ.
 
-FROM kre44et/kag-base:2026.10.04.2
+FROM kre44et/kag-base:2026.10.05.1
 
 LABEL maintainer="KAG Team"
 LABEL description="KAG - Knowledge Augmentation Generation. AI-powered knowledge management with RAG."

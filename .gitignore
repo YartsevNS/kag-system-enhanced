@@ -82,6 +82,8 @@ graphify-out/
 # Оценка retrieval: рабочий набор и отчёты — личные данные, не в git
 scripts/eval_questions.json
 reports/
+# Модели детекторов лежат в build-контексте (их вшивает docker/base/Dockerfile), в git им не место.
+assets/models/
 
 # локальное состояние сессии (файл-передача перед сжатием контекста)
 .hermes/handoff.md

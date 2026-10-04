@@ -8,7 +8,7 @@
 #   docker build -t kre44et/kag-worker:2026.09.07 -f Dockerfile.worker .
 #   docker push kre44et/kag-worker:2026.09.07
 
-FROM kre44et/kag-base:2026.10.04.2
+FROM kre44et/kag-base:2026.10.05.1
 
 LABEL maintainer="KAG Team"
 LABEL description="KAG Celery Worker"

@@ -95,6 +95,15 @@ RUN python -m playwright install --with-deps chromium && \
 # иначе overlayfs снова скопирует файлы наверх).
 RUN apt-get purge -y git && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* /root/.cache
 
+# Модели детекторов (наш собственный экспорт из официальных весов PaddlePaddle, Apache-2.0):
+#   pp_doclayout_v3_int8.onnx        — ОБЛАСТЬ таблицы на странице (второй шанс, если сетка не нашла);
+#   rt_detr_wireless_cell_int8.onnx  — ЯЧЕЙКИ таблицы (безлинейные/прозаические: абзац остаётся в ячейке).
+# INT8 выбран по замеру: точность держится (IoU 0,994 у макета; 15/15 ячеек и IoU 0,997 у ячеек),
+# а размер 127,5+123,4 МБ → 35+32 МБ. Медленнее FP32 на Broadwell, но эти этапы включаются настройкой
+# и работают только там, где базовый разбор не справился.
+# Файлы лежат в build-контексте (assets/models), рецепт пересборки — docs/guides/table-structure-bakeoff.md.
+COPY assets/models/ /app/models/
+
 LABEL maintainer="KAG Team"
 LABEL description="KAG shared base image (python + OCR + Playwright) for api/worker/mcp"
 LABEL version="2026.09.07"
