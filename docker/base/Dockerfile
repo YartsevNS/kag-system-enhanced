@@ -64,6 +64,9 @@ COPY requirements.txt .
 # Замер 03.10.2026 на одном хосте (накладная): PP-OCRv5 28,0 с и 4 контрольных числа против 43,9 с и
 # 3 чисел у Occular; лицензия Apache-2.0 вместо OpenRAIL-M. Локальный движок оставлен запасным
 # путём: если служба недоступна, скан всё равно распознаётся, а не теряется.
+# Предзагрузка ОБЯЗАНА покрывать оба языка: текст страницы — cyrillic, текст ячеек — eslav.
+# Иначе RapidOCR тянет отсутствующие веса в рантайме (modelscope.cn) и в контейнере падает
+# с PermissionError, записывая в site-packages: в закрытом контуре путь ячеек станет мёртвым.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir rapidocr && \
@@ -72,7 +75,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     python -c "from rapidocr import RapidOCR; from rapidocr.utils.typings import LangRec, ModelType, OCRVersion;\
 base={'Rec.ocr_version': OCRVersion.PPOCRV5, 'Rec.lang_type': LangRec.CYRILLIC, 'Rec.model_type': ModelType.MOBILE};\
 RapidOCR(params=dict(base)); RapidOCR(params=dict(base, **{'Global.use_det': False}));\
-print('PP-OCRv5 weights preloaded')" && \
+base_eslav=dict(base, **{'Rec.lang_type': LangRec.ESLAV});\
+RapidOCR(params=base_eslav); RapidOCR(params=dict(base_eslav, **{'Global.use_det': False}));\
+print('PP-OCRv5 weights preloaded: cyrillic + eslav, page + cells')" && \
     chown -R kag:kag /opt/venv
 
 # Playwright Chromium: pip-пакет уже из requirements; здесь системные deps
