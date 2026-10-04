@@ -14,8 +14,8 @@ import urllib.error
 import pytest
 
 from src.indexing import vlm_tables
-from src.indexing.table_recovery import OcrLine
-from src.indexing.table_strategy import recover_tables, recognize_occular_tables
+from src.indexing.table_recovery import OcrLine, RecoveredTable
+from src.indexing.table_strategy import recover_tables
 
 TABLE_MD = (
     "| Наименование | Кол | Примечание |\n"
@@ -205,11 +205,17 @@ LINES = [
 ]
 
 
-def test_strategy_prefers_occular_when_tables_found():
-    report = recover_tables(object(), ocr_lines=LINES, recognizer=_FakeRecognizer([OCCULAR_TABLE]))
+def test_strategy_prefers_grid_when_table_found(monkeypatch):
+    """Сетка по линиям — первый путь: если она дала таблицу, дальше не идём."""
+    from src.indexing import table_strategy
+
+    monkeypatch.setattr(table_strategy, "recognize_grid_tables",
+                        lambda image, raw_lines=None: ([RecoveredTable(
+                            rows=[["Наименование", "Кол"], ["Блок детектирования", "4"]],
+                            source="grid", quality=0.9)], "сетка по линиям: 2x2"))
+    report = recover_tables(object(), ocr_lines=LINES)
     assert report["technique"] == "occular-grid"
     assert report["tables"][0].rows[1] == ["Блок детектирования", "4"]
-    assert "Occular" in report["reason"]
 
 
 def test_strategy_skips_vlm_when_option_disabled():
@@ -238,11 +244,16 @@ def test_strategy_reports_when_vlm_fails():
     assert report["tables"] == [] and "сервис недоступен" in report["reason"]
 
 
-def test_occular_unavailable_is_a_reason_not_an_error():
-    """Если Occular нет на машине — это причина в отчёте, а не исключение."""
-    tables, reason = recognize_occular_tables(b"not-an-image")
-    assert tables == []
-    assert reason
+def test_no_library_table_path_is_a_reason_not_an_error(monkeypatch):
+    """Библиотечного разбора в системе больше нет: это причина в отчёте, а не исключение."""
+    from src.indexing import table_strategy
+
+    monkeypatch.setattr(table_strategy, "recognize_grid_tables",
+                        lambda image, raw_lines=None: ([], "линий сетки не найдено"))
+    report = recover_tables(object(), config={"enabled": False})
+    assert report["tables"] == []
+    assert report["technique"] == "none"
+    assert "библиотечного разбора" in report["reason"]          # причина названа прямо
 
 
 def test_settings_update_keeps_other_table_keys():

@@ -135,9 +135,9 @@ def test_engine_path_uses_service_when_enabled(monkeypatch):
     }))
 
     def should_not_be_called(image):
-        raise AssertionError("при работающей службе прежний движок вызываться не должен")
+        raise AssertionError("при работающей службе локальный движок вызываться не должен")
 
-    monkeypatch.setattr(table_strategy, "_raw_lines_from_occular", should_not_be_called)
+    monkeypatch.setattr(ocr_client, "lines_local", should_not_be_called)
     lines = table_strategy.raw_lines_from_engine(b"image")
     assert [l["text"] for l in lines] == ["строка службы"]
 
@@ -145,18 +145,18 @@ def test_engine_path_uses_service_when_enabled(monkeypatch):
 def test_engine_path_falls_back_when_service_disabled(monkeypatch):
     """Выключенная служба — работаем прежним движком (поведение до перехода сохраняется)."""
     monkeypatch.setattr(ocr_client, "get_service_config", lambda: _config(enabled=False))
-    monkeypatch.setattr(table_strategy, "_raw_lines_from_occular",
-                        lambda image: [{"text": "строка прежнего движка",
+    monkeypatch.setattr(ocr_client, "lines_local",
+                        lambda image: [{"text": "строка локального движка",
                                         "quad": [[0, 0], [5, 0], [5, 5], [0, 5]], "confidence": 0.5}])
     lines = table_strategy.raw_lines_from_engine(b"image")
-    assert [l["text"] for l in lines] == ["строка прежнего движка"]
+    assert [l["text"] for l in lines] == ["строка локального движка"]
 
 
 def test_engine_path_falls_back_when_service_returns_nothing(monkeypatch):
     """Служба ответила пусто — страница не теряется: берём прежний движок."""
     monkeypatch.setattr(ocr_client, "get_service_config", lambda: _config())
     monkeypatch.setattr(ocr_client.urllib.request, "urlopen", lambda *a, **k: _FakeResponse({"lines": []}))
-    monkeypatch.setattr(table_strategy, "_raw_lines_from_occular",
+    monkeypatch.setattr(ocr_client, "lines_local",
                         lambda image: [{"text": "прежний движок", "quad": [[0, 0], [5, 0], [5, 5], [0, 5]],
                                         "confidence": 0.5}])
     lines = table_strategy.raw_lines_from_engine(b"image")
