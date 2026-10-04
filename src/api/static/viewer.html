@@ -252,14 +252,14 @@ body {
   /* Поднята на 10 px от нижнего края (было 12 px — по просьбе владельца отступ увеличен) и больше
      не исчезает: она слегка прозрачная, при наведении показывается полностью. */
   position: fixed; bottom: 22px; left: 260px;
-  font-size: 11px; color: var(--text4);
-  opacity: 0.55; transition: opacity 0.2s;
+  font-size: 12px; color: var(--text4);      /* на пункт крупнее (было 11 px) — просьба владельца */
+  opacity: 0.65; transition: opacity 0.2s;   /* плотность 0.65 — просьба владельца */
 }
 .kbd-hint:hover { opacity: 1; }
 .kbd-hint kbd {
   background: var(--surface); border: 1px solid var(--border-s);
   border-radius: 3px; padding: 1px 5px;
-  font-family: var(--mono); font-size: 10px;
+  font-family: var(--mono); font-size: 11px;   /* на пункт крупнее (было 10 px) */
 }
 
 /* Progress bar */
