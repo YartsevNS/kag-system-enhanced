@@ -301,13 +301,66 @@ def test_recovered_table_is_written_into_document_parse(tmp_path):
     assert "<th>Наименование</th>" in saved["html"]
 
 
-def test_non_image_document_is_skipped(tmp_path):
+def test_unsupported_format_is_skipped(tmp_path):
+    """Формат вне картинок и PDF — таблицы восстановить нечем."""
     from src.indexing.table_strategy import recover_tables_for_image_document
 
-    pdf = tmp_path / "doc.pdf"
-    pdf.write_bytes(b"%PDF-1.4")
+    other = tmp_path / "doc.docx"
+    other.write_bytes(b"not a document")
+    report = recover_tables_for_image_document(_FakeParsed(), str(other))
+    assert report["applied"] is False and "не поддержан" in report["reason"]
+
+
+def test_text_pdf_is_skipped(tmp_path):
+    """У PDF с текстовым слоем таблицы берёт парсер PDF — тут не вмешиваемся."""
+    import fitz
+
+    from src.indexing.table_strategy import recover_tables_for_image_document
+
+    doc = fitz.open()
+    page = doc.new_page()
+    # текст в несколько строк: одиночная длинная строка обрезается краем страницы, и слоя
+    # может оказаться меньше порога (проверено: 103 символа вместо 440)
+    for i in range(12):
+        page.insert_text((72, 100 + i * 20), "Text layer sample line for the test", fontsize=12)
+    pdf = tmp_path / "with_text.pdf"
+    doc.save(pdf)
+    doc.close()
+
     report = recover_tables_for_image_document(_FakeParsed(), str(pdf))
-    assert report["applied"] is False and "не картинка" in report["reason"]
+    assert report["applied"] is False and "текстовый слой" in report["reason"]
+
+
+def test_scanned_pdf_is_not_rejected_by_format(tmp_path):
+    """Скан в PDF (картинка без текстового слоя) обязан идти путём изображения.
+
+    Это и была ошибка: PDF отсекался как «не картинка», и смета-скан оставалась без таблиц.
+    """
+    import fitz
+    from PIL import Image, ImageDraw
+
+    from src.indexing.table_strategy import recover_tables_for_image_document
+
+    img = Image.new("RGB", (400, 300), "white")
+    d = ImageDraw.Draw(img)
+    for x in (20, 200, 380):
+        d.line([(x, 20), (x, 280)], fill="black", width=2)
+    for y in (20, 100, 180, 280):
+        d.line([(20, y), (380, y)], fill="black", width=2)
+    png = tmp_path / "scan.png"
+    img.save(png)
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(fitz.Rect(60, 100, 535, 420), filename=str(png))
+    pdf = tmp_path / "scan.pdf"
+    doc.save(pdf)
+    doc.close()
+
+    report = recover_tables_for_image_document(_FakeParsed(), str(pdf))
+    # OCR в юнит-тесте недоступен, поэтому таблиц может не быть — важно, что формат НЕ отсекает:
+    assert "не поддержан" not in report["reason"]
+    assert "текстовый слой" not in report["reason"]
 
 
 def test_openai_protocol_payload_and_parsing(monkeypatch):

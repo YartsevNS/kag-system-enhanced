@@ -35,6 +35,12 @@ MIN_CELL_PX = 6
 MIN_ROWS = 3              # меньше — это не таблица
 MIN_COLS = 2
 LINE_COVER_H = 0.5        # горизонтальная линия должна занимать половину ширины таблицы
+# Насколько вертикальная линия должна «проходить» через полосу строки, чтобы считать её границей
+# этой строки. 0,5 было слишком строго для сканов: линия тонкая и в полосе шапки набирала 0,33 —
+# из-за этого интервал шапки выбрасывался и первая строка данных становилась «шапкой»
+# (найдено 04.10.2026 на скане сметы). Окно поиска линии тоже расширено до ±2 px: на сканах
+# линия гуляет на пару пикселей.
+LINE_ROW_COVER = 0.25
 LINE_COVER_V = 0.10       # вертикальная — десятую часть высоты
 TARGET_ROW_PX = 36        # желаемая высота строки после увеличения (текст ~24 px)
 MAX_SCALE = 4.0
@@ -142,6 +148,15 @@ def _grid_at(image: Any, notes: List[str]) -> Optional[Grid]:
     x_min, x_max = min(lines_v), max(lines_v)
     lines_h = _group([y_min + i for i, v in enumerate(hproj[y_min:y_max + 1])
                       if v > (x_max - x_min) * LINE_COVER_H])
+    # Верхняя и нижняя границы таблицы берутся из протяжённости ВЕРТИКАЛЬНЫХ линий: горизонтальная
+    # линия рамки сверху/снизу бывает прервана текстом или светлее остальных и не дотягивает до
+    # порога покрытия. Без этого шапка выпадала из сетки, и первой строкой становилась первая строка
+    # данных — она же уезжала в шапку (найдено 04.10.2026 на скане сметы: шапка OCR на y≈530,
+    # а сетка начиналась с y=584).
+    if lines_h and (lines_h[0] - y_min) > MIN_CELL_PX:
+        lines_h = [int(y_min)] + list(lines_h)
+    if lines_h and (y_max - lines_h[-1]) > MIN_CELL_PX:
+        lines_h = list(lines_h) + [int(y_max)]
     if len(lines_h) < MIN_ROWS + 1:
         return None
 
@@ -152,7 +167,7 @@ def _grid_at(image: Any, notes: List[str]) -> Optional[Grid]:
         if y1 - y0 < MIN_CELL_PX:
             continue
         present = [x for x in lines_v
-                   if float((vert[max(0, y0):y1, max(0, x - 1):x + 2] > 0).mean()) > 0.5]
+                   if float((vert[max(0, y0):y1, max(0, x - 2):x + 3] > 0).mean()) > LINE_ROW_COVER]
         present = sorted(set([x_min] + present + [x_max]))
         if len(present) < MIN_COLS + 1:
             continue

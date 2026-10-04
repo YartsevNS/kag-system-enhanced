@@ -709,9 +709,15 @@ class DocumentService:
                 # теперь просмотрщик накладывает строки поверх картинки (как textLayer у pdf.js).
                 try:
                     if _img_lines:
+                        import io as _io
+
                         from PIL import Image as _PILImage
 
-                        with _PILImage.open(file_path) as _im:
+                        # Размер берём у ОТРЕНДЕРЕННОЙ страницы, а не у файла: для скана в PDF
+                        # PIL.open(pdf) не умеет PDF и падал — из-за этого скан-PDF оставался без
+                        # строк с координатами и без searchable-PDF, и просмотрщик не показывал текст
+                        # (найдено 04.10.2026 на скане сметы).
+                        with _PILImage.open(_io.BytesIO(_img_bytes)) as _im:
                             _size = _im.size
                         _lines_path = self._ocr_dir / f"{document_id}_{record.filename}.lines.json"
                         _lines_path.write_text(json.dumps({
@@ -728,11 +734,13 @@ class DocumentService:
                 # прямо на документе — как у PDF с текстовым слоем. Сборка: src/indexing/searchable_pdf.py
                 try:
                     if _img_lines:
+                        import io as _io
+
                         from PIL import Image as _PILImage
 
                         from src.indexing.searchable_pdf import build_searchable_pdf
 
-                        with _PILImage.open(file_path) as _im:
+                        with _PILImage.open(_io.BytesIO(_img_bytes)) as _im:
                             _w, _h = _im.size
                         _pdf_bytes = build_searchable_pdf([{
                             "image": _img_bytes, "width": _w, "height": _h, "lines": list(_img_lines),
