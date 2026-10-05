@@ -239,13 +239,14 @@ def extract_prose_table(image: Any, lines: Sequence[Any]) -> Optional[Dict[str, 
 
 def prose_table_from_text_page(page: Any, bbox: Sequence[float],
                                dpi: int = 200) -> Optional[Dict[str, Any]]:
-    """Прозаическая таблица из ТЕКСТОВОЙ страницы: рендерим область и берём слова самой страницы.
+    """Прозаическая таблица из ТЕКСТОВОЙ страницы: рендерим область и распознаём ЕЁ ЖЕ.
 
-    Зачем рендерить: детектору ячеек нужна картинка. Зачем брать слова страницы, а не OCR: у текстового
-    PDF координаты и символы точнее любого распознавания — распознавать то, что уже есть в тексте, незачем.
-
-    `bbox` — рамка таблицы в точках PDF (как отдаёт find_tables), координаты слов переводятся в пиксели
-    отрендеренной области (масштаб dpi/72).
+    Почему не словами страницы: первая версия брала `page.get_text("words")` и переводила точки PDF
+    в пиксели рендера (масштаб dpi/72). На живой странице это дало кашу — шапка «в вопросы / которые
+    устно учебнике над», текст ячеек перемешан (проверено 05.10.2026 на конспекте 13611481-3): строки
+    и ячейки оказались в разных системах координат. Теперь координаты строк и кропа берутся из ОДНОГО
+    источника — распознавания отрендеренной области, ровно как в измеренно-рабочем пути для сканов.
+    `bbox` — рамка таблицы в точках PDF (как отдаёт find_tables).
     """
     import cv2
     import numpy as np
@@ -253,23 +254,25 @@ def prose_table_from_text_page(page: Any, bbox: Sequence[float],
 
     try:
         x0, y0, x1, y1 = (float(v) for v in bbox[:4])
-        zoom = dpi / 72.0
-        pix = page.get_pixmap(clip=fitz.Rect(x0, y0, x1, y1), dpi=dpi)
-        img = cv2.imdecode(np.frombuffer(pix.tobytes("png"), np.uint8), cv2.IMREAD_COLOR)
+        png = page.get_pixmap(clip=fitz.Rect(x0, y0, x1, y1), dpi=dpi).tobytes("png")
+        img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             return None
-        lines = []
-        for w in page.get_text("words"):
-            wx0, wy0, wx1, wy1, text = float(w[0]), float(w[1]), float(w[2]), float(w[3]), str(w[4])
-            if not (x0 - 2 <= wx0 and wx1 <= x1 + 2 and y0 - 2 <= wy0 and wy1 <= y1 + 2):
-                continue
-            lines.append({"text": text,
-                          "bbox": [(wx0 - x0) * zoom, (wy0 - y0) * zoom,
-                                   (wx1 - x0) * zoom, (wy1 - y0) * zoom]})
+
+        lines: Sequence[Any] = []
+        try:
+            from src.indexing.ocr_client import (lines_from_service, lines_local,
+                                                 service_available, service_enabled)
+
+            if service_enabled() and service_available():
+                lines = lines_from_service(png)
+            if not lines:
+                lines = lines_local(png)
+        except Exception as e:  # noqa: BLE001 — без строк путь просто не срабатывает
+            logger.debug(f"[tables] строки для области таблицы не получены: {type(e).__name__}: {e}")
         if not lines:
             return None
-        result = extract_prose_table(img, lines)
-        return result
+        return extract_prose_table(img, lines)
     except Exception as e:  # noqa: BLE001 — сбой этого пути не должен ломать разбор страницы
         logger.warning(f"[tables] таблица по ячейкам из текстовой страницы не собралась: "
                        f"{type(e).__name__}: {e}")
