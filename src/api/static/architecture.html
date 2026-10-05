@@ -18,6 +18,7 @@ main{margin-left:240px;flex:1;min-width:0;padding:32px 48px;max-width:1300px}
 h1{font-size:30px;font-weight:700;letter-spacing:-.5px;margin-bottom:6px}
 .lead{font-size:14px;color:var(--text4);margin-bottom:20px}
 h2{font-size:20px;font-weight:600;margin:28px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border-s)}
+.scroll-hint{display:none}
 .diagram{background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius-lg);padding:16px;overflow-x:auto}
 svg{width:100%;height:auto;display:block;min-width:1120px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
@@ -35,6 +36,7 @@ footer{margin-top:24px;color:var(--text4);font-size:12px;text-align:center}
   h1{font-size:22px}
   svg{min-width:920px}
   .diagram{padding:8px}
+  .scroll-hint{display:block;font-size:12px;color:var(--text4);margin:0 0 6px}
 }
 </style>
 </head>
@@ -56,6 +58,7 @@ footer{margin-top:24px;color:var(--text4);font-size:12px;text-align:center}
   <h1>🔭 Архитектура стенда</h1>
   <p class="lead">Снято с живого стенда 18 (ВМ 109) 05.10.2026 · образы kag-* 2026.10.05.1 · закрытый контур, только CPU</p>
 
+  <p class="scroll-hint">Схему можно листать по горизонтали →</p>
   <div class="diagram">
     <svg viewBox="0 0 1240 760" xmlns="http://www.w3.org/2000/svg" font-family="'Cascadia Code','Fira Code',Consolas,monospace">
       <defs>
