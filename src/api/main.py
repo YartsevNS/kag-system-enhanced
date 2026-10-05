@@ -422,6 +422,16 @@ async def api_page():
         return FileResponse(api_path)
     return {"error": "API page not found"}
 
+@app.get("/architecture", summary="Архитектура стенда (схема)")
+async def architecture_page():
+    """Схема архитектуры: состав контейнеров, порты, связи, сервер моделей.
+
+    Страница ОТКРЫТА без входа — как /docs и /api: это витрина состава стенда, а не рабочие данные.
+    Отдаётся с запретом кеша: состав меняется с каждым выкатом, старая схема в браузере только мешает.
+    """
+    return await _html_response(os.path.join(static_path, "architecture.html"))
+
+
 @app.get("/docs", summary="Документация проекта")
 async def docs_page():
     """Читаемая документация по проекту"""
