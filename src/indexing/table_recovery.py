@@ -22,7 +22,9 @@ from typing import List, Optional, Sequence, Tuple
 
 BBox = Tuple[float, float, float, float]      # x0, y0, x1, y1
 
-SOURCE_OCCULAR_GRID = "occular-grid"
+SOURCE_GRID = "grid"                          # наша сетка по линиям (актуальное значение)
+LEGACY_SOURCE_GRID = "occular-grid"           # встречается в СТАРЫХ строках БД; не менять значение
+SOURCE_OCCULAR_GRID = LEGACY_SOURCE_GRID      # прежнее имя константы (совместимость вызовов)
 SOURCE_VLM = "vlm"
 
 

@@ -48,7 +48,7 @@ def test_grid_success_does_not_call_detector(monkeypatch):
     monkeypatch.setattr(table_strategy, "recognize_grid_tables",
                         lambda image, raw_lines=None: ([_table()], "сетка по линиям: 8×3, качество 0.98"))
     out = table_strategy.recover_tables(b"page")
-    assert out["technique"] == "occular-grid"
+    assert out["technique"] == "grid"
     assert called["detect"] == 0
     assert "детектор" not in out["reason"]
 

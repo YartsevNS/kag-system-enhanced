@@ -5,7 +5,8 @@
   1. **Своя сетка по линиям** (`table_grid`) — первый шаг: она детерминированная и быстрая (доли секунды).
      Линии бланка видны отлично, а библиотечная модель структуры на плотных сканах ломает строки
      (23 из 30 нулевой высоты). Объединённые ячейки получаются сами: в полосе учитываются только реально
-     нарисованные вертикальные линии. Текст в ячейки кладёт выбранный движок OCR (служба PP-OCRv5 или Occular).
+     нарисованные вертикальные линии. Текст в ячейки кладёт выбранный движок OCR (служба PP-OCRv5 или
+     локальный PP-OCRv5 в контейнере).
 
   2. **Детектор ОБЛАСТИ таблицы** (PP-DocLayoutV3, ONNX) и **детектор ЯЧЕЕК** (RT-DETR, ONNX) — включаемые
      стадии, по умолчанию выключены. Область: второй шанс, если сетка по странице не дала таблицу.
@@ -18,8 +19,8 @@
      пропускается.
 
 Движок OCR выбирается настройкой (`ocr/settings.service_enabled`): служба PP-OCRv5 на сервере моделей
-(замер на одном хосте: 28,0 с и 4 контрольных числа против 43,9 с и 3 чисел у Occular) либо прежний
-Occular в контейнере. Недоступная служба — откат на прежний движок с честной причиной, а не потеря страницы.
+(замер на одном хосте: 28,0 с и 4 контрольных числа против 43,9 с и 3 чисел у прежнего движка) либо
+локальный PP-OCRv5. Недоступная служба — откат на локальный движок с честной причиной, а не потеря страницы.
 
 Модуль не бросает исключений и не теряет страницы: любой сбой шага превращается в причину в отчёте.
 """
@@ -128,18 +129,10 @@ def make_cell_recognizer() -> Optional[Any]:
     except Exception as e:  # noqa: BLE001 — без службы работает прежний распознаватель
         logger.debug(f"[tables] служба OCR для ячеек недоступна: {e}")
 
-    try:
-        from occular import CRNNRecognizerONNX
-
-        instance = CRNNRecognizerONNX(num_threads=4, lm=True)
-
-        def recognize(image: Any, quads: Sequence[Any]) -> List[tuple]:
-            return instance.recognize(image, list(quads))
-
-        _cell_recognizer = recognize
-    except Exception as e:  # noqa: BLE001 — без распознавателя путь всё равно работает (хуже)
-        _cell_recognizer_failed = True
-        logger.debug(f"[tables] распознаватель ячеек недоступен: {e}")
+    # Прежнего распознавателя ячеек (Occular) в системе нет: если ни службы, ни локального движка —
+    # возвращаем None. Тогда ветка дочитывания ячеек честно пропускается, а страница разбирается
+    # основным путём (текст ячеек уже приходит из строк страницы).
+    logger.info("[tables] распознаватель ячеек недоступен: ни служба PP-OCRv5, ни локальный движок")
     return _cell_recognizer
 
 
@@ -272,7 +265,7 @@ def recover_tables(image: bytes, *, ocr_lines: Optional[Sequence[OcrLine]] = Non
     # на плотных сканах ломает строки — 23 из 30 нулевой высоты, проверено 27.09.2026).
     grid_tables, grid_reason = recognize_grid_tables(image, raw_lines=raw_lines)
     if grid_tables:
-        return {"tables": grid_tables, "technique": "occular-grid", "reason": grid_reason,
+        return {"tables": grid_tables, "technique": "grid", "reason": grid_reason,
                 "seconds": round(time.time() - started, 1)}
 
     # ── Второй шанс (опция, по умолчанию выключена): найти ОБЛАСТЬ таблицы и разобрать кроп, а не
@@ -443,7 +436,7 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
     Зачем именно так: дальше по конвейеру уже работает `_save_document_tables` — он берёт
     `parsed.pages[].tables` и сохраняет их в document_tables + строчный слой. Поэтому восстановленные
     таблицы достаточно положить в тот же разбор: не нужен отдельный путь записи, а провенанс
-    (`extraction_method` = occular-table / vlm-<модель>) сохраняется штатно.
+    (`extraction_method` = grid / vlm-<модель> / rtdetr-cells) сохраняется штатно.
     """
     from pathlib import Path
 
@@ -497,7 +490,7 @@ def recover_tables_for_image_document(parsed: Any, file_path: str, config: Optio
             "markdown": to_markdown(table.rows),
             "html": to_html(table.rows),
             "bbox": list(table.bbox or []),
-            "extraction_method": (f"vlm-{table.source_model}" if table.source == "vlm" else "occular-table"),
+            "extraction_method": (f"vlm-{table.source_model}" if table.source == "vlm" else str(table.source or "grid")),
         })
         # Арифметика — арбитр: структурные метрики (заполненность, TEDS) не замечают, что «1» стало «7» или
         # значение уехало на колонку. Вердикт пишем в разбор и в журнал: по нему видно, можно ли доверять числам.

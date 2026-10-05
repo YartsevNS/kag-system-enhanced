@@ -28,7 +28,10 @@ import numpy as np
 
 from src.indexing.table_recovery import RecoveredTable
 
-SOURCE_GRID = "occular-grid"
+#: Источник таблицы для НАШЕЙ сетки по линиям. Раньше значение называлось "occular-grid" —
+#: имя вендора, которого в системе нет. Историческое значение осталось только в старых строках
+#: БД (см. LEGACY_SOURCE_GRID в table_recovery): по нему ничего не фильтруется, читается как строка.
+SOURCE_GRID = "grid"
 
 INSET = 2                 # отступ от линий, чтобы сами линии не попадали в распознавание
 MIN_CELL_PX = 6
@@ -340,7 +343,7 @@ def fill_cells(image: Any, grid: Grid, lines: Sequence[Dict[str, Any]],
             row.append(" ".join(cell) if cell else "")
         rows_out.append(row)
 
-    table = RecoveredTable(rows=rows_out, source=SOURCE_GRID, source_model="occular-grid",
+    table = RecoveredTable(rows=rows_out, source=SOURCE_GRID, source_model="grid",
                            bbox=grid.bbox, page=page, notes=notes + grid.notes)
     table.quality = table_quality(table.rows)
     return table

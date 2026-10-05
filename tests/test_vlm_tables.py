@@ -214,7 +214,7 @@ def test_strategy_prefers_grid_when_table_found(monkeypatch):
                             rows=[["Наименование", "Кол"], ["Блок детектирования", "4"]],
                             source="grid", quality=0.9)], "сетка по линиям: 2x2"))
     report = recover_tables(object(), ocr_lines=LINES)
-    assert report["technique"] == "occular-grid"
+    assert report["technique"] == "grid"
     assert report["tables"][0].rows[1] == ["Блок детектирования", "4"]
 
 
