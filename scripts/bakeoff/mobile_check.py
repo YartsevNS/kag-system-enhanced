@@ -81,6 +81,27 @@ def main() -> None:
             if m["smallCount"] > 0:
                 problems.append(f"{path}: мест нажатия уже 40px — {m['smallCount']} "
                                 f"(напр. {m['small'][0]['text']!r} {m['small'][0]['size']})")
+            if os.environ.get("SHOW_TARGETS") == "1" and m["smallCount"]:
+                det = page.evaluate("""() => {
+                    const out = [];
+                    document.querySelectorAll('button, a, input[type=submit]').forEach(el => {
+                        const r = el.getBoundingClientRect();
+                        const cs = getComputedStyle(el);
+                        if (cs.display === 'none' || r.width === 0 || r.height === 0) return;
+                        if (r.height >= 40 && r.width >= 40) return;
+                        out.push({
+                            sel: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+                                 (el.className ? '.' + el.className.toString().split(' ')[0] : ''),
+                            text: (el.textContent || '').trim().slice(0, 14),
+                            size: Math.round(r.width) + 'x' + Math.round(r.height),
+                            pad: cs.paddingTop + '/' + cs.paddingLeft,
+                            fs: cs.fontSize,
+                        });
+                    });
+                    return out.slice(0, 6);
+                }""")
+                for d in det:
+                    print(f"        мелко: {d['sel']:34} {d['size']:>9} отступы {d['pad']:>10} шрифт {d['fs']} «{d['text']}»")
             print(f"  {W:>4}px {path:11} прокрутка вбок: {m['overflow']:>3}px | "
                   f"узких нажатий: {m['smallCount']:>2} | {'; '.join(status) if status else 'ок'}")
 
