@@ -18,7 +18,9 @@ BASE = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8000"
 PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # страницы, закрытые проверкой доступа на сервере
-ADMIN_PATHS = ["/admin", "/users", "/logs", "/docker", "/qdrant", "/experiments", "/monitoring"]
+# Только те пути, что реально закрыты проверкой доступа в src/api/main.py.
+# /monitoring и /system открыты любому вошедшему — их в этом списке быть не должно.
+ADMIN_PATHS = ["/admin", "/users", "/logs", "/docker", "/qdrant", "/experiments"]
 CHECK_PAGES = ["/chat", "/documents", "/system"]
 
 def visible_admin_links(page):
