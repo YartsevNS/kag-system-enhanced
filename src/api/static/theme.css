@@ -185,8 +185,23 @@ table, .num, td, th { font-variant-numeric: tabular-nums; }
 }
 
 /* ── Меню: засечные подписи групп и линейки, ромбы вместо значков ─────────── */
-/* Длинное меню прокручивается внутри колонки и не обрезается */
-.nav-items, .site-nav-block { overflow-y: auto; }
+/* Колонка меню: знак и подпись сверху, пункты прокручиваются, выход всегда виден внизу.
+   Раньше пункты и «Выйти» жили в одном потоке и при длинном списке выход уходил за край экрана. */
+nav {
+    display: flex;
+    flex-direction: column;
+}
+nav .nav-items, nav [data-site-nav], nav .site-nav-block {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+nav > a[onclick*="logout"] {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-s);
+}
 
 .nav-group, .nav-section {
     font-family: var(--font-display);
