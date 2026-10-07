@@ -69,12 +69,38 @@ class ChatPromptConfig(BaseModel):
     prompt: Optional[str] = ""
 
 
+# Допустимые значения оформления (проверяются на входе, а не в браузере)
+APPEARANCE_FONTS = ("system", "pt-serif", "tahoma", "times", "georgia", "verdana", "arial")
+APPEARANCE_CONTRAST = ("normal", "high")
+APPEARANCE_DEFAULTS = {
+    "font_body": "system",
+    "font_display": "pt-serif",
+    "font_size": 14,
+    "font_weight": 400,
+    "contrast": "normal",
+    "color_accent": "",
+    "color_bg": "",
+    "color_surface": "",
+    "color_text": "",
+}
+
+
 class BrandingConfig(BaseModel):
     """Брендинг интерфейса (частичное обновление)."""
 
     name: Optional[str] = None
     version: Optional[str] = None
     footer: Optional[str] = None
+    # ── оформление: шрифт, размер, толщина, контраст, цвета ──
+    font_body: Optional[str] = None       # ключ из APPEARANCE_FONTS
+    font_display: Optional[str] = None    # шрифт витрины (заголовки, меню, имя)
+    font_size: Optional[int] = None       # базовый размер текста, px (12..20)
+    font_weight: Optional[int] = None     # толщина основного текста (300..700)
+    contrast: Optional[str] = None        # normal | high
+    color_accent: Optional[str] = None    # #RRGGBB, заливка акцентом
+    color_bg: Optional[str] = None        # #RRGGBB, фон
+    color_surface: Optional[str] = None   # #RRGGBB, панели и карточки
+    color_text: Optional[str] = None      # #RRGGBB, основной текст
 
 
 class ProcessingBlockConfig(BaseModel):
@@ -1876,11 +1902,14 @@ async def get_branding_config():
         cfg = config_store.get("system", "branding") or {}
         if not isinstance(cfg, dict):
             cfg = {}
-        return {
+        data = {
             "name": cfg.get("name", "KAG"),
             "version": cfg.get("version", ""),
             "footer": cfg.get("footer", ""),
         }
+        for key, default in APPEARANCE_DEFAULTS.items():
+            data[key] = cfg.get(key, default)
+        return data
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -1898,6 +1927,34 @@ async def save_branding_config(payload: BrandingConfig):
             cfg["version"] = str(data["version"]).strip()[:20]
         if "footer" in data:
             cfg["footer"] = str(data["footer"]).strip()[:120]
+
+        # ── оформление: значения проверяются здесь, браузеру веры нет ──
+        if "font_body" in data:
+            v = str(data["font_body"] or "").strip()
+            cfg["font_body"] = v if v in APPEARANCE_FONTS else APPEARANCE_DEFAULTS["font_body"]
+        if "font_display" in data:
+            v = str(data["font_display"] or "").strip()
+            cfg["font_display"] = v if v in APPEARANCE_FONTS else APPEARANCE_DEFAULTS["font_display"]
+        if "font_size" in data:
+            try:
+                cfg["font_size"] = max(12, min(20, int(data["font_size"])))
+            except (TypeError, ValueError):
+                cfg["font_size"] = APPEARANCE_DEFAULTS["font_size"]
+        if "font_weight" in data:
+            try:
+                w = int(data["font_weight"])
+                cfg["font_weight"] = min(700, max(300, int(round(w / 100.0) * 100)))
+            except (TypeError, ValueError):
+                cfg["font_weight"] = APPEARANCE_DEFAULTS["font_weight"]
+        if "contrast" in data:
+            v = str(data["contrast"] or "").strip()
+            cfg["contrast"] = v if v in APPEARANCE_CONTRAST else "normal"
+        for key in ("color_accent", "color_bg", "color_surface", "color_text"):
+            if key in data:
+                v = str(data[key] or "").strip()
+                # пусто = вернуть цвет темы; иначе строго #RRGGBB
+                cfg[key] = v if (not v or (len(v) == 7 and v.startswith("#") and all(
+                    c in "0123456789abcdefABCDEF" for c in v[1:]))) else ""
         config_store.set("system", "branding", cfg)
         return {"status": "ok", **cfg}
     except Exception as e:

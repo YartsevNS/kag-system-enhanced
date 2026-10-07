@@ -39,7 +39,8 @@
       ['/users', 'Пользователи'],
       ['/logs', 'Логи'],
       ['/qdrant', 'Qdrant'],
-      ['/docker', 'Docker']
+      ['/docker', 'Docker'],
+      ['/experiments', 'Опыты и модели']
     ]},
     { title: 'Помощь', compact: true, items: [
       ['/architecture', 'Архитектура'],

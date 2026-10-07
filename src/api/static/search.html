@@ -79,7 +79,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn, :root[data-theme="dark"] .tab.active { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/chat"> Чат с AI</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Поиск</h1><div class="sub">Векторный (Qdrant) + графовый (Neo4j) + по метаданным — выберите режим</div><div class="search-box"><input type="text" id="query" placeholder="Введите запрос..." onkeydown="if(event.key==='Enter')doSearch()" autofocus><button class="btn" onclick="doSearch()"> Искать</button></div><div class="tabs"><button class="tab active" data-mode="all" onclick="setMode('all',this)"> Все источники</button><button class="tab" data-mode="chunks" onclick="setMode('chunks',this)"> Чанки (Qdrant)</button><button class="tab" data-mode="docs" onclick="setMode('docs',this)"> Документы</button><button class="tab" data-mode="graph" onclick="setMode('graph',this)"> Граф (Neo4j)</button></div><div id="results"><div class="empty"> Введите запрос — поиск по всем источникам</div></div></main>
+</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>se" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Поиск</h1><div class="sub">Векторный (Qdrant) + графовый (Neo4j) + по метаданным — выберите режим</div><div class="search-box"><input type="text" id="query" placeholder="Введите запрос..." onkeydown="if(event.key==='Enter')doSearch()" autofocus><button class="btn" onclick="doSearch()"> Искать</button></div><div class="tabs"><button class="tab active" data-mode="all" onclick="setMode('all',this)"> Все источники</button><button class="tab" data-mode="chunks" onclick="setMode('chunks',this)"> Чанки (Qdrant)</button><button class="tab" data-mode="docs" onclick="setMode('docs',this)"> Документы</button><button class="tab" data-mode="graph" onclick="setMode('graph',this)"> Граф (Neo4j)</button></div><div id="results"><div class="empty"> Введите запрос — поиск по всем источникам</div></div></main>
 
 <script>
 function getToken() {
@@ -250,4 +250,5 @@ function logout() {
 }
 
 </script><script src="/static/branding.js"></script>
+    <script src="/static/site-nav.js" defer></script>
 </body></html>

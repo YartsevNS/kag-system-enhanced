@@ -1,12 +1,62 @@
-/* Единый брендинг KAG.
-   Подтягивает название/версию/подпись из /api/v1/branding и заполняет
-   элементы с data-brand / data-brand-version / data-brand-footer.
-   Одна настройка в админке (Брендинг) — применяется на всех страницах.
-
-   Плюс тема: светлая по умолчанию (интерфейс для офисных работников), тёмная — вариант.
-   Значение хранится в localStorage ('kag-theme'); раннее применение делает inline-скрипт в <head>,
-   здесь — переключатель и синхронизация. */
+/* Единый брендинг и оформление KAG (одна точка правды на все страницы).
+ *
+ * Что делает:
+ *   1) название / версия / подпись  — из /api/v1/branding в элементы data-brand*;
+ *   2) знак и витринное имя         — три дуги к точке (R, K, C вокруг пользователя), SVG рисуем сами;
+ *   3) тема                         — светлая по умолчанию, тёмная как вариант (localStorage 'kag-theme');
+ *   4) оформление из админки        — шрифт, размер, толщина, контраст, цвета (применяются переменными CSS).
+ *
+ * Оформление настраивается в админке (раздел «Оформление») и хранится в config_store 'system'/'branding'.
+ * Цвета применяются только к светлой теме: тёмная остаётся стандартной, иначе получилось бы
+ * светло-серое поле с тёмным текстом темы — нечитаемо.
+ */
 (function () {
+  /* ── шрифты: ключ из админки -> стек с подстановками ─────────────────────
+     Tahoma/Times New Roman/Verdana — системные шрифты Windows; на Linux подставится
+     ближайший свободный (Liberation/DejaVu), поэтому стек задан явно. */
+  var FONTS = {
+    'system': "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    'pt-serif': "'PT Serif', Georgia, 'DejaVu Serif', serif",
+    'tahoma': "Tahoma, 'Segoe UI', Geneva, 'DejaVu Sans', sans-serif",
+    'times': "'Times New Roman', 'Liberation Serif', 'DejaVu Serif', serif",
+    'georgia': "Georgia, 'Liberation Serif', 'DejaVu Serif', serif",
+    'verdana': "Verdana, Geneva, 'DejaVu Sans', sans-serif",
+    'arial': "Arial, Helvetica, 'Liberation Sans', 'DejaVu Sans', sans-serif"
+  };
+
+  var appearance = {};          // настройки оформления, полученные из админки
+
+  function applyAppearance() {
+    var root = document.documentElement;
+    var css = root.style;
+
+    // Тёмная тема — своя палитра: пользовательские цвета к ней не подмешиваем
+    if (root.getAttribute('data-theme') === 'dark') {
+      ['--font', '--font-display', '--fs-base', '--fw-base', '--accent', '--accent-solid',
+       '--bg', '--surface', '--panel', '--text'].forEach(function (v) { css.removeProperty(v); });
+      root.setAttribute('data-contrast', 'normal');
+      return;
+    }
+
+    var a = appearance || {};
+    if (a.font_body && FONTS[a.font_body]) css.setProperty('--font', FONTS[a.font_body]);
+    if (a.font_display && FONTS[a.font_display]) css.setProperty('--font-display', FONTS[a.font_display]);
+    if (a.font_size) css.setProperty('--fs-base', a.font_size + 'px');
+    if (a.font_weight) css.setProperty('--fw-base', String(a.font_weight));
+    if (a.color_accent) {
+      css.setProperty('--accent', a.color_accent);
+      css.setProperty('--accent-solid', a.color_accent);
+    }
+    if (a.color_bg) css.setProperty('--bg', a.color_bg);
+    if (a.color_surface) {
+      css.setProperty('--surface', a.color_surface);
+      css.setProperty('--panel', a.color_surface);
+    }
+    if (a.color_text) css.setProperty('--text', a.color_text);
+    root.setAttribute('data-contrast', a.contrast === 'high' ? 'high' : 'normal');
+  }
+  window.KAGAppearance = { set: function (a) { appearance = a || {}; applyAppearance(); } };
+
   /* ── тема ────────────────────────────────────────────────────────────── */
   var KEY = 'kag-theme';
   function current() {
@@ -16,8 +66,9 @@
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem(KEY, theme); } catch (e) { /* приватный режим */ }
     document.querySelectorAll('.kag-theme-toggle').forEach(function (b) {
-      b.textContent = theme === 'dark' ? '\u2600\uFE0F Светлая' : '\u{1F319} Тёмная';
+      b.textContent = theme === 'dark' ? 'Светлая' : 'Тёмная';   // без значков: текст читается сразу
     });
+    applyAppearance();
   }
   window.KAGTheme = {
     get: current,
@@ -34,7 +85,7 @@
     b.title = 'Переключить светлую/тёмную тему';
     b.onclick = function () { window.KAGTheme.toggle(); };
     document.body.appendChild(b);
-    applyTheme(current());            // выставить подпись на кнопке
+    applyTheme(current());
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectToggle);
@@ -47,8 +98,7 @@
 
   /* ── знак и витринное имя ─────────────────────────────────────────────
      Знак — три дуги, сходящиеся к точке: R, K, C вокруг пользователя. Рисуется здесь (SVG),
-     поэтому лицензий не требует и работает без интернета. Градиент зелёный->бирюзовый->индиго
-     даёт «краски», остальной интерфейс остаётся спокойным. */
+     поэтому лицензий не требует и работает без интернета. */
   var MARK_SVG = ''
     + '<svg class="kag-mark" viewBox="0 0 48 48" role="img" aria-label="Знак KAG">'
     +   '<defs><linearGradient id="kagMarkGrad" x1="0" y1="0" x2="1" y2="1">'
@@ -72,8 +122,6 @@
     if (!host) return;
     host.classList.add('kag-brand');
     host.insertAdjacentHTML('afterbegin', MARK_SVG);
-    // витринное имя и расшифровка: ставим столбцом внутри блока бренда, чтобы подпись
-    // не уезжала в конец меню (проверено глазами на админке)
     var nameEl = host.querySelector('span, strong, .brand-name');
     var sub = (host.parentElement || host).querySelector('.subtitle, .brand-sub');
     if (nameEl && !sub) {
@@ -91,42 +139,18 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectBrandMark);
   else injectBrandMark();
 
-  /* ── брендинг ────────────────────────────────────────────────────────── */
+  /* ── брендинг + оформление из админки ─────────────────────────────────── */
   function apply(d) {
     var name = d.name || 'KAG';
     var version = d.version || '';
     var footer = d.footer || (version ? name + ' ' + version : name);
-    document.querySelectorAll('[data-brand]').forEach(function (el) {
-      el.textContent = name;
-    });
-    document.querySelectorAll('[data-brand-version]').forEach(function (el) {
-      el.textContent = version;
-    });
-    document.querySelectorAll('[data-brand-footer]').forEach(function (el) {
-      el.textContent = footer;
-    });
+    document.querySelectorAll('[data-brand]').forEach(function (el) { el.textContent = name; });
+    document.querySelectorAll('[data-brand-version]').forEach(function (el) { el.textContent = version; });
+    document.querySelectorAll('[data-brand-footer]').forEach(function (el) { el.textContent = footer; });
+    window.KAGAppearance.set(d);
   }
   fetch('/api/v1/branding', { credentials: 'include' })
     .then(function (r) { return r.json(); })
     .then(apply)
-    .catch(function () { /* оставляем как есть */ });
-
-  /* Пункт «Опыты и модели» — только для администраторов: страница /experiments
-     отдаёт 302 обычным пользователям, поэтому и ссылку показываем только админу. */
-  fetch('/api/v1/auth/me', { credentials: 'include' })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (u) {
-      if (!u || !u.is_admin) return;
-      var list = document.querySelector('nav .nav-items') || document.querySelector('nav');
-      if (!list || list.querySelector('a[href="/experiments"]')) return;
-      var a = document.createElement('a');
-      a.href = '/experiments';
-      a.className = 'nav-item';
-      a.innerHTML = '<span>Опыты и модели</span>';
-      var adminItems = list.querySelectorAll('a[href="/admin"], a[href="/users"]');
-      var anchor = adminItems.length ? adminItems[adminItems.length - 1] : null;
-      if (anchor && anchor.parentElement === list) anchor.insertAdjacentElement('afterend', a);
-      else list.appendChild(a);
-    })
-    .catch(function () { /* не админ или нет связи — ссылки просто нет */ });
+    .catch(function () { /* оставляем оформление темы по умолчанию */ });
 })();

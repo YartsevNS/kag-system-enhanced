@@ -68,7 +68,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Все контейнеры, ресурсы, системная информация — автообновление 5с</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
+</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>se" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Все контейнеры, ресурсы, системная информация — автообновление 5с</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
 
 <script>
 async function loadAll() {
@@ -210,4 +210,5 @@ function logout() {
 }
 
 </script><script src="/static/branding.js"></script>
+    <script src="/static/site-nav.js" defer></script>
 </body></html>

@@ -26,4 +26,15 @@ async def get_branding():
         "name": cfg.get("name", "KAG"),
         "version": cfg.get("version", ""),
         "footer": cfg.get("footer", ""),
+        # Оформление: настраивается в админке, применяется на всех страницах.
+        # Пустое значение = цвет/шрифт темы по умолчанию (не трогаем).
+        "font_body": cfg.get("font_body", ""),
+        "font_display": cfg.get("font_display", ""),
+        "font_size": cfg.get("font_size", 0),
+        "font_weight": cfg.get("font_weight", 0),
+        "contrast": cfg.get("contrast", ""),
+        "color_accent": cfg.get("color_accent", ""),
+        "color_bg": cfg.get("color_bg", ""),
+        "color_surface": cfg.get("color_surface", ""),
+        "color_text": cfg.get("color_text", ""),
     }

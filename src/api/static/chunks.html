@@ -70,7 +70,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/chat"> Чат с AI</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1 id="page-title">Чанки документов</h1><div class="breadcrumb" id="breadcrumb"><a href="/documents">← К списку документов</a></div><div class="controls"><div class="limit-select"><label>Показывать:</label><select id="limit-select" onchange="changeLimit()"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select><label>чанков</label></div><div class="chunk-count" id="chunk-count"></div></div><div id="chunks-container"><div class="loading"><div class="spinner"></div></div></div><div class="pagination" id="pagination" style="display:none"></div></main>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>se" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1 id="page-title">Чанки документов</h1><div class="breadcrumb" id="breadcrumb"><a href="/documents">← К списку документов</a></div><div class="controls"><div class="limit-select"><label>Показывать:</label><select id="limit-select" onchange="changeLimit()"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select><label>чанков</label></div><div class="chunk-count" id="chunk-count"></div></div><div id="chunks-container"><div class="loading"><div class="spinner"></div></div></div><div class="pagination" id="pagination" style="display:none"></div></main>
 
 <script>
 const API = '/api/v1';
@@ -201,4 +201,5 @@ function logout() {
 }
 
 </script><script src="/static/branding.js"></script>
+    <script src="/static/site-nav.js" defer></script>
 </body></html>

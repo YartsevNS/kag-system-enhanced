@@ -262,7 +262,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn-primary { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><!-- Sidebar Navigation --><nav><div class="logo"><span>KAG</span></div><div class="nav-items"><div class="nav-group">Работа с документами</div><a href="/" class="nav-item"><span>Дашборд</span></a><a href="/chat" class="nav-item"><span>Чат с AI</span></a><a href="/documents" class="nav-item"><span>Документы</span></a><a href="/chunks" class="nav-item"><span>Чанки</span></a><a href="/search" class="nav-item"><span>Поиск</span></a><a href="/kg" class="nav-item"><span>Граф знаний</span></a><div class="nav-group">Наблюдение и данные</div><a href="/monitor" class="nav-item"><span>Веб-монитор</span></a><a href="/news" class="nav-item"><span>Новости</span></a><a href="/know" class="nav-item"><span>Know</span></a><a href="/logs" class="nav-item"><span>Логи</span></a><a href="/monitoring" class="nav-item"><span>Мониторинг</span></a><a href="/system" class="nav-item"><span>Состояние</span></a><a href="/qdrant" class="nav-item"><span>Qdrant</span></a><a href="/docker" class="nav-item"><span>Docker</span></a><div class="nav-group">Администрирование</div><a href="/admin" class="nav-item active"><span>Админ</span></a><a href="/users" class="nav-item"><span>Пользователи</span></a><div class="nav-group">Помощь</div><a href="/architecture" class="nav-item"><span>Архитектура</span></a><a href="/docs" class="nav-item"><span>Документация</span></a><a href="/guide" class="nav-item"><span>Руководство</span></a></div><div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px"><button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s"><span id="theme-icon"></span><span id="theme-label">Светлая</span></button><div style="font-size:12px;color:var(--text4)">v0.3.0</div></div><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><!-- Main Content --><main><header><h1>Управление моделями</h1><div class="subtitle">Настройка LLM, Embedding моделей, SSH подключений и чанкинга</div></header><!-- Статус системы --><div class="status-bar"><h2 style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:16px;letter-spacing:-0.3px;"> Статус системы</h2><div class="status-grid" id="system-status"><div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div>
+</head><body><!-- Sidebar Navigation --><nav><div class="logo"><span>KAG</span></div><div class="nav-items"><div data-site-nav></div></div><div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px"><button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s"><span id="theme-icon"></span><span id="theme-label">Светлая</span></button><div style="font-size:12px;color:var(--text4)">v0.3.0</div></div><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><!-- Main Content --><main><header><h1>Управление моделями</h1><div class="subtitle">Настройка LLM, Embedding моделей, SSH подключений и чанкинга</div></header><!-- Статус системы --><div class="status-bar"><h2 style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:16px;letter-spacing:-0.3px;"> Статус системы</h2><div class="status-grid" id="system-status"><div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div>
                     Загрузка...
                 </div></div><div class="action-bar"><button class="btn btn-primary" onclick="restartOllama()"> Перезапустить Ollama</button><button class="btn btn-secondary" onclick="loadAll()"> Обновить статус</button><a href="/docker" class="btn btn-secondary" style="text-decoration: none;"> Docker</a><a href="/documents" class="btn btn-primary" style="text-decoration: none;"> Документы</a></div><div id="restart-status" style="margin-top: 1rem;"></div></div><!-- ========================================== --><!-- ПРОВАЙДЕРЫ LLM (новая система) --><!-- ========================================== --><div class="section"><h2 class="section-title"> Провайдеры LLM</h2><p style="font-size:13px;color:var(--text4);margin-bottom:16px">
                 Каждый провайдер (Ollama, OpenAI, DeepSeek...) хранит свои настройки отдельно.
@@ -362,7 +362,73 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             </div><div style="display: flex; gap: 0.5rem; margin-top: 1rem;"><button class="btn btn-primary" onclick="saveChunkingSettings()"> Сохранить настройки</button></div><div id="chunking-status" style="margin-top: 1rem;"></div></div><!-- Брендинг --><div class="section"><h2 class="section-title"> Брендинг</h2><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:10px"><div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Название</label><input id="brand-name" type="text" value="KAG" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:160px"></div><div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Версия</label><input id="brand-version" type="text" value="" placeholder="v0.2.0" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;width:110px"></div><div style="flex:1;min-width:240px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Подпись (футер всех страниц)</label><input id="brand-footer" type="text" value="" placeholder="KAG — Knowledge Augmentation Generation" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><button class="btn btn-primary" onclick="saveBrandingConfig()"> Сохранить</button><span id="branding-status" style="font-size:12px;color:var(--text4)"></span></div><div style="font-size:12px;color:var(--text3);line-height:1.6;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px"><strong>Единая настройка бренда.</strong> Название, версия и подпись применяются на <strong>всех</strong> страницах
                 (чат, документы, мониторинг, админка и т.д.) через <code>/api/v1/branding</code> + <code>branding.js</code>.
                 Раньше каждая страница содержала свою надпись («KAG v0.2.0 • Ollama • Qdrant» и т.п.) — теперь всё меняется здесь.
-            </div></div><!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) --><div class="section"><h2 class="section-title"> Загрузка документов</h2><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)"><label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label></div><div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label><input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
+<!-- Оформление: шрифт, размер, толщина, контраст, цвета -->
+            <div class="section">
+                <h2 class="section-title">Оформление</h2>
+                <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:12px">
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Шрифт текста</label>
+                        <select id="ap-font-body" onchange="applyAppearancePreview()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;min-width:180px">
+                            <option value="system">Системный (по умолчанию)</option>
+                            <option value="pt-serif">PT Serif (наши засечки)</option>
+                            <option value="tahoma">Tahoma</option>
+                            <option value="times">Times New Roman</option>
+                            <option value="georgia">Georgia</option>
+                            <option value="verdana">Verdana</option>
+                            <option value="arial">Arial</option>
+                        </select></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Шрифт заголовков и меню</label>
+                        <select id="ap-font-display" onchange="applyAppearancePreview()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;min-width:180px">
+                            <option value="pt-serif">PT Serif (наши засечки)</option>
+                            <option value="system">Системный</option>
+                            <option value="tahoma">Tahoma</option>
+                            <option value="times">Times New Roman</option>
+                            <option value="georgia">Georgia</option>
+                            <option value="verdana">Verdana</option>
+                            <option value="arial">Arial</option>
+                        </select></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Размер текста, px</label>
+                        <input id="ap-font-size" type="number" min="12" max="20" step="1" onchange="applyAppearancePreview()" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Толщина текста</label>
+                        <select id="ap-font-weight" onchange="applyAppearancePreview()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+                            <option value="400">Обычная (400)</option>
+                            <option value="500">Средняя (500)</option>
+                            <option value="600">Полужирная (600)</option>
+                        </select></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Контраст</label>
+                        <select id="ap-contrast" onchange="applyAppearancePreview()" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+                            <option value="normal">Обычный</option>
+                            <option value="high">Повышенный (для слабых мониторов и печати)</option>
+                        </select></div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-bottom:12px">
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Цвет акцента</label>
+                        <input id="ap-color-accent" type="color" value="#067a3d" oninput="applyAppearancePreview()" style="width:56px;height:34px;padding:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                        <button type="button" class="btn-ghost" style="font-size:11px" onclick="clearAppearanceColor('ap-color-accent')">вернуть стандарт</button></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Фон</label>
+                        <input id="ap-color-bg" type="color" value="#f2f5f9" oninput="applyAppearancePreview()" style="width:56px;height:34px;padding:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                        <button type="button" class="btn-ghost" style="font-size:11px" onclick="clearAppearanceColor('ap-color-bg')">вернуть стандарт</button></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Панели и карточки</label>
+                        <input id="ap-color-surface" type="color" value="#ffffff" oninput="applyAppearancePreview()" style="width:56px;height:34px;padding:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                        <button type="button" class="btn-ghost" style="font-size:11px" onclick="clearAppearanceColor('ap-color-surface')">вернуть стандарт</button></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Цвет текста</label>
+                        <input id="ap-color-text" type="color" value="#12161b" oninput="applyAppearancePreview()" style="width:56px;height:34px;padding:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
+                        <button type="button" class="btn-ghost" style="font-size:11px" onclick="clearAppearanceColor('ap-color-text')">вернуть стандарт</button></div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+                    <button class="btn btn-primary" onclick="saveAppearance()">Сохранить оформление</button>
+                    <button class="btn" onclick="resetAppearance()">Вернуть стандарт</button>
+                    <span id="appearance-status" style="font-size:12px;color:var(--text4)"></span>
+                </div>
+                <div style="font-size:12px;color:var(--text3);line-height:1.6;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px">
+                    <strong>Как это работает.</strong> Настройка хранится на сервере и применяется на <strong>всех</strong> страницах
+                    (как и брендинг). Цвета действуют в светлой теме; тёмная остаётся стандартной — иначе получилось бы светлое поле
+                    с тёмным текстом. Шрифты Tahoma, Times New Roman, Verdana, Arial, Georgia — системные: если у заказчика их нет
+                    (например, на Linux), подставится ближайший свободный (Liberation/DejaVu), поэтому внешний вид может слегка отличаться.
+                    Свои засечки PT Serif лежат внутри системы и работают всегда.
+                    <strong>Контраст</strong> проверяется кнопкой «Проверить контраст» на этом стенде (scripts/bakeoff/contrast_check.py).
+                </div>
+            </div>
+            <!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) --><div class="section"><h2 class="section-title"> Загрузка документов</h2><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)"><label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label></div><div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label><input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
                 «Документы» и через API, парсинг сайтов (watched_urls) и RSS — новые документы не появляются ниоткуда
                 (API отвечает 423, мониторинг пропускает обход источников).
                 Обработка уже загруженных документов этим переключателем НЕ затрагивается — она управляется отдельной
@@ -913,6 +979,85 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 status.textContent = '✕ ' + e.message;
             }
         }
+
+        // ── Оформление: шрифт, размер, толщина, контраст, цвета ────────────────
+        function apVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+        function apSet(id, v) { const el = document.getElementById(id); if (el && v !== undefined && v !== null && v !== '') el.value = v; }
+        function collectAppearance() {
+            return {
+                font_body: apVal('ap-font-body'),
+                font_display: apVal('ap-font-display'),
+                font_size: parseInt(apVal('ap-font-size') || '14', 10),
+                font_weight: parseInt(apVal('ap-font-weight') || '400', 10),
+                contrast: apVal('ap-contrast'),
+                color_accent: apVal('ap-color-accent'),
+                color_bg: apVal('ap-color-bg'),
+                color_surface: apVal('ap-color-surface'),
+                color_text: apVal('ap-color-text'),
+            };
+        }
+        function applyAppearancePreview() {
+            if (window.KAGAppearance) window.KAGAppearance.set(collectAppearance());
+        }
+        function clearAppearanceColor(id) {
+            const def = { 'ap-color-accent': '#067a3d', 'ap-color-bg': '#f2f5f9',
+                          'ap-color-surface': '#ffffff', 'ap-color-text': '#12161b' };
+            const el = document.getElementById(id);
+            if (el) el.value = def[id] || '#ffffff';
+            applyAppearancePreview();
+        }
+        async function loadAppearance() {
+            try {
+                const r = await apiFetch(`${API_URL}/branding-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                apSet('ap-font-body', d.font_body || 'system');
+                apSet('ap-font-display', d.font_display || 'pt-serif');
+                apSet('ap-font-size', d.font_size || 14);
+                apSet('ap-font-weight', String(d.font_weight || 400));
+                apSet('ap-contrast', d.contrast || 'normal');
+                // цвет, если не задан в настройках, показываем текущий из темы
+                const cur = getComputedStyle(document.documentElement);
+                const put = (id, val, varName) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.value = val || (cur.getPropertyValue(varName) || '').trim() || el.value;
+                };
+                put('ap-color-accent', d.color_accent, '--accent');
+                put('ap-color-bg', d.color_bg, '--bg');
+                put('ap-color-surface', d.color_surface, '--surface');
+                put('ap-color-text', d.color_text, '--text');
+            } catch (e) { console.error('appearance load:', e); }
+        }
+        async function saveAppearance() {
+            const st = document.getElementById('appearance-status');
+            if (st) st.textContent = '…...';
+            try {
+                const r = await apiFetch(`${API_URL}/branding-config`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(collectAppearance())
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok' ? '✓ сохранено (применится на всех страницах)' : '✕ ' + (d.message || 'ошибка');
+                applyAppearancePreview();
+            } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
+        }
+        async function resetAppearance() {
+            const st = document.getElementById('appearance-status');
+            const body = { font_body: 'system', font_display: 'pt-serif', font_size: 14, font_weight: 400,
+                           contrast: 'normal', color_accent: '', color_bg: '', color_surface: '', color_text: '' };
+            try {
+                const r = await apiFetch(`${API_URL}/branding-config`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok' ? '✓ вернули стандартное оформление' : '✕ ' + (d.message || 'ошибка');
+                if (window.KAGAppearance) window.KAGAppearance.set(body);
+                loadAppearance();
+            } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
+        }
+
 
         async function loadStatus() {
             try {
@@ -2277,6 +2422,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         loadSearchConfig();
         loadNeo4jConfig();
         loadBrandingConfig();
+        loadAppearance();
         loadProcessingConfig();
         loadGraphConfig();
         loadRerankerConfig();
@@ -3011,4 +3157,5 @@ async function unignoreOrphan(id) {
 document.addEventListener('DOMContentLoaded', function () { loadOrphans(); });
 
 </script><script src="/static/branding.js"></script>
+    <script src="/static/site-nav.js" defer></script>
 </body></html>

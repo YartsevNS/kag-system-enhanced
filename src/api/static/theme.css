@@ -87,6 +87,7 @@
 
     /* Плавные размеры: от телефона до широкого монитора без «поломок» */
     --fs-base: clamp(13px, 0.85rem + 0.1vw, 15px);
+    --fw-base: 400;          /* толщина основного текста (настраивается в админке) */
     --fs-h1:   clamp(21px, 1.10rem + 0.9vw, 31px);
     --fs-h2:   clamp(16px, 0.95rem + 0.4vw, 20px);
     --sp-page: clamp(12px, 1.2vw, 32px);
@@ -127,8 +128,29 @@
     --shadow:        0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
+/* ── Повышенный контраст (настройка в админке) ─────────────────────────────
+   Для слабых мониторов и печати: текст к чёрному, границы плотнее. Логика интерфейса не меняется. */
+:root[data-contrast="high"] {
+    --text:          #000000;
+    --text2:         #1C2229;
+    --text3:         #2E3742;
+    --text4:         #48525D;
+    --border:        rgba(0, 0, 0, 0.34);
+    --border-s:      rgba(0, 0, 0, 0.20);
+    --border-strong: rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+    --text:          #FFFFFF;
+    --text2:         #E8EDF3;
+    --text3:         #CCD5DE;
+    --text4:         #AFBAC5;
+    --border:        #66727E;
+    --border-s:      #4C5762;
+    --border-strong: #8A96A2;
+}
+
 /* ── Основа ───────────────────────────────────────────────────────────────── */
-body { background: var(--bg); color: var(--text); font-size: var(--fs-base); }
+body { background: var(--bg); color: var(--text); font-size: var(--fs-base); font-weight: var(--fw-base); }
 /* Витрина — засечки: заголовки страниц, знак, подписи групп меню */
 h1, h2, .brand-name, .wordmark { font-family: var(--font-display); }
 h1 { font-size: var(--fs-h1); font-weight: 400; letter-spacing: 0.005em; }

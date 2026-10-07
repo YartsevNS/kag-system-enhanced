@@ -79,7 +79,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn, :root[data-theme="dark"] .step-num { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><nav><div class="logo">KAG <span>System</span></div><a href="/setup" class="active"><span></span> Setup</a></nav><div class="main-content"><div class="container"><div class="page-logo"> KAG System</div><div class="subtitle">Первоначальная настройка системы</div><!-- Шаг 1: Инициализация --><div class="step" id="init-step"><div class="step-header"><span class="step-num">1</span> Инициализация</div><div class="step-desc">
+</head><body><nav><div class="logo">KAG <span>System</span></div><div data-site-nav></div></nav><div class="main-content"><div class="container"><div class="page-logo"> KAG System</div><div class="subtitle">Первоначальная настройка системы</div><!-- Шаг 1: Инициализация --><div class="step" id="init-step"><div class="step-header"><span class="step-num">1</span> Инициализация</div><div class="step-desc">
                     Система создаст базы данных и администратора. Пароли к БД генерируются автоматически и <strong>не сохраняются</strong> — сохраните их сейчас.
                 </div><div class="progress" id="progress"><div class="progress-label" id="progress-text">Инициализация...</div><div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div></div><div class="status-box" id="init-status"></div><!-- Credentials (появляются после успеха) --><div class="creds-grid" id="creds-grid"></div><!-- Кнопка инициализации --><button class="btn-init" id="btn-init" onclick="initAll()"> Initialize ALL</button><!-- Действия после успеха --><div class="actions-row" id="actions-row"><button class="btn btn-outline" onclick="downloadCreds()"> Скачать credentials</button><button class="btn btn-success" onclick="goToAdmin()"> Перейти в админку</button></div></div><!-- Шаг 2: Уже настроено --><div class="step" id="done-step" style="display:none"><div class="step-header"><span class="step-num"></span> Система настроена</div><div class="status-box success" id="done-msg" style="margin-bottom:16px"> Система готова к работе</div><button class="btn btn-lg" onclick="window.location.href='/admin'"> Перейти в админку</button></div></div></div>
 
@@ -308,4 +308,5 @@ async function goToAdmin() {
     window.location.href = '/admin';
 }
 </script><script src="/static/branding.js"></script>
+    <script src="/static/site-nav.js" defer></script>
 </body></html>
