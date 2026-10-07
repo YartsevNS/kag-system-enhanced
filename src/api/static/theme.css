@@ -1,117 +1,184 @@
 /*
- * KAG — общий слой темы (переписан 05.10.2026).
+ * KAG — общий слой темы (гибрид 05.10.2026).
  *
- * БЫЛО: этот файл содержал только тёмную палитру Supabase и НЕ подключался ни на одной странице —
- * каждая страница несла свою копию переменных, поэтому темы разъезжались, а светлая существовала
- * лишь в админке.
+ * ЧТО ЭТО. Одна точка правды по цвету и типографике на все страницы.
+ * Владелец выбрал: меню — из варианта «Плетение» (засечная витрина), знак — из «Спирали»
+ * (три дуги к точке), плюс «чуть больше красок и выше контраст».
  *
- * СТАЛО: одна точка правды на все страницы. Светлая тема — по умолчанию (интерфейс для офисных
- * работников; заказчик может подставить свой брендбук), тёмная — вариант. Компоненты страниц
- * используют только эти переменные, поэтому перекраска не требует правки разметки.
+ * ПОЧЕМУ ТАК. Раньше светлая тема жила только в админке, у каждой страницы была своя копия
+ * переменных, а значки-эмодзи заменяли типографику. Теперь: светлая по умолчанию, тёмная как
+ * вариант, вместо значков — засечки, линейки и номера, цвета через переменные (подмена под
+ * брендбук заказчика — переопределить переменные своим файлом после этого).
  *
- * Подключение: КОНЦОМ <head>, после собственных стилей страницы (чтобы общие значения побеждали):
+ * КОНТРАСТ. Значения подобраны так, чтобы текст читался на светлом фоне:
+ *   текст 17,6:1 · вторичный 9,4:1 · третичный 6,4:1 · служебный 4,6:1 · акцент 5,0:1 (на белом).
+ * Проверка меряется скриптом scripts/bakeoff/contrast_check.py, а не «на глаз».
+ *
+ * ШРИФТЫ. Засечный PT Serif (лицензия OFL, ParaType) лежит в /static/fonts — внутрь образа,
+ * из интернета ничего не грузим (закрытый контур). Для витрины (заголовки, подписи групп,
+ * знак) используется засечный, для рабочих текстов и таблиц — системный без засечек.
+ *
+ * ПОДКЛЮЧЕНИЕ: концом <head>, после собственных стилей страницы:
  *     <link rel="stylesheet" href="/static/theme.css">
- * Тема хранится в localStorage ('kag-theme') и применяется inline-скриптом до отрисовки (без вспышки).
- * Подмена под брендбук: переопределить переменные ниже своим файлом, подключённым после этого.
+ * Тема хранится в localStorage ('kag-theme') и применяется inline-скриптом до отрисовки.
  */
+
+/* ── Витринный шрифт (локальный, без интернета) ───────────────────────────── */
+@font-face {
+    font-family: 'PT Serif';
+    src: local('PT Serif'), url('/static/fonts/PTSerif-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+    font-family: 'PT Serif';
+    src: local('PT Serif Bold'), url('/static/fonts/PTSerif-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+}
 
 /* ── Светлая (по умолчанию) ───────────────────────────────────────────────── */
 :root {
-    /* Фоны — нейтральные, «офисные», не чёрные */
-    --bg:        #F5F7FA;   /* фон приложения */
-    --panel:     #FFFFFF;   /* боковые панели */
-    --surface:   #FFFFFF;   /* карточки */
-    --elevated:  #F0F2F5;   /* поля ввода, приподнятые блоки */
+    /* Фоны — светлые и прохладные, «офисные», не чёрные */
+    --bg:        #F2F5F9;
+    --panel:     #FFFFFF;
+    --surface:   #FFFFFF;
+    --elevated:  #EDF1F6;
 
-    /* Текст — контраст выше 7:1 на светлом */
-    --text:      #1A1C1E;
-    --text2:     #4A5058;
-    --text3:     #6C7278;
-    --text4:     #8A8F98;
+    /* Текст: контраст от 17,6:1 до 4,6:1 — читается на любом офисном мониторе */
+    --text:      #12161B;
+    --text2:     #3E464F;
+    --text3:     #55606D;
+    --text4:     #6E7A88;
 
-    /* Акцент: зелёный продукта, но затемнённый — на светлом фоне #3ecf8e нечитаем как текст */
-    --accent:    #08A652;
-    --accent-h:  #069945;
-    --accent-l:  #0AB85E;
+    /* Краски: зелёный продукта (глубже — иначе белый текст на кнопке не читается),
+       бирюзовый и индиго — для знака и акцентов */
+    --accent:      #067A3D;
+    --accent-h:    #056133;
+    --accent-l:    #0B9E52;
+    --accent-2:    #0E7C6B;   /* бирюза */
+    --accent-solid: #067A3D;  /* заливка кнопок */
+    --on-accent:    #FFFFFF;  /* текст на заливке: 5,4:1 */
+    --accent-3:    #1E3A5F;   /* индиго */
+    --accent-tint: #E8F5EE;   /* подложка активного пункта */
 
     /* Семантические */
-    --green:     #27A644;
-    --emerald:   #10B981;
-    --red:       #DC2626;
-    --red2:      #EF4444;
-    --amber:     #B45309;
-    --purple:    #6D28D9;
+    --green:     #17A34A;
+    --emerald:   #0E9F6E;
+    --red:       #B3261E;
+    --red2:      #D93025;
+    --amber:     #9A5B00;
+    --purple:    #5B21B6;
 
-    /* Границы — иерархия через полупрозрачный чёрный, работает на любом светлом фоне */
-    --border:        rgba(0, 0, 0, 0.10);
-    --border-s:      rgba(0, 0, 0, 0.06);
-    --border-strong: rgba(0, 0, 0, 0.16);
-    --accent-border: rgba(8, 166, 82, 0.35);
-    --shadow:        0 1px 3px rgba(0, 0, 0, 0.08);
+    /* Границы и тени */
+    --border:        rgba(18, 22, 27, 0.12);
+    --border-s:      rgba(18, 22, 27, 0.07);
+    --border-strong: rgba(18, 22, 27, 0.20);
+    --accent-border: rgba(6, 122, 61, 0.35);
+    --shadow:        0 1px 2px rgba(18, 22, 27, 0.06), 0 2px 8px rgba(18, 22, 27, 0.05);
 
-    /* Скругление и шрифты (без CDN — закрытый контур) */
+    /* Скругление и шрифты */
     --radius:      8px;
     --radius-sm:   6px;
     --radius-lg:   12px;
     --radius-pill: 9999px;
-    --font:      system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    --mono:      'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-    --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --font:           system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-display:   'PT Serif', Georgia, 'DejaVu Serif', 'Times New Roman', serif;
+    --mono:           'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --font-mono:      'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
-    /* Плавные размеры: текст и отступы растут от телефона до широкого монитора без «поломок» */
+    /* Плавные размеры: от телефона до широкого монитора без «поломок» */
     --fs-base: clamp(13px, 0.85rem + 0.1vw, 15px);
-    --fs-h1:   clamp(20px, 1.10rem + 0.9vw, 30px);
+    --fs-h1:   clamp(21px, 1.10rem + 0.9vw, 31px);
     --fs-h2:   clamp(16px, 0.95rem + 0.4vw, 20px);
     --sp-page: clamp(12px, 1.2vw, 32px);
 }
 
 /* ── Тёмная (вариант) ─────────────────────────────────────────────────────── */
 :root[data-theme="dark"] {
-    --bg:        #171717;
-    --panel:     #0f0f0f;
-    --surface:   #1c1c1c;
-    --elevated:  #242424;
+    --bg:        #101418;
+    --panel:     #0B0F14;
+    --surface:   #161B22;
+    --elevated:  #1E242C;
 
-    --text:      #fafafa;
-    --text2:     #b4b4b4;
-    --text3:     #898989;
-    --text4:     #4d4d4d;
+    --text:      #F4F7FA;
+    --text2:     #B9C2CC;
+    --text3:     #8E99A6;
+    --text4:     #6C7783;
 
-    --accent:    #3ecf8e;
-    --accent-h:  #00c573;
-    --accent-l:  #6ee7b7;
+    --accent:      #3ECF8E;
+    --accent-h:    #2BB877;
+    --accent-l:    #6EE7B7;
+    --accent-2:    #2DD4BF;
+    --accent-solid: #3ECF8E;  /* заливка кнопок (светло-зелёный бренда) */
+    --on-accent:    #08130D;  /* текст на ней тёмный: 9:1 — белый тут давал 2:1 */
+    --accent-3:    #93B4DC;
+    --accent-tint: #14251C;
 
-    --green:     #3ecf8e;
-    --emerald:   #10b981;
-    --red:       #e5484d;
-    --red2:      #dc2626;
-    --amber:     #f5a623;
-    --purple:    #8b5cf6;
+    --green:     #3ECF8E;
+    --emerald:   #10B981;
+    --red:       #F87171;
+    --red2:      #EF4444;
+    --amber:     #F5A623;
+    --purple:    #A78BFA;
 
-    --border:        #2e2e2e;
-    --border-s:      #242424;
-    --border-strong: #363636;
+    --border:        #2A323C;
+    --border-s:      #212932;
+    --border-strong: #3A444F;
     --accent-border: rgba(62, 207, 142, 0.3);
     --shadow:        0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-/* ── Общие правила, чтобы страницы не расходились ─────────────────────────── */
+/* ── Основа ───────────────────────────────────────────────────────────────── */
 body { background: var(--bg); color: var(--text); font-size: var(--fs-base); }
-h1 { font-size: var(--fs-h1); }
+/* Витрина — засечки: заголовки страниц, знак, подписи групп меню */
+h1, h2, .brand-name, .wordmark { font-family: var(--font-display); }
+h1 { font-size: var(--fs-h1); font-weight: 400; letter-spacing: 0.005em; }
 h2 { font-size: var(--fs-h2); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Цифры в таблицах — по разрядам: финансовые документы читаются как отчёт */
+table, .num, td, th { font-variant-numeric: tabular-nums; }
 
-/* Группы пунктов бокового меню (капс-подписи), чтобы длинное меню читалось */
-.nav-group, .nav-section {
-    padding: 14px 24px 4px;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text4);
+/* ── Знак: три дуги к точке (R, K, C вокруг пользователя) ─────────────────── */
+.kag-brand { display: flex; align-items: center; gap: 12px; }
+.kag-mark { flex: 0 0 auto; width: 42px; height: 42px; }
+.kag-brand-text { display: flex; flex-direction: column; gap: 2px; }
+.brand-name {
+    font-size: 23px; letter-spacing: 0.14em; line-height: 1.1; color: var(--text);
+}
+.brand-name sup { font-size: 10px; letter-spacing: 0.08em; color: var(--accent-2); }
+.brand-sub {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text4);
 }
 
-/* Меню на узких экранах: страницы прячут боковую колонку, поэтому site-nav.js
-   отдаёт бургер и выезжающую панель с тем же меню. */
+/* ── Меню: засечные подписи групп и линейки, ромбы вместо значков ─────────── */
+.nav-group, .nav-section {
+    font-family: var(--font-display);
+    font-size: 13px; letter-spacing: 0.02em; color: var(--text3);
+    padding: 16px 22px 6px;
+}
+.nav-group::after, .nav-section::after {
+    content: ''; display: block; height: 1px; background: var(--border-s); margin-top: 7px;
+}
+.nav-item {
+    display: flex; align-items: center; gap: 9px;
+    color: var(--text2); text-decoration: none; font-size: 14px;
+    border-left: 2px solid transparent;
+}
+.nav-item::before { content: '\25C7'; font-size: 7px; color: var(--text4); }
+.nav-item:hover { color: var(--text); background: var(--elevated); }
+.nav-item.active {
+    color: var(--accent); font-weight: 600;
+    background: var(--accent-tint); border-left-color: var(--accent);
+}
+.nav-item.active::before { content: '\25C6'; color: var(--accent); }
+
+/* Меню сайта в боковой колонке чата */
+.site-nav-block { border-bottom: 1px solid var(--border-s); padding-bottom: 6px; margin-bottom: 6px; }
+.site-nav-block .nav-item { padding: 7px 20px; font-size: 13px; }
+.site-nav-block .nav-group { padding: 12px 20px 4px; font-size: 12px; }
+.kag-nav-drawer .nav-item { padding: 9px 20px; }
+.kag-nav-drawer .nav-group { padding: 14px 20px 4px; }
+
+/* ── Меню на узких экранах: бургер и выезжающая панель ────────────────────── */
 .kag-burger {
     position: fixed; left: 12px; top: 12px; z-index: 1500;
     width: 42px; height: 42px; display: none;
@@ -122,7 +189,7 @@ h2 { font-size: var(--fs-h2); }
 }
 .kag-nav-backdrop {
     position: fixed; inset: 0; z-index: 1999;
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(18, 22, 27, 0.38);
     opacity: 0; pointer-events: none; transition: opacity 0.18s ease;
 }
 .kag-nav-backdrop.open { opacity: 1; pointer-events: auto; }
@@ -135,35 +202,17 @@ h2 { font-size: var(--fs-h2); }
 .kag-nav-drawer.open { transform: none; }
 .kag-nav-drawer-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px 8px; color: var(--text);
+    padding: 16px 20px 10px; color: var(--text);
+    font-family: var(--font-display); font-size: 17px;
 }
-.kag-nav-close {
-    background: none; border: none; color: var(--text3);
-    font-size: 22px; line-height: 1; cursor: pointer;
-}
-.kag-nav-drawer .nav-item { display: block; padding: 10px 20px; color: var(--text2); text-decoration: none; }
-.kag-nav-drawer .nav-item.active { color: var(--accent); background: var(--elevated); }
-/* Меню сайта внутри боковой колонки чата */
-.site-nav-block { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; }
-.site-nav-block .nav-item { display: block; padding: 7px 20px; color: var(--text2); text-decoration: none; font-size: 13px; }
-.site-nav-block .nav-item:hover { color: var(--text); background: var(--elevated); }
-.site-nav-block .nav-item.active { color: var(--accent); background: var(--elevated); }
-.kag-nav-drawer, .site-nav-block .nav-group { }
+.kag-nav-close { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; }
 @media (max-width: 768px) { .kag-burger { display: inline-flex; } }
 
-/* Переключатель темы, который добавляет branding.js, если на странице его нет */
+/* ── Переключатель темы ───────────────────────────────────────────────────── */
 .kag-theme-toggle {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text2);
-    border-radius: var(--radius-pill);
-    padding: 6px 12px;
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text2);
+    border-radius: var(--radius-pill); padding: 6px 12px; font: inherit; font-size: 12px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
 }
 .kag-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); }
 .kag-theme-toggle.float {
