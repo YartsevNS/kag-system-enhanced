@@ -206,13 +206,13 @@ nav > a[onclick*="logout"] {
 .nav-group, .nav-section {
     font-family: var(--font-display);
     font-size: 13px; letter-spacing: 0.02em; color: var(--text3);
-    padding: 16px 22px 6px;
+    padding: 12px 22px 4px;
 }
 .nav-group::after, .nav-section::after {
     content: ''; display: block; height: 1px; background: var(--border-s); margin-top: 7px;
 }
 .nav-item {
-    display: flex; align-items: center; gap: 9px;
+    display: flex; align-items: center; gap: 9px; padding-top: 1px; padding-bottom: 1px;
     color: var(--text2); text-decoration: none; font-size: 14px;
     border-left: 2px solid transparent;
 }
@@ -226,7 +226,7 @@ nav > a[onclick*="logout"] {
 
 /* Меню сайта в боковой колонке чата */
 .site-nav-block { border-bottom: 1px solid var(--border-s); padding-bottom: 6px; margin-bottom: 6px; }
-.site-nav-block .nav-item { padding: 7px 20px; font-size: 13px; }
+.site-nav-block .nav-item { padding: 6px 20px; font-size: 13px; }
 .site-nav-block .nav-group { padding: 12px 20px 4px; font-size: 12px; }
 .kag-nav-drawer .nav-item { padding: 9px 20px; }
 .kag-nav-drawer .nav-group { padding: 14px 20px 4px; }
