@@ -25,7 +25,9 @@
     toggle: function () { applyTheme(current() === 'light' ? 'dark' : 'light'); }
   };
   function injectToggle() {
-    if (document.querySelector('.kag-theme-toggle')) return;
+    // Страница может иметь свой переключатель (например, админка: #theme-toggle) — не дублируем.
+    if (document.querySelector('.kag-theme-toggle') || document.querySelector('#theme-toggle')
+        || document.querySelector('[onclick*="toggleTheme"]')) return;
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'kag-theme-toggle float';
@@ -69,12 +71,13 @@
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (u) {
       if (!u || !u.is_admin) return;
-      var nav = document.querySelector('nav');
-      if (!nav || nav.querySelector('a[href="/experiments"]')) return;
+      var list = document.querySelector('nav .nav-items') || document.querySelector('nav');
+      if (!list || list.querySelector('a[href="/experiments"]')) return;
       var a = document.createElement('a');
       a.href = '/experiments';
-      a.innerHTML = '<span>Опыты и модели</span>';
-      nav.appendChild(a);
+      a.className = 'nav-item';
+      a.innerHTML = '<span class="icon">🧪</span> <span>Опыты и модели</span>';
+      list.appendChild(a);
     })
     .catch(function () { /* не админ или нет связи — ссылки просто нет */ });
 })();
