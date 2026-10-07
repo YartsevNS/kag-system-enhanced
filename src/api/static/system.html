@@ -54,7 +54,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
 <link rel="stylesheet" href="/static/theme.css"></head><body><div class="wrap"><header><h1>Состояние системы</h1><span class="sub" id="gen">загрузка…</span><span style="flex:1"></span><label class="sub" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="auto" checked style="accent-color:var(--accent)"> автообновление 10 с
-    </label><button class="btn" onclick="load(true)">Обновить</button><a class="btn" href="/chat">Чат</a><a class="btn" href="/admin">Админка</a></header><div class="sub">Числа считаются внутри api из тех же метрик, что отдаются в Prometheus
+    </label><button class="btn" onclick="load(true)">Обновить</button><a class="btn" href="/chat">Чат</a><a class="btn admin-only" href="/admin">Админка</a></header><div class="sub">Числа считаются внутри api из тех же метрик, что отдаются в Prometheus
     (<code>/metrics</code>) — Grafana не нужна. Каждый запрос имеет trace_id: возьмите его из заголовка
     ответа <code>X-Trace-ID</code> и найдите в журнале (<a class="sub" href="/logs">Логи</a>).</div><div id="err"></div><div class="kpis" id="kpis"></div><div class="panel"><details><summary>Стадии ответа: куда уходит время</summary><div id="stages"></div><div class="hint">Если стадия «модель» занимает 80–90% времени — оптимизировать поиск бессмысленно,
       рычаг в модели (кэш префикса, меньшая модель для простых вопросов, стриминг).</div></details></div><div class="panel"><details><summary>Ответы: сколько и какие</summary><div id="answers"></div><div class="hint">«Отказ без данных» — модель честно сказала «не найдено» при пустом контексте.

@@ -139,6 +139,18 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectBrandMark);
   else injectBrandMark();
 
+  /* ── права: элементы, доступные только администратору ───────────────────
+     Ссылки на страницы, закрытые проверкой доступа (/admin, /users, /logs, /docker, /qdrant,
+     /experiments), помечаются классом admin-only и скрываются от остальных — иначе сотрудник
+     нажимает и получает 403. */
+  function hideAdminOnly() {
+    document.querySelectorAll('.admin-only').forEach(function (el) { el.style.display = 'none'; });
+  }
+  fetch('/api/v1/auth/me', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (u) { if (!u || !u.is_admin) hideAdminOnly(); })
+    .catch(hideAdminOnly);
+
   /* ── брендинг + оформление из админки ─────────────────────────────────── */
   function apply(d) {
     var name = d.name || 'KAG';
