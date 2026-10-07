@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Интеллектуальный помощник</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG - Интеллектуальный помощник</title>
     <style>
         :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
         *{margin:0;padding:0;box-sizing:border-box}
@@ -580,9 +576,7 @@ try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag
     
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -598,129 +592,23 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-    <div class="app">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo"> KAG</div>
-                <div class="subtitle">Knowledge Augmentation Generation</div>
-            </div>
-            
-            <div data-site-nav class="site-nav-block"></div>
-
-            <button class="new-chat-btn" onclick="newChat()">
-                <span>➕</span> Новый чат
-            </button>
-            
-            <div class="sessions-list" id="sessions-list">
-                <!-- Сессии будут добавляться здесь -->
-            </div>
-            
-            <div class="sidebar-footer" data-brand-footer>KAG</div>
-        </div>
-        
-        <!-- Main Chat -->
-        <div class="main">
-            <div class="chat-header">
-                <div class="chat-title-group">
-                    <div>
-                        <div class="chat-title" id="chat-title">Новый чат</div>
-                        <div class="chat-status">
-                            <span class="status-indicator"></span>
-                            <span id="model-name" onclick="openModelPicker(event)"
+<link rel="stylesheet" href="/static/theme.css"></head><body><div class="app"><!-- Sidebar --><div class="sidebar"><div class="sidebar-header"><div class="logo"> KAG</div><div class="subtitle">Knowledge Augmentation Generation</div></div><div data-site-nav="compact" class="site-nav-block"></div><button class="new-chat-btn" onclick="newChat()"><span></span> Новый чат
+            </button><div class="sessions-list" id="sessions-list"><!-- Сессии будут добавляться здесь --></div><div class="sidebar-footer" data-brand-footer>KAG</div></div><!-- Main Chat --><div class="main"><div class="chat-header"><div class="chat-title-group"><div><div class="chat-title" id="chat-title">Новый чат</div><div class="chat-status"><span class="status-indicator"></span><span id="model-name" onclick="openModelPicker(event)"
                                   title="Нажмите, чтобы выбрать провайдера и модель для своих вопросов"
-                                  style="cursor:pointer;border-bottom:1px dotted var(--text4)">Загрузка...</span>
-                            <div id="model-picker" style="display:none;position:absolute;top:38px;right:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;min-width:280px;max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-buttons">
-                    <a href="/documents" class="header-btn header-btn-primary">📄 Документы</a>
-                    <a href="/chunks" class="header-btn">📚 Чанки</a>
-                    <a href="/qdrant" class="header-btn">🗄️ Qdrant</a>
-                    <a href="/system" class="header-btn">Состояние</a>
-                    <a href="/docker" class="header-btn">🐳 Docker</a>
-                    <a href="/admin" class="header-btn">⚙️ Настройки</a>
-                    <button class="header-btn" onclick="exportDialog('docx')" title="Скачать DOCX">📥 DOCX</button>
-                    <button class="header-btn" onclick="exportDialog('pdf')" title="Скачать PDF">📥 PDF</button>
-                </div>
-            </div>
-            
-            <div class="messages" id="messages">
-                <div class="empty-state" id="empty-state">
-                    <div class="empty-icon">✨</div>
-                    <div class="empty-title">Чем могу помочь?</div>
-                    <div>Интеллектуальный помощник с доступом к базе знаний</div>
-                    
-                    <div class="suggestions">
-                        <div class="suggestion" onclick="useSuggestion('Что такое KAG?')">
-                            <div class="suggestion-title">📚 О проекте</div>
-                            <div class="suggestion-desc">Что такое KAG и как он работает</div>
-                        </div>
-                        <div class="suggestion" onclick="useSuggestion('Какие возможности у системы?')">
-                            <div class="suggestion-title">🚀 Возможности</div>
-                            <div class="suggestion-desc">Основные функции системы</div>
-                        </div>
-                        <div class="suggestion" onclick="useSuggestion('Как загрузить документы?')">
-                            <div class="suggestion-title">📄 Документы</div>
-                            <div class="suggestion-desc">Как добавить свои документы</div>
-                        </div>
-                        <div class="suggestion" onclick="useSuggestion('Расскажи о себе')">
-                            <div class="suggestion-title">💬 О системе</div>
-                            <div class="suggestion-desc">Информация о возможностях</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="input-area">
-                <div class="input-container">
-                    <textarea 
+                                  style="cursor:pointer;border-bottom:1px dotted var(--text4)">Загрузка...</span><div id="model-picker" style="display:none;position:absolute;top:38px;right:0;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;min-width:280px;max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35)"></div></div></div></div><div class="header-buttons"><a href="/documents" class="header-btn header-btn-primary"> Документы</a><a href="/chunks" class="header-btn"> Чанки</a><a href="/qdrant" class="header-btn"> Qdrant</a><a href="/system" class="header-btn">Состояние</a><a href="/docker" class="header-btn"> Docker</a><a href="/admin" class="header-btn"> Настройки</a><button class="header-btn" onclick="exportDialog('docx')" title="Скачать DOCX"> DOCX</button><button class="header-btn" onclick="exportDialog('pdf')" title="Скачать PDF"> PDF</button></div></div><div class="messages" id="messages"><div class="empty-state" id="empty-state"><div class="empty-icon"></div><div class="empty-title">Чем могу помочь?</div><div>Интеллектуальный помощник с доступом к базе знаний</div><div class="suggestions"><div class="suggestion" onclick="useSuggestion('Что такое KAG?')"><div class="suggestion-title"> О проекте</div><div class="suggestion-desc">Что такое KAG и как он работает</div></div><div class="suggestion" onclick="useSuggestion('Какие возможности у системы?')"><div class="suggestion-title"> Возможности</div><div class="suggestion-desc">Основные функции системы</div></div><div class="suggestion" onclick="useSuggestion('Как загрузить документы?')"><div class="suggestion-title"> Документы</div><div class="suggestion-desc">Как добавить свои документы</div></div><div class="suggestion" onclick="useSuggestion('Расскажи о себе')"><div class="suggestion-title"> О системе</div><div class="suggestion-desc">Информация о возможностях</div></div></div></div></div><div class="input-area"><div class="input-container"><textarea 
                         class="message-input" 
                         id="message-input"
                         placeholder="Введите сообщение..."
                         onkeydown="handleKeyDown(event)"
-                    ></textarea>
-                    <button class="send-btn" id="send-btn" onclick="sendMessage()">
-                        ➤
-                    </button>
-                </div>
-                <div class="input-hint">
+                    ></textarea><button class="send-btn" id="send-btn" onclick="sendMessage()">→</button></div><div class="input-hint">
                     Enter - отправить • Shift+Enter - новая строка
                     <span style="margin-left:10px">
                         Контекст:
                         <select id="context-depth" onchange="saveContextDepth()"
-                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px">
-                            <option value="">как в настройках</option>
-                            <option value="3">3 фрагмента (быстро)</option>
-                            <option value="5">5 фрагментов</option>
-                            <option value="8">8 фрагментов</option>
-                            <option value="10">10 фрагментов</option>
-                            <option value="15">15 фрагментов</option>
-                            <option value="20">20 фрагментов (полно)</option>
-                        </select>
-                        <span title="Сколько найденных фрагментов уходит модели. Меньше — быстрее и дешевле, но выше риск потерять нужную норму; больше — полнее ответ, но медленнее. «Как в настройках» — значение из админки (привязка функции chat).">?</span>
-                    </span>
-                    <span style="margin-left:10px">
+                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px"><option value="">как в настройках</option><option value="3">3 фрагмента (быстро)</option><option value="5">5 фрагментов</option><option value="8">8 фрагментов</option><option value="10">10 фрагментов</option><option value="15">15 фрагментов</option><option value="20">20 фрагментов (полно)</option></select><span title="Сколько найденных фрагментов уходит модели. Меньше — быстрее и дешевле, но выше риск потерять нужную норму; больше — полнее ответ, но медленнее. «Как в настройках» — значение из админки (привязка функции chat).">?</span></span><span style="margin-left:10px">
                         Отбор фрагментов:
                         <select id="score-gap" onchange="saveScoreGap()"
-                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px">
-                            <option value="">как в настройках</option>
-                            <option value="0.02">только самое близкое (жёстко)</option>
-                            <option value="0.03">строже обычного</option>
-                            <option value="0.05">обычно</option>
-                            <option value="0.08">мягче — больше источников</option>
-                            <option value="0.12">берём почти всё</option>
-                        </select>
-                        <span title="Насколько хуже лучшего фрагмента может быть фрагмент, чтобы попасть в ответ. Число = допустимое отставание: 0.02 оставляет только почти неотличимое от лучшего (чистый и дешёвый ответ, но можно потерять факт из другого документа), 0.12 берёт почти всю выдачу (полнее, но в ответ попадут и чужие документы). «Как в настройках» — значение из админки (привязка функции chat или доменный дефолт). Выключить отбор или взять совсем всё из интерфейса нельзя — это настройка администратора.">?</span>
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
+                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px"><option value="">как в настройках</option><option value="0.02">только самое близкое (жёстко)</option><option value="0.03">строже обычного</option><option value="0.05">обычно</option><option value="0.08">мягче — больше источников</option><option value="0.12">берём почти всё</option></select><span title="Насколько хуже лучшего фрагмента может быть фрагмент, чтобы попасть в ответ. Число = допустимое отставание: 0.02 оставляет только почти неотличимое от лучшего (чистый и дешёвый ответ, но можно потерять факт из другого документа), 0.12 берёт почти всю выдачу (полнее, но в ответ попадут и чужие документы). «Как в настройках» — значение из админки (привязка функции chat или доменный дефолт). Выключить отбор или взять совсем всё из интерфейса нельзя — это настройка администратора.">?</span></span></div></div></div></div>
     
     <script>
         const API_URL = '/api/v1';
@@ -1019,7 +907,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 div.innerHTML = `
                     <div class="session-title">${escapeHTML(session.title || 'Новый диалог')}</div>
                     <div class="session-time">${session.updatedAt ? new Date(session.updatedAt).toLocaleString('ru-RU') : ''}</div>
-                    <button class="session-delete" title="Удалить чат" onclick="event.stopPropagation(); deleteSession('${session.id}')">🗑</button>
+                    <button class="session-delete" title="Удалить чат" onclick="event.stopPropagation(); deleteSession('${session.id}')">✕</button>
                 `;
                 list.appendChild(div);
             });
@@ -1195,7 +1083,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 
             } catch (error) {
                 hideLoading();
-                addMessageToUI('assistant', `❌ Ошибка: ${error.message}\n\nПроверьте что сервер запущен и доступен.`);
+                addMessageToUI('assistant', `✕ Ошибка: ${error.message}\n\nПроверьте что сервер запущен и доступен.`);
             } finally {
                 isLoading = false;
                 updateSendButton();
@@ -1210,12 +1098,12 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}-message`;
             
-            const avatar = role === 'user' ? '👤' : '✨';
+            const avatar = role === 'user' ? '' : '';
             
             let sourcesHTML = '';
             if (metadata && metadata.sources_count > 0 && metadata.rag_used) {
                 const totalDocs = metadata.total_docs || '—';
-                const graphUsed = metadata.graph_used ? ' • 🕸️ Граф знаний' : '';
+                const graphUsed = metadata.graph_used ? ' •  Граф знаний' : '';
                 // Собираем уникальные документы (в sources может быть несколько
                 // чанков одного документа) и выводим их имена ссылками на preview.
                 // seen объявляем ДО блока — иначе при пустых sources будет
@@ -1232,15 +1120,15 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                         const safeName = escapeHTML(fname || did.slice(0, 12));
                         // Ссылка на файл документа (inline-просмотр/скачивание)
                         const url = `${API_URL}/upload/${encodeURIComponent(did)}/preview`;
-                        return `<div class="source-item">📄 <a href="${url}" target="_blank" rel="noopener">${safeName}</a></div>`;
+                        return `<div class="source-item"> <a href="${url}" target="_blank" rel="noopener">${safeName}</a></div>`;
                     }).join('');
                 }
                 sourcesHTML = `
                     <div class="sources">
-                        <div class="sources-title">📎 Источники (${metadata.sources_count} чанков, ${seen ? seen.size : 0} документов)</div>
+                        <div class="sources-title"> Источники (${metadata.sources_count} чанков, ${seen ? seen.size : 0} документов)</div>
                         ${docLinksHTML}
                         <div class="source-item">
-                            📄 Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
+                             Qdrant: найдено ${metadata.sources_count} чанков из ${totalDocs} документов${graphUsed}
                         </div>
                         ${buildTablesHTML(sources)}
                     </div>
@@ -1252,9 +1140,9 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 <div class="message-content">
                     <div class="message-text">${formatMessageText(content)}</div>
                     <div class="message-meta">
-                        ${metadata ? `<span>✨ ${metadata.model || 'N/A'}</span>` : ''}
-                        ${metadata && metadata.backend ? `<span>⚙️ ${metadata.backend}</span>` : ''}
-                        <span>🕐 ${new Date().toLocaleTimeString('ru-RU')}</span>
+                        ${metadata ? `<span> ${metadata.model || 'N/A'}</span>` : ''}
+                        ${metadata && metadata.backend ? `<span> ${metadata.backend}</span>` : ''}
+                        <span> ${new Date().toLocaleTimeString('ru-RU')}</span>
                     </div>
                     ${sourcesHTML}
                 </div>
@@ -1314,7 +1202,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 return `
                     <div class="table-render">${html}</div>
                     <div class="table-caption">
-                        <span>📊 Таблица из: <a href="${docUrl}" target="_blank" rel="noopener">${fname}</a></span>
+                        <span> Таблица из: <a href="${docUrl}" target="_blank" rel="noopener">${fname}</a></span>
                         <span>стр. ${table.page_num || '—'}</span>
                     </div>
                 `;
@@ -1354,7 +1242,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             loadingDiv.className = 'message assistant-message';
             loadingDiv.id = 'loading-message';
             loadingDiv.innerHTML = `
-                <div class="message-avatar">✨</div>
+                <div class="message-avatar"></div>
                 <div class="message-content">
                     <div class="loading">
                         <span>Думаю</span>
@@ -1396,11 +1284,11 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         async function exportDialog(format) {
             const session = sessions.find(s => s.id === currentSessionId);
             if (!session || !session.messages || session.messages.length === 0) {
-                showNotification('❌ Нет сообщений для экспорта', true);
+                showNotification('✕ Нет сообщений для экспорта', true);
                 return;
             }
 
-            showNotification(`⏳ Генерация ${format.toUpperCase()}...`);
+            showNotification(`… Генерация ${format.toUpperCase()}...`);
 
             try {
                 const response = await apiFetch(`${API_URL}/chat/export/${currentSessionId}?format=${format}`, {
@@ -1430,9 +1318,9 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
 
-                showNotification(`✅ ${format.toUpperCase()} документ скачан`);
+                showNotification(`✓ ${format.toUpperCase()} документ скачан`);
             } catch (error) {
-                showNotification(`❌ Ошибка экспорта: ${error.message}`, true);
+                showNotification(`✕ Ошибка экспорта: ${error.message}`, true);
             }
         }
         
@@ -1522,24 +1410,24 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         function getEmptyStateHTML() {
             return `
                 <div class="empty-state" id="empty-state">
-                    <div class="empty-icon">✨</div>
+                    <div class="empty-icon"></div>
                     <div class="empty-title">Чем могу помочь?</div>
                     <div>Интеллектуальный помощник с доступом к базе знаний</div>
                     <div class="suggestions">
                         <div class="suggestion" onclick="useSuggestion('Что такое KAG?')">
-                            <div class="suggestion-title">📚 О проекте</div>
+                            <div class="suggestion-title"> О проекте</div>
                             <div class="suggestion-desc">Что такое KAG и как он работает</div>
                         </div>
                         <div class="suggestion" onclick="useSuggestion('Какие возможности у системы?')">
-                            <div class="suggestion-title">🚀 Возможности</div>
+                            <div class="suggestion-title"> Возможности</div>
                             <div class="suggestion-desc">Основные функции системы</div>
                         </div>
                         <div class="suggestion" onclick="useSuggestion('Как загрузить документы?')">
-                            <div class="suggestion-title">📄 Документы</div>
+                            <div class="suggestion-title"> Документы</div>
                             <div class="suggestion-desc">Как добавить свои документы</div>
                         </div>
                         <div class="suggestion" onclick="useSuggestion('Расскажи о себе')">
-                            <div class="suggestion-title">💬 О системе</div>
+                            <div class="suggestion-title"> О системе</div>
                             <div class="suggestion-desc">Информация о возможностях</div>
                         </div>
                     </div>
@@ -1553,8 +1441,5 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 200) + 'px';
         });
-    </script>
-<script src="/static/branding.js"></script>
-    <script src="/static/site-nav.js" defer></script>
-</body>
-</html>
+    </script><script src="/static/branding.js"></script><script src="/static/site-nav.js" defer></script>
+</body></html>

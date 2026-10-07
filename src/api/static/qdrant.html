@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG - Qdrant Database</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG - Qdrant Database</title>
     <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 
@@ -312,9 +308,7 @@ try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag
     
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -330,75 +324,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-    <div class="header">
-        <div class="logo">🗄️ KAG - Qdrant Database</div>
-        <div class="nav-buttons">
-            <a href="/docker" class="nav-btn">🐳 Docker</a>
-            <a href="/" class="back-btn">← Назад</a>
-        </div>
-    </div>
-    
-    <div class="container">
-        <div id="loading" class="loading">Загрузка данных Qdrant...</div>
-        
-        <div id="content" style="display: none;">
-            <div class="system-info" id="stats-cards">
-            </div>
-            
-            <h2 class="section-title">📚 Коллекции</h2>
-            <div class="collections-grid" id="collections">
-            </div>
-            
-            <div id="collection-details" style="display: none;">
-                <h2 class="section-title">📋 Детали коллекции</h2>
-                
-                <div class="tabs">
-                    <button class="tab active" onclick="showTab('points')">📄 Точки (документы)</button>
-                    <button class="tab" onclick="showTab('payload')">🏷️ Метаданные</button>
-                    <button class="tab" onclick="showTab('info')">ℹ️ Информация</button>
-                </div>
-                
-                <div id="tab-points" class="tab-content active">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Версия</th>
-                                    <th>Метаданные</th>
-                                </tr>
-                            </thead>
-                            <tbody id="points-table">
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <div id="tab-payload" class="tab-content">
-                    <div id="payload-stats">
-                    </div>
-                </div>
-                
-                <div id="tab-info" class="tab-content">
-                    <div id="collection-info">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div id="error-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">❌ Ошибка</div>
-                <button class="close-btn" onclick="closeErrorModal()">×</button>
-            </div>
-            <div id="error-message" class="json-block"></div>
-        </div>
-    </div>
+<link rel="stylesheet" href="/static/theme.css"></head><body><div class="header"><div class="logo"> KAG - Qdrant Database</div><div class="nav-buttons"><a href="/docker" class="nav-btn"> Docker</a><a href="/" class="back-btn">← Назад</a></div></div><div class="container"><div id="loading" class="loading">Загрузка данных Qdrant...</div><div id="content" style="display: none;"><div class="system-info" id="stats-cards"></div><h2 class="section-title"> Коллекции</h2><div class="collections-grid" id="collections"></div><div id="collection-details" style="display: none;"><h2 class="section-title"> Детали коллекции</h2><div class="tabs"><button class="tab active" onclick="showTab('points')"> Точки (документы)</button><button class="tab" onclick="showTab('payload')"> Метаданные</button><button class="tab" onclick="showTab('info')">ℹ Информация</button></div><div id="tab-points" class="tab-content active"><div class="table-container"><table><thead><tr><th>ID</th><th>Версия</th><th>Метаданные</th></tr></thead><tbody id="points-table"></tbody></table></div></div><div id="tab-payload" class="tab-content"><div id="payload-stats"></div></div><div id="tab-info" class="tab-content"><div id="collection-info"></div></div></div></div></div><div id="error-modal" class="modal"><div class="modal-content"><div class="modal-header"><div class="modal-title"> Ошибка</div><button class="close-btn" onclick="closeErrorModal()">×</button></div><div id="error-message" class="json-block"></div></div></div>
     
     <script>
         const API_URL = '';
@@ -626,7 +552,5 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         
         loadQdrantData();
         setInterval(loadQdrantData, 30000);
-    </script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+    </script><script src="/static/branding.js"></script>
+</body></html>

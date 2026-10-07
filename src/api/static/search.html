@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Поиск</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Поиск</title>
 
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
@@ -61,9 +57,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:4px}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -79,43 +73,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/chat"> Чат с AI</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-<main>
-<h1>Поиск</h1>
-<div class="sub">Векторный (Qdrant) + графовый (Neo4j) + по метаданным — выберите режим</div>
-
-<div class="search-box">
-  <input type="text" id="query" placeholder="Введите запрос..." onkeydown="if(event.key==='Enter')doSearch()" autofocus>
-  <button class="btn" onclick="doSearch()">🔍 Искать</button>
-</div>
-
-<div class="tabs">
-  <button class="tab active" data-mode="all" onclick="setMode('all',this)">🔀 Все источники</button>
-  <button class="tab" data-mode="chunks" onclick="setMode('chunks',this)">🧩 Чанки (Qdrant)</button>
-  <button class="tab" data-mode="docs" onclick="setMode('docs',this)">📄 Документы</button>
-  <button class="tab" data-mode="graph" onclick="setMode('graph',this)">🕸️ Граф (Neo4j)</button>
-</div>
-
-<div id="results"><div class="empty">🔍 Введите запрос — поиск по всем источникам</div></div>
-</main>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/chat"> Чат с AI</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Поиск</h1><div class="sub">Векторный (Qdrant) + графовый (Neo4j) + по метаданным — выберите режим</div><div class="search-box"><input type="text" id="query" placeholder="Введите запрос..." onkeydown="if(event.key==='Enter')doSearch()" autofocus><button class="btn" onclick="doSearch()"> Искать</button></div><div class="tabs"><button class="tab active" data-mode="all" onclick="setMode('all',this)"> Все источники</button><button class="tab" data-mode="chunks" onclick="setMode('chunks',this)"> Чанки (Qdrant)</button><button class="tab" data-mode="docs" onclick="setMode('docs',this)"> Документы</button><button class="tab" data-mode="graph" onclick="setMode('graph',this)"> Граф (Neo4j)</button></div><div id="results"><div class="empty"> Введите запрос — поиск по всем источникам</div></div></main>
 
 <script>
 function getToken() {
@@ -217,7 +175,7 @@ function renderResults(q, results) {
   results.forEach(r => {
     if (r.type === 'chunks' && r.data.length) {
       total += r.data.length;
-      html += '<div class="panel"><h3>🧩 Чанки — векторный поиск (Qdrant)</h3>';
+      html += '<div class="panel"><h3> Чанки — векторный поиск (Qdrant)</h3>';
       r.data.forEach((c,i) => {
         const text = c.text || c.content || '';
         const docId = c.document_id || c.doc_id || '';
@@ -225,7 +183,7 @@ function renderResults(q, results) {
         html += `<div class="chunk-card">
           <div class="c-header"><span class="c-id">${cid}</span><span class="c-meta">${text.length} симв.</span></div>
           <div class="c-text">${hl(text, q)}</div>
-          ${docId ? `<a class="c-doc" href="/viewer?id=${docId}">📄 Открыть документ →</a>` : ''}
+          ${docId ? `<a class="c-doc" href="/viewer?id=${docId}"> Открыть документ →</a>` : ''}
         </div>`;
       });
       html += '</div>';
@@ -233,7 +191,7 @@ function renderResults(q, results) {
     
     if (r.type === 'graph' && r.data.length) {
       total += r.data.length;
-      html += '<div class="panel"><h3>🕸️ Сущности — граф знаний (Neo4j)</h3>';
+      html += '<div class="panel"><h3> Сущности — граф знаний (Neo4j)</h3>';
       r.data.forEach(e => {
         html += `<div class="doc-card" onclick="location.href='/kg'">
           <div class="d-title">${hl(e.name||'', q)}</div>
@@ -245,7 +203,7 @@ function renderResults(q, results) {
     
     if (r.type === 'docs' && r.data.length) {
       total += r.data.length;
-      html += '<div class="panel"><h3>📄 Документы — по метаданным</h3>';
+      html += '<div class="panel"><h3> Документы — по метаданным</h3>';
       r.data.forEach(d => {
         html += `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
           <div class="d-title">${hl(d.recognized_title||d.filename, q)}</div>
@@ -259,7 +217,7 @@ function renderResults(q, results) {
   
   res.innerHTML = total 
     ? `<div class="count">Найдено: ${total} результатов по запросу «${q}»</div>` + html
-    : `<div class="empty">🔍 Ничего не найдено по запросу «${q}». Попробуйте другие слова.</div>`;
+    : `<div class="empty"> Ничего не найдено по запросу «${q}». Попробуйте другие слова.</div>`;
 }
 
 function hl(text, query) {
@@ -285,7 +243,5 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

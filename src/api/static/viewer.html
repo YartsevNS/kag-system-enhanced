@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Просмотр документа</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Просмотр документа</title>
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 
@@ -296,9 +292,7 @@ body {
 .modal-close{background:none;border:none;color:var(--text4);font-size:20px;cursor:pointer}
 .modal-close:hover{color:var(--text2)}
 .modal-body{padding:18px 20px 22px}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -314,66 +308,11 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav class="sidebar">
- <div class="sidebar-logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
- <a href="/docs"> Документация</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav class="sidebar"><div class="sidebar-logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="/docs"> Документация</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main class="main"><div class="toolbar"><div class="toolbar-title" id="title">Загрузка...</div><a href="/documents" class="btn">← Назад</a><a href="#" class="btn" id="btn-chunks" style="display:none"> Чанки</a><a href="#" class="btn btn-accent" id="btn-download" download> Скачать</a><button class="btn" onclick="openEditModal()" title="Изменить название и тип документа" id="btn-edit" style="display:none"> Изменить</button><div style="flex:1"></div><div class="page-group"><button onclick="prevPage()" id="btn-prev" disabled title="Предыдущая (←)">◀</button><input type="number" class="page-input" id="page-num" value="1" min="1" onchange="goToPage()" onkeydown="if(event.key==='Enter')goToPage()"><span class="page-total" id="page-total">/ —</span><button onclick="nextPage()" id="btn-next" disabled title="Следующая (→)">▶</button></div><button class="btn" onclick="zoomOut()" title="Уменьшить">−</button><span class="zoom-label" id="zoom-label">100%</span><button class="btn" onclick="zoomIn()" title="Увеличить">+</button><button class="btn" onclick="zoomFit()" title="По ширине (W)"><span class="label">По ширине</span> ↔</button></div><div class="meta-bar" id="meta-bar"></div><!-- Таблицы документа: восстановленные разбором (свой OCR или модель зрения). Раньше их не было видно
+       именно здесь, из-за чего казалось, что таблица вовсе не распознана. --><div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div><div class="viewer" id="viewer"><div class="state-overlay" id="loading-overlay"><div class="spinner"></div><div class="state-text">Загрузка документа...</div></div></div><div class="ocr-progress" id="ocr-progress" style="width:5%"></div><div class="kbd-hint" id="kbd-hint"><kbd>←</kbd><kbd>→</kbd> страницы · <kbd>+</kbd><kbd>−</kbd> зум · <kbd>W</kbd> по ширине
+  </div></main><div class="toast" id="toast"></div>
 
-<main class="main">
-  <div class="toolbar">
-    <div class="toolbar-title" id="title">Загрузка...</div>
-    <a href="/documents" class="btn">← Назад</a>
-    <a href="#" class="btn" id="btn-chunks" style="display:none">🧩 Чанки</a>
-    <a href="#" class="btn btn-accent" id="btn-download" download>📥 Скачать</a>
-    <button class="btn" onclick="openEditModal()" title="Изменить название и тип документа" id="btn-edit" style="display:none">✏️ Изменить</button>
-    <div style="flex:1"></div>
-    <div class="page-group">
-      <button onclick="prevPage()" id="btn-prev" disabled title="Предыдущая (←)">◀</button>
-      <input type="number" class="page-input" id="page-num" value="1" min="1" onchange="goToPage()" onkeydown="if(event.key==='Enter')goToPage()">
-      <span class="page-total" id="page-total">/ —</span>
-      <button onclick="nextPage()" id="btn-next" disabled title="Следующая (→)">▶</button>
-    </div>
-    <button class="btn" onclick="zoomOut()" title="Уменьшить">−</button>
-    <span class="zoom-label" id="zoom-label">100%</span>
-    <button class="btn" onclick="zoomIn()" title="Увеличить">+</button>
-    <button class="btn" onclick="zoomFit()" title="По ширине (W)"><span class="label">По ширине</span> ↔</button>
-  </div>
-
-  <div class="meta-bar" id="meta-bar"></div>
-  <!-- Таблицы документа: восстановленные разбором (свой OCR или модель зрения). Раньше их не было видно
-       именно здесь, из-за чего казалось, что таблица вовсе не распознана. -->
-  <div id="hl-note" style="display:none;font-size:12px;color:var(--text3, #898989);padding:6px 4px"></div>
-
-  <div class="viewer" id="viewer">
-    <div class="state-overlay" id="loading-overlay">
-      <div class="spinner"></div>
-      <div class="state-text">Загрузка документа...</div>
-    </div>
-  </div>
-
-  <div class="ocr-progress" id="ocr-progress" style="width:5%"></div>
-
-  <div class="kbd-hint" id="kbd-hint">
-    <kbd>←</kbd> <kbd>→</kbd> страницы · <kbd>+</kbd> <kbd>−</kbd> зум · <kbd>W</kbd> по ширине
-  </div>
-</main>
-
-<div class="toast" id="toast"></div>
-
-<script src="/static/pdf.min.js"></script>
-<script>
+<script src="/static/pdf.min.js"></script><script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/pdf.worker.min.js';
 
 const API = '/api/v1';
@@ -738,7 +677,7 @@ function setMeta(doc) {
     '<div class="meta-pill">Тип: <strong>' + typeLabel(doc.document_type) + '</strong></div>' +
     '<div class="meta-pill">Размер: <strong>' + fmtBytes(doc.file_size) + '</strong></div>' +
     '<div class="meta-pill">Чанков: <strong>' + (doc.chunks_count || 0) + '</strong></div>' +
-    '<div class="meta-pill">📅 ' + new Date(doc.created_at).toLocaleDateString('ru-RU') + '</div>' +
+    '<div class="meta-pill"> ' + new Date(doc.created_at).toLocaleDateString('ru-RU') + '</div>' +
     (tags ? '<div class="meta-pill">' + tags + '</div>' : '');
 }
 
@@ -759,12 +698,12 @@ function showError(msg) {
   const overlay = document.getElementById('loading-overlay') || document.getElementById('viewer');
   if (!overlay) return;
   overlay.innerHTML =
-    '<div class="state-icon">📄</div>' +
+    '<div class="state-icon"></div>' +
     '<div class="state-text">' + msg + '</div>' +
     (docId ? '<div class="state-sub">ID: ' + docId.substring(0, 16) + '...</div>' : '') +
     '<a href="/documents" class="btn" style="margin-top:8px;text-decoration:none">← К документам</a>';
   const title = document.getElementById('title');
-  if (title) title.textContent = '❌ Ошибка';
+  if (title) title.textContent = '✕ Ошибка';
   if (overlay.classList) overlay.classList.remove('fade');
 }
 
@@ -989,32 +928,7 @@ async function saveEdit() {
 // с невидимым текстовым слоем (src/indexing/searchable_pdf.py), и выделение делает сам pdf.js —
 // как для любого PDF с текстовым слоем. См. проверку типа ответа /preview в init().
 </script>
-<!-- Модалка редактирования -->
-<div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>✏️ Изменить документ</h2>
-      <button class="modal-close" onclick="closeEditModal()">×</button>
-    </div>
-    <div class="modal-body">
-      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Название</label>
-      <input type="text" id="edit-name" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px">
-      <label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Тип документа</label>
-      <select id="edit-type" onchange="onTypeChange()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
-      <div id="edit-type-add" style="display:none;align-items:center;gap:8px;margin:-6px 0 14px">
-        <input type="text" id="edit-type-new" placeholder="Название нового типа" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px">
-        <button class="btn" onclick="addDocType()">Добавить</button>
-        <span id="edit-type-status" style="font-size:12px;color:var(--text4)"></span>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn btn-accent" onclick="saveEdit()">💾 Сохранить</button>
-        <button class="btn" onclick="closeEditModal()">Отмена</button>
-        <span id="edit-status" style="font-size:12px;color:var(--text4)"></span>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Модалка редактирования --><div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()"><div class="modal"><div class="modal-header"><h2> Изменить документ</h2><button class="modal-close" onclick="closeEditModal()">×</button></div><div class="modal-body"><label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Название</label><input type="text" id="edit-name" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"><label style="display:block;font-size:13px;color:var(--text3);margin-bottom:6px">Тип документа</label><select id="edit-type" onchange="onTypeChange()" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:14px"></select><div id="edit-type-add" style="display:none;align-items:center;gap:8px;margin:-6px 0 14px"><input type="text" id="edit-type-new" placeholder="Название нового типа" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:13px"><button class="btn" onclick="addDocType()">Добавить</button><span id="edit-type-status" style="font-size:12px;color:var(--text4)"></span></div><div style="display:flex;align-items:center;gap:12px"><button class="btn btn-accent" onclick="saveEdit()"> Сохранить</button><button class="btn" onclick="closeEditModal()">Отмена</button><span id="edit-status" style="font-size:12px;color:var(--text4)"></span></div></div></div></div>
 <script src="/static/branding.js"></script>
-</body>
-</html>
+</body></html>
 

@@ -1,12 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Состояние системы</title>
-<link rel="icon" href="/static/favicon.ico">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Состояние системы</title><link rel="icon" href="/static/favicon.ico">
 <style>
 :root{
   --bg:#0f1115; --surface:#171a21; --surface2:#1d2029; --border:#2a2f3a; --border-s:#232833;
@@ -42,9 +37,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:6px}
 .bar>div{height:100%;background:var(--accent)}
 #err{display:none;background:#3a1d1d;border:1px solid #f8514955;color:#ffb4ae;padding:10px 12px;border-radius:var(--radius-sm);margin:10px 0}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -60,63 +53,16 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>Состояние системы</h1>
-    <span class="sub" id="gen">загрузка…</span>
-    <span style="flex:1"></span>
-    <label class="sub" style="display:flex;align-items:center;gap:6px;cursor:pointer">
-      <input type="checkbox" id="auto" checked style="accent-color:var(--accent)"> автообновление 10 с
-    </label>
-    <button class="btn" onclick="load(true)">Обновить</button>
-    <a class="btn" href="/chat">Чат</a>
-    <a class="btn" href="/admin">Админка</a>
-  </header>
-  <div class="sub">Числа считаются внутри api из тех же метрик, что отдаются в Prometheus
+<link rel="stylesheet" href="/static/theme.css"></head><body><div class="wrap"><header><h1>Состояние системы</h1><span class="sub" id="gen">загрузка…</span><span style="flex:1"></span><label class="sub" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="auto" checked style="accent-color:var(--accent)"> автообновление 10 с
+    </label><button class="btn" onclick="load(true)">Обновить</button><a class="btn" href="/chat">Чат</a><a class="btn" href="/admin">Админка</a></header><div class="sub">Числа считаются внутри api из тех же метрик, что отдаются в Prometheus
     (<code>/metrics</code>) — Grafana не нужна. Каждый запрос имеет trace_id: возьмите его из заголовка
-    ответа <code>X-Trace-ID</code> и найдите в журнале (<a class="sub" href="/logs">Логи</a>).</div>
-
-  <div id="err"></div>
-  <div class="kpis" id="kpis"></div>
-
-  <div class="panel"><details><summary>Стадии ответа: куда уходит время</summary>
-    <div id="stages"></div>
-    <div class="hint">Если стадия «модель» занимает 80–90% времени — оптимизировать поиск бессмысленно,
-      рычаг в модели (кэш префикса, меньшая модель для простых вопросов, стриминг).</div>
-  </details></div>
-
-  <div class="panel"><details><summary>Ответы: сколько и какие</summary>
-    <div id="answers"></div>
-    <div class="hint">«Отказ без данных» — модель честно сказала «не найдено» при пустом контексте.
-      Растущая доля отказов при растущем корпусе — сигнал к разбору поиска (домен, порог, чанкинг).</div>
-  </details></div>
-
-  <div class="panel"><details><summary>Отбор контекста и реранкер</summary>
-    <div id="retrieval"></div>
-    <div class="hint">Порог отсечения убирает посторонние фрагменты из промпта (дешевле и точнее).
+    ответа <code>X-Trace-ID</code> и найдите в журнале (<a class="sub" href="/logs">Логи</a>).</div><div id="err"></div><div class="kpis" id="kpis"></div><div class="panel"><details><summary>Стадии ответа: куда уходит время</summary><div id="stages"></div><div class="hint">Если стадия «модель» занимает 80–90% времени — оптимизировать поиск бессмысленно,
+      рычаг в модели (кэш префикса, меньшая модель для простых вопросов, стриминг).</div></details></div><div class="panel"><details><summary>Ответы: сколько и какие</summary><div id="answers"></div><div class="hint">«Отказ без данных» — модель честно сказала «не найдено» при пустом контексте.
+      Растущая доля отказов при растущем корпусе — сигнал к разбору поиска (домен, порог, чанкинг).</div></details></div><div class="panel"><details><summary>Отбор контекста и реранкер</summary><div id="retrieval"></div><div class="hint">Порог отсечения убирает посторонние фрагменты из промпта (дешевле и точнее).
       Реранкер полезен, только если реально меняет лучший фрагмент: доля изменений ниже 5% означает,
-      что он тратит время впустую.</div>
-  </details></div>
-
-  <div class="panel"><details><summary>Модель: вызовы и токены (стоимость)</summary>
-    <div id="llm"></div>
-    <div class="hint">Промпт — это контекст, он оплачивается каждый раз. Сокращать его надёжнее, чем
-      менять модель: отсечение уже дало −22% промпта.</div>
-  </details></div>
-
-  <div class="panel"><details><summary>Оценки пользователей</summary>
-    <div id="feedback"></div>
-    <div class="hint">Оценка пишется вместе с trace_id в <code>data/feedback.jsonl</code> — по «плохо»
-      виден весь путь запроса (поиск, отсечение, модель), без догадок.</div>
-  </details></div>
-
-  <div class="panel"><details><summary>Данные: документы, векторы, очередь</summary>
-    <div id="corpus"></div>
-  </details></div>
-</div>
+      что он тратит время впустую.</div></details></div><div class="panel"><details><summary>Модель: вызовы и токены (стоимость)</summary><div id="llm"></div><div class="hint">Промпт — это контекст, он оплачивается каждый раз. Сокращать его надёжнее, чем
+      менять модель: отсечение уже дало −22% промпта.</div></details></div><div class="panel"><details><summary>Оценки пользователей</summary><div id="feedback"></div><div class="hint">Оценка пишется вместе с trace_id в <code>data/feedback.jsonl</code> — по «плохо»
+      виден весь путь запроса (поиск, отсечение, модель), без догадок.</div></details></div><div class="panel"><details><summary>Данные: документы, векторы, очередь</summary><div id="corpus"></div></details></div></div>
 
 <script>
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -159,7 +105,7 @@ function render(d){
     + kpi('p95 модели', sec((stages.llm||{}).p95), 'p50 '+sec((stages.llm||{}).p50))
     + kpi('Фрагментов в промпте', num((Q.fragments||{}).avg,1), 'p50 '+num((Q.fragments||{}).p50,0))
     + kpi('Отсечений порогом', num(Q.cutoff_triggered,0), 'убрано в среднем '+(num((Q.cutoff_dropped||{}).avg,1)))
-    + kpi('Оценки 👍/👎', num(F.up,0)+' / '+num(F.down,0), 'всего '+num((F.up||0)+(F.down||0),0))
+    + kpi('Оценки /', num(F.up,0)+' / '+num(F.down,0), 'всего '+num((F.up||0)+(F.down||0),0))
     + kpi('Документов / очередь', num(C.documents,0)+' / '+num(C.queue_total,0), 'векторов '+num(C.vectors,0));
 
   // Стадии
@@ -215,5 +161,4 @@ function render(d){
 load(false);
 setInterval(()=>{ if(document.getElementById('auto').checked) load(false); }, 10000);
 </script>
-</body>
-</html>
+</body></html>

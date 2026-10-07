@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Лента новостей</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Лента новостей</title>
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -74,9 +70,7 @@ h1{font-size:22px;font-weight:600;margin-bottom:4px}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -92,59 +86,10 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/chat"> Чат с AI</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-<main>
-  <h1>Лента новостей</h1>
-  <div class="sub">Новости в реальном времени из подключённых источников. Нажмите на блок чтобы развернуть</div>
-
-  <!-- Управление -->
-  <div class="top-bar">
-    <select id="filter-source" onchange="applyFilter()">
-      <option value="">Все источники</option>
-    </select>
-    <input type="text" id="filter-search" placeholder="🔍 Поиск по тексту..." oninput="applyFilter()">
-    <button class="btn-sm" onclick="toggleSourcePanel()">📡 Источники</button>
-    <button class="btn" onclick="refreshNews()">🔄 Обновить</button>
-    <span id="news-count" style="font-size:11px;color:var(--text4)"></span>
-  </div>
-
-  <!-- Панель источников -->
-  <div class="src-panel" id="src-panel">
-    <h3>📡 Подключение источников новостей</h3>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <input type="text" id="new-source-url" placeholder="URL RSS-ленты..." style="flex:1;min-width:200px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none">
-      <input type="text" id="new-source-name" placeholder="Название" style="width:160px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none">
-      <button class="btn" onclick="addNewsSource()">➕ Добавить</button>
-    </div>
-    <div class="src-list" id="src-list"></div>
-    <div style="margin-top:10px;font-size:11px;color:var(--text4)">
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/chat"> Чат с AI</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Лента новостей</h1><div class="sub">Новости в реальном времени из подключённых источников. Нажмите на блок чтобы развернуть</div><!-- Управление --><div class="top-bar"><select id="filter-source" onchange="applyFilter()"><option value="">Все источники</option></select><input type="text" id="filter-search" placeholder=" Поиск по тексту..." oninput="applyFilter()"><button class="btn-sm" onclick="toggleSourcePanel()"> Источники</button><button class="btn" onclick="refreshNews()"> Обновить</button><span id="news-count" style="font-size:11px;color:var(--text4)"></span></div><!-- Панель источников --><div class="src-panel" id="src-panel"><h3> Подключение источников новостей</h3><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><input type="text" id="new-source-url" placeholder="URL RSS-ленты..." style="flex:1;min-width:200px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none"><input type="text" id="new-source-name" placeholder="Название" style="width:160px;background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;outline:none"><button class="btn" onclick="addNewsSource()"> Добавить</button></div><div class="src-list" id="src-list"></div><div style="margin-top:10px;font-size:11px;color:var(--text4)">
       Тестовые источники:
       <a href="#" onclick="addTestSources();return false" style="color:var(--accent-h)">Securelist</a> |
-      <a href="#" onclick="quickAdd('https://securelist.com/feed/','Securelist');return false" style="color:var(--accent-h)">+Securelist</a>
-    </div>
-  </div>
-
-  <!-- Сетка новостей -->
-  <div class="news-grid" id="news-grid"><div class="empty"><div class="spinner"></div></div></div>
-</main>
+      <a href="#" onclick="quickAdd('https://securelist.com/feed/','Securelist');return false" style="color:var(--accent-h)">+Securelist</a></div></div><!-- Сетка новостей --><div class="news-grid" id="news-grid"><div class="empty"><div class="spinner"></div></div></div></main>
 
 <script>
 const API = '/api/v1/monitor';
@@ -182,11 +127,11 @@ async function addNewsSource(){
     var r = await fetch(API + '/sources', { method: 'POST', headers: ah(), credentials: 'include',
       body: JSON.stringify({ name: name, url: url, type: 'rss', check_interval_minutes: 360 }) });
     var d = await r.json();
-    if (d.status !== 'ok') { alert('❌ ' + (d.message || 'Ошибка')); return; }
+    if (d.status !== 'ok') { alert('✕ ' + (d.message || 'Ошибка')); return; }
     document.getElementById('new-source-url').value='';
     document.getElementById('new-source-name').value='';
     await loadSources();
-  } catch(e) { alert('❌ ' + e.message); }
+  } catch(e) { alert('✕ ' + e.message); }
 }
 
 async function removeSource(url){
@@ -248,7 +193,7 @@ async function refreshNews(){
   try {
     var r = await fetch(API + '/news?limit=200', { credentials: 'include' });
     var d = await r.json();
-    if (!d || d.error) { grid.innerHTML='<div class="empty">❌ ' + ((d && d.error) || 'Ошибка') + '</div>'; return; }
+    if (!d || d.error) { grid.innerHTML='<div class="empty">✕ ' + ((d && d.error) || 'Ошибка') + '</div>'; return; }
     allNews = (d.items || []).map(function(n){
       return {
         title: n.title || '',
@@ -263,7 +208,7 @@ async function refreshNews(){
     // Обновляем список источников-фильтров из новостей (в дополнение к RSS web_monitor)
     updateSourceFilter();
   } catch(e) {
-    grid.innerHTML='<div class="empty">❌ ' + e.message + '</div>';
+    grid.innerHTML='<div class="empty">✕ ' + e.message + '</div>';
     return;
   }
   
@@ -287,7 +232,7 @@ function applyFilter(){
   
   var grid=document.getElementById('news-grid');
   if(!filtered.length){
-    grid.innerHTML='<div class="empty">📭 Нет новостей</div>';
+    grid.innerHTML='<div class="empty"> Нет новостей</div>';
     return;
   }
   
@@ -372,7 +317,5 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

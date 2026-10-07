@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Docker & Сервер</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Docker & Сервер</title>
 
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
@@ -50,9 +46,7 @@ tr:hover td{background:rgba(255,255,255,0.015)}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -68,50 +62,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-<main>
-<h1>Docker & Сервер</h1>
-<div class="sub">Все контейнеры, ресурсы, системная информация — автообновление 5с</div>
-
-<div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div>
-
-<div class="panel">
-  <h2>📦 Контейнеры <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">🔄</button></h2>
-  <div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div>
-</div>
-
-<div class="panel">
-  <h2>💾 Диски</h2>
-  <div id="disks"><div class="loading"><div class="spin"></div></div></div>
-</div>
-
-<div class="panel">
-  <h2>🌐 Сеть</h2>
-  <div id="network"><div class="loading"><div class="spin"></div></div></div>
-</div>
-
-<div class="panel">
-  <h2>📋 Процессы (top-10 по памяти)</h2>
-  <div id="processes"><div class="loading"><div class="spin"></div></div></div>
-</div>
-</main>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Все контейнеры, ресурсы, системная информация — автообновление 5с</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
 
 <script>
 async function loadAll() {
@@ -169,7 +120,7 @@ function renderDocker(d) {
   document.getElementById('stats-row').innerHTML += 
     `<div class="stat"><div class="val">${sys.containers_running||0}/${sys.containers_total||0}</div><div class="lbl">Контейнеров</div></div>
     <div class="stat"><div class="val">${sys.images_count||0}</div><div class="lbl">Образов</div></div>
-    <div class="stat"><div class="val">🐳 ${sys.docker_version||'?'}</div><div class="lbl">Docker</div></div>`;
+    <div class="stat"><div class="val"> ${sys.docker_version||'?'}</div><div class="lbl">Docker</div></div>`;
 
   const containers = d.containers || [];
   document.getElementById('containers').innerHTML = containers.length ?
@@ -181,12 +132,12 @@ function renderDocker(d) {
       return `<tr>
         <td><strong>${c.name}</strong></td>
         <td class="mono" style="font-size:10px">${(c.image||'').split(':')[0]}</td>
-        <td><span class="badge ${running?'badge-ok':'badge-err'}">${running?'✅ '+c.status:'⏹ '+c.state}</span></td>
+        <td><span class="badge ${running?'badge-ok':'badge-err'}">${running?'✓ '+c.status:'■ '+c.state}</span></td>
         <td>${cpu}%<div class="bar"><div class="fill ${fillClass(parseFloat(cpu),50,80)}" style="width:${Math.min(parseFloat(cpu),100)}%"></div></div></td>
         <td>${fmt(s.mem_used)}/${fmt(s.mem_limit)}<div class="bar"><div class="fill ${fillClass(s.mem_percent||0,70,90)}" style="width:${Math.min(s.mem_percent||0,100)}%"></div></div></td>
         <td class="mono" style="font-size:10px">↓${fmt(s.net_in)} ↑${fmt(s.net_out)}</td>
         <td class="mono">${s.pids||0}</td>
-        <td>${running?`<button class="btn-sm" onclick="act('${c.name}','restart')">🔄</button><button class="btn-sm" onclick="act('${c.name}','stop')">⏹</button>`:`<button class="btn-sm" onclick="act('${c.name}','start')">▶</button>`}<button class="btn-sm" onclick="act('${c.name}','logs')">📋</button></td>
+        <td>${running?`<button class="btn-sm" onclick="act('${c.name}','restart')">↻</button><button class="btn-sm" onclick="act('${c.name}','stop')">■</button>`:`<button class="btn-sm" onclick="act('${c.name}','start')">▶</button>`}<button class="btn-sm" onclick="act('${c.name}','logs')">▶</button></td>
       </tr>`;
     }).join('')+'</tbody></table>' : '<span style="color:var(--text4)">Нет контейнеров</span>';
 }
@@ -219,7 +170,7 @@ function renderDiskUsage(d) {
   }
   
   // Add to disk panel
-  document.getElementById('disks').innerHTML += '<div style="margin-top:14px"><h3 style="font-size:13px;color:var(--text2);margin-bottom:8px">📂 Что занимает место (du -sh)</h3>' + html + '</div>';
+  document.getElementById('disks').innerHTML += '<div style="margin-top:14px"><h3 style="font-size:13px;color:var(--text2);margin-bottom:8px"> Что занимает место (du -sh)</h3>' + html + '</div>';
 }
 
 async function act(name, action) {
@@ -252,7 +203,5 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

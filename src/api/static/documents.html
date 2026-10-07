@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Документы</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Документы</title>
 
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
@@ -116,9 +112,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .access-chip:hover{border-color:var(--accent)}
 .access-chip .chip-x{cursor:pointer;color:var(--red);font-weight:bold;margin-left:2px;font-size:12px}
 .access-chip.dragging{opacity:0.4}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -134,255 +128,20 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/chat"> Чат с AI</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-
-<main>
-  <h1>Документы</h1>
-  <div class="sub">Управление документами — загрузка, классификация, просмотр</div>
-
-  <div class="stats-row" id="stats-row">
-    <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div>
-    <div class="stat-card" id="stat-pending-card" style="cursor:pointer"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Ожидает</div><div id="reprocess-btn" style="display:none;margin-top:4px"><button onclick="reprocessPending()" style="padding:3px 8px;font-size:10px;background:var(--red);color:#fff;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔄 Переобработать</button></div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div>
-    <div class="stat-card" id="stat-types-card" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div><div id="type-watch-btn" style="display:none;margin-top:4px"><button class="btn-outline" onclick="startTypeDetection()" style="padding:3px 8px;font-size:10px;background:var(--amber);color:#000;border:none;cursor:pointer;border-radius:4px;font-weight:600">🔍 Типизировать</button></div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div>
-  </div>
-
-  <!-- Upload -->
-  <!-- Баннер блокировки обработки (управляется из админки) -->
-  <div id="processing-banner" style="display:none;align-items:center;gap:10px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)">
-    <span style="font-size:16px">⚠️</span>
-    <div style="flex:1;line-height:1.5">
-      <strong>Обработка после загрузки может не начаться</strong> — в связи с блокировкой на техническое обслуживание.
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/chat"> Чат с AI</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Документы</h1><div class="sub">Управление документами — загрузка, классификация, просмотр</div><div class="stats-row" id="stats-row"><div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Всего</div></div><div class="stat-card"><div class="stat-num" id="stat-ready">—</div><div class="stat-label">Готово</div></div><div class="stat-card" id="stat-pending-card" style="cursor:pointer"><div class="stat-num" id="stat-pending">—</div><div class="stat-label">Ожидает</div><div id="reprocess-btn" style="display:none;margin-top:4px"><button onclick="reprocessPending()" style="padding:3px 8px;font-size:10px;background:var(--red);color:#fff;border:none;cursor:pointer;border-radius:4px;font-weight:600"> Переобработать</button></div></div><div class="stat-card"><div class="stat-num" id="stat-chunks">—</div><div class="stat-label">Чанков</div></div><div class="stat-card" id="stat-types-card" style="cursor:pointer" title="Перейти к управлению типами"><div class="stat-num" id="stat-types">—</div><div class="stat-label">Типов</div><div id="type-watch-badge" style="font-size:9px;margin-top:3px;display:none"></div><div id="type-watch-btn" style="display:none;margin-top:4px"><button class="btn-outline" onclick="startTypeDetection()" style="padding:3px 8px;font-size:10px;background:var(--amber);color:#000;border:none;cursor:pointer;border-radius:4px;font-weight:600"> Типизировать</button></div></div><div class="stat-card"><div class="stat-num" id="stat-tags">—</div><div class="stat-label">Тэгов</div></div></div><!-- Upload --><!-- Баннер блокировки обработки (управляется из админки) --><div id="processing-banner" style="display:none;align-items:center;gap:10px;background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)"><span style="font-size:16px"></span><div style="flex:1;line-height:1.5"><strong>Обработка после загрузки может не начаться</strong> — в связи с блокировкой на техническое обслуживание.
       <span id="processing-banner-msg" style="color:var(--text2)"></span>
       Обратитесь к администратору.
-    </div>
-    <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button>
-  </div>
-
-  <!-- Баннер запрета загрузки новых документов (управляется из админки) -->
-  <div id="upload-banner" style="display:none;align-items:center;gap:10px;background:rgba(229,72,77,0.10);border:1px solid rgba(229,72,77,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)">
-    <span style="font-size:16px">🚫</span>
-    <div style="flex:1;line-height:1.5">
-      <strong>Загрузка документов отключена администратором</strong> — новые документы не принимаются
+    </div><button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button></div><!-- Баннер запрета загрузки новых документов (управляется из админки) --><div id="upload-banner" style="display:none;align-items:center;gap:10px;background:rgba(229,72,77,0.10);border:1px solid rgba(229,72,77,0.35);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text)"><span style="font-size:16px"></span><div style="flex:1;line-height:1.5"><strong>Загрузка документов отключена администратором</strong> — новые документы не принимаются
       (ни вручную, ни парсером сайтов, ни по RSS).
-      <span id="upload-banner-msg" style="color:var(--text2)"></span>
-    </div>
-    <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button>
-  </div>
-
-  <div class="upload-zone" id="upload-zone">
-    <div class="upload-icon">📤</div>
-    <div class="upload-text">Загрузить документы</div>
-    <div class="upload-hint">Перетащите файлы или нажмите для выбора</div>
-    <div id="allowed-formats-bar" style="display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px;"></div>
-  </div>
-  <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none">
-
-  <!-- Импорт папкой: файлы кладутся на диск стенда, приложение забирает всё найденное.
-       Блок виден только администратору (см. loadCurrentUser) — он работает с файловой системой. -->
-  <details id="folder-import" style="display:none;margin:14px 0;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
-    <summary style="padding:10px 12px;cursor:pointer;user-select:none">
-      <strong>📥 Импорт из папки</strong>
-      <span style="color:var(--text4);font-size:11px;margin-left:8px">пакетно: папка на диске стенда → база</span>
-    </summary>
-    <div style="padding:0 12px 12px">
-      <div style="color:var(--text4);margin-bottom:8px">
+      <span id="upload-banner-msg" style="color:var(--text2)"></span></div><button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px" title="Скрыть">✕</button></div><div class="upload-zone" id="upload-zone"><div class="upload-icon"></div><div class="upload-text">Загрузить документы</div><div class="upload-hint">Перетащите файлы или нажмите для выбора</div><div id="allowed-formats-bar" style="display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px;"></div></div><input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.docx,.csv" style="display:none"><!-- Импорт папкой: файлы кладутся на диск стенда, приложение забирает всё найденное.
+       Блок виден только администратору (см. loadCurrentUser) — он работает с файловой системой. --><details id="folder-import" style="display:none;margin:14px 0;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px"><summary style="padding:10px 12px;cursor:pointer;user-select:none"><strong> Импорт из папки</strong><span style="color:var(--text4);font-size:11px;margin-left:8px">пакетно: папка на диске стенда → база</span></summary><div style="padding:0 12px 12px"><div style="color:var(--text4);margin-bottom:8px">
         Положите файлы в папку импорта (например <code>scp *.pdf yartsevn@192.168.50.18:/home/yartsevn/kag-system/data/inbox/</code>)
         и нажмите «Проверить» — приложение заберёт всё, что найдёт. Файлы, которые уже есть в базе
-        (совпал хеш), пропускаются. Обработку можно запустить сразу галочкой ниже или потом кнопкой ▶️ у документа.
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-        <input id="import-folder-name" placeholder="подпапка (пусто — корень)"
-               style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;min-width:200px">
-        <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-recursive" checked> вложенные папки</label>
-        <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-process"> сразу обработать</label>
-        <button class="btn" onclick="importFolderScan()">Проверить</button>
-        <button class="btn" onclick="importFolderRun()">Импортировать</button>
-      </div>
-      <div id="import-folder-result" style="margin-top:10px;color:var(--text2)"></div>
-    </div>
-  </details>
-
-  <!-- Права доступа при загрузке (сворачиваемый блок) -->
-  <div style="margin:14px 0 10px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px">
-    <div onclick="toggleUploadAccess()" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none">
-      <span id="upload-access-arrow" style="color:var(--accent);font-size:15px;line-height:1">▸</span>
-      <strong>Права доступа к документам</strong>
-      <span style="color:var(--text4);font-size:11px;margin-left:auto">права учитываются при доступе к документу и в чате</span>
-    </div>
-    <div id="upload-access-body" style="display:none;padding:0 12px 12px">
-      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px">
-        <div>
-          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
-          <select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px">
-            <option value="public">Доступен всем</option>
-            <option value="restricted">Только избранным</option>
-          </select>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div style="flex:1.2;min-width:200px">
-          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
-          <div class="access-pool" id="upload-all"></div>
-        </div>
-        <div style="flex:1;min-width:170px">
-          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
-          <div class="access-drop" id="upload-allow"></div>
-        </div>
-        <div style="flex:1;min-width:170px">
-          <label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
-          <div class="access-drop" id="upload-deny"></div>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--text4);margin-top:6px">
+        (совпал хеш), пропускаются. Обработку можно запустить сразу галочкой ниже или потом кнопкой ▶ у документа.
+      </div><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><input id="import-folder-name" placeholder="подпапка (пусто — корень)"
+               style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;min-width:200px"><label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-recursive" checked> вложенные папки</label><label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="import-process"> сразу обработать</label><button class="btn" onclick="importFolderScan()">Проверить</button><button class="btn" onclick="importFolderRun()">Импортировать</button></div><div id="import-folder-result" style="margin-top:10px;color:var(--text2)"></div></div></details><!-- Права доступа при загрузке (сворачиваемый блок) --><div style="margin:14px 0 10px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px"><div onclick="toggleUploadAccess()" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none"><span id="upload-access-arrow" style="color:var(--accent);font-size:15px;line-height:1">▸</span><strong>Права доступа к документам</strong><span style="color:var(--text4);font-size:11px;margin-left:auto">права учитываются при доступе к документу и в чате</span></div><div id="upload-access-body" style="display:none;padding:0 12px 12px"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px"><div><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label><select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"><option value="public">Доступен всем</option><option value="restricted">Только избранным</option></select></div></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1.2;min-width:200px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label><div class="access-pool" id="upload-all"></div></div><div style="flex:1;min-width:170px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px"> Разрешено</label><div class="access-drop" id="upload-allow"></div></div><div style="flex:1;min-width:170px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px"> Запрещено</label><div class="access-drop" id="upload-deny"></div></div></div><div style="font-size:11px;color:var(--text4);margin-top:6px">
         «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
-        <label style="font-size:11px;color:var(--text4)">Применить к существующему документу:</label>
-        <select id="upload-apply-doc" style="flex:1;min-width:180px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"></select>
-        <button class="btn" onclick="applyAccessToDoc()" style="padding:6px 14px">💾 Сохранить</button>
-        <span id="upload-apply-status" style="font-size:11px;color:var(--text4)"></span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Обработка необработанных документов (общая кнопка) -->
-  <div id="proc-all-wrap" style="display:none;margin:0 0 14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <button class="btn" id="proc-all-btn" onclick="processAllMine()" style="padding:8px 14px">▶️ Обработать все необработанные</button>
-      <span id="proc-all-count" style="color:var(--text4)"></span>
-      <span style="color:var(--text3);flex:1;min-width:200px">Запускает обработку только ваших документов со статусом «Ожидает»/«Ошибка». Документы других пользователей не затрагиваются.</span>
-    </div>
-  </div>
-
-  <!-- Модалка прав доступа -->
-  <div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw;max-height:90vh;overflow-y:auto">
-      <div style="font-size:15px;font-weight:600;margin-bottom:12px">🔒 Права доступа документа</div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label>
-        <select id="edit-visibility" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
-          <option value="public">Доступен всем</option>
-          <option value="restricted">Только избранным</option>
-        </select>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div style="flex:1.2;min-width:200px">
-          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label>
-          <div class="access-pool" id="edit-all"></div>
-        </div>
-        <div style="flex:1;min-width:170px">
-          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">✅ Разрешено</label>
-          <div class="access-drop" id="edit-allow"></div>
-        </div>
-        <div style="flex:1;min-width:170px">
-          <label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">🚫 Запрещено</label>
-          <div class="access-drop" id="edit-deny"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="document.getElementById('access-modal').style.display='none'">Отмена</button>
-        <button class="btn btn-primary" onclick="saveAccessModal()">💾 Сохранить</button>
-      </div>
-      <div id="access-modal-status" style="font-size:12px;color:var(--text4);margin-top:8px"></div>
-    </div>
-  </div>
-
-  <!-- Filters + View toggle -->
-  <div class="filters">
-    <input type="text" id="search-input" placeholder="🔍 Поиск по названию, типу, тэгам..." oninput="applyFilters()">
-    <select id="type-filter" onchange="applyFilters()">
-      <option value="">Все типы</option>
-      <option value="invoice">Счёт</option><option value="contract">Договор</option>
-      <option value="report">Отчёт</option><option value="letter">Письмо</option>
-      <option value="form">Форма</option><option value="identity">Удостоверение</option>
-      <option value="legal">Юридический</option><option value="medical">Медицинский</option>
-      <option value="financial">Финансовый</option><option value="technical">Технический</option>
-      <option value="certificate">Сертификат</option><option value="standard">Стандарт</option>
-      <option value="policy">Политика</option><option value="order">Приказ</option>
-      <option value="news">Новость</option>
-      <option value="unknown">Неизвестно</option>
-    </select>
-    <select id="status-filter" onchange="applyFilters()">
-      <option value="">Все статусы</option>
-      <option value="completed">✅ Готово</option>
-      <option value="processing">⚙️ В обработке</option>
-      <option value="pending">⏳ Ожидает</option>
-      <option value="failed">❌ Ошибка</option>
-    </select>
-    <select id="source-filter" onchange="applyFilters()" title="Фильтр по источнику">
-      <option value="">Все источники</option>
-      <option value="user">👤 Файлы загруженные пользователем</option>
-    </select>
-    <select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка">
-      <option value="date_desc">📅 Новые сверху</option>
-      <option value="date_asc">📅 Старые сверху</option>
-      <option value="name_asc">🔤 А–Я</option>
-      <option value="name_desc">🔤 Я–А</option>
-      <option value="size_desc">📦 Большие сверху</option>
-      <option value="size_asc">📦 Малые сверху</option>
-    </select>
-    <select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице">
-      <option value="20">20 шт</option>
-      <option value="50" selected>50 шт</option>
-      <option value="100">100 шт</option>
-      <option value="200">200 шт</option>
-      <option value="500">500 шт</option>
-      <option value="0">Все</option>
-    </select>
-    <button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button>
-    <span id="filter-info" style="font-size:11px;color:var(--text4)"></span>
-    <button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button>
-    <button class="btn-outline" id="btn-table" onclick="setView('table')">📋 Таблица</button>
-    <button class="btn-outline active" id="btn-cards" onclick="setView('cards')">🖼️ Карточки</button>
-    <button class="btn" onclick="loadAll()">🔄 Обновить</button>
-  </div>
-
-  <!-- Cards -->
-  <div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div>
-
-  <!-- Table -->
-  <div id="docs-table" style="display:none">
-    <div id="bulk-actions" style="display:none;padding:8px 0;text-align:right">
-      <span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span>
-      <span id="bulk-status" style="font-size:12px;margin-right:10px"></span>
-      <button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✖ Снять выбор</button>
-      <button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px;margin-right:8px" onclick="processSelected()">▶️ Обработать выбранные</button>
-      <button id="btn-bulk-delete" class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()">🗑️ Удалить выбранные</button>
-    </div>
-    <table>
-      <thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead>
-      <tbody id="table-body"></tbody>
-    </table>
-    <div class="empty" id="table-empty" style="display:none">Нет документов</div>
-  </div>
-</main>
-
-<!-- Modal -->
-<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div>
-</div>
-<div class="toast" id="toast"></div>
+      </div><div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap"><label style="font-size:11px;color:var(--text4)">Применить к существующему документу:</label><select id="upload-apply-doc" style="flex:1;min-width:180px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"></select><button class="btn" onclick="applyAccessToDoc()" style="padding:6px 14px"> Сохранить</button><span id="upload-apply-status" style="font-size:11px;color:var(--text4)"></span></div></div></div><!-- Обработка необработанных документов (общая кнопка) --><div id="proc-all-wrap" style="display:none;margin:0 0 14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" id="proc-all-btn" onclick="processAllMine()" style="padding:8px 14px">▶ Обработать все необработанные</button><span id="proc-all-count" style="color:var(--text4)"></span><span style="color:var(--text3);flex:1;min-width:200px">Запускает обработку только ваших документов со статусом «Ожидает»/«Ошибка». Документы других пользователей не затрагиваются.</span></div></div><!-- Модалка прав доступа --><div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center"><div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw;max-height:90vh;overflow-y:auto"><div style="font-size:15px;font-weight:600;margin-bottom:12px"> Права доступа документа</div><div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label><select id="edit-visibility" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"><option value="public">Доступен всем</option><option value="restricted">Только избранным</option></select></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1.2;min-width:200px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label><div class="access-pool" id="edit-all"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Разрешено</label><div class="access-drop" id="edit-allow"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Запрещено</label><div class="access-drop" id="edit-deny"></div></div></div><div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end"><button class="btn btn-secondary" onclick="document.getElementById('access-modal').style.display='none'">Отмена</button><button class="btn btn-primary" onclick="saveAccessModal()"> Сохранить</button></div><div id="access-modal-status" style="font-size:12px;color:var(--text4);margin-top:8px"></div></div></div><!-- Filters + View toggle --><div class="filters"><input type="text" id="search-input" placeholder=" Поиск по названию, типу, тэгам..." oninput="applyFilters()"><select id="type-filter" onchange="applyFilters()"><option value="">Все типы</option><option value="invoice">Счёт</option><option value="contract">Договор</option><option value="report">Отчёт</option><option value="letter">Письмо</option><option value="form">Форма</option><option value="identity">Удостоверение</option><option value="legal">Юридический</option><option value="medical">Медицинский</option><option value="financial">Финансовый</option><option value="technical">Технический</option><option value="certificate">Сертификат</option><option value="standard">Стандарт</option><option value="policy">Политика</option><option value="order">Приказ</option><option value="news">Новость</option><option value="unknown">Неизвестно</option></select><select id="status-filter" onchange="applyFilters()"><option value="">Все статусы</option><option value="completed"> Готово</option><option value="processing"> В обработке</option><option value="pending"> Ожидает</option><option value="failed"> Ошибка</option></select><select id="source-filter" onchange="applyFilters()" title="Фильтр по источнику"><option value="">Все источники</option><option value="user"> Файлы загруженные пользователем</option></select><select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка"><option value="date_desc"> Новые сверху</option><option value="date_asc"> Старые сверху</option><option value="name_asc"> А–Я</option><option value="name_desc"> Я–А</option><option value="size_desc"> Большие сверху</option><option value="size_asc"> Малые сверху</option></select><select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице"><option value="20">20 шт</option><option value="50" selected>50 шт</option><option value="100">100 шт</option><option value="200">200 шт</option><option value="500">500 шт</option><option value="0">Все</option></select><button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button><span id="filter-info" style="font-size:11px;color:var(--text4)"></span><button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button><button class="btn-outline" id="btn-table" onclick="setView('table')"> Таблица</button><button class="btn-outline active" id="btn-cards" onclick="setView('cards')"> Карточки</button><button class="btn" onclick="loadAll()"> Обновить</button></div><!-- Cards --><div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div><!-- Table --><div id="docs-table" style="display:none"><div id="bulk-actions" style="display:none;padding:8px 0;text-align:right"><span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span><span id="bulk-status" style="font-size:12px;margin-right:10px"></span><button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✕ Снять выбор</button><button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px;margin-right:8px" onclick="processSelected()">▶ Обработать выбранные</button><button id="btn-bulk-delete" class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()"> Удалить выбранные</button></div><table><thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead><tbody id="table-body"></tbody></table><div class="empty" id="table-empty" style="display:none">Нет документов</div></div></main><!-- Modal --><div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div></div><div class="toast" id="toast"></div>
 
 <script>
 const API = '/api/v1';
@@ -467,11 +226,11 @@ function setupDragDrop() {
 async function uploadFiles(files) {
   if (!files.length) return;
   if (uploadsBlocked) {
-    toast('🚫 Загрузка документов отключена администратором' + (uploadBlockMsg ? ': ' + uploadBlockMsg : ''), true);
+    toast(' Загрузка документов отключена администратором' + (uploadBlockMsg ? ': ' + uploadBlockMsg : ''), true);
     return;
   }
   const pn = document.getElementById('prog-file');
-  if (pn) pn.textContent = '⏳ Загрузка...';
+  if (pn) pn.textContent = '… Загрузка...';
 
   // Права доступа из drag&drop зон
   const vis = document.getElementById('upload-visibility').value;
@@ -479,7 +238,7 @@ async function uploadFiles(files) {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (pn) pn.textContent = `📤 ${file.name}`;
+    if (pn) pn.textContent = ` ${file.name}`;
     const fd = new FormData();
     fd.append('file', file);
     fd.append('visibility', vis);
@@ -495,12 +254,12 @@ async function uploadFiles(files) {
         throw new Error(msg);
       }
       if (processingBlocked) {
-        toast(`✅ ${file.name} загружен. ⚠️ Обработка заблокирована администратором (тех. обслуживание)`);
+        toast(`✓ ${file.name} загружен. ! Обработка заблокирована администратором (тех. обслуживание)`);
       } else {
-        toast(`✅ ${file.name} загружен. Нажмите «Обработать» для запуска`);
+        toast(`✓ ${file.name} загружен. Нажмите «Обработать» для запуска`);
       }
     } catch(e) {
-      toast(`❌ ${file.name}: ${e.message}`, true);
+      toast(`✕ ${file.name}: ${e.message}`, true);
     }
   }
   setTimeout(() => { loadAll(); }, 500);
@@ -515,8 +274,8 @@ let _accState = {                                       // выбранные: {
 
 function _allChips() {
   const out = [];
-  _accessOptions.groups.forEach(g => out.push({v: 'g:' + g.id, label: '👥 ' + g.name}));
-  _accessOptions.users.forEach(u => out.push({v: 'u:' + u.id, label: '👤 ' + u.username}));
+  _accessOptions.groups.forEach(g => out.push({v: 'g:' + g.id, label: ' ' + g.name}));
+  _accessOptions.users.forEach(u => out.push({v: 'u:' + u.id, label: ' ' + u.username}));
   return out;
 }
 
@@ -639,7 +398,7 @@ async function applyAccessToDoc() {
   if (!docId) { if (st) st.textContent = 'Выберите документ'; return; }
   const acc = collectAccess('upload');
   acc.visibility = document.getElementById('upload-visibility').value;
-  if (st) { st.textContent = '⏳...'; st.style.color = 'var(--text4)'; }
+  if (st) { st.textContent = '…...'; st.style.color = 'var(--text4)'; }
   try {
     const r = await fetch(`${API}/upload/${docId}/access`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
@@ -647,10 +406,10 @@ async function applyAccessToDoc() {
     });
     const d = await r.json();
     if (st) {
-      st.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message || d.detail || 'ошибка');
+      st.textContent = d.status === 'ok' ? '✓ сохранено' : '✕ ' + (d.message || d.detail || 'ошибка');
       st.style.color = d.status === 'ok' ? 'var(--green)' : 'var(--red)';
     }
-  } catch(e) { if (st) { st.textContent = '❌ ' + e.message; st.style.color = 'var(--red)'; } }
+  } catch(e) { if (st) { st.textContent = '✕ ' + e.message; st.style.color = 'var(--red)'; } }
 }
 
 let _accessDocId = null;
@@ -669,11 +428,11 @@ async function openAccessModal(docId) {
     };
     renderAccess('edit');
     document.getElementById('access-modal').style.display = 'flex';
-  } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
+  } catch(e) { if (st) st.textContent = '✕ ' + e.message; }
 }
 async function saveAccessModal() {
   const st = document.getElementById('access-modal-status');
-  if (st) st.textContent = '⏳...';
+  if (st) st.textContent = '…...';
   try {
     const r = await fetch(`${API}/upload/${_accessDocId}/access`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
@@ -683,14 +442,14 @@ async function saveAccessModal() {
       })
     });
     const d = await r.json();
-    if (st) st.textContent = d.status === 'ok' ? '✅ сохранено' : '❌ ' + (d.message||'ошибка');
+    if (st) st.textContent = d.status === 'ok' ? '✓ сохранено' : '✕ ' + (d.message||'ошибка');
     if (d.status === 'ok') setTimeout(()=>{document.getElementById('access-modal').style.display='none';}, 600);
-  } catch(e) { if (st) st.textContent = '❌ ' + e.message; }
+  } catch(e) { if (st) st.textContent = '✕ ' + e.message; }
 }
 
 async function loadAll(auto = false) {
   // Автообновление не перерисовывает таблицу, пока есть отметки: иначе выбор
-  // сбрасывался через 5–15 с и пачку удалить было нельзя. Кнопка «🔄 Обновить»
+  // сбрасывался через 5–15 с и пачку удалить было нельзя. Кнопка « Обновить»
   // работает всегда и выбор тоже сохраняет.
   if (auto && selectedDocs.size > 0) return;
   try {
@@ -721,7 +480,7 @@ async function loadAll(auto = false) {
   } catch(e) {
     // При первом вызове (нет таймера) показываем ошибку
     if (!window._docsPollTimer || !allDocs.length) {
-      document.getElementById('docs-grid').innerHTML = `<div class="empty">❌ ${e.message}</div>`;
+      document.getElementById('docs-grid').innerHTML = `<div class="empty">✕ ${e.message}</div>`;
     }
   }
 }
@@ -737,17 +496,17 @@ async function checkTypeWatchdog() {
     if (d.status === 'running') {
       badge.style.display = 'block';
       badge.style.color = 'var(--amber)';
-      badge.textContent = `⏳ ${d.processed}/${d.total_progress || d.total}`;
+      badge.textContent = `… ${d.processed}/${d.total_progress || d.total}`;
       if (btn) btn.style.display = 'none';
     } else if (d.without_type > 0) {
       badge.style.display = 'block';
       badge.style.color = 'var(--text4)';
-      badge.textContent = `⚠️ ${d.without_type}/${d.total} без типа`;
+      badge.textContent = `! ${d.without_type}/${d.total} без типа`;
       if (btn) btn.style.display = 'block';
     } else if (d.status === 'completed') {
       badge.style.display = 'block';
       badge.style.color = 'var(--emerald)';
-      badge.textContent = `✅ ${d.with_type}/${d.total}`;
+      badge.textContent = `✓ ${d.with_type}/${d.total}`;
       if (btn) btn.style.display = 'none';
     } else {
       if (btn) btn.style.display = 'none';
@@ -757,7 +516,7 @@ async function checkTypeWatchdog() {
 
 async function startTypeDetection() {
   const btn = document.querySelector('#type-watch-btn button');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '… Запуск...'; }
   try {
     const r = await fetch(`${API}/kg/type-watchdog/start`, {method:'POST'});
     const d = await r.json();
@@ -765,7 +524,7 @@ async function startTypeDetection() {
       setTimeout(checkTypeWatchdog, 2000);
     }
   } catch(e) {}
-  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔍 Типизировать'; } }, 5000);
+  setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = ' Типизировать'; } }, 5000);
 }
 
 // enrichDocs() УДАЛЁН: был источником N+1 запросов (details на каждый документ).
@@ -790,7 +549,7 @@ function updateStats() {
 
 async function reprocessPending() {
   const btn = document.querySelector('#reprocess-btn button');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Запуск...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '… Запуск...'; }
   try {
     const r = await fetch('/api/v1/upload/reprocess-pending', { method: 'POST' });
     const d = await r.json();
@@ -823,8 +582,8 @@ function populateSourceFilter() {
   const srcs = {};
   allDocs.forEach(d => { if (d.source_name) srcs[d.source_name] = true; });
   // сохраняем первые 2 option ('' и 'user'), добавляем источники
-  let html = '<option value="">Все источники</option><option value="user">👤 Файлы загруженные пользователем</option>';
-  Object.keys(srcs).sort().forEach(s => { html += `<option value="${s.replace(/"/g,'&quot;')}">🗂 ${s}</option>`; });
+  let html = '<option value="">Все источники</option><option value="user"> Файлы загруженные пользователем</option>';
+  Object.keys(srcs).sort().forEach(s => { html += `<option value="${s.replace(/"/g,'&quot;')}"> ${s}</option>`; });
   sel.innerHTML = html;
   sel.value = current || '';
 }
@@ -888,21 +647,21 @@ function renderAll() {
 }
 
 function sourceLabel(d) {
-  if (d.source_name) return '🗂 ' + d.source_name;
-  return '👤 ' + (d.uploaded_by_name || 'Загружено пользователем');
+  if (d.source_name) return ' ' + d.source_name;
+  return ' ' + (d.uploaded_by_name || 'Загружено пользователем');
 }
 
 function renderCards(docs) {
   const grid = document.getElementById('docs-grid');
   if (!docs.length) {
-    grid.innerHTML = '<div class="empty">📭 Нет документов</div>';
+    grid.innerHTML = '<div class="empty"> Нет документов</div>';
     return;
   }
   grid.innerHTML = docs.map(d => {
     const type = d.document_type || 'unknown';
     const tags = d.tags || [];
     const thumbUrl = `${API}/upload/${d.document_id}/thumbnail`;
-    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    const statusMap = {completed:'✓ Готово',processing:' Обработка',pending:'… Ожидает',failed:'✕ Ошибка'};
     return `<div class="doc-card" onclick="location.href='/viewer?id=${d.document_id}'">
       <div class="thumb-wrap">
         <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy"
@@ -915,9 +674,9 @@ function renderCards(docs) {
         <div class="card-meta">${fmtBytes(d.file_size||0)} · <a href="/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}" onclick="event.stopPropagation()" style="color:var(--accent-h);text-decoration:none;font-weight:600">${d.chunks_count||0} чанков</a> · ${sourceLabel(d)}</div>
         <div class="card-meta" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <span style="padding-left:2px">${statusMap[d.status]||d.status}${d.status==='processing'?` · ${Math.round(d.progress||0)}%`:''} · ${new Date(d.created_at).toLocaleDateString('ru-RU')}</span>
-          ${canProcess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶️ Обработать</button>`:''}
-          ${currentUser && currentUser.is_admin && d.status === 'completed'?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();buildGraph('${d.document_id}')" title="Построить граф знаний для этого документа (можно позже, если граф отключён в админке)">🧠 Граф</button>`:''}
-          ${canEditAccess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа">🔒 Права</button>`:''}
+          ${canProcess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶ Обработать</button>`:''}
+          ${currentUser && currentUser.is_admin && d.status === 'completed'?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();buildGraph('${d.document_id}')" title="Построить граф знаний для этого документа (можно позже, если граф отключён в админке)"> Граф</button>`:''}
+          ${canEditAccess(d)?`<button class="btn" style="padding:1px 8px;font-size:10px;line-height:1.5;border-radius:9999px;margin-right:4px;flex-shrink:0" onclick="event.stopPropagation();openAccessModal('${d.document_id}')" title="Права доступа"> Права</button>`:''}
         </div>
         <div class="card-tags">${tags.slice(0,4).map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('')}${tags.length>4?`<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--text4)">+${tags.length-4}</span>`:''}</div>
       </div>
@@ -936,7 +695,7 @@ function renderTable(docs) {
     return;
   }
   document.getElementById('table-empty').style.display = 'none';
-  const statusMap = {completed:'<span class="status-badge s-ready">✅ Готово</span>',processing:'<span class="status-badge s-proc">⚙️ Обработка</span>',pending:'<span class="status-badge s-pend">⏳ Ожидает</span>',failed:'<span class="status-badge s-fail">❌ Ошибка</span>'};
+  const statusMap = {completed:'<span class="status-badge s-ready">✓ Готово</span>',processing:'<span class="status-badge s-proc"> Обработка</span>',pending:'<span class="status-badge s-pend">… Ожидает</span>',failed:'<span class="status-badge s-fail">✕ Ошибка</span>'};
   // Выбор переносим через перерисовку: выбрасываем только то, чего больше нет
   // в списке (документ удалён), остальное восстанавливаем галочками.
   // ВАЖНО: syncSelectionUI() вызывается ПОСЛЕ сборки tbody — иначе счётчик
@@ -953,7 +712,7 @@ function renderTable(docs) {
       <td>${sourceLabel(d)}</td>
       <td>${new Date(d.created_at).toLocaleDateString('ru-RU')}</td>
       <td>${statusMap[d.status]||d.status}</td><td>${ocrLink(d)}</td>
-      <td style="white-space:nowrap">${canProcess(d)?`<button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶️</button>`:''}${currentUser && currentUser.is_admin && d.status === 'completed'?`<button class="tag" style="background:rgba(139,92,246,0.15);color:#a78bfa;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();buildGraph('${d.document_id}')" title="Построить граф знаний">🧠</button>`:''}<button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">🗑️</button></td>
+      <td style="white-space:nowrap">${canProcess(d)?`<button class="tag" style="background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();processDocument('${d.document_id}')" title="Поставить документ в очередь обработки">▶</button>`:''}${currentUser && currentUser.is_admin && d.status === 'completed'?`<button class="tag" style="background:rgba(139,92,246,0.15);color:#a78bfa;cursor:pointer;border:none;font-size:11px;margin-right:4px" onclick="event.stopPropagation();buildGraph('${d.document_id}')" title="Построить граф знаний">Граф</button>`:''}<button class="tag" style="background:rgba(220,38,38,0.12);color:var(--red);cursor:pointer;border:none;font-size:11px" onclick="event.stopPropagation();delDoc('${d.document_id}')">Граф</button></td>
     </tr>`).join('');
   // Теперь, когда таблица собрана, приводим галочки и панель к состоянию выбора
   syncSelectionUI();
@@ -969,12 +728,12 @@ async function showDetail(docId) {
     if (!r.ok) throw new Error('Ошибка загрузки');
     const d = await r.json();
     document.getElementById('modal-title').textContent = d.recognized_title || d.filename;
-    const statusMap = {completed:'✅ Готово',processing:'⚙️ Обработка',pending:'⏳ Ожидает',failed:'❌ Ошибка'};
+    const statusMap = {completed:'✓ Готово',processing:' Обработка',pending:'… Ожидает',failed:'✕ Ошибка'};
     document.getElementById('modal-body').innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">♻️ Переобработать</button>
-        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
-        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">↻ Переобработать</button>
+        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'"> Чанки →</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()"> Удалить</button>
       </div>
       <img class="modal-thumb" src="${API}/upload/${docId}/thumbnail" onerror="this.style.display='none'" alt="Миниатюра">
       <div class="detail-grid">
@@ -990,9 +749,9 @@ async function showDetail(docId) {
       </div>
       <div class="modal-tags">${(d.tags||[]).length ? d.tags.map(t => `<span class="tag ${tagClass(t)}">${t}</span>`).join('') : '<span style="font-size:11px;color:var(--text4)">Нет тэгов</span>'}</div>
       <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'">🧩 Чанки →</button>
-        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">♻️ Переобработать</button>
-        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()">🗑️ Удалить</button>
+        <button class="btn" onclick="location.href='/chunks?doc_id=${d.document_id}&name=${encodeURIComponent(d.filename)}'"> Чанки →</button>
+        <button class="btn" onclick="reindexDoc('${d.document_id}')" title="Разобрать документ заново: текст, таблицы, векторы, граф">↻ Переобработать</button>
+        <button class="btn" style="background:rgba(220,38,38,0.12);color:var(--red)" onclick="delDoc('${d.document_id}');closeModal()"> Удалить</button>
       </div>
       <div id="modal-tables" style="margin-top:14px"></div>`;
     loadDocTables(d.document_id);      // таблицы подгружаем отдельно, чтобы карточка открывалась сразу
@@ -1008,19 +767,19 @@ function closeModal() { document.getElementById('modal-overlay').classList.remov
 // (для документов в статусе «Ожидает») или через API — владелец искал и не находил.
 async function reindexDoc(id) {
   if (!confirm('Переобработать этот документ?\n\nОн будет разобран заново: текст, таблицы, векторы и граф.\nДля картинок с таблицами обработка занимает до пары минут (распознавание моделью зрения).')) return;
-  toast('♻️ Переобработка запускается…');
+  toast('↻ Переобработка запускается…');
   try {
     const r = await fetch(`${API}/upload/${id}/reindex`, {method:'POST', credentials:'include'});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось запустить'));
     if (d.status === 'already_queued') {
-      toast('⚠️ ' + (d.message || 'Документ уже в очереди обработки'), true);
+      toast('! ' + (d.message || 'Документ уже в очереди обработки'), true);
     } else {
-      toast('✅ ' + (d.message || 'Переобработка поставлена в очередь'));
+      toast('✓ ' + (d.message || 'Переобработка поставлена в очередь'));
       setTimeout(() => loadAll(true), 3000);      // статус обновится сам
     }
   } catch(e) {
-    toast('❌ ' + e.message, true);
+    toast('✕ ' + e.message, true);
   }
 }
 
@@ -1031,9 +790,9 @@ async function delDoc(id) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось удалить'));
     selectedDocs.delete(id);   // если он был отмечен — убираем из выбора
-    toast('✅ Удалён');
+    toast('✓ Удалён');
     loadAll();
-  } catch(e) { toast('❌ '+e.message, true); }
+  } catch(e) { toast('✕ '+e.message, true); }
 }
 
 function setView(v) {
@@ -1047,7 +806,7 @@ function setView(v) {
 function applyFilters() { renderAll(); }
 
 // Helpers
-function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'📕';if(t.includes('doc'))return'📘';if(t.includes('txt')||t.includes('md'))return'📝';if(t.includes('csv')||t.includes('sheet'))return'📊';return'📄'; }
+function fileIcon(ft) { const t=(ft||'').toLowerCase(); if(t.includes('pdf'))return'';if(t.includes('doc'))return'';if(t.includes('txt')||t.includes('md'))return'';if(t.includes('csv')||t.includes('sheet'))return'';return''; }
 function typeLabel(t) { const m={invoice:'Счёт',contract:'Договор',report:'Отчёт',letter:'Письмо',form:'Форма',identity:'Удостоверение',financial:'Финансы',medical:'Медицинский',legal:'Юридический',technical:'Технический',certificate:'Сертификат',standard:'Стандарт',policy:'Политика',order:'Приказ',news:'Новость',other:'Другое',unknown:'Неизвестно'}; return m[t]||t; }
 function typeBadgeClass(t) { return (t||'unknown')==='unknown' ? 'tag-type-unknown' : 'tag-type'; }
 function tagClass(t) { if(t&&t.includes('has-date'))return'tag-has-date';if(t&&t.includes('signed'))return'tag-signed';if(t&&t.includes('amount'))return'tag-has-amounts';return'tag-type'; }
@@ -1056,19 +815,19 @@ function toast(msg,err) { const t=document.getElementById('toast');t.textContent
 
 async function diffVersions(docId) {
   const div = document.getElementById('diff-result-' + docId);
-  div.innerHTML = '<span style="color:var(--amber)">⏳ Сравниваю версии...</span>';
+  div.innerHTML = '<span style="color:var(--amber)">… Сравниваю версии...</span>';
   try {
     const r = await fetch(API + '/upload/' + docId + '/diff');
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     div.innerHTML = '<div style="padding:8px 12px;background:var(--surface);border-radius:var(--radius);margin-top:6px">' +
-      '<strong>📊 Сравнение версий v' + d.version + '</strong><br>' +
+      '<strong> Сравнение версий v' + d.version + '</strong><br>' +
       '<span style="font-size:11px;color:var(--text4)">SHA-256 текущ: ' + (d.current_hash||'?').substring(0,12) + '...</span><br>' +
       '<span style="font-size:11px;color:var(--text4)">SHA-256 пред.: ' + (d.previous_hash||'?').substring(0,12) + '...</span><br>' +
       '<span style="color:' + (d.has_changes ? 'var(--amber)' : 'var(--emerald)') + '">' + d.diff_summary + '</span>' +
       '</div>';
   } catch(e) {
-    div.innerHTML = '<span style="color:var(--red)">❌ ' + e.message + '</span>';
+    div.innerHTML = '<span style="color:var(--red)">✕ ' + e.message + '</span>';
   }
 }
 
@@ -1142,11 +901,11 @@ async function buildGraph(id) {
     });
     const d = await r.json().catch(() => ({}));
     // 409 = перестроение уже идёт (флаг общий на весь граф) — это не ошибка
-    if (r.status === 409) { toast('ℹ️ ' + (d.detail || 'Перестроение графа уже идёт')); return; }
+    if (r.status === 409) { toast('ℹ ' + (d.detail || 'Перестроение графа уже идёт')); return; }
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Не удалось запустить построение графа'));
-    toast('🧠 Граф поставлен в очередь (прогресс — на странице /kg)');
+    toast(' Граф поставлен в очередь (прогресс — на странице /kg)');
     setTimeout(() => { loadAll(); }, 800);
-  } catch(e) { toast('❌ ' + e.message, true); }
+  } catch(e) { toast('✕ ' + e.message, true); }
 }
 
 // Обработать выбранные галочками документы (кнопка в панели массовых действий).
@@ -1154,7 +913,7 @@ async function buildGraph(id) {
 // никто не вызывал — кнопку одного документа потеряли при переделке (коммит a5951c3),
 // поэтому запустить обработку можно было только кнопкой «Обработать все необработанные».
 async function processSelected() {
-  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  if (processingBlocked) { toast('! Обработка заблокирована администратором', true); return; }
   const ids = [...selectedDocs];
   if (!ids.length) { toast('Отметьте документы галочками', true); return; }
   let queued = 0, skipped = 0, i = 0;
@@ -1172,7 +931,7 @@ async function processSelected() {
   } catch(e) {
     setBulkStatus('Ошибка: ' + e.message, true);
   }
-  toast(`▶️ Поставлено в очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
+  toast(`▶ Поставлено в очередь: ${queued}${skipped ? `, не поставлено: ${skipped}` : ''}`);
   selectedDocs.clear();
   loadAll();
 }
@@ -1199,13 +958,13 @@ async function bulkDelete() {
   if (_bulkArmedKey !== key) {
     _bulkArmedKey = key;
     const btn = document.getElementById('btn-bulk-delete');
-    if (btn) btn.textContent = `⚠️ Точно удалить ${ids.length}? Нажмите ещё раз`;
+    if (btn) btn.textContent = `! Точно удалить ${ids.length}? Нажмите ещё раз`;
     setBulkStatus(`Удаление ${ids.length} документов — нажмите кнопку ещё раз для подтверждения`);
     clearTimeout(window._bulkDeleteReset);
     window._bulkDeleteReset = setTimeout(() => {
       _bulkArmedKey = '';
       const b = document.getElementById('btn-bulk-delete');
-      if (b) b.textContent = '🗑️ Удалить выбранные';
+      if (b) b.textContent = ' Удалить выбранные';
       setBulkStatus('');
     }, 15000);
     return;
@@ -1236,15 +995,15 @@ async function bulkDelete() {
     selectedDocs = new Set(failedIds);
     const summary = `Удалено: ${deleted}` + (failedIds.length ? `, не удалось: ${failedIds.length} (${reasons.join('; ')})` : '');
     setBulkStatus(summary, failedIds.length > 0);
-    toast(`🗑️ Удалено: ${deleted}${failedIds.length ? `, не удалось: ${failedIds.length}` : ''}`);
+    toast(` Удалено: ${deleted}${failedIds.length ? `, не удалось: ${failedIds.length}` : ''}`);
     loadAll();
   } catch(e) {
     setBulkStatus('Ошибка удаления: ' + e.message, true);
-    toast('❌ ' + e.message, true);
+    toast('✕ ' + e.message, true);
   } finally {
     if (btn0) {
       btn0.disabled = false;
-      btn0.textContent = '🗑️ Удалить выбранные';
+      btn0.textContent = ' Удалить выбранные';
     }
   }
 }
@@ -1266,8 +1025,8 @@ function ocrLink(d) {
   // Две ссылки: открыть распознанный Markdown и переобработать документ заново.
   // Переобработка была доступна только через API — владелец искал её и не находил,
   // поэтому действие продублировано прямо в списке (не нужно открывать карточку).
-  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none">📝 .md</a>'
-       + ' <a href="#" onclick="reindexDoc(\'' + d.document_id + '\');return false" title="Переобработать документ (разобрать заново: текст, таблицы, векторы, граф)" style="color:var(--accent);font-size:12px;text-decoration:none">♻️</a>';
+  return '<a href="#" onclick="viewOcr(\'' + d.document_id + '\');return false" title="Открыть распознанный Markdown" style="color:var(--accent);font-size:12px;text-decoration:none"> .md</a>'
+       + ' <a href="#" onclick="reindexDoc(\'' + d.document_id + '\');return false" title="Переобработать документ (разобрать заново: текст, таблицы, векторы, граф)" style="color:var(--accent);font-size:12px;text-decoration:none">↻</a>';
 }
 
 // Экранирование для таблиц документа (в ячейках бывает что угодно — «<», кавычки, амперсанды).
@@ -1372,7 +1131,7 @@ function _importFolderParams() {
 async function importFolderScan() {
   const box = document.getElementById('import-folder-result');
   const p = _importFolderParams();
-  box.innerHTML = '⏳ Смотрю папку…';
+  box.innerHTML = '… Смотрю папку…';
   try {
     const url = `${API}/upload/import-folder?folder=${encodeURIComponent(p.folder)}&recursive=${p.recursive}`;
     const r = await fetch(url, { credentials: 'include' });
@@ -1400,7 +1159,7 @@ async function importFolderRun() {
   const p = _importFolderParams();
   if (!confirm(`Импортировать все файлы из папки${p.folder ? ' «' + p.folder + '»' : ''}?\n` +
                `Файлы, которые уже есть в базе (совпал хеш), будут пропущены.`)) return;
-  box.innerHTML = '⏳ Импортирую… это может занять время на большой папке';
+  box.innerHTML = '… Импортирую… это может занять время на большой папке';
   try {
     const r = await fetch(`${API}/upload/import-folder`, {
       method: 'POST', credentials: 'include',
@@ -1465,36 +1224,36 @@ async function loadProcessingConfig() {
 }
 
 async function processDocument(id) {
-  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  if (processingBlocked) { toast('! Обработка заблокирована администратором', true); return; }
   try {
     const r = await fetch(`${API}/upload/${id}/process`, { method: 'POST', credentials: 'include' });
     const d = await r.json();
     // 409 = задача уже стоит (QueueGuard). Это не ошибка пользователя, поэтому
-    // показываем нейтрально, а не красным «❌».
-    if (r.status === 409) { toast('ℹ️ ' + (d.detail || d.message || 'Документ уже в очереди обработки')); return; }
+    // показываем нейтрально, а не красным «✕».
+    if (r.status === 409) { toast('ℹ ' + (d.detail || d.message || 'Документ уже в очереди обработки')); return; }
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Ошибка запуска обработки'));
-    toast('✅ ' + (d.message || 'Документ поставлен в очередь обработки'));
+    toast('✓ ' + (d.message || 'Документ поставлен в очередь обработки'));
     setTimeout(() => { loadAll(); }, 800);
   } catch(e) {
-    toast('❌ ' + e.message, true);
+    toast('✕ ' + e.message, true);
   }
 }
 
 // Общая кнопка: обработать все необработанные документы пользователя
 async function processAllMine() {
-  if (processingBlocked) { toast('⚠️ Обработка заблокирована администратором', true); return; }
+  if (processingBlocked) { toast('! Обработка заблокирована администратором', true); return; }
   const btn = document.getElementById('proc-all-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Постановка в очередь...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '… Постановка в очередь...'; }
   try {
     const r = await fetch(`${API}/upload/process-all`, { method: 'POST', credentials: 'include' });
     const d = await r.json();
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : (d.message || 'Ошибка запуска обработки'));
-    toast('✅ ' + (d.message || 'Обработка запущена'));
+    toast('✓ ' + (d.message || 'Обработка запущена'));
     setTimeout(() => { loadAll(); }, 800);
   } catch(e) {
-    toast('❌ ' + e.message, true);
+    toast('✕ ' + e.message, true);
   }
-  if (btn) { btn.disabled = false; btn.textContent = '▶️ Обработать все необработанные'; }
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Обработать все необработанные'; }
 }
 
 function updateProcAllButton() {
@@ -1523,7 +1282,5 @@ async function viewOcr(id) {
     }
   } catch(e) { toast('Ошибка: ' + e.message, true); }
 }
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

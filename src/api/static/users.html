@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Пользователи и группы</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Пользователи и группы</title>
 
 <style>:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -45,9 +41,7 @@ td{padding:10px 14px;font-size:14px;color:var(--text2);border-bottom:1px solid v
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -63,124 +57,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-<main>
-  <h1>Пользователи и группы</h1>
-  <div class="sub">Управление доступом: локальные пользователи, группы, Keycloak</div>
-
-  <!-- Source toggle -->
-  <div class="toggle">
-  <button class="active" onclick="switchSource('local', this)">💻 Локальные</button>
-  <button onclick="switchSource('keycloak', this)">🌐 Keycloak</button>
-  <button onclick="switchSource('ad', this)">🏢 Active Directory</button>
-  </div>
-
-  <!-- Registration -->
-  <div class="section" id="local-section">
-    <div id="sso-status" class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text2)">Проверка SSO...</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button onclick="setSso(true)" id="sso-on-btn" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px">✅ Включить SSO</button>
-      <button onclick="setSso(false)" id="sso-off-btn" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px">⛔ Выключить SSO</button>
-      <span id="sso-status-save" style="font-size:12px;color:var(--text4);align-self:center"></span>
-    </div>
-    <div class="section-title">📝 Регистрация локального пользователя</div>
-    <div class="card" id="local-reg-card">
-      <div class="form">
-        <input type="text" id="reg-username" placeholder="Логин" autocomplete="off">
-        <input type="password" id="reg-password" placeholder="Пароль (мин 6 символов)" autocomplete="off">
-        <input type="email" id="reg-email" placeholder="Email" autocomplete="off">
-        <select id="reg-role"><option value="user">User</option><option value="admin">Admin</option></select>
-        <button class="btn" onclick="register()">Зарегистрировать</button>
-      </div>
-      <div class="status" id="reg-status"></div>
-    </div>
-  </div>
-
-  <!-- Users list -->
-  <div class="section">
-    <div class="section-title">👤 Пользователи</div>
-    <div class="card"><div id="users-list"><div class="empty">Загрузка...</div></div></div>
-  </div>
-
-  <!-- Groups -->
-  <div class="section" id="groups-section">
-    <div class="section-title">👥 Группы</div>
-    <div class="card">
-      <div id="groups-list"><div class="empty">Загрузка...</div></div>
-      <div class="form" style="margin-top:12px;margin-bottom:0">
-        <input type="text" id="group-name" placeholder="Название группы">
-        <input type="text" id="group-desc" placeholder="Описание">
-        <button class="btn" onclick="createGroup()">+ Создать группу</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Keycloak settings -->
-  <div class="section" id="keycloak-section" style="display:none">
-    <div class="section-title">🔐 Keycloak — доменные пользователи</div>
-    <div class="card">
-      <div class="form">
-        <button class="btn" onclick="testKeycloak()">🔍 Проверить подключение</button>
-      </div>
-      <div class="status" id="kc-status"></div>
-      <div style="margin-top:16px">
-        <div class="section-title" style="font-size:14px">➕ Создать пользователя в Keycloak</div>
-        <div class="form">
-          <input type="text" id="kc-new-username" placeholder="Логин" autocomplete="off">
-          <input type="email" id="kc-new-email" placeholder="Email" autocomplete="off">
-          <input type="text" id="kc-new-first" placeholder="Имя" autocomplete="off">
-          <input type="text" id="kc-new-last" placeholder="Фамилия" autocomplete="off">
-          <input type="password" id="kc-new-password" placeholder="Пароль (мин 6)" autocomplete="off">
-          <select id="kc-new-role"><option value="user">User</option><option value="admin">Admin</option></select>
-          <button class="btn" onclick="createKeycloakUser()">➕ Создать</button>
-        </div>
-        <div class="status" id="kc-create-status"></div>
-        <div style="font-size:12px;color:var(--text4);margin-bottom:12px">Имя и фамилия обязательны — без них Keycloak не пустит пользователя (Account is not fully set up).</div>
-      </div>
-      <div style="margin-top:16px">
-        <div class="section-title" style="font-size:14px">Пользователи Keycloak</div>
-        <div id="kc-users-list"><div class="empty" style="padding:20px">Нажмите «Проверить подключение»</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- AD/LDAP section -->
-  <div class="section" id="ad-section" style="display:none">
-    <div class="section-title">🏢 Active Directory — доменная авторизация</div>
-    <div class="card">
-      <div class="form">
-        <input type="text" id="ad-url" placeholder="LDAP URL (ldap://dc.company.local)">
-        <input type="text" id="ad-bind-dn" placeholder="Bind DN">
-        <input type="password" id="ad-bind-pw" placeholder="Bind Password">
-      </div>
-      <div class="form">
-        <input type="text" id="ad-users-dn" placeholder="Users DN">
-        <input type="text" id="ad-domain" placeholder="Домен (COMPANY)">
-        <button class="btn" onclick="testAD()">🔍 Проверить AD</button>
-        <button class="btn" onclick="saveAD()" style="background:var(--green)">💾 Сохранить</button>
-      </div>
-      <div class="status" id="ad-status"></div>
-      <div style="margin-top:8px;font-size:12px;color:var(--text4)">Пароль хранится в PostgreSQL (GOST-шифрование). Не в .env.</div>
-    </div>
-  </div>
-</main>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Пользователи и группы</h1><div class="sub">Управление доступом: локальные пользователи, группы, Keycloak</div><!-- Source toggle --><div class="toggle"><button class="active" onclick="switchSource('local', this)"> Локальные</button><button onclick="switchSource('keycloak', this)"> Keycloak</button><button onclick="switchSource('ad', this)"> Active Directory</button></div><!-- Registration --><div class="section" id="local-section"><div id="sso-status" class="card" style="margin-bottom:12px;padding:12px 16px;font-size:13px;color:var(--text2)">Проверка SSO...</div><div style="display:flex;gap:8px;margin-bottom:12px"><button onclick="setSso(true)" id="sso-on-btn" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px"> Включить SSO</button><button onclick="setSso(false)" id="sso-off-btn" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;font-size:13px"> Выключить SSO</button><span id="sso-status-save" style="font-size:12px;color:var(--text4);align-self:center"></span></div><div class="section-title"> Регистрация локального пользователя</div><div class="card" id="local-reg-card"><div class="form"><input type="text" id="reg-username" placeholder="Логин" autocomplete="off"><input type="password" id="reg-password" placeholder="Пароль (мин 6 символов)" autocomplete="off"><input type="email" id="reg-email" placeholder="Email" autocomplete="off"><select id="reg-role"><option value="user">User</option><option value="admin">Admin</option></select><button class="btn" onclick="register()">Зарегистрировать</button></div><div class="status" id="reg-status"></div></div></div><!-- Users list --><div class="section"><div class="section-title"> Пользователи</div><div class="card"><div id="users-list"><div class="empty">Загрузка...</div></div></div></div><!-- Groups --><div class="section" id="groups-section"><div class="section-title"> Группы</div><div class="card"><div id="groups-list"><div class="empty">Загрузка...</div></div><div class="form" style="margin-top:12px;margin-bottom:0"><input type="text" id="group-name" placeholder="Название группы"><input type="text" id="group-desc" placeholder="Описание"><button class="btn" onclick="createGroup()">+ Создать группу</button></div></div></div><!-- Keycloak settings --><div class="section" id="keycloak-section" style="display:none"><div class="section-title"> Keycloak — доменные пользователи</div><div class="card"><div class="form"><button class="btn" onclick="testKeycloak()"> Проверить подключение</button></div><div class="status" id="kc-status"></div><div style="margin-top:16px"><div class="section-title" style="font-size:14px"> Создать пользователя в Keycloak</div><div class="form"><input type="text" id="kc-new-username" placeholder="Логин" autocomplete="off"><input type="email" id="kc-new-email" placeholder="Email" autocomplete="off"><input type="text" id="kc-new-first" placeholder="Имя" autocomplete="off"><input type="text" id="kc-new-last" placeholder="Фамилия" autocomplete="off"><input type="password" id="kc-new-password" placeholder="Пароль (мин 6)" autocomplete="off"><select id="kc-new-role"><option value="user">User</option><option value="admin">Admin</option></select><button class="btn" onclick="createKeycloakUser()"> Создать</button></div><div class="status" id="kc-create-status"></div><div style="font-size:12px;color:var(--text4);margin-bottom:12px">Имя и фамилия обязательны — без них Keycloak не пустит пользователя (Account is not fully set up).</div></div><div style="margin-top:16px"><div class="section-title" style="font-size:14px">Пользователи Keycloak</div><div id="kc-users-list"><div class="empty" style="padding:20px">Нажмите «Проверить подключение»</div></div></div></div></div><!-- AD/LDAP section --><div class="section" id="ad-section" style="display:none"><div class="section-title"> Active Directory — доменная авторизация</div><div class="card"><div class="form"><input type="text" id="ad-url" placeholder="LDAP URL (ldap://dc.company.local)"><input type="text" id="ad-bind-dn" placeholder="Bind DN"><input type="password" id="ad-bind-pw" placeholder="Bind Password"></div><div class="form"><input type="text" id="ad-users-dn" placeholder="Users DN"><input type="text" id="ad-domain" placeholder="Домен (COMPANY)"><button class="btn" onclick="testAD()"> Проверить AD</button><button class="btn" onclick="saveAD()" style="background:var(--green)"> Сохранить</button></div><div class="status" id="ad-status"></div><div style="margin-top:8px;font-size:12px;color:var(--text4)">Пароль хранится в PostgreSQL (GOST-шифрование). Не в .env.</div></div></div></main>
 
 <script>
 const API = '/api/v1';
@@ -223,10 +100,10 @@ async function register() {
     const res = await fetch(`${API}/auth/register`, {method:'POST', headers:authHeaders(), body: JSON.stringify({username:u, password:p, email:e||null, is_admin: role === 'admin'})});
     const data = await res.json();
     if (res.ok) {
-      st.className='status ok'; st.textContent = '✅ Пользователь создан: ' + data.username;
+      st.className='status ok'; st.textContent = '✓ Пользователь создан: ' + data.username;
       loadUsers();
     } else {
-      st.className='status err'; st.textContent = '❌ ' + (data.detail || data.message);
+      st.className='status err'; st.textContent = '✕ ' + (data.detail || data.message);
     }
   } catch(err) { st.className='status err'; st.textContent = 'Ошибка: ' + err.message; }
 }
@@ -245,9 +122,9 @@ async function loadUsers() {
         <td style="color:var(--text4)">${u.email || '—'}</td>
         <td><span class="badge ${u.is_admin ? 'admin' : 'user'}">${u.is_admin ? 'Админ' : 'User'}</span></td>
         <td><span class="badge ${u.source === 'keycloak' ? 'domain' : 'user'}">${u.source === 'keycloak' ? 'Keycloak' : 'Локальный'}</span></td>
-        <td>${u.is_active ? '✅' : '❌'}</td>
+        <td>${u.is_active ? '✓' : '✕'}</td>
         <td style="color:var(--text4);font-size:12px">${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
-        <td>${u.source !== 'keycloak' && u.username !== 'admin' ? `<button class="btn-sm" onclick="toggleActive('${u.id}')">${u.is_active ? '🔴 Отключить' : '🟢 Включить'}</button> <button class="btn-sm" onclick="resetPwd('${u.id}')">🔑 Сменить пароль</button> <button class="btn-sm" style="background:rgba(220,38,38,0.15);color:var(--red);border:none;cursor:pointer;padding:4px 10px;border-radius:6px" onclick="deleteLocalUser('${u.id}','${u.username}')">🗑️ Удалить</button>` : ''}</td>
+        <td>${u.source !== 'keycloak' && u.username !== 'admin' ? `<button class="btn-sm" onclick="toggleActive('${u.id}')">${u.is_active ? ' Отключить' : ' Включить'}</button> <button class="btn-sm" onclick="resetPwd('${u.id}')"> Сменить пароль</button> <button class="btn-sm" style="background:rgba(220,38,38,0.15);color:var(--red);border:none;cursor:pointer;padding:4px 10px;border-radius:6px" onclick="deleteLocalUser('${u.id}','${u.username}')"> Удалить</button>` : ''}</td>
       </tr>`).join('')}</table>`;
   } catch(e) { document.getElementById('users-list').innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
 }
@@ -287,7 +164,7 @@ async function resetPwd(userId) {
       body: JSON.stringify({password: newPwd})
     });
     const data = await res.json();
-    if (res.ok) { alert('✅ Пароль изменён'); } else { alert('❌ ' + (data.detail || 'Ошибка')); }
+    if (res.ok) { alert('✓ Пароль изменён'); } else { alert('✕ ' + (data.detail || 'Ошибка')); }
   } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
@@ -297,7 +174,7 @@ async function toggleActive(userId) {
       method:'POST', headers:authHeaders()
     });
     const data = await res.json();
-    if (res.ok) { loadUsers(); } else { alert('❌ ' + (data.detail || 'Ошибка')); }
+    if (res.ok) { loadUsers(); } else { alert('✕ ' + (data.detail || 'Ошибка')); }
   } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
@@ -308,8 +185,8 @@ async function deleteLocalUser(userId, username) {
       method:'DELETE', headers:authHeaders()
     });
     const data = await res.json();
-    if (res.ok) { alert('✅ ' + (data.message || 'Пользователь удалён')); loadUsers(); }
-    else { alert('❌ ' + (data.detail || 'Ошибка')); }
+    if (res.ok) { alert('✓ ' + (data.message || 'Пользователь удалён')); loadUsers(); }
+    else { alert('✕ ' + (data.detail || 'Ошибка')); }
   } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
@@ -321,10 +198,10 @@ async function deleteKcUser(userId, username) {
     });
     const data = await res.json();
     if (res.ok) {
-      alert('✅ ' + (data.message || 'Пользователь удалён'));
+      alert('✓ ' + (data.message || 'Пользователь удалён'));
       loadKeycloakUsers();
       loadUsers(); // локальная запись синхронизированного юзера осталась — обновить список
-    } else { alert('❌ ' + (data.detail || 'Ошибка')); }
+    } else { alert('✕ ' + (data.detail || 'Ошибка')); }
   } catch(e) { alert('Ошибка: ' + e.message); }
 }
 
@@ -335,12 +212,12 @@ async function testKeycloak() {
     const res = await fetch(`${API}/admin/keycloak/status`, {headers:authHeaders()});
     const d = await res.json();
     if (res.ok && d.ok) {
-      st.className='status ok'; st.textContent = '✅ Keycloak доступен (realm: '+d.realm+')';
+      st.className='status ok'; st.textContent = '✓ Keycloak доступен (realm: '+d.realm+')';
       loadKeycloakUsers();
     } else {
-      st.className='status err'; st.textContent = '❌ ' + (d.message || ('Keycloak недоступен (status: '+res.status+')'));
+      st.className='status err'; st.textContent = '✕ ' + (d.message || ('Keycloak недоступен (status: '+res.status+')'));
     }
-  } catch(e) { st.className='status err'; st.textContent = '❌ Ошибка подключения: ' + e.message; }
+  } catch(e) { st.className='status err'; st.textContent = '✕ Ошибка подключения: ' + e.message; }
 }
 
 async function loadKeycloakUsers() {
@@ -357,8 +234,8 @@ async function loadKeycloakUsers() {
         <td style="font-weight:500">${u.username}</td>
         <td style="color:var(--text4)">${u.email || '—'}</td>
         <td>${u.firstName || ''} ${u.lastName || ''}</td>
-        <td>${u.enabled ? '✅' : '❌'}</td>
-        <td>${u.username !== 'admin' ? `<button class="btn-sm" style="background:rgba(220,38,38,0.15);color:var(--red);border:none;cursor:pointer;padding:4px 10px;border-radius:6px" onclick="deleteKcUser('${u.id}','${u.username}')">🗑️ Удалить</button>` : ''}</td>
+        <td>${u.enabled ? '✓' : '✕'}</td>
+        <td>${u.username !== 'admin' ? `<button class="btn-sm" style="background:rgba(220,38,38,0.15);color:var(--red);border:none;cursor:pointer;padding:4px 10px;border-radius:6px" onclick="deleteKcUser('${u.id}','${u.username}')"> Удалить</button>` : ''}</td>
       </tr>`).join('')}</table>`;
   } catch(e) { c.innerHTML = '<div class="empty">Ошибка: ' + e.message + '</div>'; }
 }
@@ -387,12 +264,12 @@ async function createKeycloakUser() {
     const d = await res.json().catch(() => ({}));
     if (res.ok) {
       st.className='status ok';
-      st.textContent = '✅ Пользователь создан в Keycloak: ' + username + (d.message ? ' (' + d.message + ')' : '');
+      st.textContent = '✓ Пользователь создан в Keycloak: ' + username + (d.message ? ' (' + d.message + ')' : '');
       ['kc-new-username','kc-new-email','kc-new-first','kc-new-last','kc-new-password'].forEach(id => document.getElementById(id).value = '');
       loadKeycloakUsers();
     } else {
       st.className='status err';
-      st.textContent = '❌ ' + (d.detail || d.message || ('Ошибка (status: '+res.status+')'));
+      st.textContent = '✕ ' + (d.detail || d.message || ('Ошибка (status: '+res.status+')'));
     }
   } catch(e) {
     st.className='status err';
@@ -475,10 +352,10 @@ async function loadSsoStatus() {
 
     let html = '';
     if (d.sso_enabled) {
-      html += '<div style="color:var(--accent-l);font-weight:600;margin-bottom:6px">✅ SSO включён — вход пользователей через Keycloak</div>';
-      html += '<div style="color:var(--text3);margin-bottom:8px">Админ может создавать пользователей локально (форма ниже) или в консоли Keycloak (роли admin/user). Локальный вход — ссылка «🔑 Локальный вход» на странице входа.</div>';
+      html += '<div style="color:var(--accent-l);font-weight:600;margin-bottom:6px">✓ SSO включён — вход пользователей через Keycloak</div>';
+      html += '<div style="color:var(--text3);margin-bottom:8px">Админ может создавать пользователей локально (форма ниже) или в консоли Keycloak (роли admin/user). Локальный вход — ссылка « Локальный вход» на странице входа.</div>';
     } else {
-      html += '<div style="color:var(--amber);font-weight:600;margin-bottom:6px">⚠️ SSO выключен (AUTH_ENABLED=false)</div>';
+      html += '<div style="color:var(--amber);font-weight:600;margin-bottom:6px">! SSO выключен (AUTH_ENABLED=false)</div>';
       html += '<div style="color:var(--text3);margin-bottom:8px">Сейчас авторизацию проводит <b>локальная система</b> (users). Для SSO — включи AUTH_ENABLED и настрой внешний адрес в админке.</div>';
     }
     html += '<div style="font-size:12px;color:var(--text3)">Консоль Keycloak: ';
@@ -520,7 +397,5 @@ async function setSso(enabled) {
 }
 loadSsoStatus();
 
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

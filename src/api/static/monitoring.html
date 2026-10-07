@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Мониторинг</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Мониторинг</title>
 
 <style>:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -55,9 +51,7 @@ input:focus,select:focus{border-color:var(--accent-h)}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -73,55 +67,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo"> <span>KAG</span></div>
- <a href="/"> Дашборд</a>
- <a href="/documents"> Документы</a>
- <a href="/chunks"> Чанки</a>
- <a href="/search"> Поиск</a>
- <a href="/kg"> Граф знаний</a>
- <a href="/architecture"> Архитектура</a>
- <a href="/monitor"> Веб-монитор</a>
- <a href="/news"> Новости</a>
- <a href="/know"> Know</a>
- <a href="/logs"> Логи</a>
- <a href="/admin"> Админ</a>
-<a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
-</nav>
-<main>
-  <h1>Мониторинг</h1>
-  <div class="sub">Отслеживание изменений веб-страниц и файлов в папках</div>
-
-  <div class="section">
-    <div class="section-title">🌐 Отслеживаемые URL</div>
-    <div class="card">
-      <div id="urls-list"><div class="empty">Загрузка...</div></div>
-      <div class="form-row">
-        <input type="url" id="new-url" placeholder="https://example.com/page">
-        <button class="btn" onclick="addUrl()">+ Добавить URL</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">📁 Отслеживаемые папки</div>
-    <div class="card">
-      <div id="folders-list"><div class="empty">Загрузка...</div></div>
-      <div class="form-row">
-        <input type="text" id="new-folder" placeholder="/data/docs">
-        <button class="btn" onclick="addFolder()">+ Добавить папку</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">🔔 Уведомления</div>
-    <div class="card"><div id="notifications-list"><div class="empty">Загрузка...</div></div></div>
-  </div>
-</main>
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo"><span>KAG</span></div><a href="/"> Дашборд</a><a href="/documents"> Документы</a><a href="/chunks"> Чанки</a><a href="/search"> Поиск</a><a href="/kg"> Граф знаний</a><a href="/architecture"> Архитектура</a><a href="/monitor"> Веб-монитор</a><a href="/news"> Новости</a><a href="/know"> Know</a><a href="/logs"> Логи</a><a href="/admin"> Админ</a><a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a></nav><main><h1>Мониторинг</h1><div class="sub">Отслеживание изменений веб-страниц и файлов в папках</div><div class="section"><div class="section-title"> Отслеживаемые URL</div><div class="card"><div id="urls-list"><div class="empty">Загрузка...</div></div><div class="form-row"><input type="url" id="new-url" placeholder="https://example.com/page"><button class="btn" onclick="addUrl()">+ Добавить URL</button></div></div></div><div class="section"><div class="section-title"> Отслеживаемые папки</div><div class="card"><div id="folders-list"><div class="empty">Загрузка...</div></div><div class="form-row"><input type="text" id="new-folder" placeholder="/data/docs"><button class="btn" onclick="addFolder()">+ Добавить папку</button></div></div></div><div class="section"><div class="section-title"> Уведомления</div><div class="card"><div id="notifications-list"><div class="empty">Загрузка...</div></div></div></div></main>
 
 <script>
 const API = '/api/v1';
@@ -234,7 +180,5 @@ function logout() {
     .finally(function(){ window.location.replace('/login'); });
 }
 
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

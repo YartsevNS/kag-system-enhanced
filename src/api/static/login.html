@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — Вход</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Вход</title>
 
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
@@ -25,9 +21,7 @@ input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -43,26 +37,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<div class="card">
-  <h1> KAG</h1>
-  <div class="sub">Войдите в систему · <span id="auth-mode" style="font-size:12px">—</span></div>
-  <div class="error" id="error"></div>
-  <div class="field">
-    <label>Логин</label>
-    <input type="text" id="username" placeholder="admin" autocomplete="username">
-  </div>
-  <div class="field">
-    <label>Пароль</label>
-    <input type="password" id="password" placeholder="••••••" autocomplete="current-password">
-  </div>
-  <button class="btn" onclick="login()">Войти</button>
-  <div style="text-align:center;margin-top:12px">
-    <a href="#" id="local-link" onclick="useLocalLogin();return false" style="font-size:12px;color:var(--accent-l);display:none">🔑 Локальный вход (для пользователей KAG)</a>
-  </div>
-</div>
+<link rel="stylesheet" href="/static/theme.css"></head><body><div class="card"><h1> KAG</h1><div class="sub">Войдите в систему · <span id="auth-mode" style="font-size:12px">—</span></div><div class="error" id="error"></div><div class="field"><label>Логин</label><input type="text" id="username" placeholder="admin" autocomplete="username"></div><div class="field"><label>Пароль</label><input type="password" id="password" placeholder="••••••" autocomplete="current-password"></div><button class="btn" onclick="login()">Войти</button><div style="text-align:center;margin-top:12px"><a href="#" id="local-link" onclick="useLocalLogin();return false" style="font-size:12px;color:var(--accent-l);display:none"> Локальный вход (для пользователей KAG)</a></div></div>
 <script>
 let ssoConfig = null;
 let useLocal = false; // переключение на локальный вход (admin fallback)
@@ -187,7 +162,5 @@ async function login() {
 }
 document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 initAuth();
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>

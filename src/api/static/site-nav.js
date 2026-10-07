@@ -20,31 +20,31 @@
 
   var SECTIONS = [
     { title: 'Работа с документами', compact: true, items: [
-      ['/', '⬡', 'Дашборд'],
-      ['/chat', '💬', 'Чат с AI'],
-      ['/documents', '📄', 'Документы'],
-      ['/chunks', '🧩', 'Чанки'],
-      ['/search', '🔎', 'Поиск'],
-      ['/kg', '🕸️', 'Граф знаний']
+      ['/', 'Дашборд'],
+      ['/chat', 'Чат с AI'],
+      ['/documents', 'Документы'],
+      ['/chunks', 'Чанки'],
+      ['/search', 'Поиск'],
+      ['/kg', 'Граф знаний']
     ]},
     { title: 'Наблюдение и данные', items: [
-      ['/monitor', '🌐', 'Веб-монитор'],
-      ['/news', '📰', 'Новости'],
-      ['/know', '📚', 'Know'],
-      ['/monitoring', '📊', 'Мониторинг'],
-      ['/system', '📊', 'Состояние']
+      ['/monitor', 'Веб-монитор'],
+      ['/news', 'Новости'],
+      ['/know', 'Know'],
+      ['/monitoring', 'Мониторинг'],
+      ['/system', 'Состояние']
     ]},
     { title: 'Администрирование', role: 'admin', items: [
-      ['/admin', '⚙️', 'Админ'],
-      ['/users', '👥', 'Пользователи'],
-      ['/logs', '📋', 'Логи'],
-      ['/qdrant', '🗄️', 'Qdrant'],
-      ['/docker', '🐳', 'Docker']
+      ['/admin', 'Админ'],
+      ['/users', 'Пользователи'],
+      ['/logs', 'Логи'],
+      ['/qdrant', 'Qdrant'],
+      ['/docker', 'Docker']
     ]},
     { title: 'Помощь', compact: true, items: [
-      ['/architecture', '🔭', 'Архитектура'],
-      ['/docs', '📖', 'Документация'],
-      ['/guide', '📘', 'Руководство']
+      ['/architecture', 'Архитектура'],
+      ['/docs', 'Документация'],
+      ['/guide', 'Руководство']
     ]}
   ];
 
@@ -73,7 +73,7 @@
         var a = document.createElement('a');
         a.href = it[0];
         a.className = 'nav-item' + (isActive(it[0]) ? ' active' : '');
-        a.innerHTML = '<span class="icon">' + it[1] + '</span> <span>' + it[2] + '</span>';
+        a.textContent = it[1];
         if (opts.onClick) a.addEventListener('click', opts.onClick);
         frag.appendChild(a);
       });

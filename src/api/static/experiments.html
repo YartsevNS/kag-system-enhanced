@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAG — опыты и модели</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — опыты и модели</title>
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -42,9 +38,7 @@ tr.best td.num{color:var(--accent-h);font-weight:600}
 .meta .stat .l{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:0.03em}
 .empty{color:var(--text4);font-size:13px;padding:8px 0}
 @media(max-width:900px){nav{width:60px}nav a span,nav .logo{display:none}main{margin-left:60px;padding:16px}}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -60,136 +54,33 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-<nav>
- <div class="logo">KA<span>G</span></div>
- <a href="/chat"><span>Чат с AI</span></a>
- <a href="/documents"><span>Документы</span></a>
- <a href="/chunks"><span>Чанки</span></a>
- <a href="/kg"><span>Граф знаний</span></a>
- <a href="/architecture"> <span>Архитектура</span></a>
- <a href="/admin"><span>Админ</span></a>
- <a href="/experiments" class="active"><span>Опыты и модели</span></a>
-</nav>
-<main>
-  <h1>Опыты и модели</h1>
-  <div class="sub">Сравнение моделей на нашем корпусе: что проверено, с какими цифрами и что делаем дальше. Страница доступна только администраторам.</div>
-
-  <div class="meta" id="meta"></div>
-
-  <details open>
-    <summary>Сравнение эмбеддеров на нашем корпусе</summary>
-    <div class="note" style="margin-bottom:10px">
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo">KA<span>G</span></div><a href="/chat"><span>Чат с AI</span></a><a href="/documents"><span>Документы</span></a><a href="/chunks"><span>Чанки</span></a><a href="/kg"><span>Граф знаний</span></a><a href="/architecture"><span>Архитектура</span></a><a href="/admin"><span>Админ</span></a><a href="/experiments" class="active"><span>Опыты и модели</span></a></nav><main><h1>Опыты и модели</h1><div class="sub">Сравнение моделей на нашем корпусе: что проверено, с какими цифрами и что делаем дальше. Страница доступна только администраторам.</div><div class="meta" id="meta"></div><details open><summary>Сравнение эмбеддеров на нашем корпусе</summary><div class="note" style="margin-bottom:10px">
       Метрика — ранг фрагмента с ответом внутри пула кандидатов (20 вопросов с эталонами, пул по 15 фрагментов).
       hit@K — доля вопросов, где правильный фрагмент попал в первые K; MRR — средний обратный ранг.
       Чем больше, тем лучше. <b>Строка-эталон</b> — модель, которая работает в KAG сейчас.
-    </div>
-    <table>
-      <thead><tr>
-        <th>Модель</th><th>Размерность</th><th>Где считалась</th>
-        <th>hit@1</th><th>hit@3</th><th>hit@5</th><th>MRR</th><th>Вердикт</th>
-      </tr></thead>
-      <tbody id="emb-table"></tbody>
-    </table>
-    <div class="note" style="margin-top:12px">
-      <b>Ограничения замера.</b> Пулы фрагментов собраны действующей моделью (её top-15), поэтому кандидаты
+    </div><table><thead><tr><th>Модель</th><th>Размерность</th><th>Где считалась</th><th>hit@1</th><th>hit@3</th><th>hit@5</th><th>MRR</th><th>Вердикт</th></tr></thead><tbody id="emb-table"></tbody></table><div class="note" style="margin-top:12px"><b>Ограничения замера.</b> Пулы фрагментов собраны действующей моделью (её top-15), поэтому кандидаты
       переранжируют уже отобранное и не могут найти то, что действующая модель пропустила — это смещение в её пользу.
       Разметка «где лежит ответ» сделана чтением фрагментов (без платных судей). Полное сравнение требует прогона
       кандидата по всему корпусу, то есть отдельной коллекции Qdrant и переиндексации.
-    </div>
-  </details>
-
-  <details open>
-    <summary>Железо под GPU: что нужно и сколько стоит</summary>
-    <div class="note" style="margin-bottom:10px">
+    </div></details><details open><summary>Железо под GPU: что нужно и сколько стоит</summary><div class="note" style="margin-bottom:10px">
       Цифры пропускной способности — из карточек моделей (замер на H100, batch size 16).
       Цены — прайсы на 19.09.2026; где цена не подтверждена прайсом, это помечено.
-    </div>
-    <table>
-      <thead><tr><th>Что нужно</th><th>Железо</th><th>Цена</th><th>Пояснение</th></tr></thead>
-      <tbody id="hw-table"></tbody>
-    </table>
-  </details>
-
-  <details>
-    <summary>Что доступно из моделей и где</summary>
-    <table>
-      <thead><tr><th>Источник</th><th>Модели</th><th>Комментарий</th></tr></thead>
-      <tbody>
-        <tr><td>GigaChat (облако, через прокси)</td><td class="num">GigaR (2560), GigaEmbeddings-3B-2025-09 (2048), Embeddings-2 (1024), Embeddings (1024)</td><td>работает в KAG; новых instruct-моделей 3B-0826 / 10B в нашем доступе нет — API их не отдаёт</td></tr>
-        <tr><td>Локально, сервер 41 (Ollama)</td><td class="num">bge-m3, qllama/bge-m3 (Q4), enbeddrus, bge-reranker-v2-m3, <b>qwen2vl:2b</b> (зрение, таблицы)</td><td>CPU, 20 ядер, 76 ГБ RAM, GPU нет; Ollama слушает 0.0.0.0:11434 и доступна из api сервера 18</td></tr>
-        <tr><td>Локально, сервер 41 (Python)</td><td class="num">Giga-Embeddings-instruct-3B-0826</td><td>sentence-transformers на CPU, веса 5.9 ГБ, размерность 2048</td></tr>
-        <tr><td>Внешний агрегатор (polza.ai)</td><td class="num">deepseek-v4.1-flash, glm-5.3-flash и др.</td><td>только генерация; эмбеддинги ключу недоступны</td></tr>
-      </tbody>
-    </table>
-  </details>
-
-  <details>
-    <summary>Веса внутри поставки: что вшито в образ и по какой лицензии</summary>
-    <div class="note" style="margin-bottom:10px">
+    </div><table><thead><tr><th>Что нужно</th><th>Железо</th><th>Цена</th><th>Пояснение</th></tr></thead><tbody id="hw-table"></tbody></table></details><details><summary>Что доступно из моделей и где</summary><table><thead><tr><th>Источник</th><th>Модели</th><th>Комментарий</th></tr></thead><tbody><tr><td>GigaChat (облако, через прокси)</td><td class="num">GigaR (2560), GigaEmbeddings-3B-2025-09 (2048), Embeddings-2 (1024), Embeddings (1024)</td><td>работает в KAG; новых instruct-моделей 3B-0826 / 10B в нашем доступе нет — API их не отдаёт</td></tr><tr><td>Локально, сервер 41 (Ollama)</td><td class="num">bge-m3, qllama/bge-m3 (Q4), enbeddrus, bge-reranker-v2-m3, <b>qwen2vl:2b</b> (зрение, таблицы)</td><td>CPU, 20 ядер, 76 ГБ RAM, GPU нет; Ollama слушает 0.0.0.0:11434 и доступна из api сервера 18</td></tr><tr><td>Локально, сервер 41 (Python)</td><td class="num">Giga-Embeddings-instruct-3B-0826</td><td>sentence-transformers на CPU, веса 5.9 ГБ, размерность 2048</td></tr><tr><td>Внешний агрегатор (polza.ai)</td><td class="num">deepseek-v4.1-flash, glm-5.3-flash и др.</td><td>только генерация; эмбеддинги ключу недоступны</td></tr></tbody></table></details><details><summary>Веса внутри поставки: что вшито в образ и по какой лицензии</summary><div class="note" style="margin-bottom:10px">
       Все веса OCR — нашего проекта <b>Occular-OCR</b> (репозиторий <code>Bodhi42/Occular-ocr</code>).
       Сами веса опубликованы на HuggingFace в репозитории <code>Shivin11/occular-ocr</code>, языковая модель
       декодера — в <code>Shivin11/occular-lm-ru</code>. Они скачиваются <b>на этапе сборки образа</b> и лежат
       внутри него: в закрытой сети система не обращается к HuggingFace. Проверка офлайн-готовности —
       запуск с <code>HF_HUB_OFFLINE=1</code> (последняя проверка: 10 из 10 файлов на месте).
-    </div>
-    <table>
-      <thead><tr><th>Файл веса</th><th>Размер</th><th>Что делает</th></tr></thead>
-      <tbody>
-        <tr><td><code>detector_dbnet_fp32.onnx</code></td><td class="num">96,2 МБ</td><td>детектор текста (DBNet) — находит строки на странице</td></tr>
-        <tr><td><code>recognizer_svtr_lcnet_fp32.onnx</code></td><td class="num">29,1 МБ</td><td>распознаватель по умолчанию (в 5 раз быстрее прежнего при 99,6% его точности)</td></tr>
-        <tr><td><code>recognizer_svtr_fp32.onnx</code></td><td class="num">16,1 МБ</td><td>крупный распознаватель (svtr_t) — медленнее, точнее</td></tr>
-        <tr><td><code>recognizer_svtr_lcnet_cyr12_fp32.onnx</code> / <code>recognizer_svtr_cyr12_fp32.onnx</code></td><td class="num">29,6 / 16,4 МБ</td><td>распознавание 12 кириллических языков</td></tr>
-        <tr><td><code>recognizer_charset.txt</code> / <code>recognizer_charset_cyr12.txt</code></td><td class="num">&lt; 0,1 МБ</td><td>наборы символов для распознавателей</td></tr>
-        <tr><td><code>table_detect_v3_fp32.onnx</code></td><td class="num">8,2 МБ</td><td>детектор таблиц — ищет таблицу на странице (по линиям сетки)</td></tr>
-        <tr><td><code>table_struct_split_v2_fp32.onnx</code></td><td class="num">19,1 МБ</td><td>структура таблиц, ONNX-путь: сетка строк и колонок без объединённых ячеек</td></tr>
-        <tr><td><code>table_struct_split_merge_v2.pt</code></td><td class="num">21,0 МБ</td><td><b>объединённые ячейки</b> (colspan/rowspan) — модель на PyTorch, поэтому в образе стоит torch (CPU)</td></tr>
-        <tr><td><code>reading_order_encoder.onnx</code> + <code>decoder.onnx</code></td><td class="num">299,1 + 112,8 МБ</td><td>порядок чтения для многоколоночных страниц</td></tr>
-        <tr><td><code>compact_lm.npz</code> + <code>unigrams.txt</code></td><td class="num">255,7 + 24,4 МБ</td><td>русская языковая модель beam-декодера: снижает ошибки распознавания без переобучения</td></tr>
-      </tbody>
-    </table>
-    <div class="note" style="margin-top:10px">
-      <b>Лицензии.</b> Код Occular-OCR — Apache 2.0, его можно использовать свободно. Веса (всё в таблице выше,
+    </div><table><thead><tr><th>Файл веса</th><th>Размер</th><th>Что делает</th></tr></thead><tbody><tr><td><code>detector_dbnet_fp32.onnx</code></td><td class="num">96,2 МБ</td><td>детектор текста (DBNet) — находит строки на странице</td></tr><tr><td><code>recognizer_svtr_lcnet_fp32.onnx</code></td><td class="num">29,1 МБ</td><td>распознаватель по умолчанию (в 5 раз быстрее прежнего при 99,6% его точности)</td></tr><tr><td><code>recognizer_svtr_fp32.onnx</code></td><td class="num">16,1 МБ</td><td>крупный распознаватель (svtr_t) — медленнее, точнее</td></tr><tr><td><code>recognizer_svtr_lcnet_cyr12_fp32.onnx</code> / <code>recognizer_svtr_cyr12_fp32.onnx</code></td><td class="num">29,6 / 16,4 МБ</td><td>распознавание 12 кириллических языков</td></tr><tr><td><code>recognizer_charset.txt</code> / <code>recognizer_charset_cyr12.txt</code></td><td class="num">&lt; 0,1 МБ</td><td>наборы символов для распознавателей</td></tr><tr><td><code>table_detect_v3_fp32.onnx</code></td><td class="num">8,2 МБ</td><td>детектор таблиц — ищет таблицу на странице (по линиям сетки)</td></tr><tr><td><code>table_struct_split_v2_fp32.onnx</code></td><td class="num">19,1 МБ</td><td>структура таблиц, ONNX-путь: сетка строк и колонок без объединённых ячеек</td></tr><tr><td><code>table_struct_split_merge_v2.pt</code></td><td class="num">21,0 МБ</td><td><b>объединённые ячейки</b> (colspan/rowspan) — модель на PyTorch, поэтому в образе стоит torch (CPU)</td></tr><tr><td><code>reading_order_encoder.onnx</code> + <code>decoder.onnx</code></td><td class="num">299,1 + 112,8 МБ</td><td>порядок чтения для многоколоночных страниц</td></tr><tr><td><code>compact_lm.npz</code> + <code>unigrams.txt</code></td><td class="num">255,7 + 24,4 МБ</td><td>русская языковая модель beam-декодера: снижает ошибки распознавания без переобучения</td></tr></tbody></table><div class="note" style="margin-top:10px"><b>Лицензии.</b> Код Occular-OCR — Apache 2.0, его можно использовать свободно. Веса (всё в таблице выше,
       кроме модели определения ориентации страницы) — <b>modified AI Pubs OpenRAIL-M</b>: свободно только для
       частных лиц, исследователей, некоммерческих организаций, самозанятых и малых организаций (годовая выручка
       меньше 20 млн ₽ и меньше 8 сотрудников). Для поставки в организации этого недостаточно — в техническом
       долге лежит пункт «свой OCR вместо весов Occular»: нужно обучить собственные веса и заменить эти файлы
       (код менять не требуется). Модель определения ориентации страницы — исключение, она под Apache 2.0.
-    </div>
-  </details>
-
-  <details>
-    <summary>Что дальше: опыты, которым нужен GPU</summary>
-    <table>
-      <thead><tr><th>Опыт</th><th>Зачем</th><th>Что нужно</th></tr></thead>
-      <tbody>
-        <tr><td>Giga-Embeddings-instruct-10B-A1.8B</td><td>проверить верх линейки Giga на нашем корпусе (в карточке MTEB rus 74.99 против 74.57 у 3B)</td><td>GPU; запуск через vLLM с флагами pooling/embed и trust-remote-code</td></tr>
-        <tr><td>Giga-Embeddings-instruct-3B-0826 на GPU</td><td>сравнить с CPU-прогоном и с действующей моделью по скорости</td><td>GPU (на CPU считается, но медленно)</td></tr>
-        <tr><td>Реранкер bge-reranker-v2-m3</td><td>перемерить реранкер на большем наборе: прошлый (flashrank MultiBERT) по замеру ухудшал ответы</td><td>GPU желателен; на CPU уже стоит в Ollama</td></tr>
-        <tr><td>Переиндексация корпуса под выбранную модель</td><td>только после победы кандидата: другая размерность — отдельная коллекция Qdrant и полный пересчёт эмбеддингов</td><td>GPU ускоряет, но не обязателен</td></tr>
-      </tbody>
-    </table>
-  </details>
-
-  <details>
-    <summary>История замеров и решения</summary>
-    <div id="history" class="note"></div>
-  </details>
-
-  <div class="panel">
-    <h2>Методика: как мы измеряем</h2>
-    <div class="note">
-      <b>Поиск.</b> Набор вопросов с эталонными ответами; для ранжирования сравниваем ранг фрагмента с ответом.<br>
-      <b>Ответы.</b> LLM-судья по рубрике; шум судьи ±0.04 на 20 вопросах, поэтому базу и вариант измеряем в одном заходе,
-      а разницу меньше ~0.05 считаем отсутствием эффекта.<br>
-      <b>Стоимость.</b> Внешние модели для судейства — только дешёвые, с журналом расходов и дневным лимитом.
-    </div>
-  </div>
-</main>
-<script src="/static/branding.js"></script>
-<script>
+    </div></details><details><summary>Что дальше: опыты, которым нужен GPU</summary><table><thead><tr><th>Опыт</th><th>Зачем</th><th>Что нужно</th></tr></thead><tbody><tr><td>Giga-Embeddings-instruct-10B-A1.8B</td><td>проверить верх линейки Giga на нашем корпусе (в карточке MTEB rus 74.99 против 74.57 у 3B)</td><td>GPU; запуск через vLLM с флагами pooling/embed и trust-remote-code</td></tr><tr><td>Giga-Embeddings-instruct-3B-0826 на GPU</td><td>сравнить с CPU-прогоном и с действующей моделью по скорости</td><td>GPU (на CPU считается, но медленно)</td></tr><tr><td>Реранкер bge-reranker-v2-m3</td><td>перемерить реранкер на большем наборе: прошлый (flashrank MultiBERT) по замеру ухудшал ответы</td><td>GPU желателен; на CPU уже стоит в Ollama</td></tr><tr><td>Переиндексация корпуса под выбранную модель</td><td>только после победы кандидата: другая размерность — отдельная коллекция Qdrant и полный пересчёт эмбеддингов</td><td>GPU ускоряет, но не обязателен</td></tr></tbody></table></details><details><summary>История замеров и решения</summary><div id="history" class="note"></div></details><div class="panel"><h2>Методика: как мы измеряем</h2><div class="note"><b>Поиск.</b> Набор вопросов с эталонными ответами; для ранжирования сравниваем ранг фрагмента с ответом.<br><b>Ответы.</b> LLM-судья по рубрике; шум судьи ±0.04 на 20 вопросах, поэтому базу и вариант измеряем в одном заходе,
+      а разницу меньше ~0.05 считаем отсутствием эффекта.<br><b>Стоимость.</b> Внешние модели для судейства — только дешёвые, с журналом расходов и дневным лимитом.
+    </div></div></main>
+<script src="/static/branding.js"></script><script>
 const API = '/api/v1';
 
 const FALLBACK = {
@@ -277,5 +168,4 @@ fetch(API + '/admin/models/experiments', { headers: { 'Content-Type': 'applicati
   .then(function (d) { if (d && d.embedders) render(d); })
   .catch(function () { /* остаются встроенные данные */ });
 </script>
-</body>
-</html>
+</body></html>

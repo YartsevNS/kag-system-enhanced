@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
 try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KAG — Setup Wizard</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>KAG — Setup Wizard</title>
 <style>
 :root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--emerald:#10b981;--red:#e5484d;--red2:#dc2626;--amber:#f5a623;--purple:#8b5cf6;--border:#2e2e2e;--border-s:#242424;--border-strong:#363636;--accent-border:rgba(62,207,142,0.3);--radius:8px;--radius-sm:6px;--radius-lg:16px;--radius-pill:9999px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace;--font-mono:'Cascadia Code','Fira Code','Consolas',monospace;}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -61,9 +57,7 @@ nav a.active{color:var(--text);background:rgba(255,255,255,0.06)}
 
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
-</style>
-
-<style>
+</style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
    Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
    (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
@@ -79,52 +73,9 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css">
-</head>
-<body>
-    <nav>
- <div class="logo">KAG <span>System</span></div>
- <a href="/setup" class="active"><span></span> Setup</a>
- </nav>
-    <div class="main-content">
-        <div class="container">
-            <div class="page-logo"> KAG System</div>
-            <div class="subtitle">Первоначальная настройка системы</div>
-
-            <!-- Шаг 1: Инициализация -->
-            <div class="step" id="init-step">
-                <div class="step-header"><span class="step-num">1</span> Инициализация</div>
-                <div class="step-desc">
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo">KAG <span>System</span></div><a href="/setup" class="active"><span></span> Setup</a></nav><div class="main-content"><div class="container"><div class="page-logo"> KAG System</div><div class="subtitle">Первоначальная настройка системы</div><!-- Шаг 1: Инициализация --><div class="step" id="init-step"><div class="step-header"><span class="step-num">1</span> Инициализация</div><div class="step-desc">
                     Система создаст базы данных и администратора. Пароли к БД генерируются автоматически и <strong>не сохраняются</strong> — сохраните их сейчас.
-                </div>
-
-                <div class="progress" id="progress">
-                    <div class="progress-label" id="progress-text">Инициализация...</div>
-                    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-                </div>
-                <div class="status-box" id="init-status"></div>
-
-                <!-- Credentials (появляются после успеха) -->
-                <div class="creds-grid" id="creds-grid"></div>
-
-                <!-- Кнопка инициализации -->
-                <button class="btn-init" id="btn-init" onclick="initAll()">🚀 Initialize ALL</button>
-
-                <!-- Действия после успеха -->
-                <div class="actions-row" id="actions-row">
-                    <button class="btn btn-outline" onclick="downloadCreds()">📥 Скачать credentials</button>
-                    <button class="btn btn-success" onclick="goToAdmin()">🛡️ Перейти в админку</button>
-                </div>
-            </div>
-
-            <!-- Шаг 2: Уже настроено -->
-            <div class="step" id="done-step" style="display:none">
-                <div class="step-header"><span class="step-num">✅</span> Система настроена</div>
-                <div class="status-box success" id="done-msg" style="margin-bottom:16px">✅ Система готова к работе</div>
-                <button class="btn btn-lg" onclick="window.location.href='/admin'">🛡️ Перейти в админку</button>
-            </div>
-        </div>
-    </div>
+                </div><div class="progress" id="progress"><div class="progress-label" id="progress-text">Инициализация...</div><div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div></div><div class="status-box" id="init-status"></div><!-- Credentials (появляются после успеха) --><div class="creds-grid" id="creds-grid"></div><!-- Кнопка инициализации --><button class="btn-init" id="btn-init" onclick="initAll()"> Initialize ALL</button><!-- Действия после успеха --><div class="actions-row" id="actions-row"><button class="btn btn-outline" onclick="downloadCreds()"> Скачать credentials</button><button class="btn btn-success" onclick="goToAdmin()"> Перейти в админку</button></div></div><!-- Шаг 2: Уже настроено --><div class="step" id="done-step" style="display:none"><div class="step-header"><span class="step-num"></span> Система настроена</div><div class="status-box success" id="done-msg" style="margin-bottom:16px"> Система готова к работе</div><button class="btn btn-lg" onclick="window.location.href='/admin'"> Перейти в админку</button></div></div></div>
 
 <script>
 const API = '/api/v1/setup';
@@ -138,7 +89,7 @@ let _creds = null;
         if (d.configured) {
             document.getElementById('init-step').style.display = 'none';
             document.getElementById('done-step').style.display = 'block';
-            document.getElementById('done-msg').textContent = '✅ Система настроена ' + (d.timestamp ? ' (' + new Date(d.timestamp).toLocaleString() + ')' : '');
+            document.getElementById('done-msg').textContent = '✓ Система настроена ' + (d.timestamp ? ' (' + new Date(d.timestamp).toLocaleString() + ')' : '');
         }
     } catch(e) { /* ignore */ }
 })();
@@ -151,7 +102,7 @@ async function initAll() {
     const status = document.getElementById('init-status');
 
     btn.disabled = true;
-    btn.textContent = '⏳ Инициализация...';
+    btn.textContent = '… Инициализация...';
     progress.classList.add('active');
     status.className = 'status-box';
     status.style.display = 'none';
@@ -178,25 +129,25 @@ async function initAll() {
             document.getElementById('actions-row').classList.add('show');
 
             status.className = 'status-box success';
-            status.textContent = '✅ ' + (data.message || 'Система готова к работе');
+            status.textContent = '✓ ' + (data.message || 'Система готова к работе');
             status.style.display = 'block';
         } else {
             fill.style.width = '0%';
             label.textContent = 'Ошибка';
             status.className = 'status-box error';
-            status.textContent = '❌ ' + (data.detail || data.message || 'Неизвестная ошибка');
+            status.textContent = '✕ ' + (data.detail || data.message || 'Неизвестная ошибка');
             status.style.display = 'block';
             btn.disabled = false;
-            btn.textContent = '🚀 Initialize ALL';
+            btn.textContent = ' Initialize ALL';
         }
     } catch (err) {
         fill.style.width = '0%';
         label.textContent = 'Ошибка сети';
         status.className = 'status-box error';
-        status.textContent = '❌ ' + err.message;
+        status.textContent = '✕ ' + err.message;
         status.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = '🚀 Initialize ALL';
+        btn.textContent = ' Initialize ALL';
     }
 }
 
@@ -206,19 +157,19 @@ function renderCreds(c) {
 
     // PostgreSQL
     if (c.postgresql && c.postgresql.password) {
-        html += '<div class="creds-card"><h4>🐘 PostgreSQL</h4>';
+        html += '<div class="creds-card"><h4> PostgreSQL</h4>';
         html += '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-value">' + esc(c.postgresql.host||'kag-db') + ':' + (c.postgresql.port||5432) + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-value">' + esc(c.postgresql.name||'kag') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">' + esc(c.postgresql.user||'kag') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value">' + esc(c.postgresql.password) + '</span></div>';
         html += '</div>';
     } else if (c.postgresql && c.postgresql.error) {
-        html += '<div class="creds-card"><h4>🐘 PostgreSQL</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.postgresql.error) + '</div></div>';
+        html += '<div class="creds-card"><h4> PostgreSQL</h4><div style="color:var(--red);font-size:13px">✕ ' + esc(c.postgresql.error) + '</div></div>';
     }
 
     // Keycloak DB
     if (c.keycloak_db && c.keycloak_db.password) {
-        html += '<div class="creds-card"><h4>🔐 Keycloak DB</h4>';
+        html += '<div class="creds-card"><h4> Keycloak DB</h4>';
         html += '<div class="creds-row"><span class="creds-label">Хост</span><span class="creds-value">' + esc(c.keycloak_db.host||'kag-db') + ':' + (c.keycloak_db.port||5432) + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">БД</span><span class="creds-value">' + esc(c.keycloak_db.name||'keycloak') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">' + esc(c.keycloak_db.user||'keycloak') + '</span></div>';
@@ -228,7 +179,7 @@ function renderCreds(c) {
 
     // Qdrant
     if (c.qdrant && c.qdrant.collection) {
-        html += '<div class="creds-card"><h4>📊 Qdrant</h4>';
+        html += '<div class="creds-card"><h4> Qdrant</h4>';
         html += '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-value">' + esc(c.qdrant.url||'http://qdrant:6333') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Коллекция</span><span class="creds-value">' + esc(c.qdrant.collection) + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Размерность</span><span class="creds-value">' + esc(String(c.qdrant.dimensions||'1024')) + '</span></div>';
@@ -237,29 +188,29 @@ function renderCreds(c) {
         }
         html += '</div>';
     } else if (c.qdrant && c.qdrant.error) {
-        html += '<div class="creds-card"><h4>📊 Qdrant</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.qdrant.error) + '</div></div>';
+        html += '<div class="creds-card"><h4> Qdrant</h4><div style="color:var(--red);font-size:13px">✕ ' + esc(c.qdrant.error) + '</div></div>';
     }
 
     // Neo4j
     if (c.neo4j && c.neo4j.bolt) {
-        html += '<div class="creds-card"><h4>🧠 Neo4j</h4>';
+        html += '<div class="creds-card"><h4> Neo4j</h4>';
         html += '<div class="creds-row"><span class="creds-label">URL</span><span class="creds-value">' + esc(c.neo4j.http||'http://neo4j:7474') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Bolt</span><span class="creds-value">' + esc(c.neo4j.bolt) + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пользователь</span><span class="creds-value">neo4j</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value">' + esc(c.neo4j.password||'***') + '</span></div>';
         html += '</div>';
     } else if (c.neo4j && c.neo4j.error) {
-        html += '<div class="creds-card"><h4>🧠 Neo4j</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.neo4j.error) + '</div></div>';
+        html += '<div class="creds-card"><h4> Neo4j</h4><div style="color:var(--red);font-size:13px">✕ ' + esc(c.neo4j.error) + '</div></div>';
     }
 
     // Admin
     if (c.admin && c.admin.password) {
-        html += '<div class="creds-card creds-full"><h4>🛡️ Администратор</h4>';
+        html += '<div class="creds-card creds-full"><h4> Администратор</h4>';
         html += '<div class="creds-row"><span class="creds-label">Логин</span><span class="creds-value">' + esc(c.admin.login||'admin') + '</span></div>';
         html += '<div class="creds-row"><span class="creds-label">Пароль</span><span class="creds-value admin-pwd">' + esc(c.admin.password) + '</span></div>';
         html += '</div>';
     } else if (c.admin && c.admin.error) {
-        html += '<div class="creds-card creds-full"><h4>🛡️ Администратор</h4><div style="color:var(--red);font-size:13px">❌ ' + esc(c.admin.error) + '</div></div>';
+        html += '<div class="creds-card creds-full"><h4> Администратор</h4><div style="color:var(--red);font-size:13px">✕ ' + esc(c.admin.error) + '</div></div>';
     }
 
     grid.innerHTML = html;
@@ -350,7 +301,5 @@ async function goToAdmin() {
     // Редирект на /admin
     window.location.href = '/admin';
 }
-</script>
-<script src="/static/branding.js"></script>
-</body>
-</html>
+</script><script src="/static/branding.js"></script>
+</body></html>
