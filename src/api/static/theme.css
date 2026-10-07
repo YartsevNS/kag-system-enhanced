@@ -265,47 +265,75 @@ nav > a[onclick*="logout"] {
     font-family: var(--font-display); font-size: 17px;
 }
 .kag-nav-close { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; }
-/* ── Телефон: узкий экран (проверено на 360, 390, 412, 430, 480, 673 px) ─────────
-   Что было: боковая колонка 240px не пряталась нигде, кроме чата, — на телефоне висело
-   сжатое меню («Да…», «Чак…») и содержимое сжималось в полоску 150px, а бургер дублировал меню.
-   Что стало: колонку прячем, меню даёт бургер и выезжающая панель, содержимое занимает весь экран,
-   места нажатия увеличиваем до удобных пальцу (44px). Таблицы прокручиваются внутри себя. */
+/* ── Телефон: узкий экран ────────────────────────────────────────────────────────
+   Сделано по практике 2026 (проверено на 360x780, 390x844, 393x852, 412x914, 430x932 и в развороте):
+   • безопасные зоны через env(safe-area-inset-*) — вырез/динамический остров сверху, домашняя полоса снизу;
+     в <meta viewport> добавлен viewport-fit=cover, иначе значения всегда нули;
+   • высота считается динамически (dvh), потому что 100vh на телефоне выше видимой области
+     из-за панели браузера — плавающие панели (ввод в чате) уезжали под неё;
+   • текст и поля 16px: в Safari поле со шрифтом меньше 16px вызывает автозум и ломает раскладку;
+   • цели нажатия не меньше 44px (требование Apple; Android рекомендует 48px);
+   • боковая колонка скрыта, меню даёт бургер и выезжающая панель (раньше колонка висела сжатой);
+   • таблицы прокручиваются внутри себя, панели действий переносятся, фильтры — сеткой 2 в ряд. */
 @media (max-width: 768px) {
     nav { display: none !important; }
-    .kag-burger { display: inline-flex; }
+
+    .kag-burger {
+        display: inline-flex;
+        top: calc(env(safe-area-inset-top, 0px) + 10px);
+        left: calc(env(safe-area-inset-left, 0px) + 12px);
+        width: 44px; height: 44px;
+    }
+
     main, .main, .content, .container {
         margin-left: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
-        padding: 56px var(--sp-page) 20px !important;   /* 56px сверху — чтобы бургер не наезжал на заголовок */
+        padding:
+            calc(env(safe-area-inset-top, 0px) + 62px)
+            calc(var(--sp-page) + env(safe-area-inset-right, 0px))
+            calc(28px + env(safe-area-inset-bottom, 0px))
+            calc(var(--sp-page) + env(safe-area-inset-left, 0px)) !important;
     }
-    /* Панель меню: пункт не меньше 44px по высоте — иначе палец мажет */
-    .kag-nav-drawer .nav-item { padding: 13px 20px; font-size: 15px; }
+
+    /* Панель меню: пункты удобного размера, учтены безопасные зоны сверху и снизу */
+    .kag-nav-drawer {
+        width: min(88vw, 340px);
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        padding-left: env(safe-area-inset-left, 0px);
+    }
+    .kag-nav-drawer .nav-item { padding: 13px 20px; font-size: 16px; min-height: 44px; }
     .kag-nav-drawer .nav-group { padding: 16px 20px 6px; font-size: 12px; }
-    .kag-nav-drawer-head { padding: 14px 16px 8px; }
     .kag-nav-close { width: 44px; height: 44px; font-size: 26px; }
-    .kag-nav-drawer .kag-theme-toggle { margin: 12px 20px 0; padding: 11px 14px; }
-    /* Широкие таблицы и код не распирают экран, а прокручиваются */
+
+    /* Чат: панель ввода не уезжает под домашнюю полосу, высота — по видимой области */
+    .app { height: 100vh; height: 100dvh; }
+    .input-area { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
+    .input-area textarea, .message-input { font-size: 16px !important; }
+    .send-btn { width: 46px; height: 46px; min-width: 46px; }
+
+    /* Панели действий и шапки переносим, а не сжимаем */
+    .toolbar, .header, .actions, .view-toggle, .header-actions, .filters-row { flex-wrap: wrap; }
+
+    /* Фильтры: сетка 2 в ряд, поиск на всю ширину (лента из пяти списков съедала экран) */
+    .filters { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+    .filters input[type="text"], .filters input[type="search"] { grid-column: 1 / -1; }
+
+    /* Размеры и нажатия */
+    body { font-size: 16px; }
+    input, select, textarea { font-size: 16px !important; min-height: 44px; }
+    button, .btn, .header-btn, .new-chat-btn { min-height: 44px; }
+    .card, .section { padding: 14px !important; }
+
+    /* Широкие таблицы и код прокручиваются внутри себя, страница остаётся ровной */
     table, pre { display: block; overflow-x: auto; max-width: 100%; }
-    /* Поля ввода и кнопки — не мельче 44px, шрифт не меньше 16px (иначе Safari зумит) */
-    input, select, textarea, button, .btn { min-height: 40px; }
-    input, select, textarea { font-size: 16px; }
+    h1 { font-size: clamp(22px, 6vw, 30px); }
 }
 
-/* ── Кнопки прямоугольные (требование владельца, 05.10.2026) ────────────────
-   Было: primary-кнопки «таблетками» (9999px) по старой теме Supabase. Из-за этого на «Документах»
-   переключатель вида выглядел разнобоем — «Обновить» овальная, «Таблица» и «Карточки» прямоугольные.
-   Стало: один радиус у всех кнопок и управляющих элементов, включая страницу входа, админку и чат.
-   !important стоит осознанно: часть страниц задаёт радиус своим правилом с !important (правило темы
-   подключено последним, поэтому перекрывает) и в inline-стилях. Круглые значки и плашки-бейджи
-   (.tag у <span>, аватары, индикаторы) под правило не попадают — это не кнопки. */
-button, input[type="submit"], input[type="button"], input[type="reset"],
-.btn, .btn-primary, .btn-secondary, .btn-ghost, .btn-outline, .btn-sm, .btn-danger,
-a.btn, button.tag, .header-btn, .new-chat-btn, .send-btn, .tab, .toolbar .btn-accent,
-.kg-mode, .kag-theme-toggle, .kag-burger, .kag-nav-close, .kag-nav-drawer .nav-item,
-.site-nav-block .nav-item {
-    border-radius: var(--radius-btn) !important;
-}
+/* Общая защита от случайной горизонтальной прокрутки и автоподгонки текста */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { max-width: 100%; overflow-x: clip; }
 
 /* ── Переключатель темы ───────────────────────────────────────────────────── */
 .kag-theme-toggle {

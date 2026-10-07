@@ -65,10 +65,19 @@ def main() -> None:
         print(f"вход: {r.status} | экран {W}x{H} (телефон)")
         page = ctx.new_page()
 
+        # Ошибки страницы: JS-исключения и сообщения консоли об ошибках (запросы, разбор данных и т.п.)
+        errors = []
+        page.on("pageerror", lambda e: errors.append(f"исключение: {str(e)[:140]}"))
+        page.on("console", lambda m: errors.append(f"консоль: {m.text[:140]}")
+                if m.type == "error" else None)
+        page.on("requestfailed", lambda r: errors.append(f"запрос не прошёл: {r.url[:90]}"))
+        seen_errors = set()
+
         problems = []
         for path in PAGES:
             page.goto(f"{BASE}{path}")
             page.wait_for_timeout(1800)
+            errors.clear()
             m = page.evaluate(MEASURE)
             name = f"{path.strip('/').replace('/', '_') or 'root'}_{W}"
             if not SKIP_SHOTS:
@@ -81,6 +90,12 @@ def main() -> None:
             if m["smallCount"] > 0:
                 problems.append(f"{path}: мест нажатия уже 40px — {m['smallCount']} "
                                 f"(напр. {m['small'][0]['text']!r} {m['small'][0]['size']})")
+            for e in errors:
+                if e not in seen_errors:
+                    seen_errors.add(e)
+                    problems.append(f"{path}: {e}")
+            if errors:
+                print(f"      ошибок на странице: {len(errors)}")
             if os.environ.get("SHOW_TARGETS") == "1" and m["smallCount"]:
                 det = page.evaluate("""() => {
                     const out = [];
