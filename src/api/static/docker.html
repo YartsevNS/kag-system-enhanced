@@ -49,6 +49,23 @@ tr:hover td{background:rgba(255,255,255,0.015)}
 /* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
 </style>
+
+<style>
+/* ==== Сдерживание раскладки (05.10.2026) ====
+   Причина: главный flex-элемент (main/.main) без min-width:0 не сжимается, и широкий контент
+   (таблицы в ответах, длинные строки и URL, картинки) распирает страницу — появляется
+   горизонтальная прокрутка, а боковое меню уезжает за левый край («меню исчезло»).
+   Проверено приборно: при 800px широкий ответ давал scrollWidth 1046 при клиентских 800. */
+main, .main, .content, .container { min-width: 0; max-width: 100%; }
+.content table, main table, .main table { max-width: 100%; }
+/* Таблицы внутри ответов и markdown-блоков прокручиваются сами, страницу не растягивают */
+.md table, .bubble table, .message table, .chat-table { display: block; overflow-x: auto; max-width: 100%; }
+pre, code { max-width: 100%; }
+pre { overflow-x: auto; }
+img, svg, video, canvas, iframe { max-width: 100%; }
+/* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
+.md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
+</style>
 </head>
 <body>
 <nav>
