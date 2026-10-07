@@ -22,6 +22,7 @@ OUT = os.environ.get("OUT_DIR", "/work/mobile")
 W = int(os.environ.get("WIDTH", "375"))
 H = int(os.environ.get("HEIGHT", "812"))
 PAGES = os.environ.get("PAGES", "/documents,/chat,/admin,/kg,/login").split(",")
+SKIP_SHOTS = os.environ.get("SKIP_SHOTS", "") == "1"
 
 MEASURE = """() => {
     const de = document.documentElement;
@@ -69,8 +70,9 @@ def main() -> None:
             page.goto(f"{BASE}{path}")
             page.wait_for_timeout(1800)
             m = page.evaluate(MEASURE)
-            name = path.strip("/").replace("/", "_") or "root"
-            page.screenshot(path=f"{OUT}/{name}.png")
+            name = f"{path.strip('/').replace('/', '_') or 'root'}_{W}"
+            if not SKIP_SHOTS:
+                page.screenshot(path=f"{OUT}/{name}.png")
             status = []
             if m["overflow"] > 2:
                 status.append(f"прокрутка вбок +{m['overflow']}px")
@@ -79,7 +81,7 @@ def main() -> None:
             if m["smallCount"] > 0:
                 problems.append(f"{path}: мест нажатия уже 40px — {m['smallCount']} "
                                 f"(напр. {m['small'][0]['text']!r} {m['small'][0]['size']})")
-            print(f"  {path:12} прокрутка вбок: {m['overflow']:>3}px | "
+            print(f"  {W:>4}px {path:11} прокрутка вбок: {m['overflow']:>3}px | "
                   f"узких нажатий: {m['smallCount']:>2} | {'; '.join(status) if status else 'ок'}")
 
             # бургер и панель меню
@@ -94,7 +96,8 @@ def main() -> None:
                                            "return !!d && d.classList.contains('open'); }")
                     items = page.evaluate("() => document.querySelectorAll('.kag-nav-drawer .nav-item').length")
                     print(f", панель {'открылась' if opened else 'НЕ открылась'}, пунктов {items}")
-                    page.screenshot(path=f"{OUT}/{name}_menu.png")
+                    if not SKIP_SHOTS:
+                        page.screenshot(path=f"{OUT}/{name}_menu.png")
                     if not opened or items == 0:
                         problems.append(f"{path}: панель меню не открывается по бургеру")
                 else:
