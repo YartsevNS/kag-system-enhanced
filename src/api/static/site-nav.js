@@ -144,6 +144,17 @@
     burger.innerHTML = '&#9776;';
     burger.addEventListener('click', openDrawer);
 
+    // Переключатель темы в панели: на телефоне плавающая кнопка внизу наезжала на поля ввода
+    if (window.KAGTheme) {
+      var themeBtn = document.createElement('button');
+      themeBtn.type = 'button';
+      themeBtn.className = 'kag-theme-toggle';
+      themeBtn.style.margin = '14px 20px 0';
+      themeBtn.textContent = window.KAGTheme.get() === 'dark' ? 'Светлая' : 'Тёмная';
+      themeBtn.addEventListener('click', function () { window.KAGTheme.toggle(); });
+      drawer.appendChild(themeBtn);
+    }
+
     document.body.appendChild(backdrop);
     document.body.appendChild(drawer);
     document.body.appendChild(burger);

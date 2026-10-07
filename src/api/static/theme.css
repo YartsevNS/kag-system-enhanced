@@ -323,7 +323,10 @@ nav > a[onclick*="logout"] {
     /* Размеры и нажатия */
     body { font-size: 16px; }
     input, select, textarea { font-size: 16px !important; min-height: 44px; }
-    button, .btn, .header-btn, .new-chat-btn { min-height: 44px; }
+    button, .btn, .header-btn, .new-chat-btn { min-height: 44px; min-width: 44px; }
+    /* Действия в карточках документа (счётчик чанков и кнопки) — не мельче 36px */
+    .doc-card .card-meta, .doc-card .card-title { font-size: 12px !important; }
+    .doc-card .card-meta a { display: inline-flex; align-items: center; min-height: 36px; }
     .card, .section { padding: 14px !important; }
 
     /* Широкие таблицы и код прокручиваются внутри себя, страница остаётся ровной */

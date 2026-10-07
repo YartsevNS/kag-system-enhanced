@@ -79,6 +79,9 @@
     // Страница может иметь свой переключатель (например, админка: #theme-toggle) — не дублируем.
     if (document.querySelector('.kag-theme-toggle') || document.querySelector('#theme-toggle')
         || document.querySelector('[onclick*="toggleTheme"]')) return;
+    // На телефоне переключатель живёт в панели меню (site-nav.js): плавающая кнопка внизу
+    // наезжала на поля ввода и кнопку отправки.
+    if (window.innerWidth <= 768) return;
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'kag-theme-toggle float';
