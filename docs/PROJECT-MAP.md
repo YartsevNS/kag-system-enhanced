@@ -109,6 +109,14 @@ dev mode в prod mode). Правки redirect URIs руками НЕ требу�
 - Все замеры по OCR и таблицам — `docs/guides/table-structure-bakeoff.md`
 - Выбор OCR-движка — `docs/guides/ocr-engine-selection.md`, `ocr-engine-switch.md`, `ocr-settings-admin-guide.md`
 - Наблюдаемость, граф, чанкинг, чат, права — `docs/guides/*.md`
+- Интерфейс и внешний вид: общий слой темы `src/api/static/theme.css` (светлая по умолчанию, тёмная —
+  вариант, телефонный слой), меню одним компонентом `src/api/static/site-nav.js`, знак и оформление
+  `branding.js`, настройка шрифта/цветов/контраста — в админке, раздел «Оформление»
+- Порядок работы с внешним видом и грабли — `docs/skills/kag-ui-theme-typography/SKILL.md`
+- Проверки вида и разметки — `scripts/bakeoff/`: `ui_shots.py` (снимки тем и элементов),
+  `mobile_check.py` (телефонные размеры, бургер, нажатия, ошибки страниц), `buttons_check.py` (форма кнопок),
+  `preview_check.py` (превью — страница A4 с полями и рамка), `contrast_check.py` (контраст WCAG),
+  `markup_sanity.py` (обрубки разметки), `appearance_probe.py` и `role_visibility_probe.py` (настройки и права)
 - Инструменты замеров и рендер страниц — `scripts/bakeoff/`
 - Состояние «здесь и сейчас» (что выкачено, что включено) — долгая память Mnemosyne: снимки состояния,
   карта образов, кейс переезда, открытые хвосты
