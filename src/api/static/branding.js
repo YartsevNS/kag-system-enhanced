@@ -121,7 +121,10 @@
       a.href = '/experiments';
       a.className = 'nav-item';
       a.innerHTML = '<span class="icon">🧪</span> <span>Опыты и модели</span>';
-      list.appendChild(a);
+      var adminItems = list.querySelectorAll('a[href="/admin"], a[href="/users"]');
+      var anchor = adminItems.length ? adminItems[adminItems.length - 1] : null;
+      if (anchor && anchor.parentElement === list) anchor.insertAdjacentElement('afterend', a);
+      else list.appendChild(a);
     })
     .catch(function () { /* не админ или нет связи — ссылки просто нет */ });
 })();
