@@ -265,7 +265,32 @@ nav > a[onclick*="logout"] {
     font-family: var(--font-display); font-size: 17px;
 }
 .kag-nav-close { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; }
-@media (max-width: 768px) { .kag-burger { display: inline-flex; } }
+/* ── Телефон: узкий экран (проверено на 360, 390, 412, 430, 480, 673 px) ─────────
+   Что было: боковая колонка 240px не пряталась нигде, кроме чата, — на телефоне висело
+   сжатое меню («Да…», «Чак…») и содержимое сжималось в полоску 150px, а бургер дублировал меню.
+   Что стало: колонку прячем, меню даёт бургер и выезжающая панель, содержимое занимает весь экран,
+   места нажатия увеличиваем до удобных пальцу (44px). Таблицы прокручиваются внутри себя. */
+@media (max-width: 768px) {
+    nav { display: none !important; }
+    .kag-burger { display: inline-flex; }
+    main, .main, .content, .container {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 56px var(--sp-page) 20px !important;   /* 56px сверху — чтобы бургер не наезжал на заголовок */
+    }
+    /* Панель меню: пункт не меньше 44px по высоте — иначе палец мажет */
+    .kag-nav-drawer .nav-item { padding: 13px 20px; font-size: 15px; }
+    .kag-nav-drawer .nav-group { padding: 16px 20px 6px; font-size: 12px; }
+    .kag-nav-drawer-head { padding: 14px 16px 8px; }
+    .kag-nav-close { width: 44px; height: 44px; font-size: 26px; }
+    .kag-nav-drawer .kag-theme-toggle { margin: 12px 20px 0; padding: 11px 14px; }
+    /* Широкие таблицы и код не распирают экран, а прокручиваются */
+    table, pre { display: block; overflow-x: auto; max-width: 100%; }
+    /* Поля ввода и кнопки — не мельче 44px, шрифт не меньше 16px (иначе Safari зумит) */
+    input, select, textarea, button, .btn { min-height: 40px; }
+    input, select, textarea { font-size: 16px; }
+}
 
 /* ── Кнопки прямоугольные (требование владельца, 05.10.2026) ────────────────
    Было: primary-кнопки «таблетками» (9999px) по старой теме Supabase. Из-за этого на «Документах»
