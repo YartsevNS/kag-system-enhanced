@@ -150,7 +150,20 @@
 }
 
 /* ── Основа ───────────────────────────────────────────────────────────────── */
-body { background: var(--bg); color: var(--text); font-size: var(--fs-base); font-weight: var(--fw-base); }
+/* Шрифт, размер и толщина — из переменных темы, чтобы настройка из админки действовала
+   и на тексте, и на элементах форм (они не наследуют шрифт автоматически).
+   Свои правила страниц про шрифт перекрываются: этот файл подключён последним. */
+body {
+    background: var(--bg); color: var(--text);
+    font-size: var(--fs-base); font-weight: var(--fw-base);
+}
+body, button, input, select, textarea, p, li, td, th, label {
+    font-family: var(--font);
+}
+/* Код и моноширинные значения остаются моноширинными независимо от настройки */
+pre, code, kbd, samp, .mono, .monospace {
+    font-family: var(--mono);
+}
 /* Витрина — засечки: заголовки страниц, знак, подписи групп меню */
 h1, h2, .brand-name, .wordmark { font-family: var(--font-display); }
 h1 { font-size: var(--fs-h1); font-weight: 400; letter-spacing: 0.005em; }
