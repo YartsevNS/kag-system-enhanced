@@ -265,6 +265,21 @@ nav > a[onclick*="logout"] {
     font-family: var(--font-display); font-size: 17px;
 }
 .kag-nav-close { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; }
+/* ── Кнопки прямоугольные (требование владельца, 05.10.2026) ────────────────
+   Было: primary-кнопки «таблетками» (9999px) по старой теме Supabase — из-за этого на «Документах»
+   переключатель вида выглядел разнобоем («Обновить» овальная, «Таблица» и «Карточки» прямоугольные).
+   Стало: один радиус у всех кнопок и управляющих элементов, включая страницу входа, админку и чат.
+   !important стоит осознанно: часть страниц задаёт радиус своим правилом с !important и в inline-стилях;
+   правило темы подключено последним, поэтому перекрывает. Круглые плашки-бейджи (<span class="tag">),
+   аватары и индикаторы — не кнопки, их вид сохраняется. Проверка: scripts/bakeoff/buttons_check.py. */
+button, input[type="submit"], input[type="button"], input[type="reset"],
+.btn, .btn-primary, .btn-secondary, .btn-ghost, .btn-outline, .btn-sm, .btn-danger,
+a.btn, button.tag, .header-btn, .new-chat-btn, .send-btn, .tab, .toolbar .btn-accent,
+.kg-mode, .kag-theme-toggle, .kag-burger, .kag-nav-close, .kag-nav-drawer .nav-item,
+.site-nav-block .nav-item {
+    border-radius: var(--radius-btn) !important;
+}
+
 /* ── Телефон: узкий экран ────────────────────────────────────────────────────────
    Сделано по практике 2026 (проверено на 360x780, 390x844, 393x852, 412x914, 430x932 и в развороте):
    • безопасные зоны через env(safe-area-inset-*) — вырез/динамический остров сверху, домашняя полоса снизу;
