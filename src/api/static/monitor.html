@@ -147,7 +147,7 @@ async function loadSources() {
             '<td>' + (s.items_found||0) + '</td>' +
             '<td>' + (s.items_uploaded||0) + '</td>' +
             '<td style="font-size:11px;color:var(--text4)">' + lastCheck + '</td>' +
-            '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--panel);border:1px solid var(--border);cursor:pointer;border-radius:4px" onclick="editSource(\'' + s.id + '\')" title="Редактировать">Изменить</button> <button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">Изменить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
+            '<td style="white-space:nowrap"><button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--panel);border:1px solid var(--border);cursor:pointer;border-radius:4px" onclick="editSource(\'' + s.id + '\')" title="Редактировать">Изменить</button> <button class="btn-outline" style="font-size:11px;padding:4px 8px;background:var(--accent);color:#fff;border:none;cursor:pointer;border-radius:4px" onclick="runCheck(\'' + s.id + '\')" title="Запустить проверку">Проверить</button> <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteSource(\'' + s.id + '\')">✕</button></td>' +
             '</tr>';
         });
         html += '</tbody></table></div></details></div>';
