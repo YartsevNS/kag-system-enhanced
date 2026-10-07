@@ -16,6 +16,10 @@ PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 OUT = os.environ.get("OUT_DIR", "/work")
 WIDTH = int(os.environ.get("WIDTH", "1440"))
 PAGES = os.environ.get("PAGES", "/chat,/documents,/admin,/kg,/docs,/architecture").split(",")
+# Необязательно: селектор, к которому прокрутить перед снимком (например, панель «Оформление»)
+SCROLL = os.environ.get("SCROLL_SELECTOR", "")
+# Необязательно: селектор элемента — тогда снимок делается только по нему (удобно для панелей)
+ELEMENT = os.environ.get("ELEMENT_SELECTOR", "")
 
 
 def main() -> None:
@@ -34,6 +38,20 @@ def main() -> None:
                 page.evaluate("(t) => { document.documentElement.setAttribute('data-theme', t); "
                               "try{localStorage.setItem('kag-theme', t)}catch(e){} }", theme)
                 page.wait_for_timeout(1800)
+                if SCROLL:
+                    try:
+                        page.locator(SCROLL).first.scroll_into_view_if_needed(timeout=3000)
+                        page.wait_for_timeout(400)
+                    except Exception as e:      # элемент не найден — снимаем как есть
+                        print(f"    прокрутка к {SCROLL} не удалась: {e}")
+                if ELEMENT:
+                    try:
+                        page.locator(ELEMENT).first.screenshot(
+                            path=f"{OUT}/{name}_{theme}_element.png", timeout=5000)
+                        print(f"  {path} [{theme}] -> {name}_{theme}_element.png (элемент)")
+                        continue
+                    except Exception as e:
+                        print(f"    снимок элемента {ELEMENT} не удался: {e}")
                 page.screenshot(path=f"{OUT}/{name}_{theme}.png", full_page=False)
                 print(f"  {path} [{theme}] -> {name}_{theme}.png")
         browser.close()
