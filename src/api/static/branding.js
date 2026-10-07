@@ -72,19 +72,21 @@
     if (!host) return;
     host.classList.add('kag-brand');
     host.insertAdjacentHTML('afterbegin', MARK_SVG);
-    // витринное имя: берём из брендинга, если уже подставлено, иначе оставляем как есть
+    // витринное имя и расшифровка: ставим столбцом внутри блока бренда, чтобы подпись
+    // не уезжала в конец меню (проверено глазами на админке)
     var nameEl = host.querySelector('span, strong, .brand-name');
-    if (nameEl) nameEl.classList.add('brand-name');
-    // расшифровка RAG · KAG · CAG: заполняем существующую подпись или добавляем свою
-    var parent = host.parentElement || host;
-    var sub = parent.querySelector('.subtitle, .brand-sub');
-    if (!sub) {
-      var d = document.createElement('div');
-      d.className = 'brand-sub';
-      parent.appendChild(d);
-      sub = d;
+    var sub = (host.parentElement || host).querySelector('.subtitle, .brand-sub');
+    if (nameEl && !sub) {
+      nameEl.classList.add('brand-name');
+      var col = document.createElement('div');
+      col.className = 'kag-brand-text';
+      host.insertBefore(col, nameEl);
+      col.appendChild(nameEl);
+      sub = document.createElement('div');
+      sub.className = 'brand-sub';
+      col.appendChild(sub);
     }
-    sub.textContent = 'RAG \u00B7 KAG \u00B7 CAG';
+    if (sub) sub.textContent = 'RAG \u00B7 KAG \u00B7 CAG';
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectBrandMark);
   else injectBrandMark();
@@ -120,7 +122,7 @@
       var a = document.createElement('a');
       a.href = '/experiments';
       a.className = 'nav-item';
-      a.innerHTML = '<span class="icon">🧪</span> <span>Опыты и модели</span>';
+      a.innerHTML = '<span>Опыты и модели</span>';
       var adminItems = list.querySelectorAll('a[href="/admin"], a[href="/users"]');
       var anchor = adminItems.length ? adminItems[adminItems.length - 1] : null;
       if (anchor && anchor.parentElement === list) anchor.insertAdjacentElement('afterend', a);
