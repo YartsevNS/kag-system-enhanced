@@ -1,47 +1,41 @@
-# KAG System — Документация проекта
+# KAG System — документация
 
-> Knowledge Augmentation Generation — система управления документами с ИИ: OCR, векторный поиск, граф знаний, чат.
-> **Дата последнего обновления:** 2026-08-23
-> **Ветка:** stable_PyMuPDF
-> **Сервер:** 192.168.50.18 (внутренний), qd.gostsecret.ru (внешний)
+> **Начинать отсюда: [PROJECT-MAP.md](PROJECT-MAP.md)** — карта проекта: назначение, слои, где что лежит,
+> настройки, процедуры сборки/выката/переезда/отката, границы применимости и указатели на всё остальное.
+
+> KAG — self-hosted система работы с документами: OCR → таблицы → векторный поиск → граф знаний → чат
+> по фрагментам с цитированием. Проект **разворачивается у заказчика** (другие сети, другое железо),
+> поэтому живёт артефактами: образы + настройки в админке + документация.
+
+**Обновлено:** 05.10.2026. **Ветка работы:** `paddle-ocr` (PREPROD и TABLES заморожены).
 
 ## Разделы
 
 | Файл | Содержание |
 |---|---|
-| [architecture-current.md](architecture-current.md) | Архитектура (актуальная): сервисы, потоки данных, базы, модули |
-| [ARCHITECTURE-LEGACY.md](ARCHITECTURE-LEGACY.md) | Архитектура (историческая версия из проекта) |
+| [PROJECT-MAP.md](PROJECT-MAP.md) | **Карта проекта** — читать перед любыми изменениями |
+| [architecture-current.md](architecture-current.md) | Архитектура: сервисы, потоки данных, базы, модули |
+| [guides/deploy.md](guides/deploy.md) | Сборка образов, выкат, состав стенда, откат, переезд |
+| [guides/table-structure-bakeoff.md](guides/table-structure-bakeoff.md) | Все замеры OCR и таблиц с обоснованиями |
+| [guides/ocr-engine-selection.md](guides/ocr-engine-selection.md) | Почему PP-OCRv5 и как устроена служба OCR |
+| [guides/](guides/) | Остальные инструкции: чанкинг, поиск, граф, чат, наблюдаемость, права, просмотрщик |
 | [decisions.md](decisions.md) | ADR — ключевые решения и почему |
-| [troubleshooting.md](troubleshooting.md) | Узкие места и проблемы: симптом → причина → решение |
-| [sessions-summary.md](sessions-summary.md) | Сводка по сессиям (детально, без сжатия) |
-| [guides/](guides/) | Инструкции: embedding, чанкинг, граф, деплой, чат, веб-монитор |
+| [tech-debt.md](tech-debt.md) | Отложенное (в т.ч. модуль съёмки с телефона, п.10) |
+| [handoff.md](handoff.md) | Журнал состояния и грабель заходов (исторический, местами устарел) |
+| [ARCHITECTURE-LEGACY.md](ARCHITECTURE-LEGACY.md) | Историческая архитектура (для контекста, не руководство) |
 
-## Ключевые факты (актуально на 2026-08-23)
+Живая схема состава стенда — страница сайта **`/architecture`** (открыта без входа), исходник —
+`src/api/static/architecture.html`.
 
-- **Embedding:** GigaChat `Embeddings`, размерность **1024**, лимит входа ~500 символов (512 токенов)
-- **Чанкинг:** размер **500** символов, overlap **15% (75)** — применяется вручную (RecursiveCharacterTextSplitter игнорирует overlap)
-- **LLM (чат/граф/анализ):** `deepseek-v4-flash` (api.deepseek.com) — ⚠️ граф знаний возвращает ПУСТЫЕ ответы
-- **Worker:** 4 CPU / 12G (лимиты через `${WORKER_CPUS:-4.0}` / `${WORKER_MEMORY:-12G}`)
-- **Очередь:** Celery, redis db=1, QueueGuard (`qguard:{doc_id}`, SET NX, TTL 6ч)
-- **Qdrant:** коллекция `kag_documents`, dense 1024 COSINE (+ sparse, отключён для скорости)
-- **Neo4j:** Community — NODE KEY недоступны → MERGE + индекс
+## Актуальные ориентиры (детали и цифры — в карте проекта)
 
-## Статусы документов
+- **OCR:** PP-OCRv5 — страница `cyrillic`, ячейки таблиц `eslav`; служба на сервере моделей 41
+  (:8020 CPU, :8021 OpenVINO), локальный движок в контейнере как запасной путь.
+- **Таблицы:** числовые — своя сетка по линиям; прозаические — детектор ячеек (INT8, вшит в образ).
+- **Поиск:** dense 2560 (GigaChat EmbeddingsGigaR) + sparse BM25 + RRF, реранкер — опция.
+- **Очередь:** Celery (`--pool=solo` — документы идут по одному), redis, QueueGuard.
+- **Образы:** `kre44et/kag-base|kag-api|kag-worker|kag-mcp` — текущий набор см. в карте и в памяти.
+- **Внешний адрес и SSO** задаются в админке («🔗 Внешний адрес системы») — это и есть кейс переезда.
 
-`pending → processing → completed | failed`
-
-- completed: 158+ (на момент паузы 2026-08-22; очередь 0)
-- recovery: сбрасывает зависшие >60 мин (снимает замок QueueGuard перед перезапуском)
-
-## Полезные команды
-
-```bash
-# Очередь
-docker exec kag-redis redis-cli -n 1 LLEN documents
-# Замки QueueGuard
-docker exec kag-redis redis-cli -n 1 KEYS 'qguard:*'
-# Статусы
-docker exec kag-postgres psql -U kag -d kag -t -c "SELECT status, count(*) FROM documents GROUP BY status;"
-# Логи worker
-docker logs -f kag-worker
-```
+Числа, которые меняются ежедневно (документы, таблицы, векторы, узлы графа), в документах не дублируются —
+их берут запросом к БД (пример команды — в конце карты проекта).
