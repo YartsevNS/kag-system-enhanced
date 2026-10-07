@@ -84,6 +84,7 @@
     --radius-sm:   6px;
     --radius-lg:   12px;
     --radius-pill: 9999px;
+    --radius-btn:  4px;       /* кнопки: строгий прямоугольник, 6px на маленьких кнопках выглядит круглым */
     --font:           system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --font-display:   'PT Serif', Georgia, 'DejaVu Serif', 'Times New Roman', serif;
     --mono:           'Cascadia Code', 'Fira Code', 'Consolas', monospace;
@@ -278,7 +279,7 @@ button, input[type="submit"], input[type="button"], input[type="reset"],
 a.btn, button.tag, .header-btn, .new-chat-btn, .send-btn, .tab, .toolbar .btn-accent,
 .kg-mode, .kag-theme-toggle, .kag-burger, .kag-nav-close, .kag-nav-drawer .nav-item,
 .site-nav-block .nav-item {
-    border-radius: var(--radius-sm) !important;
+    border-radius: var(--radius-btn) !important;
 }
 
 /* ── Переключатель темы ───────────────────────────────────────────────────── */
