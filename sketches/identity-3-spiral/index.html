@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>KAG · вариант «Спираль»</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+         color: #1A1C1E; background: #F7F8FA; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { display: flex; min-height: 100vh; }
+  aside { width: 272px; background: #fff; border-right: 1px solid rgba(0,0,0,.10); padding: 22px 0 16px; }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 22px 18px; border-bottom: 1px solid rgba(0,0,0,.06); }
+  .brand svg { flex: 0 0 auto; }
+  .wordmark { font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+              font-size: 17px; letter-spacing: .18em; font-weight: 600; }
+  .tagline { font-family: 'Cascadia Code', Consolas, monospace; font-size: 10px;
+             letter-spacing: .12em; color: #6C7278; }
+  .nav-group { padding: 18px 22px 6px; font-family: 'Cascadia Code', Consolas, monospace;
+               font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #8A8F98; }
+  nav { position: relative; }
+  nav::before { content: ''; position: absolute; left: 22px; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.07); }
+  nav a { display: flex; align-items: center; gap: 12px; padding: 8px 22px 8px 34px;
+          color: #4A5058; text-decoration: none; font-size: 14px; position: relative; }
+  nav a .num { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; color: #A8AEB6; }
+  nav a:hover { color: #1A1C1E; background: #F0F2F5; }
+  nav a.active { color: #08703a; font-weight: 500; }
+  nav a.active::before { content: ''; position: absolute; left: 19px; width: 7px; height: 7px;
+                         background: #08A652; border-radius: 50%; box-shadow: 0 0 0 3px #fff; }
+  main { flex: 1; min-width: 0; padding: 28px 32px; }
+  h1 { font-family: 'Cascadia Code', Consolas, monospace; font-size: 20px; font-weight: 600; letter-spacing: .02em; }
+  .sub { color: #6C7278; margin: 6px 0 24px; }
+  .card { background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; padding: 18px 20px; max-width: 720px; }
+  .card h2 { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; letter-spacing: .14em;
+             text-transform: uppercase; color: #6C7278; font-weight: 600; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,.06); font-size: 14px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .esoteric { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; color: #8A8F98; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <!-- «Спираль»: три дуги-кольца сходятся к точке в центре; подписи R/K/C по кольцам -->
+    <div class="brand">
+      <svg width="46" height="46" viewBox="0 0 46 46" aria-label="Монограмма KAG">
+        <g fill="none" stroke="#08A652" stroke-linecap="round">
+          <path d="M23 5 A 18 18 0 1 1 5 23" stroke-width="1.4"/>
+          <path d="M23 11 A 12 12 0 1 1 11 23" stroke-width="1.2" opacity=".75"/>
+          <path d="M23 17 A 6 6 0 1 1 17 23" stroke-width="1" opacity=".55"/>
+        </g>
+        <circle cx="23" cy="23" r="2.4" fill="#1A1C1E"/>
+      </svg>
+      <div>
+        <div class="wordmark">KAG.SYS</div>
+        <div class="tagline">rag / kag / cag</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-group">01 · документы</div>
+      <a href="#"><span class="num">001</span>Дашборд</a>
+      <a href="#" class="active"><span class="num">002</span>Чат с AI</a>
+      <a href="#"><span class="num">003</span>Документы</a>
+      <a href="#"><span class="num">004</span>Чанки</a>
+      <a href="#"><span class="num">005</span>Поиск</a>
+      <a href="#"><span class="num">006</span>Граф знаний</a>
+      <div class="nav-group">02 · наблюдение</div>
+      <a href="#"><span class="num">007</span>Веб-монитор</a>
+      <a href="#"><span class="num">008</span>Новости</a>
+      <a href="#"><span class="num">009</span>Состояние</a>
+      <div class="nav-group">03 · помощь</div>
+      <a href="#"><span class="num">010</span>Архитектура</a>
+      <a href="#"><span class="num">011</span>Документация</a>
+    </nav>
+  </aside>
+  <main>
+    <h1>УПРАВЛЕНИЕ МОДЕЛЯМИ</h1>
+    <p class="sub">Вариант «Спираль»: техническая монопись, «позвоночник» меню, точка-акцент на активном пункте.</p>
+    <div class="card">
+      <h2>Провайдеры</h2>
+      <table>
+        <tr><th>Название</th><th>Моделей</th><th>Ключ</th></tr>
+        <tr><td>deepseek</td><td class="n">2</td><td>есть</td></tr>
+        <tr><td>gigachat</td><td class="n">10</td><td>есть</td></tr>
+        <tr><td>polza.ai</td><td class="n">421</td><td>есть</td></tr>
+      </table>
+      <p class="esoteric">Монопись читается как приборная панель: цифры и адреса на своём месте.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>KAG · вариант «Три кольца»</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #1A1C1E; background: #F5F7FA; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { display: flex; min-height: 100vh; }
+  /* ── боковая колонка ─────────────────────────────────────────────── */
+  aside { width: 272px; background: #fff; border-right: 1px solid rgba(0,0,0,.10); padding: 22px 0 16px; }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 22px 18px; border-bottom: 1px solid rgba(0,0,0,.06); }
+  .brand svg { flex: 0 0 auto; }
+  .wordmark { font-size: 19px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; }
+  .tagline { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #6C7278; }
+  .nav-group {
+    padding: 18px 22px 6px; font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: #8A8F98;
+  }
+  nav a {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 22px; color: #4A5058; text-decoration: none; font-size: 14px;
+    border-left: 2px solid transparent;
+  }
+  nav a:hover { color: #1A1C1E; background: #F0F2F5; }
+  nav a.active { color: #08703a; border-left-color: #08A652; background: #F0F2F5; font-weight: 500; }
+  nav a .num { font-size: 11px; color: #8A8F98; letter-spacing: .08em; min-width: 18px; }
+  /* ── содержимое ──────────────────────────────────────────────────── */
+  main { flex: 1; min-width: 0; padding: 28px 32px; }
+  h1 { font-size: 26px; font-weight: 600; letter-spacing: .01em; }
+  .sub { color: #6C7278; margin: 6px 0 24px; }
+  .card { background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; padding: 18px 20px; max-width: 720px; }
+  .card h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #6C7278; font-weight: 600; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,.06); font-size: 14px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .esoteric { font-size: 12px; color: #8A8F98; letter-spacing: .06em; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <!-- Монограмма «Три кольца»: R, K, C сплетены в трилистник, точка в центре — пользователь -->
+    <div class="brand">
+      <svg width="44" height="44" viewBox="0 0 44 44" aria-label="Монограмма KAG">
+        <g fill="none" stroke="#08A652" stroke-width="1.6">
+          <circle cx="22" cy="15.5" r="9.5"/>
+          <circle cx="14.8" cy="27.5" r="9.5"/>
+          <circle cx="29.2" cy="27.5" r="9.5"/>
+        </g>
+        <circle cx="22" cy="23.5" r="2.6" fill="#1A1C1E"/>
+        <g font-family="Georgia, serif" font-size="7.5" fill="#4A5058" text-anchor="middle">
+          <text x="22" y="8">R</text>
+          <text x="7.5" y="38">C</text>
+          <text x="36.5" y="38">G</text>
+        </g>
+      </svg>
+      <div>
+        <div class="wordmark">KAG</div>
+        <div class="tagline">RAG · KAG · CAG</div>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-group">I · Работа с документами</div>
+      <a href="#" class=""><span class="num">01</span>Дашборд</a>
+      <a href="#" class="active"><span class="num">02</span>Чат с AI</a>
+      <a href="#"><span class="num">03</span>Документы</a>
+      <a href="#"><span class="num">04</span>Чанки</a>
+      <a href="#"><span class="num">05</span>Поиск</a>
+      <a href="#"><span class="num">06</span>Граф знаний</a>
+      <div class="nav-group">II · Наблюдение</div>
+      <a href="#"><span class="num">07</span>Веб-монитор</a>
+      <a href="#"><span class="num">08</span>Новости</a>
+      <a href="#"><span class="num">09</span>Состояние</a>
+      <div class="nav-group">III · Помощь</div>
+      <a href="#"><span class="num">10</span>Архитектура</a>
+      <a href="#"><span class="num">11</span>Документация</a>
+    </nav>
+  </aside>
+
+  <main>
+    <h1>Управление моделями</h1>
+    <p class="sub">Вариант «Три кольца»: строгий капс, нумерация вместо значков, акцентная черта у активного пункта.</p>
+    <div class="card">
+      <h2>Провайдеры</h2>
+      <table>
+        <tr><th>Название</th><th>Моделей</th><th>Ключ</th></tr>
+        <tr><td>deepseek</td><td class="n">2</td><td>есть</td></tr>
+        <tr><td>gigachat</td><td class="n">10</td><td>есть</td></tr>
+        <tr><td>polza.ai</td><td class="n">421</td><td>есть</td></tr>
+      </table>
+      <p class="esoteric">Числа выровнены по разрядам (tabular-nums) — таблица читается как отчёт.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

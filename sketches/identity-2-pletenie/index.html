@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>KAG · вариант «Плетение»</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+         color: #1A1C1E; background: #F5F7FA; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { display: flex; min-height: 100vh; }
+  aside { width: 272px; background: #fff; border-right: 1px solid rgba(0,0,0,.10); padding: 22px 0 16px; }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 22px 18px; border-bottom: 1px solid rgba(0,0,0,.06); }
+  .brand svg { flex: 0 0 auto; }
+  .wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 24px; letter-spacing: .12em; }
+  .tagline { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #6C7278; }
+  .nav-group { padding: 18px 22px 4px; font-family: Georgia, serif; font-size: 12px;
+               letter-spacing: .04em; color: #6C7278; }
+  .nav-group::after { content: ''; display: block; height: 1px; background: rgba(0,0,0,.08); margin-top: 8px; }
+  nav a { display: flex; align-items: center; gap: 9px; padding: 8px 22px;
+          color: #4A5058; text-decoration: none; font-size: 14px; }
+  nav a:hover { color: #1A1C1E; background: #F0F2F5; }
+  nav a.active { color: #08703a; font-weight: 500; }
+  nav a.active::before { content: '\25C6'; font-size: 7px; color: #08A652; }
+  nav a:not(.active)::before { content: '\25C7'; font-size: 7px; color: #C8CDD4; }
+  main { flex: 1; min-width: 0; padding: 28px 32px; }
+  h1 { font-family: Georgia, serif; font-size: 28px; font-weight: 400; }
+  .sub { color: #6C7278; margin: 6px 0 24px; }
+  .card { background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; padding: 18px 20px; max-width: 720px; }
+  .card h2 { font-family: Georgia, serif; font-size: 12px; letter-spacing: .16em;
+             text-transform: uppercase; color: #6C7278; font-weight: 400; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,.06); font-size: 14px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .esoteric { font-family: Georgia, serif; font-size: 12px; color: #8A8F98; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <!-- «Плетение»: K — центральная буква, R и C продеты сквозь неё дугами; ромб в узле — пользователь -->
+    <div class="brand">
+      <svg width="42" height="42" viewBox="0 0 46 46" aria-label="Монограмма KAG">
+        <g fill="none" stroke="#1A1C1E" stroke-width="1.5" stroke-linecap="round">
+          <path d="M15 8 L15 38"/><!-- стойка K -->
+          <path d="M15 23 L30 8"/>
+          <path d="M15 23 L30 38"/>
+        </g>
+        <g fill="none" stroke="#08A652" stroke-width="1.5" stroke-linecap="round">
+          <path d="M30 8 A 12 12 0 0 1 30 38"/><!-- R: дуга справа -->
+          <path d="M8 8 A 12 12 0 0 0 8 38"/><!-- C: дуга слева -->
+        </g>
+        <path d="M15 23 l4 -4 4 4 -4 4 z" fill="#08A652"/>
+      </svg>
+      <div>
+        <div class="wordmark">KAG</div>
+        <div class="tagline" style="white-space:nowrap">RAG · KAG · CAG</div>
+        <div class="tagline" style="letter-spacing:.06em;text-transform:none">знание вокруг человека</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-group">Работа с документами</div>
+      <a href="#">Дашборд</a>
+      <a href="#" class="active">Чат с AI</a>
+      <a href="#">Документы</a>
+      <a href="#">Чанки</a>
+      <a href="#">Поиск</a>
+      <a href="#">Граф знаний</a>
+      <div class="nav-group">Наблюдение и данные</div>
+      <a href="#">Веб-монитор</a>
+      <a href="#">Новости</a>
+      <a href="#">Состояние</a>
+      <div class="nav-group">Помощь</div>
+      <a href="#">Архитектура</a>
+      <a href="#">Документация</a>
+    </nav>
+  </aside>
+  <main>
+    <h1>Управление моделями</h1>
+    <p class="sub">Вариант «Плетение»: засечная витрина, ромбы вместо значков, спокойная рабочая основа.</p>
+    <div class="card">
+      <h2>Провайдеры</h2>
+      <table>
+        <tr><th>Название</th><th>Моделей</th><th>Ключ</th></tr>
+        <tr><td>deepseek</td><td class="n">2</td><td>есть</td></tr>
+        <tr><td>gigachat</td><td class="n">10</td><td>есть</td></tr>
+        <tr><td>polza.ai</td><td class="n">421</td><td>есть</td></tr>
+      </table>
+      <p class="esoteric">Засечная витрина даёт «издательский» вес, остальной интерфейс — рабочий и нейтральный.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

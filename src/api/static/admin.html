@@ -267,48 +267,48 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 <body>
     <!-- Sidebar Navigation -->
     <nav>
-        <div class="logo"> <span>KAG</span></div>
-        <div class="nav-items">
-            <div class="nav-group">Работа с документами</div>
-            <a href="/" class="nav-item"><span class="icon">⬡</span> <span>Дашборд</span></a>
-            <a href="/chat" class="nav-item"><span class="icon">💬</span> <span>Чат с AI</span></a>
-            <a href="/documents" class="nav-item"><span class="icon">📄</span> <span>Документы</span></a>
-            <a href="/chunks" class="nav-item"><span class="icon">🧩</span> <span>Чанки</span></a>
-            <a href="/search" class="nav-item"><span class="icon">🔎</span> <span>Поиск</span></a>
-            <a href="/kg" class="nav-item"><span class="icon">🕸️</span> <span>Граф знаний</span></a>
+ <div class="logo"> <span>KAG</span></div>
+ <div class="nav-items">
+ <div class="nav-group">Работа с документами</div>
+ <a href="/" class="nav-item"><span>Дашборд</span></a>
+ <a href="/chat" class="nav-item"><span>Чат с AI</span></a>
+ <a href="/documents" class="nav-item"><span>Документы</span></a>
+ <a href="/chunks" class="nav-item"><span>Чанки</span></a>
+ <a href="/search" class="nav-item"><span>Поиск</span></a>
+ <a href="/kg" class="nav-item"><span>Граф знаний</span></a>
 
-            <div class="nav-group">Наблюдение и данные</div>
-            <a href="/monitor" class="nav-item"><span class="icon">🌐</span> <span>Веб-монитор</span></a>
-            <a href="/news" class="nav-item"><span class="icon">📰</span> <span>Новости</span></a>
-            <a href="/know" class="nav-item"><span class="icon">📚</span> <span>Know</span></a>
-            <a href="/logs" class="nav-item"><span class="icon">📋</span> <span>Логи</span></a>
-            <a href="/monitoring" class="nav-item"><span class="icon">📊</span> <span>Мониторинг</span></a>
-            <a href="/system" class="nav-item"><span class="icon">📊</span> <span>Состояние</span></a>
-            <a href="/qdrant" class="nav-item"><span class="icon">🗄️</span> <span>Qdrant</span></a>
-            <a href="/docker" class="nav-item"><span class="icon">🐳</span> <span>Docker</span></a>
+ <div class="nav-group">Наблюдение и данные</div>
+ <a href="/monitor" class="nav-item"><span>Веб-монитор</span></a>
+ <a href="/news" class="nav-item"><span>Новости</span></a>
+ <a href="/know" class="nav-item"><span>Know</span></a>
+ <a href="/logs" class="nav-item"><span>Логи</span></a>
+ <a href="/monitoring" class="nav-item"><span>Мониторинг</span></a>
+ <a href="/system" class="nav-item"><span>Состояние</span></a>
+ <a href="/qdrant" class="nav-item"><span>Qdrant</span></a>
+ <a href="/docker" class="nav-item"><span>Docker</span></a>
 
-            <div class="nav-group">Администрирование</div>
-            <a href="/admin" class="nav-item active"><span class="icon">⚙️</span> <span>Админ</span></a>
-            <a href="/users" class="nav-item"><span class="icon">👥</span> <span>Пользователи</span></a>
+ <div class="nav-group">Администрирование</div>
+ <a href="/admin" class="nav-item active"><span>Админ</span></a>
+ <a href="/users" class="nav-item"><span>Пользователи</span></a>
 
-            <div class="nav-group">Помощь</div>
-            <a href="/architecture" class="nav-item"><span class="icon">🔭</span> <span>Архитектура</span></a>
-            <a href="/docs" class="nav-item"><span class="icon">📖</span> <span>Документация</span></a>
-            <a href="/guide" class="nav-item"><span class="icon">📘</span> <span>Руководство</span></a>
-        </div>
-        <div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px">
-            <button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s">
-                <span id="theme-icon">☀️</span> <span id="theme-label">Светлая</span>
-            </button>
-            <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
-        </div>
-    <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)">🚪 Выйти</a>
+ <div class="nav-group">Помощь</div>
+ <a href="/architecture" class="nav-item"><span>Архитектура</span></a>
+ <a href="/docs" class="nav-item"><span>Документация</span></a>
+ <a href="/guide" class="nav-item"><span>Руководство</span></a>
+ </div>
+ <div style="padding:8px 24px;border-top:1px solid var(--border-s);display:flex;align-items:center;gap:8px">
+ <button onclick="toggleTheme()" id="theme-toggle" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;padding:6px 12px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all 0.2s">
+ <span id="theme-icon"></span> <span id="theme-label">Светлая</span>
+ </button>
+ <div style="font-size:12px;color:var(--text4)">v0.3.0</div>
+ </div>
+ <a href="#" onclick="logout();return false" style="margin-top:auto;color:var(--red)"> Выйти</a>
 </nav>
 
     <!-- Main Content -->
     <main>
         <header>
-            <h1>⚙️ Управление моделями</h1>
+            <h1>Управление моделями</h1>
             <div class="subtitle">Настройка LLM, Embedding моделей, SSH подключений и чанкинга</div>
         </header>
 
