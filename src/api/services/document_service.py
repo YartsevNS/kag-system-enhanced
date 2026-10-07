@@ -1488,11 +1488,9 @@ class DocumentService:
                 if img is None:
                     return None
             
-            # Resize to max 500px wide
-            max_width = 500
-            if img.width > max_width:
-                ratio = max_width / img.width
-                img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+            # Единый формат страницы: A4-портрет, вписывание с полями 5%.
+            # Так и скан, и фото, и PDF, и текстовая карточка выглядят страницей одного масштаба.
+            img = self._fit_to_page(img)
             
             # Отрисовываем тип документа на миниатюре
             if document_type and document_type not in ('unknown', '', 'pending'):
@@ -1526,6 +1524,28 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Ошибка генерации миниатюры {document_id}: {e}")
             return None
+
+    @staticmethod
+    def _fit_to_page(img: Any, page_w: int = 500, page_ratio: float = 1.4142,
+                     margin_ratio: float = 0.05) -> Any:
+        """Вписать изображение в страницу формата A4 (портрет) с полями.
+
+        Зачем: раньше миниатюра скана или фото отдавалась «как есть», а рамка карточки
+        обрезала её по формату A4 (object-fit: cover) — поля и края таблиц пропадали.
+        Теперь любая миниатюра — страница A4 с полями 5% и тем же масштабом, что и страница PDF.
+        """
+        from PIL import Image
+
+        page_h = int(round(page_w * page_ratio))
+        m = int(round(page_w * margin_ratio))
+        inner_w, inner_h = page_w - 2 * m, page_h - 2 * m
+        ratio = min(inner_w / img.width, inner_h / img.height)
+        new_w = max(1, int(round(img.width * ratio)))
+        new_h = max(1, int(round(img.height * ratio)))
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+        page = Image.new("RGB", (page_w, page_h), "white")
+        page.paste(resized, ((page_w - new_w) // 2, (page_h - new_h) // 2))
+        return page
 
     def _generate_text_thumbnail(self, file_path: Path) -> Optional[Any]:
         """Создать текстовую миниатюру для docx/txt/md/csv."""

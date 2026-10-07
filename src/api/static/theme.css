@@ -72,6 +72,10 @@
     --border:        rgba(18, 22, 27, 0.12);
     --border-s:      rgba(18, 22, 27, 0.07);
     --border-strong: rgba(18, 22, 27, 0.20);
+    /* Рамка вокруг превью: на 10% темнее обычной границы.
+       Считалось по итоговому цвету на белом: альфа 0,07 -> 0,163 (1 - 0,9*(1-a)),
+       то есть серый 238 -> 216. Меряется скриптом scripts/bakeoff/preview_check.py. */
+    --preview-border: rgba(18, 22, 27, 0.163);
     --accent-border: rgba(6, 122, 61, 0.35);
     --shadow:        0 1px 2px rgba(18, 22, 27, 0.06), 0 2px 8px rgba(18, 22, 27, 0.05);
 
@@ -124,6 +128,7 @@
     --border:        #2A323C;
     --border-s:      #212932;
     --border-strong: #3A444F;
+    --preview-border: #1E252D;   /* тёмная тема: 10% темнее #212932 */
     --accent-border: rgba(62, 207, 142, 0.3);
     --shadow:        0 1px 3px rgba(0, 0, 0, 0.35);
 }

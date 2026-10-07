@@ -46,9 +46,9 @@ h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
 
 /* Cards grid */
 .docs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(189px,1fr));gap:8px;margin-bottom:24px}
-.doc-card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s}
+.doc-card{background:var(--surface);border:1px solid var(--preview-border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.2s}
 .doc-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 24px rgba(94,106,210,0.08)}
-.doc-card .thumb{width:100%;aspect-ratio:1/1.414;object-fit:cover;background:var(--panel);display:block}
+.doc-card .thumb{width:100%;aspect-ratio:1/1.414;object-fit:contain;background:var(--panel);display:block}
 .doc-card .thumb-wrap{position:relative;overflow:hidden;aspect-ratio:1/1.414;background:var(--panel)}
 .doc-card .thumb-wrap .type-badge{position:absolute;top:6px;right:6px;font-size:9px;padding:2px 6px;border-radius:9999px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em}
 .doc-card .card-body{padding:4px 2px 2px 3px}
@@ -672,7 +672,7 @@ function renderCards(docs) {
       <div class="thumb-wrap">
         <img class="thumb" src="${thumbUrl}" alt="${d.filename}" loading="lazy"
              onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}'"
-             style="object-fit:cover">
+             style="object-fit:contain">
         <span class="type-badge tag ${typeBadgeClass(type)}">${typeLabel(type)}</span>
       </div>
       <div class="card-body">
