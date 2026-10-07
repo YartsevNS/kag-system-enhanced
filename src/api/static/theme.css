@@ -266,6 +266,21 @@ nav > a[onclick*="logout"] {
 .kag-nav-close { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; }
 @media (max-width: 768px) { .kag-burger { display: inline-flex; } }
 
+/* ── Кнопки прямоугольные (требование владельца, 05.10.2026) ────────────────
+   Было: primary-кнопки «таблетками» (9999px) по старой теме Supabase. Из-за этого на «Документах»
+   переключатель вида выглядел разнобоем — «Обновить» овальная, «Таблица» и «Карточки» прямоугольные.
+   Стало: один радиус у всех кнопок и управляющих элементов, включая страницу входа, админку и чат.
+   !important стоит осознанно: часть страниц задаёт радиус своим правилом с !important (правило темы
+   подключено последним, поэтому перекрывает) и в inline-стилях. Круглые значки и плашки-бейджи
+   (.tag у <span>, аватары, индикаторы) под правило не попадают — это не кнопки. */
+button, input[type="submit"], input[type="button"], input[type="reset"],
+.btn, .btn-primary, .btn-secondary, .btn-ghost, .btn-outline, .btn-sm, .btn-danger,
+a.btn, button.tag, .header-btn, .new-chat-btn, .send-btn, .tab, .toolbar .btn-accent,
+.kg-mode, .kag-theme-toggle, .kag-burger, .kag-nav-close, .kag-nav-drawer .nav-item,
+.site-nav-block .nav-item {
+    border-radius: var(--radius-sm) !important;
+}
+
 /* ── Переключатель темы ───────────────────────────────────────────────────── */
 .kag-theme-toggle {
     background: var(--surface); border: 1px solid var(--border); color: var(--text2);

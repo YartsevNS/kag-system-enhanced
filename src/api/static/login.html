@@ -19,7 +19,8 @@ input:focus{border-color:var(--accent-h);box-shadow:0 0 0 2px rgba(94,106,210,0.
 .error{background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:var(--radius-sm);padding:10px 14px;color:var(--red);font-size:13px;margin-bottom:16px;display:none}
 .error.show{display:block}
 
-/* Supabase: primary-кнопки — pill (9999px), вес 500 (не 600/700) */
+/* Кнопки прямоугольные (требование владельца, 05.10.2026): радиус задаётся общим слоем
+   /static/theme.css, здесь оставлен только вес. Раньше тут была «таблетка» 9999px. */
 .btn{border-radius:var(--radius-pill)!important;font-weight:500}
 </style><style>
 /* ==== Сдерживание раскладки (05.10.2026) ====
