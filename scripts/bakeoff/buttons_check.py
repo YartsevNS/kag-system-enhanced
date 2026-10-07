@@ -24,7 +24,7 @@ MAX_RADIUS_PX = 10          # всё, что круглее, — уже не п�
 
 PAGES = ["/documents", "/admin", "/chat", "/users", "/logs", "/kg", "/system", "/monitor"]
 
-COLLECT = """() => {
+COLLECT = """(maxRadius) => {
     const sel = 'button, input[type=submit], input[type=button], a.btn, .btn, .btn-primary, ' +
                 '.btn-outline, .header-btn, .new-chat-btn, .send-btn, .tab, .kag-theme-toggle';
     const out = [];
@@ -39,7 +39,7 @@ COLLECT = """() => {
             text: (el.textContent || el.value || '').trim().slice(0, 24),
             radius: px,
             size: Math.round(r.width) + 'x' + Math.round(r.height),
-            pill: px > MAX_RADIUS_PX || (limit > 0 && px >= limit),
+            pill: px > maxRadius || (limit > 0 && px >= limit),
         });
     });
     return out;
@@ -59,7 +59,7 @@ def main() -> None:
         for path in PAGES:
             page.goto(f"{BASE}{path}")
             page.wait_for_timeout(1500)
-            items = page.evaluate(COLLECT)
+            items = page.evaluate(COLLECT, MAX_RADIUS_PX)
             pills = [i for i in items if i["pill"]]
             total += len(items)
             print(f"  {path:12} кнопок {len(items):3} | овальных {len(pills)}")
@@ -71,7 +71,7 @@ def main() -> None:
         page2 = ctx2.new_page()
         page2.goto(f"{BASE}/login")
         page2.wait_for_timeout(1200)
-        items = page2.evaluate(COLLECT)
+        items = page2.evaluate(COLLECT, MAX_RADIUS_PX)
         pills = [i for i in items if i["pill"]]
         total += len(items)
         print(f"  {'/login':12} кнопок {len(items):3} | овальных {len(pills)}")
