@@ -54,7 +54,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 /* Длинные строки без пробелов (URL, идентификаторы) переносятся, а не расширяют страницу */
 .md, .bubble, .message, .msg, .card p, .row { overflow-wrap: anywhere; word-break: break-word; }
 </style>
-<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo">KA<span>G</span></div><div data-site-nav></div></nav><main><h1>Опыты и модели</h1><div class="sub">Сравнение моделей на нашем корпусе: что проверено, с какими цифрами и что делаем дальше. Страница доступна только администраторам.</div><div class="meta" id="meta"></div><details open><summary>Сравнение эмбеддеров на нашем корпусе</summary><div class="note" style="margin-bottom:10px">
+<link rel="stylesheet" href="/static/theme.css"></head><body><nav><div class="logo">KA<span>G</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Опыты и модели</h1><div class="sub">Сравнение моделей на нашем корпусе: что проверено, с какими цифрами и что делаем дальше. Страница доступна только администраторам.</div><div class="meta" id="meta"></div><details open><summary>Сравнение эмбеддеров на нашем корпусе</summary><div class="note" style="margin-bottom:10px">
       Метрика — ранг фрагмента с ответом внутри пула кандидатов (20 вопросов с эталонами, пул по 15 фрагментов).
       hit@K — доля вопросов, где правильный фрагмент попал в первые K; MRR — средний обратный ранг.
       Чем больше, тем лучше. <b>Строка-эталон</b> — модель, которая работает в KAG сейчас.
