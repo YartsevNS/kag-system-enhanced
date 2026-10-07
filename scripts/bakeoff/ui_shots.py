@@ -39,10 +39,15 @@ def main() -> None:
                               "try{localStorage.setItem('kag-theme', t)}catch(e){} }", theme)
                 page.wait_for_timeout(1800)
                 if SCROLL:
+                    # Прокрутка через JS: страница после загрузки данных сама возвращается наверх,
+                    # поэтому прокручиваем прямо перед снимком и ждём отрисовку.
                     try:
-                        page.locator(SCROLL).first.scroll_into_view_if_needed(timeout=3000)
-                        page.wait_for_timeout(400)
-                    except Exception as e:      # элемент не найден — снимаем как есть
+                        page.evaluate("""(sel) => {
+                            const el = document.querySelector(sel);
+                            if (el) el.scrollIntoView({block: 'center'});
+                        }""", SCROLL)
+                        page.wait_for_timeout(700)
+                    except Exception as e:
                         print(f"    прокрутка к {SCROLL} не удалась: {e}")
                 if ELEMENT:
                     try:
