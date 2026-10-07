@@ -1,53 +1,121 @@
 /*
- * Supabase Dark Theme — эталонные CSS-переменные для KAG.
- * За основу взят design system Supabase (см. скилл popular-web-designs).
- * Правила Supabase:
- *   - фон #171717 (не чисто чёрный), глубина через границы, не тени
- *   - зелёный акцент #3ecf8e — только для акцентов/ссылок, не для заливки
- *   - вес текста 400/500 (без 700)
- *   - скругление: карточки 8-16px, primary-кнопки pill (9999px)
- * Без CDN: основной шрифт system-ui, моно Cascadia Code (уже в проекте).
+ * KAG — общий слой темы (переписан 05.10.2026).
+ *
+ * БЫЛО: этот файл содержал только тёмную палитру Supabase и НЕ подключался ни на одной странице —
+ * каждая страница несла свою копию переменных, поэтому темы разъезжались, а светлая существовала
+ * лишь в админке.
+ *
+ * СТАЛО: одна точка правды на все страницы. Светлая тема — по умолчанию (интерфейс для офисных
+ * работников; заказчик может подставить свой брендбук), тёмная — вариант. Компоненты страниц
+ * используют только эти переменные, поэтому перекраска не требует правки разметки.
+ *
+ * Подключение: КОНЦОМ <head>, после собственных стилей страницы (чтобы общие значения побеждали):
+ *     <link rel="stylesheet" href="/static/theme.css">
+ * Тема хранится в localStorage ('kag-theme') и применяется inline-скриптом до отрисовки (без вспышки).
+ * Подмена под брендбук: переопределить переменные ниже своим файлом, подключённым после этого.
  */
+
+/* ── Светлая (по умолчанию) ───────────────────────────────────────────────── */
 :root {
-    /* Фоны */
-    --bg:        #171717;  /* страница (Supabase page) */
-    --panel:     #0f0f0f;  /* панели/сайдбар (Supabase button bg) */
-    --surface:   #1c1c1c;  /* карточки (чуть светлее фона) */
-    --elevated:  #242424;  /* ховер/поднятые элементы */
+    /* Фоны — нейтральные, «офисные», не чёрные */
+    --bg:        #F5F7FA;   /* фон приложения */
+    --panel:     #FFFFFF;   /* боковые панели */
+    --surface:   #FFFFFF;   /* карточки */
+    --elevated:  #F0F2F5;   /* поля ввода, приподнятые блоки */
 
-    /* Текст */
-    --text:      #fafafa;  /* основной (Supabase off-white) */
-    --text2:     #b4b4b4;  /* вторичный (Supabase light gray) */
-    --text3:     #898989;  /* приглушённый (Supabase mid gray) */
-    --text4:     #4d4d4d;  /* третичный (Supabase dark gray) */
+    /* Текст — контраст выше 7:1 на светлом */
+    --text:      #1A1C1E;
+    --text2:     #4A5058;
+    --text3:     #6C7278;
+    --text4:     #8A8F98;
 
-    /* Акцент — Supabase green */
-    --accent:    #3ecf8e;  /* brand green */
-    --accent-h:  #00c573;  /* hover/links */
-    --accent-l:  #6ee7b7;  /* light green */
+    /* Акцент: зелёный продукта, но затемнённый — на светлом фоне #3ecf8e нечитаем как текст */
+    --accent:    #08A652;
+    --accent-h:  #069945;
+    --accent-l:  #0AB85E;
 
-    /* Семантические (Radix-подобные) */
+    /* Семантические */
+    --green:     #27A644;
+    --emerald:   #10B981;
+    --red:       #DC2626;
+    --red2:      #EF4444;
+    --amber:     #B45309;
+    --purple:    #6D28D9;
+
+    /* Границы — иерархия через полупрозрачный чёрный, работает на любом светлом фоне */
+    --border:        rgba(0, 0, 0, 0.10);
+    --border-s:      rgba(0, 0, 0, 0.06);
+    --border-strong: rgba(0, 0, 0, 0.16);
+    --accent-border: rgba(8, 166, 82, 0.35);
+    --shadow:        0 1px 3px rgba(0, 0, 0, 0.08);
+
+    /* Скругление и шрифты (без CDN — закрытый контур) */
+    --radius:      8px;
+    --radius-sm:   6px;
+    --radius-lg:   12px;
+    --radius-pill: 9999px;
+    --font:      system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:      'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+    /* Плавные размеры: текст и отступы растут от телефона до широкого монитора без «поломок» */
+    --fs-base: clamp(13px, 0.85rem + 0.1vw, 15px);
+    --fs-h1:   clamp(20px, 1.10rem + 0.9vw, 30px);
+    --fs-h2:   clamp(16px, 0.95rem + 0.4vw, 20px);
+    --sp-page: clamp(12px, 1.2vw, 32px);
+}
+
+/* ── Тёмная (вариант) ─────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+    --bg:        #171717;
+    --panel:     #0f0f0f;
+    --surface:   #1c1c1c;
+    --elevated:  #242424;
+
+    --text:      #fafafa;
+    --text2:     #b4b4b4;
+    --text3:     #898989;
+    --text4:     #4d4d4d;
+
+    --accent:    #3ecf8e;
+    --accent-h:  #00c573;
+    --accent-l:  #6ee7b7;
+
     --green:     #3ecf8e;
     --emerald:   #10b981;
-    --red:       #e5484d;  /* tomato/error */
-    --red2:      #dc2626;  /* альтернативный красный */
+    --red:       #e5484d;
+    --red2:      #dc2626;
     --amber:     #f5a623;
     --purple:    #8b5cf6;
 
-    /* Границы — иерархия через серый, не тени */
-    --border:        #2e2e2e;  /* стандартная (Supabase border-dark) */
-    --border-s:      #242424;  /* тонкая (Supabase dark border) */
-    --border-strong: #363636;  /* заметная (Supabase mid border) */
-    --accent-border: rgba(62, 207, 142, 0.3); /* зелёная подсветка */
+    --border:        #2e2e2e;
+    --border-s:      #242424;
+    --border-strong: #363636;
+    --accent-border: rgba(62, 207, 142, 0.3);
+    --shadow:        0 1px 3px rgba(0, 0, 0, 0.35);
+}
 
-    /* Скругление */
-    --radius:    8px;    /* карточки */
-    --radius-sm: 6px;    /* кнопки/инпуты */
-    --radius-lg: 16px;   /* крупные контейнеры */
-    --radius-pill: 9999px; /* primary-кнопки */
+/* ── Общие правила, чтобы страницы не расходились ─────────────────────────── */
+body { background: var(--bg); color: var(--text); font-size: var(--fs-base); }
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-    /* Шрифты (без CDN) */
-    --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-    --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+/* Переключатель темы, который добавляет branding.js, если на странице его нет */
+.kag-theme-toggle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    border-radius: var(--radius-pill);
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.kag-theme-toggle:hover { color: var(--text); border-color: var(--border-strong); }
+.kag-theme-toggle.float {
+    position: fixed; right: 16px; bottom: 16px; z-index: 1500; box-shadow: var(--shadow);
 }
