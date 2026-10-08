@@ -78,6 +78,7 @@ def main() -> None:
 
     base_lines = ocr(base_img)
     base_nums = set(NUM.findall(" ".join(base_lines)))
+    base_text = " ".join(base_lines)
     print(f"\nЭТАЛОН (то, что лежит на диске): строк {len(base_lines)}, чисел {len(base_nums)}")
     print(f"  числа: {' '.join(sorted(base_nums))}")
 
@@ -99,15 +100,20 @@ def main() -> None:
         payload = make(base_img)
         lines = ocr(Image.open(io.BytesIO(payload)))
         nums = set(NUM.findall(" ".join(lines)))
+        import difflib
         lost = sorted(base_nums - nums)
         extra = sorted(nums - base_nums)
-        if nums == base_nums and len(lines) == len(base_lines):
+        ratio = difflib.SequenceMatcher(None, base_text, " ".join(lines)).ratio()
+        if nums == base_nums and len(lines) == len(base_lines) and ratio > 0.995:
             verdict = "совпало с текущим"
-            if best_ok is None:
+            # берём самый компактный вариант, а не первый попавшийся
+            if best_ok is None or len(payload) < best_ok[1]:
                 best_ok = (label, len(payload))
         else:
-            verdict = f"числа: потеряно {lost or '—'}, лишние {extra or '—'}"
-        print(f"  {label:22} {len(payload) / 1e6:6.3f} МБ | строк {len(lines):>3}/{len(base_lines)} | {verdict}")
+            verdict = f"расхождение: строк {len(lines)}/{len(base_lines)}, текст {ratio * 100:.1f}%, " \
+                      f"числа потеряны {lost or '—'}, лишние {extra or '—'}"
+        print(f"  {label:22} {len(payload) / 1e6:6.3f} МБ | строк {len(lines):>3}/{len(base_lines)} "
+              f"| текст {ratio * 100:5.1f}% | {verdict}")
 
     if best_ok:
         print(f"\nвывод: самый компактный вариант, где числа и строки не изменились — "
