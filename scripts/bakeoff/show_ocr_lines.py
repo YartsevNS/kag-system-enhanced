@@ -31,7 +31,20 @@ def main() -> None:
         for i, l in enumerate(lines, 1):
             print(f"{i:3}. {l.get('text', '')[:120]}")
     if not found:
-        print("сохранённых строк нет — документ ещё не обработан")
+        print("сохранённых строк нет — распознаю сам (тот же движок, что в системе)")
+        import numpy as np
+        from PIL import Image, ImageOps
+        from rapidocr import RapidOCR
+        from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+
+        eng = RapidOCR(params={"Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.lang_type": LangRec.CYRILLIC,
+                               "Rec.model_type": ModelType.MOBILE})
+        img = ImageOps.exif_transpose(Image.open(latest))
+        res = eng(np.array(img.convert("RGB"))[:, :, ::-1])
+        lines = [t for t in (res.txts or []) if t] if res is not None else []
+        print(f"строк {len(lines)}")
+        for i, t in enumerate(lines, 1):
+            print(f"{i:3}. {t[:120]}")
 
 
 if __name__ == "__main__":
