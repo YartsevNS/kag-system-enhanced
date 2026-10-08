@@ -439,12 +439,14 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                         <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Качество JPEG</label>
                             <input id="up-photo-quality" type="number" min="50" max="95" step="1" onchange="saveUploadConfig()" style="width:110px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
                         <div style="font-size:12px;color:var(--text3);max-width:420px;line-height:1.5">
-                            Снимок с телефона приходит на 5–8 МБ. Замер на ваших снимках показал: уменьшать пиксели нельзя —
-                            распознавание меняется, перестают совпадать числа даже при уменьшении на 12%. Поэтому система не уменьшает
-                            снимок, а пересохраняет его в JPEG (качество ниже, выборка цвета 4:4:4 — сохраняет мелкий цветной текст)
-                            и снимает метаданные камеры; поворот по метке EXIF применяется. Итог: 5,21 МБ → 2,66 МБ, 6,96 МБ → 3,88 МБ,
-                            распознанный текст и числа совпадают с оригиналом полностью. Порог уменьшения (пикселей) оставлен для очень
-                            больших снимков — по умолчанию 6000, он не срабатывает на обычных телефонах.
+                            Замеры на ваших снимках (5,2 и 7 МБ, 4096 пикселей) дали два разных ответа.
+                            Уменьшать пиксели нельзя: распознавание меняется уже при уменьшении на 12% — движок сам приводит
+                            страницу к своему размеру, и лишняя пересборка пикселей размывает мелкий текст.
+                            Пересжатие тоже не бесплатно: на плотном документе (мелкий шрифт, таблицы) даже качество 95 теряло числа,
+                            а на снимке обычного текста распознавание выдержало всё вплоть до 60% пикселей.
+                            Поэтому по умолчанию: пиксели не трогаем, качество 92 (щадяще), поворот по метке EXIF применяем,
+                            метаданные камеры снимаем. Если документы с мелким шрифтом — поставьте качество 95;
+                            если важнее место, чем риск единичной цифры — можно снизить до 85. Полный отказ — снять галочку.
                         </div>
                     </div>
                     <div id="photo-size-note" style="font-size:12px;color:var(--text4);margin-top:8px"></div>
@@ -948,7 +950,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 const pq = document.getElementById('up-photo-quality');
                 if (pn) pn.checked = d.photo_normalize !== false;
                 if (ps) ps.value = d.photo_max_side || 6000;
-                if (pq) pq.value = d.photo_quality || 85;
+                if (pq) pq.value = d.photo_quality || 92;
                 if (msg && d.message) msg.value = d.message;
             } catch (e) { console.error('ingest-config load:', e); }
         }
@@ -964,7 +966,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                         message: document.getElementById('upload-message').value,
                         photo_normalize: document.getElementById('up-photo-normalize').checked,
                         photo_max_side: parseInt(document.getElementById('up-photo-max-side').value || '6000', 10),
-                        photo_quality: parseInt(document.getElementById('up-photo-quality').value || '85', 10),
+                        photo_quality: parseInt(document.getElementById('up-photo-quality').value || '92', 10),
                     })
                 });
                 const d = await r.json();

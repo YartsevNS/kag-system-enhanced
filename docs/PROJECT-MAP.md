@@ -113,6 +113,7 @@ dev mode в prod mode). Правки redirect URIs руками НЕ требу�
   вариант, телефонный слой), меню одним компонентом `src/api/static/site-nav.js`, знак и оформление
   `branding.js`, настройка шрифта/цветов/контраста — в админке, раздел «Оформление»
 - Порядок работы с внешним видом и грабли — `docs/skills/kag-ui-theme-typography/SKILL.md`
+- Снимки с телефона: сколько весить, что можно сжать и что при этом теряется — `docs/guides/photo-upload-normalization.md`
 - Проверки вида и разметки — `scripts/bakeoff/`: `ui_shots.py` (снимки тем и элементов),
   `mobile_check.py` (телефонные размеры, бургер, нажатия, ошибки страниц), `buttons_check.py` (форма кнопок),
   `preview_check.py` (превью — страница A4 с полями и рамка), `contrast_check.py` (контраст WCAG),

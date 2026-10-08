@@ -2197,7 +2197,7 @@ async def get_ingest_config():
             "message": str(cfg.get("message", "")),
             "photo_normalize": bool(cfg.get("photo_normalize", True)),
             "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
-            "photo_quality": int(cfg.get("photo_quality", 85) or 85),
+            "photo_quality": int(cfg.get("photo_quality", 92) or 92),
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2227,13 +2227,13 @@ async def save_ingest_config(payload: IngestBlockConfig):
             try:
                 cfg["photo_quality"] = max(50, min(95, int(data["photo_quality"])))
             except (TypeError, ValueError):
-                cfg["photo_quality"] = 85
+                cfg["photo_quality"] = 92
         config_store.set("system", "uploads", cfg)
         return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
                 "message": str(cfg.get("message", "")),
                 "photo_normalize": bool(cfg.get("photo_normalize", True)),
                 "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
-                "photo_quality": int(cfg.get("photo_quality", 85) or 85)}
+                "photo_quality": int(cfg.get("photo_quality", 92) or 92)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

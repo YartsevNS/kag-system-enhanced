@@ -1534,10 +1534,13 @@ class DocumentService:
     @staticmethod
     def _photo_settings() -> dict:
         """Настройки уменьшения снимков (админка, раздел «Загрузка документов»)."""
-        # Значения по умолчанию — из замера на снимках владельца: пиксели не уменьшаем (порог 6000 px
-        # срабатывает только на огромных снимках), качество 85 с выборкой 4:4:4 сохраняет распознавание 1:1,
-        # файл при этом падает втрое (5,21 МБ → 2,66 МБ, 6,96 МБ → 3,88 МБ).
-        opts = {"normalize": True, "max_side": 6000, "quality": 85}
+        # Умолчания — из замеров на снимках владельца (scripts/bakeoff/photo_format_check.py,
+        # photo_last_doc_check.py, photo_noise_check.py): пиксели не уменьшаем (порог 6000 px срабатывает
+        # только на огромных снимках), качество 92 с выборкой 4:4:4 — щадящее пересжатие.
+        # ВАЖНО: на плотных документах (мелкий шрифт, таблицы) даже лёгкое пересжатие меняет распознавание —
+        # на замере JPEG 95 терял числа на снимке 5,21 МБ. Поэтому админу доступны и качество, и полный отказ
+        # от обработки (photo_normalize=false), а для документов с мелким шрифтом лучше держать качество 95+.
+        opts = {"normalize": True, "max_side": 6000, "quality": 92}
         try:
             from src.api.services.config_store import config_store
             cfg = config_store.get("system", "uploads") or {}
@@ -1607,9 +1610,11 @@ class DocumentService:
             if len(payload) >= len(file_content):
                 return file_content, filename
             new_name = Path(filename).with_suffix(".jpg").name if suffix == ".png" else filename
+            what = (f"{long_side}px → {opts['max_side']}px" if resize
+                    else f"{long_side}px без изменения размера")
             logger.info(
-                f"Снимок уменьшен: {len(file_content) // 1024} КБ → {len(payload) // 1024} КБ "
-                f"({long_side}px → {opts['max_side']}px), {filename}"
+                f"Снимок сжат: {len(file_content) // 1024} КБ → {len(payload) // 1024} КБ "
+                f"({what}, JPEG {opts['quality']}), {filename}"
             )
             return payload, new_name
         except Exception as e:
