@@ -87,7 +87,7 @@ def main() -> None:
         base_lines = lines_of(base_res)
         base_text = " ".join(base_lines)
         base_nums = sorted(NUM.findall(base_text))
-        print(f"  эталон: {base_img.width}x{base_img.height}, {base_bytes / 1e6:.2f} МБ, "
+        print(f"  эталон: {base_img.width}x{base_img.height}, {len(base_bytes) / 1e6:.2f} МБ, "
               f"строк {len(base_lines)}, чисел {len(base_nums)}, распознавание {base_time:.1f} с")
 
         for quality in QUALITY:
