@@ -428,7 +428,28 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                     <strong>Контраст</strong> проверяется кнопкой «Проверить контраст» на этом стенде (scripts/bakeoff/contrast_check.py).
                 </div>
             </div>
-            <!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) --><div class="section"><h2 class="section-title"> Загрузка документов</h2><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)"><label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label></div><div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label><input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
+            <!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) --><div class="section"><h2 class="section-title"> Загрузка документов</h2><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)"><label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label></div><div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label><input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><div style="margin:14px 0 6px;padding-top:14px;border-top:1px solid var(--border-s)">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <input type="checkbox" id="up-photo-normalize" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
+                        <label for="up-photo-normalize" style="font-size:14px;font-weight:600;cursor:pointer">Уменьшать снимки с телефона при загрузке</label>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+                        <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Длинная сторона, пикселей</label>
+                            <input id="up-photo-max-side" type="number" min="1000" max="12000" step="100" onchange="saveUploadConfig()" style="width:130px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                        <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Качество JPEG</label>
+                            <input id="up-photo-quality" type="number" min="50" max="95" step="1" onchange="saveUploadConfig()" style="width:110px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                        <div style="font-size:12px;color:var(--text3);max-width:420px;line-height:1.5">
+                            Снимок с телефона приходит на 5–8 МБ. Замер на ваших снимках показал: уменьшать пиксели нельзя —
+                            распознавание меняется, перестают совпадать числа даже при уменьшении на 12%. Поэтому система не уменьшает
+                            снимок, а пересохраняет его в JPEG (качество ниже, выборка цвета 4:4:4 — сохраняет мелкий цветной текст)
+                            и снимает метаданные камеры; поворот по метке EXIF применяется. Итог: 5,21 МБ → 2,66 МБ, 6,96 МБ → 3,88 МБ,
+                            распознанный текст и числа совпадают с оригиналом полностью. Порог уменьшения (пикселей) оставлен для очень
+                            больших снимков — по умолчанию 6000, он не срабатывает на обычных телефонах.
+                        </div>
+                    </div>
+                    <div id="photo-size-note" style="font-size:12px;color:var(--text4);margin-top:8px"></div>
+                </div>
+                <button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
                 «Документы» и через API, парсинг сайтов (watched_urls) и RSS — новые документы не появляются ниоткуда
                 (API отвечает 423, мониторинг пропускает обход источников).
                 Обработка уже загруженных документов этим переключателем НЕ затрагивается — она управляется отдельной
@@ -922,6 +943,12 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 const cb = document.getElementById('upload-blocked');
                 if (cb && typeof d.blocked === 'boolean') cb.checked = d.blocked;
                 const msg = document.getElementById('upload-message');
+                const pn = document.getElementById('up-photo-normalize');
+                const ps = document.getElementById('up-photo-max-side');
+                const pq = document.getElementById('up-photo-quality');
+                if (pn) pn.checked = d.photo_normalize !== false;
+                if (ps) ps.value = d.photo_max_side || 6000;
+                if (pq) pq.value = d.photo_quality || 85;
                 if (msg && d.message) msg.value = d.message;
             } catch (e) { console.error('ingest-config load:', e); }
         }
@@ -935,6 +962,9 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                     body: JSON.stringify({
                         blocked: document.getElementById('upload-blocked').checked,
                         message: document.getElementById('upload-message').value,
+                        photo_normalize: document.getElementById('up-photo-normalize').checked,
+                        photo_max_side: parseInt(document.getElementById('up-photo-max-side').value || '6000', 10),
+                        photo_quality: parseInt(document.getElementById('up-photo-quality').value || '85', 10),
                     })
                 });
                 const d = await r.json();

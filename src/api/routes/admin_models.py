@@ -103,6 +103,14 @@ class BrandingConfig(BaseModel):
     color_text: Optional[str] = None      # #RRGGBB, основной текст
 
 
+class IngestPhotoConfig(BaseModel):
+    """Уменьшение снимков при загрузке (частичное обновление)."""
+
+    normalize: Optional[bool] = None      # включено ли уменьшение
+    max_side: Optional[int] = None        # длинная сторона, px (1000..12000)
+    quality: Optional[int] = None         # качество JPEG (50..95)
+
+
 class ProcessingBlockConfig(BaseModel):
     """Блокировка обработки документов (частичное обновление)."""
 
@@ -120,10 +128,14 @@ class GraphBuildConfig(BaseModel):
     message: Optional[str] = None
 
 class IngestBlockConfig(BaseModel):
-    """Блокировка загрузки документов (частичное обновление)."""
+    """Блокировка поступления документов (частичное обновление)."""
 
     blocked: Optional[bool] = None
     message: Optional[str] = None
+    # ── уменьшение снимков с телефона (снимок 5–8 МБ распознаванию не нужен) ──
+    photo_normalize: Optional[bool] = None
+    photo_max_side: Optional[int] = None
+    photo_quality: Optional[int] = None
 
 
 class SearchModeConfig(BaseModel):
@@ -2183,6 +2195,9 @@ async def get_ingest_config():
         return {
             "blocked": bool(cfg.get("blocked", False)),
             "message": str(cfg.get("message", "")),
+            "photo_normalize": bool(cfg.get("photo_normalize", True)),
+            "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
+            "photo_quality": int(cfg.get("photo_quality", 85) or 85),
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2200,9 +2215,25 @@ async def save_ingest_config(payload: IngestBlockConfig):
             cfg["blocked"] = bool(data["blocked"])
         if "message" in data:
             cfg["message"] = str(data["message"]).strip()[:200]
+        # Уменьшение снимков: значения проверяются на сервере (браузеру веры нет)
+        if "photo_normalize" in data:
+            cfg["photo_normalize"] = bool(data["photo_normalize"])
+        if "photo_max_side" in data:
+            try:
+                cfg["photo_max_side"] = max(1000, min(12000, int(data["photo_max_side"])))
+            except (TypeError, ValueError):
+                cfg["photo_max_side"] = 6000
+        if "photo_quality" in data:
+            try:
+                cfg["photo_quality"] = max(50, min(95, int(data["photo_quality"])))
+            except (TypeError, ValueError):
+                cfg["photo_quality"] = 85
         config_store.set("system", "uploads", cfg)
         return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
-                "message": str(cfg.get("message", ""))}
+                "message": str(cfg.get("message", "")),
+                "photo_normalize": bool(cfg.get("photo_normalize", True)),
+                "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
+                "photo_quality": int(cfg.get("photo_quality", 85) or 85)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

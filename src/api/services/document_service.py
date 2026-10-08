@@ -283,6 +283,12 @@ class DocumentService:
 
         ensure_ingest_allowed()
 
+        # ========== Этап 0.7: снимки уменьшаем до размера, нужного распознаванию ==========
+        # Делаем это ДО хеша: тогда в базе, на диске и при поиске дублей — один и тот же файл.
+        file_content, filename = await asyncio.to_thread(
+            self._normalize_photo, file_content, filename
+        )
+
         # ========== Этап 1: вычисляем SHA-256 хеш содержимого ==========
         # В поток: upload_document зовётся из async-роутов, а хеш большого файла
         # держит event loop (замер: 5 МБ — 14 мс, 20 МБ — 55 мс, 50 МБ — 140 мс).
@@ -1524,6 +1530,91 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Ошибка генерации миниатюры {document_id}: {e}")
             return None
+
+    @staticmethod
+    def _photo_settings() -> dict:
+        """Настройки уменьшения снимков (админка, раздел «Загрузка документов»)."""
+        # Значения по умолчанию — из замера на снимках владельца: пиксели не уменьшаем (порог 6000 px
+        # срабатывает только на огромных снимках), качество 85 с выборкой 4:4:4 сохраняет распознавание 1:1,
+        # файл при этом падает втрое (5,21 МБ → 2,66 МБ, 6,96 МБ → 3,88 МБ).
+        opts = {"normalize": True, "max_side": 6000, "quality": 85}
+        try:
+            from src.api.services.config_store import config_store
+            cfg = config_store.get("system", "uploads") or {}
+            if isinstance(cfg, dict):
+                if "photo_normalize" in cfg:
+                    opts["normalize"] = bool(cfg["photo_normalize"])
+                try:
+                    opts["max_side"] = max(1000, min(12000, int(cfg.get("photo_max_side", opts["max_side"]))))
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    opts["quality"] = max(50, min(95, int(cfg.get("photo_quality", opts["quality"]))))
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            pass
+        return opts
+
+    def _normalize_photo(self, file_content: bytes, filename: str) -> tuple[bytes, str]:
+        """Уменьшить снимок с телефона до размера, достаточного для распознавания.
+
+        Снимок с телефона — это 5–8 МБ. ЗАМЕР (scripts/bakeoff/photo_size_check.py и photo_zoom_check.py
+        на снимках владельца 4096 px): уменьшение пикселей МЕНЯЕТ распознавание — перестают совпадать
+        числа, даже при уменьшении всего на 12% (4096 → 3600). Причина: движок распознавания сам
+        приводит страницу к своему размеру, и лишняя пересборка пикселей перед ним размывает мелкий текст.
+        Поэтому здесь пиксели НЕ уменьшаются, а вес снимается пересохранением JPEG (качество из админки,
+        цветовая выборка 4:4:4 — она сохраняет мелкий цветной текст) и удалением метаданных снимка
+        (миниатюра EXIF, GPS, данные камеры). На замере: 5,21 МБ → 3,02 МБ при полностью совпавшем тексте.
+        Уменьшение остаётся как настройка для очень больших снимков (по умолчанию порог 6000 px).
+
+        Поворот из EXIF применяется обязательно — иначе снимок сохранится боком (телефон часто пишет
+        поворот не в пикселях, а в метке). Если после сжатия файл не стал меньше — возвращаем исходный.
+
+        Настройка: админка → «Загрузка документов» (system/uploads.photo_*).
+        """
+        suffix = Path(filename).suffix.lower()
+        if suffix not in (".jpg", ".jpeg", ".png"):
+            return file_content, filename
+        opts = self._photo_settings()
+        if not opts["normalize"]:
+            return file_content, filename
+        try:
+            import io as _io
+
+            from PIL import Image, ImageOps
+
+            with Image.open(_io.BytesIO(file_content)) as img:
+                img.load()
+                fixed = ImageOps.exif_transpose(img)          # поворот из EXIF — до всего остального
+                long_side = max(fixed.size)
+                resize = long_side > opts["max_side"]
+                # Пересохраняем, только если файл действительно большой или это не JPEG
+                # (PNG-снимок или скриншот весит в разы больше при том же содержимом).
+                heavy = len(file_content) > 400 * 1024 or suffix == ".png"
+                if not resize and not heavy:
+                    return file_content, filename
+                if resize:
+                    k = opts["max_side"] / long_side
+                    fixed = fixed.resize(
+                        (max(1, round(fixed.width * k)), max(1, round(fixed.height * k))), Image.LANCZOS
+                    )
+                buf = _io.BytesIO()
+                fixed.convert("RGB").save(buf, format="JPEG", quality=opts["quality"],
+                                          optimize=True, subsampling=0)   # 4:4:4 — не теряет мелкий цветной текст
+                payload = buf.getvalue()
+
+            if len(payload) >= len(file_content):
+                return file_content, filename
+            new_name = Path(filename).with_suffix(".jpg").name if suffix == ".png" else filename
+            logger.info(
+                f"Снимок уменьшен: {len(file_content) // 1024} КБ → {len(payload) // 1024} КБ "
+                f"({long_side}px → {opts['max_side']}px), {filename}"
+            )
+            return payload, new_name
+        except Exception as e:
+            logger.warning(f"Не удалось уменьшить снимок {filename}: {e}")
+            return file_content, filename
 
     @staticmethod
     def _fit_to_page(img: Any, page_w: int = 500, page_ratio: float = 1.4142,
