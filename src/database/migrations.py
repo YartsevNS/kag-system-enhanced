@@ -34,6 +34,12 @@ _COLUMN_MIGRATIONS = [
     # домен документа: нужен и для фильтра RAG, и чтобы его было видно в админке
     # (раньше жил только в payload Qdrant и правился лишь переиндексацией).
     ("documents", "domain", "VARCHAR(32) DEFAULT ''"),
+    # documents — семантика как ПОЛЯ ДАННЫХ (не вывод модели на лету): издатель, фасеты,
+    # версия схемы разметки. Без этого правка словаря требует переобработки корпуса, а
+    # «кто издал документ» восстанавливается только из текста.
+    ("documents", "issuer", "VARCHAR DEFAULT ''"),
+    ("documents", "facets", "TEXT DEFAULT '{}'"),
+    ("documents", "schema_version", "VARCHAR DEFAULT ''"),
     ("documents", "previous_hash", "VARCHAR DEFAULT ''"),
     ("documents", "original_text", "TEXT"),
     ("documents", "source_metadata", "TEXT"),

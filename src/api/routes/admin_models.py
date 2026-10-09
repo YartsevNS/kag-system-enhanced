@@ -2209,6 +2209,94 @@ async def warm_reranker_endpoint():
         return {"loaded": False, "error": f"{type(e).__name__}: {e}"}
 
 
+class DocumentClassificationFix(BaseModel):
+    """Ручная правка разметки документа (действие человека, а не вывод модели)."""
+
+    document_id: str
+    document_type: Optional[str] = None
+    domain: Optional[str] = None
+    issuer: Optional[str] = None
+    topics: Optional[list] = None            # многозначная тема
+    facets: Optional[dict] = None            # фасеты: предмет защиты, этап, нормативная сила, гриф
+    note: Optional[str] = None               # зачем поправили
+
+
+@router.post("/document-classification", summary="Поправить разметку документа вручную")
+async def fix_document_classification(payload: DocumentClassificationFix,
+                                      current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Ручная правка вида/темы/фасетов документа с записью в журнал действий.
+
+    Зачем: разметку ставит модель, и она ошибается. Без ручной правки ошибку не исправить вообще,
+    а правка без провенанса через месяц неотличима от машинной разметки. Поэтому: меняем поля
+    в БД и в payload Qdrant (чтобы фильтры поиска сразу это учитывали) и пишем в журнал действий
+    КТО и ЗАЧЕМ изменил.
+    """
+    try:
+        import json as _json
+
+        from src.api.services.document_repository import get_doc_repo
+
+        data = payload.model_dump(exclude_unset=True)
+        doc_id = data.pop("document_id", "")
+        note = data.pop("note", None)
+        if not doc_id:
+            return {"status": "error", "message": "не указан document_id"}
+        repo = get_doc_repo()
+        before = repo.get_dict(doc_id) or {}
+        if not before:
+            return {"status": "error", "message": "документ не найден"}
+
+        changes: dict = {}
+        for field in ("document_type", "domain", "issuer"):
+            if field in data and data[field] is not None:
+                changes[field] = str(data[field])[:120]
+        if "topics" in data and data["topics"] is not None:
+            changes["topics"] = _json.dumps(data["topics"], ensure_ascii=False)
+        if "facets" in data and data["facets"] is not None:
+            changes["facets"] = _json.dumps(data["facets"], ensure_ascii=False)
+        if not changes:
+            return {"status": "error", "message": "нечего менять"}
+        changes["schema_version"] = "manual"
+
+        repo.upsert(doc_id, changes)
+        # payload в Qdrant — иначе фильтры поиска не увидят правку
+        try:
+            from src.indexing.embeddings_service import service_for_document
+
+            await service_for_document(doc_id).update_document_payload(doc_id, {
+                k: (_json.loads(v) if k in ("topics", "facets") else v) for k, v in changes.items()
+            })
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).warning(f"[manual] payload не обновлён для {doc_id[:12]}: {e}")
+
+        try:
+            from src.security.provenance import append_action
+
+            append_action(
+                actor=(current_user.username if current_user else "unknown"),
+                action="document_classification",
+                target=doc_id,
+                details={"changed": sorted(changes.keys()), "values": changes, "note": note,
+                         "before": {k: before.get(k) for k in changes if k != "schema_version"}},
+            )
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).warning(f"[manual] журнал действий недоступен: {e}")
+
+        return {"status": "ok", "document_id": doc_id, "changed": sorted(changes.keys())}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/document-actions", summary="Журнал ручных правок (кто, когда, что, зачем)")
+async def get_document_actions(limit: int = 30):
+    try:
+        from src.security.provenance import actions
+
+        return {"items": actions(max(1, min(200, int(limit or 30))))}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/provenance", summary="Журнал происхождения файлов и проверка цепочки")
 async def get_provenance(limit: int = 20):
     """Показать хвост журнала происхождения и проверить целостность цепочки.

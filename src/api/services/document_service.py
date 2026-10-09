@@ -1000,7 +1000,8 @@ class DocumentService:
                     # В record (SQLAlchemy-объект конвейера) поля ещё старые: анализ
                     # писал в БД через отдельный объект. Обновляем, иначе в payload
                     # уйдёт document_type="unknown" (регрессия против прежнего порядка).
-                    for _f in ("document_type", "recognized_title", "summary", "topics"):
+                    for _f in ("document_type", "recognized_title", "summary", "topics",
+                               "issuer", "facets", "schema_version"):
                         if _doc_fresh.get(_f) is not None:
                             try:
                                 setattr(record, _f, _doc_fresh[_f])
@@ -1017,6 +1018,13 @@ class DocumentService:
                     "file_size": record.file_size,
                     "document_type": getattr(record, 'document_type', '') or "unknown",
                     "domain": domain,
+                    # Семантика как поля данных: издатель, фасеты, темы и версия схемы разметки.
+                    # Их видно в payload, значит по ним можно фильтровать поиск, а не выводить
+                    # на лету моделью.
+                    "issuer": getattr(record, 'issuer', '') or "",
+                    "facets": getattr(record, 'facets', '') or "{}",
+                    "topics": getattr(record, 'topics', '') or "[]",
+                    "schema_version": getattr(record, 'schema_version', '') or "",
                     # Права доступа (ACL): наследуются чанками
                     "visibility": getattr(record, 'visibility', 'public') or 'public',
                     "allow_group_ids": getattr(record, 'allow_group_ids', None) or [],

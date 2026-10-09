@@ -43,6 +43,13 @@ class Document(Base):
     summary = Column(Text, default="")
     topics = Column(Text, default="[]")  # JSON list
     domain = Column(String(32), default="")  # домен документа (infosec/accounting/legal/universal)
+    # Издатель (кто выпустил документ): Росстандарт, ФСТЭК, Банк России, организация…
+    issuer = Column(String, default="")
+    # Фасеты — независимые перечни: предмет защиты, этап, нормативная сила, гриф.
+    # Хранятся JSON-объектом (значение может быть списком — фасет многозначный).
+    facets = Column(Text, default="{}")
+    # Версия схемы, по которой документ размечен: при смене словаря видно, что переразметить.
+    schema_version = Column(String, default="")
     # Версионность и контекст
     previous_hash = Column(String, default="")
     original_text = Column(Text, default=None)

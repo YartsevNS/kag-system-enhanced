@@ -96,6 +96,69 @@ def append(document_id: str, sha256: str, size: int, filename: str,
         return None
 
 
+def _actions_path() -> Path:
+    return _journal_path().parent / "actions.jsonl"
+
+
+def append_action(actor: str, action: str, target: str, details: Optional[Dict[str, Any]] = None,
+                  timestamp: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Записать ПРАВКУ, сделанную человеком (аналог «журнала действий» в промышленных онтологиях).
+
+    Хранится отдельно от журнала загрузок и по той же схеме с хеш-цепочкой: видно, КТО, КОГДА,
+    ЧТО и С КАКИМ обоснованием изменил. Без этого правка словаря или типа документа неотличима
+    от машинной разметки, и через месяц никто не скажет, откуда взялось значение.
+    """
+    record: Dict[str, Any] = {
+        "ts": timestamp or datetime.now(timezone.utc).isoformat(),
+        "actor": actor or "unknown",
+        "action": action,
+        "target": target,
+        "details": details or {},
+    }
+    try:
+        path = _actions_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _LOCK:
+            last_hash, seq = GENESIS, 0
+            if path.exists() and path.stat().st_size:
+                with path.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            prev = json.loads(line)
+                        except Exception:
+                            continue
+                        last_hash, seq = prev.get("hash", last_hash), int(prev.get("seq", seq)) + 1
+            record["seq"] = seq
+            record["prev_hash"] = last_hash
+            record["hash"] = _hash_record(record)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+            return record
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[provenance] журнал действий недоступен: {e}")
+        return None
+
+
+def actions(limit: int = 50) -> List[Dict[str, Any]]:
+    """Последние правки человека (свежие — первыми)."""
+    path = _actions_path()
+    if not path.exists():
+        return []
+    out: List[Dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    continue
+    return list(reversed(out))[: max(1, limit)]
+
+
 def verify() -> Tuple[bool, int, Optional[int]]:
     """Проверить цепочку. Возвращает (цепочка_цела, число_записей, номер_первой_битой)."""
     path = _journal_path()
