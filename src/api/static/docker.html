@@ -69,7 +69,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 :root[data-theme="dark"] .btn { background: var(--accent-solid); color: var(--on-accent); }
 </style>
 </head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Контейнеры, ресурсы и системная информация. Значения снимаются по запросу (кнопка «Обновить»), динамика — в разделе Grafana ниже</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <span id="load-stamp" style="float:right;font-size:11px;color:var(--text4);margin-left:10px"></span> <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Динамика (Grafana) <button class="btn" onclick="enableGrafana()" style="float:right;font-size:11px">Включить графики</button></h2><div id="grafana-wrap" style="min-height:420px">
-        <iframe id="grafana-frame" src="/grafana/d/kag-storage/?kiosk&amp;refresh=1m&amp;from=now-7d&amp;to=now"
+        <iframe id="grafana-frame" src="about:blank"
                 style="width:100%;height:520px;border:1px solid var(--border-s);border-radius:var(--radius);background:var(--surface)"
                 loading="lazy" referrerpolicy="no-referrer"></iframe>
         <div style="font-size:12px;color:var(--text4);margin-top:8px">
@@ -80,6 +80,15 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         <div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
 
 <script>
+function showLoadError(where, err) {
+  // Раньше сбой загрузки оставлял панели со спиннером «Загрузка…» и выглядел как зависший сервер.
+  const box = document.getElementById(where);
+  const text = (err && (err.message || err)) || 'неизвестная ошибка';
+  if (box) box.innerHTML = '<div style="font-size:12px;color:#b3261e;padding:8px 0">Данные не загрузились: '
+    + String(text).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))
+    + '</div>';
+}
+
 async function loadAll() {
   try {
     const [sysR, dockerR, rawR] = await Promise.all([
@@ -87,12 +96,15 @@ async function loadAll() {
       fetch('/api/v1/admin/models/docker/stats').then(r=>r.json()).catch(()=>null),
       fetch('/api/v1/admin/models/storage/raw').then(r=>r.json()).catch(()=>null)
     ]);
-    if (sysR && !sysR.error) renderSystem(sysR);
-    if (dockerR) renderDocker(dockerR);
-    if (rawR && !rawR.error) renderStorageRaw(rawR);
+    // Каждая часть рисуется отдельно: сбой одной не должен прятать остальные
+    try { if (sysR && !sysR.error) renderSystem(sysR); } catch (e) { showLoadError('stats-row', e); }
+    try { if (dockerR && !dockerR.error) renderDocker(dockerR); else showLoadError('containers', dockerR && dockerR.message); }
+    catch (e) { showLoadError('containers', e); }
+    try { if (rawR && !rawR.error) renderStorageRaw(rawR); else showLoadError('disks', rawR && rawR.message); }
+    catch (e) { showLoadError('disks', e); }
     const stamp = document.getElementById('load-stamp');
     if (stamp) stamp.textContent = 'данные сняты в ' + new Date().toLocaleTimeString('ru-RU');
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error(e); showLoadError('containers', e); }
 }
 
 function fillClass(v, w, c) { return v >= c ? 'fill-err' : v >= w ? 'fill-warn' : 'fill-ok'; }

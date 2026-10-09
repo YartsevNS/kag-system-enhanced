@@ -35,8 +35,10 @@ def main() -> None:
         page.on("console", lambda m: errors.append(f"консоль: {m.text[:200]}") if m.type == "error" else None)
         page.on("requestfailed", lambda r: failed.append(f"{r.url[:120]} — {r.failure}"))
         # Главное для разбора: какие именно запросы вернули ошибку (без этого «403» ни о чём не говорит)
-        page.on("response", lambda r: bad_responses.append(f"{r.status} {r.url[:130]}")
-                if r.status >= 400 else None)
+        api_calls = []
+        page.on("response", lambda r: (
+            bad_responses.append(f"{r.status} {r.url[:130]}") if r.status >= 400 else None,
+            api_calls.append(f"{r.status} {r.url.split('/api/v1')[-1][:60]}") if "/api/v1" in r.url else None))
 
         # Запоминаем, что именно вернул API хранилища — по этому видно, дошёл ли до страницы grafana_url
         page.on("response", lambda r: page.evaluate("k => window.__kagRawKeys = k",
@@ -65,6 +67,9 @@ def main() -> None:
         print("\nкадр Grafana:", state["frameSrc"][:120])
         print("отметка времени:", state["stamp"])
 
+        print("\nзапросы к нашему API:")
+        for a in dict.fromkeys(api_calls):
+            print("  -", a)
         print("\nответы с ошибкой:", len(bad_responses))
         for b in dict.fromkeys(bad_responses):
             print("  -", b)
