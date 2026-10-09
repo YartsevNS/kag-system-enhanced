@@ -609,6 +609,10 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                     ></textarea><button class="send-btn" id="send-btn" onclick="sendMessage()">→</button></div><div class="input-hint">
                     Enter - отправить • Shift+Enter - новая строка
                     <span style="margin-left:10px">
+                        Источник:
+                        <select id="chat-scope" onchange="saveChatScope()"
+                                style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px"><option value="">документы (по умолчанию)</option><option value="news">только новости</option><option value="all">документы и новости</option></select><span title="Где искать ответ. По умолчанию — только загруженные документы; новости монитора источников лежат в отдельной коллекции и в выдачу по документам не попадают. «Только новости» — поиск по новостям, «документы и новости» — по обоим.">?</span></span>
+                    <span style="margin-left:10px">
                         Контекст:
                         <select id="context-depth" onchange="saveContextDepth()"
                                 style="background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:11px"><option value="">как в настройках</option><option value="3">3 фрагмента (быстро)</option><option value="5">5 фрагментов</option><option value="8">8 фрагментов</option><option value="10">10 фрагментов</option><option value="15">15 фрагментов</option><option value="20">20 фрагментов (полно)</option></select><span title="Сколько найденных фрагментов уходит модели. Меньше — быстрее и дешевле, но выше риск потерять нужную норму; больше — полнее ответ, но медленнее. «Как в настройках» — значение из админки (привязка функции chat).">?</span></span><span style="margin-left:10px">
@@ -653,6 +657,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             loadSessions();
             loadCurrentModel();
             restoreContextDepth();
+            restoreChatScope();
             restoreScoreGap();
             document.getElementById('message-input').focus();
         });
@@ -708,6 +713,31 @@ img, svg, video, canvas, iframe { max-width: 100%; }
             try {
                 const saved = localStorage.getItem('kag_score_gap');
                 const sel = document.getElementById('score-gap');
+                if (saved && sel) sel.value = saved;
+            } catch (e) { /* ignore */ }
+        }
+
+        // ── Источник поиска: документы / новости / оба ────────────────────────────
+        // Новости монитора источников лежат в ОТДЕЛЬНОЙ коллекции (kag_news): по умолчанию
+        // они не смешиваются с нормативными документами, иначе свежая новость ЦБ попадает
+        // в ответ на вопрос по ГОСТу. Пусто = как принято по умолчанию (документы).
+        function chatScope() {
+            const sel = document.getElementById('chat-scope');
+            return sel && sel.value ? sel.value : null;
+        }
+
+        function saveChatScope() {
+            try {
+                const v = chatScope();
+                if (v) { localStorage.setItem('kag_chat_scope', v); }
+                else { localStorage.removeItem('kag_chat_scope'); }
+            } catch (e) { /* приватный режим */ }
+        }
+
+        function restoreChatScope() {
+            try {
+                const saved = localStorage.getItem('kag_chat_scope');
+                const sel = document.getElementById('chat-scope');
                 if (saved && sel) sel.value = saved;
             } catch (e) { /* ignore */ }
         }
@@ -1066,6 +1096,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                         },
                         contextDepth() ? { context_limit: contextDepth() } : {},
                         scoreGap() ? { min_score_gap: scoreGap() } : {},
+                        chatScope() ? { scope: chatScope() } : {},
                         modelChoice() ? { provider_id: modelChoice().provider_id, model: modelChoice().model } : {}
                     ))
                 });
