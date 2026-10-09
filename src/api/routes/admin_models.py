@@ -2257,6 +2257,65 @@ async def save_ingest_config(payload: IngestBlockConfig):
 
 
 # ═══════════════════════════════════════
+# Хранилище: сырые данные утилит
+# ═══════════════════════════════════════
+
+@router.get("/storage/raw", summary="Сырые данные утилит о хранилище (df, du, docker)")
+async def storage_raw():
+    """Отдать тексты команд и значения как есть, без наших вычислений.
+
+    Зачем: проценты и доли, посчитанные «на лету», уже приводили к ложной тревоге — в таблице
+    «что занимает место» каталог Docker давал 98%, потому что делился на сумму показанных каталогов,
+    а не на состояние диска. Здесь мы ничего не считаем: отдаём то, что напечатали df, du и Docker;
+    динамику и доли считает Grafana на своей стороне по истории.
+    """
+    import subprocess
+
+    def run(cmd, timeout=30.0) -> str:
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return res.stdout.strip() if res.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    data_dir = os.environ.get("DATA_DIR", "/app/data")
+    dirs = [data_dir, f"{data_dir}/uploads", f"{data_dir}/thumbnails", f"{data_dir}/ocr_results"]
+    du_lines = []
+    for path in dirs:
+        line = run(["du", "-sh", path])
+        if line:
+            du_lines.append(line)
+
+    docker_rows = []
+    try:
+        from src.api.services.docker_monitor import docker_monitor
+        client = docker_monitor._ensure_client() or getattr(docker_monitor, "_client", None)
+        if client is not None:
+            df = client.df()
+            images = df.get("Images") or []
+            containers = df.get("Containers") or []
+            volumes = df.get("Volumes") or []
+            docker_rows = [
+                {"kind": "Образы", "count": len(images), "size": sum(int(i.get("Size") or 0) for i in images),
+                 "shared": sum(int(i.get("SharedSize") or 0) for i in images)},
+                {"kind": "Контейнеры", "count": len(containers),
+                 "size": sum(int(c.get("SizeRw") or 0) for c in containers), "shared": 0},
+                {"kind": "Тома", "count": len(volumes),
+                 "size": sum(int(v.get("UsageData", {}).get("Size") or 0) for v in volumes), "shared": 0},
+            ]
+    except Exception as e:
+        logger.debug(f"storage/raw: Docker недоступен ({e})")
+
+    return {
+        "df_h": run(["df", "-h"]),
+        "du": "\n".join(du_lines),
+        "docker": docker_rows,
+        "note": ("Значения сняты командами df, du и через Docker API. Проценты и доли здесь не считаются — "
+                 "динамику и доли показывает Grafana по истории метрик (раздел «Динамика»)."),
+    }
+
+
+# ═══════════════════════════════════════
 # Отчёты на почту
 # ═══════════════════════════════════════
 

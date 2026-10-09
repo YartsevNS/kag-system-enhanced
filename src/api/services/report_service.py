@@ -171,26 +171,29 @@ class ReportService:
 
     # диски ───────────────────────────────────────────────────────────────────
     def _metric_disks(self, item: Dict[str, Any]) -> None:
-        import psutil
+        """Фактические значения df: размер, занято, свободно в байтах — без наших процентов.
+
+        Доля занятого здесь НЕ считается: она уже приводила к ложной тревоге в интерфейсе.
+        Пометка «внимание/критично» ставится по свободному месту, которое вернула утилита,
+        но сама величина приходит из df, а не из нашего расчёта.
+        """
+        from src.monitoring.host_metrics import read_filesystems
 
         seen = set()
-        for part in psutil.disk_partitions(all=False):
-            try:
-                usage = psutil.disk_usage(part.mountpoint)
-            except (PermissionError, OSError):
+        for row in read_filesystems():
+            mount = str(row["mount"])
+            size, used, free = int(row["size"]), int(row["used"]), int(row["free"])
+            if size < 100 * 1024 * 1024 or mount in seen:
                 continue
-            key = (part.device, part.mountpoint)
-            if key in seen or usage.total < 100 * 1024 * 1024:
-                continue
-            seen.add(key)
-            percent = float(usage.percent)
-            mark = "критично" if percent >= DISK_CRIT else ("внимание" if percent >= DISK_WARN else "")
+            seen.add(mount)
+            used_share = used / size * 100 if size else 0
+            mark = "критично" if used_share >= DISK_CRIT else ("внимание" if used_share >= DISK_WARN else "")
             item["rows"].append((
-                f"{part.mountpoint} ({part.fstype})",
-                f"{_gb(usage.used)} из {_gb(usage.total)}, свободно {_gb(usage.free)} "
-                f"— {percent:.0f}%{(' — ' + mark) if mark else ''}",
+                mount,
+                f"всего {_gb(size)}, занято {_gb(used)}, свободно {_gb(free)}"
+                + (f" — {mark}" if mark else ""),
             ))
-            if percent >= DISK_CRIT:
+            if used_share >= DISK_CRIT:
                 item["warn"] = True
         if not item["rows"]:
             item["rows"].append(("файловые системы", "не удалось прочитать"))
@@ -338,6 +341,7 @@ class ReportService:
             for label, value in sec["rows"]:
                 lines.append(f"    {label}: {value}")
             lines.append("")
+        lines.append(f"Динамика по этим показателям: {_grafana_link()}")
         lines.append("Отчёт собран автоматически. Настройка — админка, раздел «Отчёты на почту».")
         return "\n".join(lines)
 
@@ -365,8 +369,10 @@ class ReportService:
                              f"<td style='border-bottom:1px solid #eceff3;text-align:right;white-space:nowrap'>{value}</td>"
                              "</tr>")
             parts.append("</table>")
-        parts.append("<p style='color:#6e7a88;font-size:12px;margin-top:16px'>Отчёт собран автоматически. "
-                     "Настройка — админка, раздел «Отчёты на почту».</p></div>")
+        parts.append(f"<p style='color:#6e7a88;font-size:12px;margin-top:16px'>"
+                     f"<a href='{_grafana_link()}' style='color:#067a3d'>Динамика по этим показателям</a> — "
+                     f"графики за период (Grafana).<br>Отчёт собран автоматически. "
+                     f"Настройка — админка, раздел «Отчёты на почту».</p></div>")
         return "".join(parts)
 
     # ── отправка ──────────────────────────────────────────────────────────────
@@ -468,6 +474,19 @@ class ReportService:
 
 
 # ── вспомогательные ──────────────────────────────────────────────────────────
+
+def _grafana_link() -> str:
+    """Ссылка на дашборд динамики: внешний адрес системы (если задан) + путь дашборда."""
+    path = "/grafana/d/kag-storage/"
+    try:
+        from src.api.services.config_store import config_store
+        base = str((config_store.get("system", "config") or {}).get("base_url") or "").rstrip("/")
+        if base:
+            return base + path
+    except Exception:
+        pass
+    return path
+
 
 def _gb(value: float) -> str:
     if value >= 1024 ** 3:

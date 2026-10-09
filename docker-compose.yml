@@ -473,6 +473,15 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?не задан GRAFANA_ADMIN_PASSWORD (.env)}
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Анонимный доступ ТОЛЬКО на чтение и разрешённое встраивание: панели Grafana
+      # показываются внутри страниц системы (iframe через наш домен, /grafana/).
+      # Редактирование дашбордов при этом закрыто — нужен вход администратора.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # Grafana живёт по подпути /grafana/, иначе ссылки в интерфейсе ведут на корень
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro

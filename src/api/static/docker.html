@@ -68,19 +68,30 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Все контейнеры, ресурсы, системная информация — автообновление 5с</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
+</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Контейнеры, ресурсы и системная информация. Значения снимаются по запросу (кнопка «Обновить»), динамика — в разделе Grafana ниже</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <span id="load-stamp" style="float:right;font-size:11px;color:var(--text4);margin-left:10px"></span> <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Динамика (Grafana)</h2><div id="grafana-wrap" style="min-height:420px">
+        <iframe id="grafana-frame" src="/grafana/d/kag-storage/?kiosk&amp;refresh=1m&amp;from=now-7d&amp;to=now"
+                style="width:100%;height:520px;border:1px solid var(--border-s);border-radius:var(--radius);background:var(--surface)"
+                loading="lazy" referrerpolicy="no-referrer"></iframe>
+        <div style="font-size:12px;color:var(--text4);margin-top:8px">
+            История показателей хранится в Prometheus, графики строит Grafana (дашборд «KAG — хранилище и нагрузка»).
+            Наша страница значения не пересчитывает: если панель не отображается, откройте её напрямую —
+            <a href="/grafana/d/kag-storage/" target="_blank" style="color:var(--accent)">дашборд в Grafana</a>.
+        </div></div></div>
+        <div class="panel"><h2> Сеть</h2><div id="network"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Процессы (top-10 по памяти)</h2><div id="processes"><div class="loading"><div class="spin"></div></div></div></div></main>
 
 <script>
 async function loadAll() {
   try {
-    const [sysR, dockerR, duR] = await Promise.all([
+    const [sysR, dockerR, rawR] = await Promise.all([
       fetch('/api/v1/admin/models/system/info').then(r=>r.json()).catch(()=>null),
       fetch('/api/v1/admin/models/docker/stats').then(r=>r.json()).catch(()=>null),
-      fetch('/api/v1/admin/disk-usage').then(r=>r.json()).catch(()=>null)
+      fetch('/api/v1/admin/models/storage/raw').then(r=>r.json()).catch(()=>null)
     ]);
     if (sysR && !sysR.error) renderSystem(sysR);
     if (dockerR) renderDocker(dockerR);
-    if (duR) renderDiskUsage(duR);
+    if (rawR && !rawR.error) renderStorageRaw(rawR);
+    const stamp = document.getElementById('load-stamp');
+    if (stamp) stamp.textContent = 'данные сняты в ' + new Date().toLocaleTimeString('ru-RU');
   } catch(e) { console.error(e); }
 }
 
@@ -98,13 +109,9 @@ function renderSystem(d) {
     <div class="stat"><div class="val">${pct(mem.used,mem.total)}</div><div class="lbl">RAM ${fmt(mem.used)}/${fmt(mem.total)}</div><div class="bar"><div class="fill ${fillClass(mem.percent,70,90)}" style="width:${Math.min(mem.percent||0,100)}%"></div></div></div>
     <div class="stat"><div class="val">${(d.uptime||0)>86400?Math.floor(d.uptime/86400)+'д':'—'}</div><div class="lbl">Uptime</div></div>`;
 
-  // Disks
-  const disks = d.disk || [];
-  window.__kagDisks = disks;      // нужны для подписи файловой системы в разделе «Что занимает место»
-  document.getElementById('disks').innerHTML = disks.length ? 
-    '<table><thead><tr><th>Устройство</th><th>Точка</th><th>ФС</th><th>Размер</th><th>Исп.</th><th>Своб.</th><th>%</th></tr></thead><tbody>'+
-    disks.map(dd => `<tr><td class="mono">${dd.device}</td><td>${dd.mountpoint}</td><td>${dd.fstype}</td><td>${fmt(dd.total)}</td><td>${fmt(dd.used)}</td><td>${fmt(dd.free)}</td><td><span class="badge ${dd.percent>90?'badge-err':dd.percent>70?'badge-warn':'badge-ok'}">${dd.percent.toFixed(0)}%</span></td></tr>`).join('')+
-    '</tbody></table>' : '<span style="color:var(--text4)">Нет данных</span>';
+  // Диски: таблицу с процентами не рисуем — проценты, посчитанные на месте, уже приводили
+  // к ложной тревоге («98%» было долей каталога Docker в сумме показанных каталогов).
+  // Ниже показываем то, что напечатали утилиты, а доли и динамику считает Grafana.
 
   // Network
   const net = d.network || {};
@@ -147,6 +154,25 @@ function renderDocker(d) {
         <td>${running?`<button class="btn-sm" onclick="act('${c.name}','restart')">↻</button><button class="btn-sm" onclick="act('${c.name}','stop')">■</button>`:`<button class="btn-sm" onclick="act('${c.name}','start')">▶</button>`}<button class="btn-sm" onclick="act('${c.name}','logs')">▶</button></td>
       </tr>`;
     }).join('')+'</tbody></table>' : '<span style="color:var(--text4)">Нет контейнеров</span>';
+}
+
+function renderStorageRaw(d) {
+  // Сырые данные утилит: df -h, du -sh и размеры Docker — как есть, без наших вычислений.
+  const box = document.getElementById('disks');
+  if (!box) return;
+  const pre = (text) => '<pre class="mono" style="background:var(--elevated);border:1px solid var(--border-s);'
+    + 'border-radius:var(--radius-sm);padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;margin:0 0 12px">'
+    + String(text || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</pre>';
+  let html = '<div style="font-size:12px;color:var(--text4);margin-bottom:8px">Значения сняты командами, без пересчёта на нашей стороне. Динамика — в разделе «Динамика (Grafana)» ниже.</div>';
+  if (d.df_h) html += '<div style="font-size:12px;color:var(--text3);margin-bottom:4px">df -h</div>' + pre(d.df_h);
+  if (d.du) html += '<div style="font-size:12px;color:var(--text3);margin-bottom:4px">du -sh (данные системы)</div>' + pre(d.du);
+  if (Array.isArray(d.docker) && d.docker.length) {
+    html += '<div style="font-size:12px;color:var(--text3);margin-bottom:4px">Docker (размеры как есть)</div>'
+          + '<table><thead><tr><th>Раздел</th><th>Объектов</th><th>Размер</th><th>Общий с другими</th></tr></thead><tbody>'
+          + d.docker.map(r => `<tr><td>${r.kind}</td><td>${r.count}</td><td>${fmt(r.size)}</td><td>${r.shared ? fmt(r.shared) : '—'}</td></tr>`).join('')
+          + '</tbody></table>';
+  }
+  box.innerHTML = html;
 }
 
 function renderDiskUsage(d) {
@@ -213,8 +239,10 @@ async function act(name, action) {
   } catch(e) { alert(e.message); }
 }
 
+// Данные снимаются ПО ЗАПРОСУ: открытие страницы и кнопка «Обновить». Постоянный опрос
+// (было раз в 5 с) нагружал сервер командами df/du/docker без пользы — история для графиков
+// собирается отдельно, фоновым съёмом в метрики (Prometheus), а не этим окном.
 loadAll();
-setInterval(loadAll, 5000);
 
 function logout() {
   localStorage.removeItem('kag_token');

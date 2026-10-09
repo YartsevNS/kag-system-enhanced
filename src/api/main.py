@@ -142,6 +142,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"HotFolderWatcher не запущен: {e}")
     
+    # Съём показателей хранилища (диски, каталоги данных, размеры Docker) — раз в минуту,
+    # независимо от того, открыта ли страница. Так интерфейс открывается с готовыми данными,
+    # а в Prometheus нет дыр в истории для графиков динамики.
+    host_metrics_task = None
+    try:
+        from src.monitoring.host_metrics import host_metrics_loop
+        host_metrics_task = asyncio.create_task(host_metrics_loop())
+        logger.info("Съём показателей хранилища запущен")
+    except Exception as e:
+        logger.warning(f"Съём показателей хранилища не запущен: {e}")
+
     # Планировщик отчётов на почту: раз в минуту проверяет, не пора ли отправить по расписанию,
     # которое задано в админке. Отправка идёт в отдельном потоке, поэтому API не блокируется.
     report_task = None
@@ -153,6 +164,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Планировщик отчётов не запущен: {e}")
 
     yield
+
+    # Остановка съёма показателей хранилища
+    if host_metrics_task is not None:
+        host_metrics_task.cancel()
+        try:
+            await host_metrics_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Остановка планировщика отчётов
     if report_task is not None:

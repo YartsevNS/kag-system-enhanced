@@ -21,6 +21,19 @@ from datetime import datetime, timedelta
 API = "http://127.0.0.1:8000/api/v1"
 
 
+def _default_gateway() -> str:
+    """Адрес хоста глазами контейнера: шлюз по умолчанию из /proc/net/route (без внешних утилит)."""
+    try:
+        with open("/proc/net/route") as f:
+            for line in f.readlines()[1:]:
+                fields = line.split()
+                if len(fields) > 2 and fields[1] == "00000000":
+                    return ".".join(str(int(fields[2][i:i + 2], 16)) for i in (6, 4, 2, 0))
+    except Exception:
+        pass
+    return ""
+
+
 def call(path: str, method: str = "GET", body: dict | None = None, cookie: str = "") -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f"{API}{path}", data=data, method=method,
@@ -51,12 +64,16 @@ def main() -> None:
         print("   ", line)
 
     # ── 2) сохраняем тестовую настройку на локальный приёмник ──
+    # Приёмник поднимается на ХОСТЕ, а мы внутри контейнера: 127.0.0.1 здесь — сам контейнер.
+    # Поэтому берём адрес шлюза по умолчанию (это и есть хост) или явный SMTP_HOST из окружения.
+    smtp_host = os.environ.get("SMTP_HOST") or _default_gateway() or "127.0.0.1"
     smtp_port = int(os.environ.get("SMTP_PORT", "1025"))
+    print(f"SMTP для проверки: {smtp_host}:{smtp_port}")
     test_cfg = {
         "enabled": True, "schedule": "daily", "time": "07:00", "weekday": 0,
         "recipients": "test@example.local", "subject_prefix": "KAG-ТЕСТ",
         "metrics": ["disks", "documents", "queue", "services"],
-        "smtp_host": "127.0.0.1", "smtp_port": smtp_port, "smtp_user": "", "smtp_tls": False,
+        "smtp_host": smtp_host, "smtp_port": smtp_port, "smtp_user": "", "smtp_tls": False,
         "from_addr": "kag@example.local",
     }
     saved = call("/admin/models/report-config", "POST", test_cfg, cookie)
