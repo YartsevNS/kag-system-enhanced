@@ -117,6 +117,30 @@ class DockerMonitor:
             logger.error(f"Ошибка получения списка контейнеров: {e}")
             return []
 
+    def stats_snapshot(self, max_age_s: float = 25.0) -> Dict[str, Dict[str, Any]]:
+        """Статистика контейнеров из снимка, снимаемого в фоне.
+
+        Почему снимок, а не съём по запросу: Docker отдаёт статистику по контейнеру за две выборки,
+        и обход 13 контейнеров занимает десятки секунд. Раньше страница ждала этот ответ и всё это
+        время показывала «Загрузка…». Теперь фон обновляет снимок, а страница получает готовые данные.
+        Если снимка нет (только после старта), собираем синхронно — один раз.
+        """
+        import time as _time
+
+        cached = getattr(self, "_stats_cache", None)
+        if cached and (_time.time() - cached[0]) < max_age_s:
+            return cached[1]
+        return self.refresh_stats_cache()
+
+    def refresh_stats_cache(self) -> Dict[str, Dict[str, Any]]:
+        """Собрать статистику и положить в снимок (вызывается и фоном, и при отсутствии снимка)."""
+        import time as _time
+
+        data = self.get_container_stats() or {}
+        if data:
+            self._stats_cache = (_time.time(), data)
+        return data
+
     def get_container_stats(self) -> Dict[str, Dict[str, Any]]:
         """
         Получить статистику использования ресурсов контейнерами.

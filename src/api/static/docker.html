@@ -91,20 +91,33 @@ function showLoadError(where, err) {
 
 async function loadAll() {
   try {
-    const [sysR, dockerR, rawR] = await Promise.all([
-      fetch('/api/v1/admin/models/system/info').then(r=>r.json()).catch(()=>null),
-      fetch('/api/v1/admin/models/docker/stats').then(r=>r.json()).catch(()=>null),
-      fetch('/api/v1/admin/models/storage/raw').then(r=>r.json()).catch(()=>null)
-    ]);
-    // Каждая часть рисуется отдельно: сбой одной не должен прятать остальные
-    try { if (sysR && !sysR.error) renderSystem(sysR); } catch (e) { showLoadError('stats-row', e); }
-    try { if (dockerR && !dockerR.error) renderDocker(dockerR); else showLoadError('containers', dockerR && dockerR.message); }
-    catch (e) { showLoadError('containers', e); }
-    try { if (rawR && !rawR.error) renderStorageRaw(rawR); else showLoadError('disks', rawR && rawR.message); }
-    catch (e) { showLoadError('disks', e); }
+    // Каждый источник грузится САМ ПО СЕБЕ и рисуется, как только пришёл.
+    // Раньше стоял Promise.all: сбор статистики по контейнерам идёт дольше остальных запросов,
+    // и страница ждала его, оставляя ВСЕ панели со спиннером «Загрузка…» (проверено приборно).
+    const withTimeout = (url, ms = 20000) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), ms);
+      return fetch(url, {signal: ctl.signal}).then(r => r.json())
+        .catch(e => ({error: (e && e.name) === 'AbortError' ? `нет ответа за ${ms / 1000} с` : String(e)}))
+        .finally(() => clearTimeout(timer));
+    };
+    const sysP = withTimeout('/api/v1/admin/models/system/info').then(d => {
+      try { if (d && !d.error) renderSystem(d); else showLoadError('stats-row', d && d.error); }
+      catch (e) { showLoadError('stats-row', e); }
+    });
+    const rawP = withTimeout('/api/v1/admin/models/storage/raw').then(d => {
+      try { if (d && !d.error) renderStorageRaw(d); else showLoadError('disks', d && d.error); }
+      catch (e) { showLoadError('disks', e); }
+    });
+    const dockerP = withTimeout('/api/v1/admin/models/docker/stats', 45000).then(d => {
+      try { if (d && !d.error) renderDocker(d); else showLoadError('containers', d && d.error); }
+      catch (e) { showLoadError('containers', e); }
+    });
+    await Promise.allSettled([sysP, rawP, dockerP]);
     const stamp = document.getElementById('load-stamp');
     if (stamp) stamp.textContent = 'данные сняты в ' + new Date().toLocaleTimeString('ru-RU');
-  } catch(e) { console.error(e); showLoadError('containers', e); }
+    return;
+
 }
 
 function fillClass(v, w, c) { return v >= c ? 'fill-err' : v >= w ? 'fill-warn' : 'fill-ok'; }

@@ -135,6 +135,21 @@ def collect_once() -> None:
         DOCKER_BYTES.labels(kind=kind).set(value)
 
 
+async def docker_stats_loop(interval_s: int = 30) -> None:
+    """Фоновый снимок статистики контейнеров: страница получает готовые данные без ожидания.
+
+    Сам сбор медленный (Docker отдаёт stats по контейнеру за две выборки — обход 13 контейнеров
+    занимает десятки секунд), поэтому он не может ждать захода пользователя.
+    """
+    while True:
+        try:
+            from src.api.services.docker_monitor import docker_monitor
+            await asyncio.to_thread(docker_monitor.refresh_stats_cache)
+        except Exception as e:
+            logger.debug(f"Снимок статистики контейнеров: {type(e).__name__}: {e}")
+        await asyncio.sleep(interval_s)
+
+
 async def host_metrics_loop(interval_s: int = 60) -> None:
     """Фоновый съём раз в минуту: страницы открываются с уже готовыми данными, история без дыр."""
     while True:

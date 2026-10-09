@@ -276,7 +276,7 @@ async def test_ssh_connection(connection_id: str = "default"):
 # Docker мониторинг
 # ===========================================
 
-@router.get("/docker/stats", summary="Получить статистику Docker контейнеров")
+@router.get("/docker/stats", summary="Получить статистику Docker контейнеров (из фонового снимка)")
 async def get_docker_stats():
     """
     Получить детальную статистику всех Docker контейнеров.

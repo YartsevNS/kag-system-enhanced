@@ -146,10 +146,12 @@ async def lifespan(app: FastAPI):
     # независимо от того, открыта ли страница. Так интерфейс открывается с готовыми данными,
     # а в Prometheus нет дыр в истории для графиков динамики.
     host_metrics_task = None
+    docker_stats_task = None
     try:
-        from src.monitoring.host_metrics import host_metrics_loop
+        from src.monitoring.host_metrics import docker_stats_loop, host_metrics_loop
         host_metrics_task = asyncio.create_task(host_metrics_loop())
-        logger.info("Съём показателей хранилища запущен")
+        docker_stats_task = asyncio.create_task(docker_stats_loop())
+        logger.info("Съём показателей хранилища и снимок статистики контейнеров запущены")
     except Exception as e:
         logger.warning(f"Съём показателей хранилища не запущен: {e}")
 
@@ -165,13 +167,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Остановка съёма показателей хранилища
-    if host_metrics_task is not None:
-        host_metrics_task.cancel()
-        try:
-            await host_metrics_task
-        except (asyncio.CancelledError, Exception):
-            pass
+    # Остановка съёма показателей хранилища и снимка статистики контейнеров
+    for task in (host_metrics_task, docker_stats_task):
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
     # Остановка планировщика отчётов
     if report_task is not None:
