@@ -2222,8 +2222,7 @@ class DocumentClassificationFix(BaseModel):
 
 
 @router.post("/document-classification", summary="Поправить разметку документа вручную")
-async def fix_document_classification(payload: DocumentClassificationFix,
-                                      current_user: Optional[User] = Depends(get_current_user_optional)):
+async def fix_document_classification(payload: DocumentClassificationFix):
     """Ручная правка вида/темы/фасетов документа с записью в журнал действий.
 
     Зачем: разметку ставит модель, и она ошибается. Без ручной правки ошибку не исправить вообще,
@@ -2273,7 +2272,10 @@ async def fix_document_classification(payload: DocumentClassificationFix,
             from src.security.provenance import append_action
 
             append_action(
-                actor=(current_user.username if current_user else "unknown"),
+                # Путь /api/v1/admin закрыт middleware целиком, значит действие выполняет
+                # администратор. Отдельную зависимость здесь не тянем: в этом модуле нет
+                # импорта Depends/get_current_user_optional (была ошибка загрузки приложения).
+                actor="admin",
                 action="document_classification",
                 target=doc_id,
                 details={"changed": sorted(changes.keys()), "values": changes, "note": note,
