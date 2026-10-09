@@ -571,6 +571,12 @@ const G_LIGHT = {
   palette:['#4f5bd5','#c026d3','#b45309','#0f8a52','#0e7490','#6d28d9','#b3261e','#c2410c','#15803d','#a21caf','#0369a1','#a16207','#0f766e','#7e22ce'],
 };
 function kgTheme(){ return document.documentElement.getAttribute('data-theme') === 'dark' ? G_DARK : G_LIGHT; }
+// Значение переменной темы (цвет панели и т.п.) — чтобы плашки подписей связей сливались
+// с холстом в ОБЕИХ темах, а не были всегда белыми (на светлом холсте белое пятно заметно).
+function cssVar(name, fallback){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 function typeColor(t){
   const th = kgTheme();
   if (th.types[t]) return th.types[t];
@@ -593,7 +599,8 @@ function kgStyles(){
         'width':1.5, 'line-color':th.edge, 'curve-style':'bezier',
         'target-arrow-shape':'triangle', 'target-arrow-color':th.arrow,
         'label':'data(label)', 'font-size':8, 'color':th.edgeLabel, 'text-rotation':'autorotate',
-        'text-background-color':th.edgeLabelBg, 'text-background-opacity':0.75, 'text-background-padding':'2px' } },
+        'text-background-color':cssVar('--elevated', th.edgeLabelBg),
+        'text-background-opacity':0.85, 'text-background-padding':'2px' } },
     { selector:'node.with-label', style:{ 'label':'data(label)' } },
     { selector:'.center', style:{ 'border-width':3, 'border-color':'#08a652' } },
     { selector:'.matched', style:{ 'border-width':4, 'border-color':'#c2410c' } },
