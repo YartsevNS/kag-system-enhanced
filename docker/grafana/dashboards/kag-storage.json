@@ -2,7 +2,7 @@
   "id": null,
   "uid": "kag-storage",
   "title": "KAG — хранилище и нагрузка",
-  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные). Переменные убраны (публичные дашборды Grafana их не поддерживают): точка монтирования указана явно. Плитки переведены в графики: публичные дашборды Grafana отдают только запросы по диапазону, а плитки просят мгновенное значение и получали 400.",
+  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные). Переменные убраны (публичные дашборды Grafana их не поддерживают): точка монтирования указана явно. Плитки переведены в графики: публичные дашборды Grafana отдают только запросы по диапазону, а плитки просят мгновенное значение и получали 400. Источник данных указан явно (uid prometheus): публичные дашборды не подставляют источник по умолчанию.",
   "tags": [
     "kag",
     "хранилище",
@@ -38,7 +38,11 @@
         {
           "expr": "kag_fs_free_bytes{mount=\"/app/data\"}",
           "legendFormat": "Свободно на диске",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -63,6 +67,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -79,7 +87,11 @@
         {
           "expr": "kag_fs_used_bytes{mount=\"/app/data\"}",
           "legendFormat": "Занято на диске",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -104,6 +116,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -120,7 +136,11 @@
         {
           "expr": "kag_fs_size_bytes{mount=\"/app/data\"}",
           "legendFormat": "Размер файловой системы",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -145,6 +165,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -161,7 +185,11 @@
         {
           "expr": "100 * kag_fs_used_bytes{mount=\"/app/data\"} / kag_fs_size_bytes{mount=\"/app/data\"}",
           "legendFormat": "занято, %",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -186,6 +214,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -202,12 +234,20 @@
         {
           "expr": "kag_fs_used_bytes{mount=\"/app/data\"}",
           "legendFormat": "занято",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         },
         {
           "expr": "kag_fs_free_bytes{mount=\"/app/data\"}",
           "legendFormat": "свободно",
-          "refId": "B"
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -232,6 +272,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -248,7 +292,11 @@
         {
           "expr": "kag_dir_bytes",
           "legendFormat": "{{path}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -273,6 +321,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     },
     {
@@ -289,7 +341,11 @@
         {
           "expr": "kag_docker_bytes",
           "legendFormat": "{{kind}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ],
       "fieldConfig": {
@@ -314,6 +370,10 @@
         "tooltip": {
           "mode": "multi"
         }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       }
     }
   ]

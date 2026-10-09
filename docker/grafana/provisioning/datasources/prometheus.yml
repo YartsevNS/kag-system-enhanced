@@ -10,6 +10,9 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    # Постоянный uid: на него ссылаются панели дашбордов. Без него Grafana выдаёт случайный,
+    # и публичный дашборд отвергает запросы с «Query does not contain a valid data source identifier».
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
