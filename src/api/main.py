@@ -142,8 +142,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"HotFolderWatcher не запущен: {e}")
     
+    # Планировщик отчётов на почту: раз в минуту проверяет, не пора ли отправить по расписанию,
+    # которое задано в админке. Отправка идёт в отдельном потоке, поэтому API не блокируется.
+    report_task = None
+    try:
+        from src.api.services.report_service import scheduler_loop
+        report_task = asyncio.create_task(scheduler_loop())
+        logger.info("Планировщик отчётов запущен")
+    except Exception as e:
+        logger.warning(f"Планировщик отчётов не запущен: {e}")
+
     yield
-    
+
+    # Остановка планировщика отчётов
+    if report_task is not None:
+        report_task.cancel()
+        try:
+            await report_task
+        except (asyncio.CancelledError, Exception):
+            pass
+
     # Остановка Hot Folder Watcher
     try:
         from src.indexing.hot_folder_watcher import hot_folder_watcher

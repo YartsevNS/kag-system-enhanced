@@ -428,6 +428,69 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                     <strong>Контраст</strong> проверяется кнопкой «Проверить контраст» на этом стенде (scripts/bakeoff/contrast_check.py).
                 </div>
             </div>
+            <!-- Отчёты на почту -->
+            <div class="section">
+                <h2 class="section-title">Отчёты на почту</h2>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <input type="checkbox" id="rep-enabled" style="width:18px;height:18px;accent-color:var(--accent)">
+                    <label for="rep-enabled" style="font-size:14px;font-weight:600;cursor:pointer">Отправлять отчёт по расписанию</label>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:12px">
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Периодичность</label>
+                        <select id="rep-schedule" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+                            <option value="hourly">Каждый час</option>
+                            <option value="daily">Раз в сутки</option>
+                            <option value="weekly">Раз в неделю</option>
+                        </select></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Время, ЧЧ:ММ</label>
+                        <input id="rep-time" type="text" placeholder="08:30" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">День недели (для недельного)</label>
+                        <select id="rep-weekday" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+                            <option value="0">Понедельник</option><option value="1">Вторник</option><option value="2">Среда</option>
+                            <option value="3">Четверг</option><option value="4">Пятница</option><option value="5">Суббота</option><option value="6">Воскресенье</option>
+                        </select></div>
+                    <div style="flex:1;min-width:260px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Получатели (через запятую)</label>
+                        <input id="rep-recipients" type="text" placeholder="admin@company.ru, otvetstvenny@company.ru" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Тема письма</label>
+                        <input id="rep-subject" type="text" placeholder="KAG" style="width:140px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                </div>
+
+                <div style="margin-bottom:12px">
+                    <div style="font-size:12px;color:var(--text4);margin-bottom:6px">Что включать в отчёт</div>
+                    <div id="rep-metrics" style="display:flex;flex-wrap:wrap;gap:14px"></div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:12px;padding-top:12px;border-top:1px solid var(--border-s)">
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">SMTP-сервер</label>
+                        <input id="rep-smtp-host" type="text" placeholder="mail.company.ru" style="width:190px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Порт</label>
+                        <input id="rep-smtp-port" type="number" min="1" max="65535" placeholder="25" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Пользователь</label>
+                        <input id="rep-smtp-user" type="text" placeholder="kag@company.ru" style="width:190px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Пароль</label>
+                        <input id="rep-smtp-password" type="password" placeholder="не менять" style="width:150px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Адрес отправителя</label>
+                        <input id="rep-from" type="text" placeholder="kag@company.ru" style="width:190px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div>
+                    <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px">
+                        <input type="checkbox" id="rep-tls" style="width:16px;height:16px;accent-color:var(--accent)">
+                        <label for="rep-tls" style="font-size:12px;cursor:pointer">STARTTLS</label></div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                    <button class="btn btn-primary" onclick="saveReportConfig()">Сохранить</button>
+                    <button class="btn" onclick="previewReport()">Показать образец</button>
+                    <button class="btn btn-secondary" onclick="sendReportNow()">Отправить сейчас</button>
+                    <span id="rep-status" style="font-size:12px;color:var(--text4)"></span>
+                </div>
+                <pre id="rep-preview" class="mono" style="display:none;white-space:pre-wrap;font-size:11px;background:var(--elevated);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px;margin-top:10px;max-height:340px;overflow:auto"></pre>
+                <div style="font-size:12px;color:var(--text3);line-height:1.6;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px;margin-top:10px">
+                    <strong>Как это работает.</strong> Отчёт собирается на сервере из тех же данных, что видны в админке
+                    (диски, Docker, документы, корпус, доступность сервисов, очередь), и уходит письмом по SMTP.
+                    Письмо содержит и текст, и таблицу — читается и в почте без HTML. Пустое поле пароля при сохранении
+                    означает «оставить прежний». Если SMTP-сервер внутренний и без авторизации, поля пользователя и пароля
+                    можно оставить пустыми. Расписание проверяется раз в минуту; «Отправить сейчас» удобно для проверки настройки.
+                </div>
+            </div>
             <!-- Загрузка документов (все источники: UI/API, парсинг сайтов, RSS) --><div class="section"><h2 class="section-title"> Загрузка документов</h2><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><input type="checkbox" id="upload-blocked" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)"><label for="upload-blocked" style="font-size:14px;font-weight:600;cursor:pointer">Запретить загрузку новых документов (не загружать)</label></div><div style="margin-bottom:12px"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Сообщение пользователям (показывается на странице «Документы»)</label><input id="upload-message" type="text" placeholder="например: тестовый стенд, загрузка документов приостановлена" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"></div><div style="margin:14px 0 6px;padding-top:14px;border-top:1px solid var(--border-s)">
                     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                         <input type="checkbox" id="up-photo-normalize" onchange="saveUploadConfig()" style="width:18px;height:18px;accent-color:var(--accent)">
@@ -973,6 +1036,99 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 if (st) st.textContent = d.status === 'ok'
                     ? (d.blocked ? '✓ Загрузка документов запрещена' : '✓ Загрузка документов разрешена')
                     : ('✕ ' + (d.message || 'ошибка'));
+            } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
+        }
+
+
+        // ── Отчёты на почту ──────────────────────────────────────────────────
+        async function loadReportConfig() {
+            try {
+                const r = await apiFetch(`${API_URL}/report-config`);
+                const d = await r.json();
+                if (!d || d.status === 'error') return;
+                const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+                chk('rep-enabled', d.enabled);
+                set('rep-schedule', d.schedule || 'daily');
+                set('rep-time', d.time || '08:30');
+                set('rep-weekday', String(d.weekday || 0));
+                set('rep-recipients', d.recipients || '');
+                set('rep-subject', d.subject_prefix || 'KAG');
+                set('rep-smtp-host', d.smtp_host || '');
+                set('rep-smtp-port', d.smtp_port || 25);
+                set('rep-smtp-user', d.smtp_user || '');
+                set('rep-from', d.from_addr || '');
+                chk('rep-tls', d.smtp_tls);
+                const pwd = document.getElementById('rep-smtp-password');
+                if (pwd) { pwd.value = ''; pwd.placeholder = d.smtp_password_set ? 'задан (не менять)' : 'не задан'; }
+                const box = document.getElementById('rep-metrics');
+                if (box && Array.isArray(d.metrics_available)) {
+                    const chosen = new Set(d.metrics || []);
+                    box.innerHTML = d.metrics_available.map(m =>
+                        `<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">`
+                        + `<input type="checkbox" class="rep-metric" value="${m.code}" ${chosen.has(m.code) ? 'checked' : ''}`
+                        + ` style="width:16px;height:16px;accent-color:var(--accent)">${m.title}</label>`).join('');
+                }
+                if (d.last_sent) {
+                    const st = document.getElementById('rep-status');
+                    if (st) st.textContent = 'последняя отправка: ' + String(d.last_sent).replace('T', ' ');
+                }
+            } catch (e) { console.error('report-config load:', e); }
+        }
+        function collectReportConfig() {
+            const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+            const checked = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+            const metrics = Array.from(document.querySelectorAll('.rep-metric'))
+                .filter(el => el.checked).map(el => el.value);
+            return {
+                enabled: checked('rep-enabled'),
+                schedule: val('rep-schedule'),
+                time: val('rep-time'),
+                weekday: parseInt(val('rep-weekday') || '0', 10),
+                recipients: val('rep-recipients'),
+                subject_prefix: val('rep-subject'),
+                metrics: metrics,
+                smtp_host: val('rep-smtp-host'),
+                smtp_port: parseInt(val('rep-smtp-port') || '25', 10),
+                smtp_user: val('rep-smtp-user'),
+                smtp_tls: checked('rep-tls'),
+                from_addr: val('rep-from'),
+            };
+        }
+        async function saveReportConfig() {
+            const st = document.getElementById('rep-status');
+            if (st) st.textContent = '…...';
+            const body = collectReportConfig();
+            const pwd = document.getElementById('rep-smtp-password');
+            if (pwd && pwd.value) body.smtp_password = pwd.value;   // пусто = не менять
+            try {
+                const r = await apiFetch(`${API_URL}/report-config`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok' ? '✓ сохранено' : '✕ ' + (d.message || 'ошибка');
+                loadReportConfig();
+            } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
+        }
+        async function previewReport() {
+            const st = document.getElementById('rep-status');
+            const box = document.getElementById('rep-preview');
+            if (st) st.textContent = '… собираю образец';
+            try {
+                const r = await apiFetch(`${API_URL}/report-preview`);
+                const d = await r.json();
+                if (d.status !== 'ok') { if (st) st.textContent = '✕ ' + (d.message || 'ошибка'); return; }
+                if (box) { box.style.display = 'block'; box.textContent = d.text; }
+                if (st) st.textContent = 'образец собран (на почту не отправлялся)';
+            } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
+        }
+        async function sendReportNow() {
+            const st = document.getElementById('rep-status');
+            if (st) st.textContent = '… отправляю';
+            try {
+                const r = await apiFetch(`${API_URL}/report-send-now`, {method: 'POST'});
+                const d = await r.json();
+                if (st) st.textContent = d.status === 'ok' ? '✓ ' + d.message : '✕ ' + d.message;
             } catch (e) { if (st) st.textContent = '✕ ' + e.message; }
         }
 
@@ -2455,6 +2611,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
         loadNeo4jConfig();
         loadBrandingConfig();
         loadAppearance();
+        loadReportConfig();
         loadProcessingConfig();
         loadGraphConfig();
         loadRerankerConfig();

@@ -103,6 +103,24 @@ class BrandingConfig(BaseModel):
     color_text: Optional[str] = None      # #RRGGBB, основной текст
 
 
+class ReportConfig(BaseModel):
+    """Отчёты на почту (частичное обновление)."""
+
+    enabled: Optional[bool] = None
+    schedule: Optional[str] = None        # hourly | daily | weekly
+    time: Optional[str] = None            # "ЧЧ:ММ" для daily и weekly
+    weekday: Optional[int] = None         # 0 = понедельник (для weekly)
+    recipients: Optional[str] = None      # через запятую
+    subject_prefix: Optional[str] = None
+    metrics: Optional[List[str]] = None   # какие показатели включать
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None   # пусто = не менять
+    smtp_tls: Optional[bool] = None
+    from_addr: Optional[str] = None
+
+
 class IngestPhotoConfig(BaseModel):
     """Уменьшение снимков при загрузке (частичное обновление)."""
 
@@ -2234,6 +2252,58 @@ async def save_ingest_config(payload: IngestBlockConfig):
                 "photo_normalize": bool(cfg.get("photo_normalize", True)),
                 "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
                 "photo_quality": int(cfg.get("photo_quality", 92) or 92)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
+# Отчёты на почту
+# ═══════════════════════════════════════
+
+@router.get("/report-config", summary="Настройки отчётов на почту")
+async def get_report_config():
+    """Настройки отчёта: расписание, получатели, показатели, SMTP (пароль не отдаём)."""
+    try:
+        from src.api.services.report_service import METRICS, report_service
+        cfg = report_service.public_settings()
+        cfg["metrics_available"] = [{"code": code, "title": title, "default": default}
+                                    for code, title, default in METRICS]
+        return cfg
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/report-config", summary="Сохранить настройки отчётов")
+async def save_report_config(payload: ReportConfig):
+    try:
+        from src.api.services.report_service import report_service
+        data = payload.model_dump(exclude_unset=True)
+        cfg = report_service.save_settings(data)
+        out = report_service.public_settings()
+        return {"status": "ok", **out}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/report-preview", summary="Образец отчёта")
+async def preview_report():
+    """Текст отчёта без отправки — чтобы посмотреть, что придёт на почту."""
+    try:
+        from src.api.services.report_service import report_service
+        cfg = report_service.settings()
+        sections = report_service.collect(list(cfg.get("metrics") or []))
+        return {"status": "ok", "text": report_service.render_text(sections),
+                "html": report_service.render_html(sections)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/report-send-now", summary="Отправить отчёт сейчас")
+async def send_report_now():
+    try:
+        from src.api.services.report_service import report_service
+        ok, message = await asyncio.to_thread(report_service.send_now)
+        return {"status": "ok" if ok else "error", "message": message}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
