@@ -226,7 +226,7 @@ class DocumentService:
             # финальное сохранение конвейера затирало результат пустыми полями
             # (то же сбивало типизацию: document_type откатывался на "unknown").
             _fresh = repo.get_dict(document_id) or {}
-            for _k in ("recognized_title", "summary", "topics", "document_type"):
+            for _k in ("recognized_title", "summary", "topics", "document_type", "source_metadata"):
                 if not data.get(_k) and _fresh.get(_k):
                     data[_k] = _fresh[_k]
             repo.upsert(document_id, data)
