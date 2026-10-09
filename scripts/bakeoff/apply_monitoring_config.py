@@ -32,16 +32,21 @@ GRAFANA_LOC = """
     }
 """
 
-GRAFANA_ENV = """      # Анонимный доступ ТОЛЬКО на чтение и разрешённое встраивание: панели Grafana
-      # показываются внутри страниц системы (iframe через наш домен, /grafana/).
-      # Редактирование дашбордов при этом закрыто — нужен вход администратора.
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_SECURITY_ALLOW_EMBEDDING=true
-      # Grafana живёт по подпути /grafana/, иначе ссылки в интерфейсе ведут на корень
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
-"""
+# Строки окружения Grafana, которые должны быть в compose. Добавляются по одной —
+# так повторный запуск скрипта докатывает недостающие, а не пропускает всё сразу.
+GRAFANA_ENV_LINES = [
+    "      # Анонимный доступ ТОЛЬКО на чтение и разрешённое встраивание: панели Grafana\n",
+    "      # показываются внутри страниц системы (iframe через наш домен, /grafana/).\n",
+    "      # Редактирование дашбордов при этом закрыто — нужен вход администратора.\n",
+    "      - GF_AUTH_ANONYMOUS_ENABLED=true\n",
+    "      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer\n",
+    "      - GF_SECURITY_ALLOW_EMBEDDING=true\n",
+    "      # Публичные дашборды: штатный способ показать графики без входа в Grafana\n",
+    "      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards\n",
+    "      # Grafana живёт по подпути /grafana/, иначе ссылки в интерфейсе ведут на корень\n",
+    "      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/\n",
+    "      - GF_SERVER_SERVE_FROM_SUB_PATH=true\n",
+]
 
 
 def backup(path: pathlib.Path) -> pathlib.Path:
@@ -74,14 +79,16 @@ def patch_compose(root: pathlib.Path) -> str:
     if not compose.exists():
         return f"compose: файла нет ({compose})"
     text = compose.read_text(encoding="utf-8")
-    if "GF_AUTH_ANONYMOUS_ENABLED" in text:
+    missing = [line for line in GRAFANA_ENV_LINES
+               if line.strip() and not line.strip().startswith("#") and line.strip() not in text]
+    if not missing:
         return "compose: уже настроено"
     anchor = "      - GF_USERS_ALLOW_SIGN_UP=false\n"
     if anchor not in text:
         return "compose: не нашёл блок Grafana (GF_USERS_ALLOW_SIGN_UP)"
     backup(compose)
-    compose.write_text(text.replace(anchor, anchor + GRAFANA_ENV, 1), encoding="utf-8")
-    return "compose: переменные Grafana добавлены"
+    compose.write_text(text.replace(anchor, anchor + "".join(GRAFANA_ENV_LINES), 1), encoding="utf-8")
+    return f"compose: добавлено строк — {len(missing)}"
 
 
 def main() -> None:
