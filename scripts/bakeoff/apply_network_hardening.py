@@ -116,14 +116,20 @@ def main() -> None:
                                 name], capture_output=True, text=True).stdout.strip()
         print(f"{service}: {state}")
 
-    print("\n=== что осталось опубликовано наружу ===")
+    print("\n=== что опубликовано наружу (маппинг на 0.0.0.0 или внешний адрес) ===")
     out = subprocess.run(["docker", "ps", "--format", "{{.Names}}|{{.Ports}}"],
                          capture_output=True, text=True).stdout
+    published = []
     for line in out.splitlines():
         name, _, ports = line.partition("|")
-        external = [p for p in ports.split(",") if p.strip() and "127.0.0.1" not in p]
-        if external:
-            print(f"  {name}: {', '.join(p.strip() for p in external)}")
+        for entry in ports.split(","):
+            entry = entry.strip()
+            # публикация — это «адрес:порт->порт»; просто «порт/tcp» значит лишь «открыт внутри сети»
+            if "->" in entry and "127.0.0.1" not in entry and "[::]" not in entry.replace("::", ""):
+                if "0.0.0.0" in entry or entry[0].isdigit():
+                    published.append(f"{name}: {entry}")
+    print("\n".join("  " + x for x in published) if published else "  ничего")
+    print("\n(строки вида «8080/tcp» без стрелки — порт открыт только внутри docker-сети, снаружи недоступен)")
 
     print("\n=== приложение живо? ===")
     print(compose("exec", "-T", "api", "curl", "-s", "-o", "/dev/null", "-w", "health: %{http_code}",
