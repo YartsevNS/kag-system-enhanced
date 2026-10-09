@@ -75,6 +75,8 @@ class Relation:
     target: str       # name сущности-цели
     type: str         # Тип связи: MENTIONS, RELATED_TO, SIGNED_BY, DATED, AMOUNT, BELONGS_TO, LOCATED_AT
     document_id: str = ""
+    # Происхождение факта: из какого фрагмента связь извлечена (нужно для «откуда это известно»)
+    chunk_id: str = ""
     properties: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -138,6 +140,48 @@ class KnowledgeGraphService:
         "document_ref": {"label": "📄 Документ", "color": "#a78bfa"},
         "legal_term": {"label": "⚖️ Юр. термин", "color": "#fb923c"},
     }
+
+    # ── Версия схемы и извлекателя ──────────────────────────────────────────────
+    # Каждый факт в графе помечается, КАКОЙ версией словаря и КАКИМ промптом он получен.
+    # Без этого после смены словаря не отличить старые факты от новых, и любую правку
+    # приходится оплачивать переобработкой всего корпуса. Меняется вручную при смене схемы;
+    # версия извлекателя считается по тексту промпта (менялся промпт — менялась версия).
+    SCHEMA_VERSION = "2026.10.1"
+
+    def allowed_relation_types(self) -> set:
+        """Закрытый список допустимых типов связей.
+
+        Системные (MENTIONS, HAS_CHUNK, RELATED_TO) + объявленные типы + типы из доменной схемы.
+        Всё, чего нет в списке, в граф не пишется под своим именем: иначе модель придумывает
+        типы на ходу, и в базе копится мусор, который чистится только переобработкой.
+        """
+        allowed = {t.upper() for t in self.DEFAULT_RELATION_TYPES} | {"MENTIONS", "HAS_CHUNK", "RELATED_TO"}
+        try:
+            schema = self.get_domain_schema() or {}
+            for group, items in schema.items():
+                if isinstance(items, dict):
+                    allowed |= {str(k).upper() for k in items.keys()}
+        except Exception:
+            pass
+        return allowed
+
+    @staticmethod
+    def extractor_version() -> str:
+        """Короткий отпечаток промпта извлечения: менялся промпт — менялись и факты."""
+        try:
+            import hashlib
+            import pathlib
+
+            from src.api.services.config_store import config_store
+
+            cfg = config_store.get("function_map", "graph") or {}
+            text = (cfg.get("system_prompt") if isinstance(cfg, dict) else "") or ""
+            if not text:
+                prompt_file = pathlib.Path("prompts/graph.txt")
+                text = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else "default"
+            return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+        except Exception:
+            return "unknown"
 
     # Типы связей по умолчанию
     DEFAULT_RELATION_TYPES = [
@@ -333,6 +377,8 @@ class KnowledgeGraphService:
                             ELSE (e.confidence + $confidence) / 2.0  // Усредняем confidence
                         END,
                         e.properties = $properties,
+                        e.schema_version = $schema_version,
+                        e.extractor_version = $extractor_version,
                         e.updated_at = datetime()
                     // Если есть description в properties — кладём и в отдельное поле
                     // (удобнее для поиска и resolution)
@@ -354,7 +400,9 @@ class KnowledgeGraphService:
                     properties=json.dumps(entity.properties, ensure_ascii=False) if entity.properties else "{}",
                     description=entity.properties.get("description", ""),
                     doc_id=entity.document_id,
-                    chunk_id=entity.chunk_id
+                    chunk_id=entity.chunk_id,
+                    schema_version=self.SCHEMA_VERSION,
+                    extractor_version=self.extractor_version(),
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания сущности '{entity.name}': {e}")
@@ -368,16 +416,28 @@ class KnowledgeGraphService:
             return
         try:
             with self.driver.session() as session:
-                # Динамическое имя связи — безопасно, т.к. тип из доменной схемы
+                # Динамическое имя связи — безопасно, т.к. тип проверяется по закрытому списку
                 safe_type = rel.type.replace("`", "").replace(" ", "_")
+                if safe_type.upper() not in self.allowed_relation_types():
+                    logger.warning(f"[graph][types] неизвестный тип связи '{safe_type}' заменён на RELATED_TO")
+                    safe_type = "RELATED_TO"
                 session.run(
                     f"""
                     MATCH (a:Entity {{name: $source}})
                     MATCH (b:Entity {{name: $target}})
-                    MERGE (a)-[:`{safe_type}`]->(b)
+                    MERGE (a)-[rel:`{safe_type}`]->(b)
+                    SET rel.doc_id = coalesce(rel.doc_id, $doc_id),
+                        rel.chunk_id = coalesce(rel.chunk_id, $chunk_id),
+                        rel.schema_version = $schema_version,
+                        rel.extractor_version = $extractor_version,
+                        rel.created_at = coalesce(rel.created_at, datetime())
                     """,
                     source=rel.source,
-                    target=rel.target
+                    target=rel.target,
+                    doc_id=rel.document_id or "",
+                    chunk_id=rel.chunk_id or "",
+                    schema_version=self.SCHEMA_VERSION,
+                    extractor_version=self.extractor_version(),
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания связи {rel.type}: {e}")
@@ -405,6 +465,10 @@ class KnowledgeGraphService:
                 "description": props.get("description", ""),
                 "doc_id": e.document_id,
                 "chunk_id": e.chunk_id,
+                # Версия схемы и извлекателя у КАЖДОГО факта: без них после смены словаря
+                # старые и новые факты неразличимы.
+                "schema_version": self.SCHEMA_VERSION,
+                "extractor_version": self.extractor_version(),
             })
         try:
             from src.api.services.config_store import config_store
@@ -434,6 +498,8 @@ class KnowledgeGraphService:
                                 ELSE (n.confidence + e.confidence) / 2.0
                             END,
                             n.properties = e.properties,
+                            n.schema_version = e.schema_version,
+                            n.extractor_version = e.extractor_version,
                             n.updated_at = datetime()
                         FOREACH (_ IN CASE WHEN e.description IS NOT NULL AND e.description <> '' THEN [1] ELSE [] END |
                             SET n.description = e.description
@@ -460,10 +526,27 @@ class KnowledgeGraphService:
         """
         if not self.driver or not rels:
             return 0
+        allowed = self.allowed_relation_types()
+        _extractor_v = self.extractor_version()
         by_type: Dict[str, list] = {}
+        unknown: set = set()
         for r in rels:
             safe = r.type.replace("`", "").replace(" ", "_")
-            by_type.setdefault(safe, []).append({"source": r.source, "target": r.target})
+            if safe.upper() not in allowed:
+                # Тип не из словаря: под своим именем НЕ пишем (иначе мусор в графе), но и факт
+                # не теряем — пишем как RELATED_TO. Отказ виден в журнале строкой [graph][types].
+                unknown.add(safe)
+                safe = "RELATED_TO"
+            by_type.setdefault(safe, []).append({
+                "source": r.source,
+                "target": r.target,
+                "doc_id": r.document_id or "",
+                "chunk_id": r.chunk_id or "",
+                "schema_version": self.SCHEMA_VERSION,
+                "extractor_version": _extractor_v,
+            })
+        if unknown:
+            logger.warning(f"[graph][types] неизвестные типы связей заменены на RELATED_TO: {sorted(unknown)}")
         total = 0
         try:
             from src.api.services.config_store import config_store
@@ -488,7 +571,12 @@ class KnowledgeGraphService:
                             UNWIND $batch AS r
                             MATCH (a:Entity {{name: r.source}})
                             MATCH (b:Entity {{name: r.target}})
-                            MERGE (a)-[:`{safe_type}`]->(b)
+                            MERGE (a)-[rel:`{safe_type}`]->(b)
+                            SET rel.doc_id = coalesce(rel.doc_id, r.doc_id),
+                                rel.chunk_id = coalesce(rel.chunk_id, r.chunk_id),
+                                rel.schema_version = r.schema_version,
+                                rel.extractor_version = r.extractor_version,
+                                rel.created_at = coalesce(rel.created_at, datetime())
                             """,
                             batch=_b,
                         ))

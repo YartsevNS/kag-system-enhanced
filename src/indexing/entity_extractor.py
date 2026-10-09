@@ -914,7 +914,10 @@ JSON:
             rel_objs = [
                 Relation(
                     source=r["source"], target=r["target"],
-                    type=r["type"], document_id=document_id
+                    type=r["type"], document_id=document_id,
+                    # Из какого фрагмента извлечена связь: без этого «откуда известно»
+                    # восстанавливается только догадкой по упоминаниям.
+                    chunk_id=chunk_id,
                 )
                 for r in relations
             ]
