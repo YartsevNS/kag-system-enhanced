@@ -136,11 +136,16 @@ class DockerMonitor:
             return cached[1]
         return self.refresh_stats_cache()
 
-    def refresh_stats_cache(self) -> Dict[str, Dict[str, Any]]:
-        """Собрать статистику и положить в снимок (вызывается и фоном, и при отсутствии снимка)."""
+    def refresh_stats_cache(self) -> Dict[str, Any]:
+        """Собрать ПОЛНЫЙ отчёт Docker и положить в снимок.
+
+        Важно: кэшируем именно `get_detailed_stats()` — тот же ответ, что отдавался странице раньше
+        ({containers: [...], system: {...}}). Первая версия кэшировала только статистику по имени
+        (`get_container_stats()`), и страница показывала «Нет контейнеров»: форма данных не совпадала.
+        """
         import time as _time
 
-        data = self.get_container_stats() or {}
+        data = self.get_detailed_stats() or {}
         if data:
             self._stats_cache = (_time.time(), data)
         return data
