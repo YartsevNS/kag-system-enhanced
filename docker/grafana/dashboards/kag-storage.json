@@ -2,7 +2,7 @@
   "id": null,
   "uid": "kag-storage",
   "title": "KAG — хранилище и нагрузка",
-  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные). Переменные убраны (публичные дашборды Grafana их не поддерживают): точка монтирования указана явно.",
+  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные). Переменные убраны (публичные дашборды Grafana их не поддерживают): точка монтирования указана явно. Плитки переведены в графики: публичные дашборды Grafana отдают только запросы по диапазону, а плитки просят мгновенное значение и получали 400.",
   "tags": [
     "kag",
     "хранилище",
@@ -26,12 +26,12 @@
   "panels": [
     {
       "id": 2,
-      "type": "stat",
+      "type": "timeseries",
       "title": "Свободно на диске",
       "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 0,
+        "h": 8,
+        "w": 12,
+        "x": 12,
         "y": 0
       },
       "targets": [
@@ -43,28 +43,37 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
-        "colorMode": "value"
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
       "id": 3,
-      "type": "stat",
+      "type": "timeseries",
       "title": "Занято на диске",
       "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 0
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
       },
       "targets": [
         {
@@ -75,28 +84,37 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
-        "colorMode": "value"
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
       "id": 4,
-      "type": "stat",
+      "type": "timeseries",
       "title": "Размер файловой системы",
       "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 0
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
       },
       "targets": [
         {
@@ -107,17 +125,26 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
-        "colorMode": "value"
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
@@ -128,7 +155,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 24
       },
       "targets": [
         {
@@ -168,8 +195,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 13
+        "x": 12,
+        "y": 32
       },
       "targets": [
         {
@@ -215,7 +242,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 40
       },
       "targets": [
         {
@@ -255,8 +282,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 29
+        "x": 12,
+        "y": 48
       },
       "targets": [
         {
