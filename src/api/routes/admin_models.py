@@ -287,6 +287,14 @@ async def get_docker_stats():
     Через asyncio.to_thread.
     """
     try:
+        # Порядок: сначала снимок, сделанный фоном (он обновляется раз в минуту), и только если
+        # снимка нет — сбор на месте. Раньше здесь каждый раз собиралась статистика по всем
+        # контейнерам: Docker отдаёт stats за две выборки, обход 13 контейнеров занимает десятки
+        # секунд, и страница всё это время показывала «Загрузка…».
+        if hasattr(docker_monitor, "stats_snapshot"):
+            stats = await asyncio.to_thread(docker_monitor.stats_snapshot)
+            if stats:
+                return stats
         stats = await asyncio.to_thread(docker_monitor.get_detailed_stats)
         return stats
     except HTTPException:
@@ -2378,16 +2386,18 @@ async def enable_public_dashboard(uid: str = "kag-storage"):
         # Идемпотентно: сначала спрашиваем, не сделан ли дашборд публичным раньше
         # (повторный POST Grafana отвергает с «Dashboard is already public» — это не ошибка,
         # но токен нам всё равно нужен, поэтому берём его из GET).
-        info: dict = {}
+        # Публичный дашборд пересоздаём всегда: если дашборд обновился (правка панелей, источников),
+        # старая публичная ссылка продолжает отдавать ПРЕЖНЮЮ версию, и панели молча не получают
+        # данные (в журнале браузера — запрос panels/undefined с кодом 400). Сначала снимаем публичность,
+        # затем публикуем заново — так ссылка гарантированно указывает на текущую версию.
         try:
-            info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
+            grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "DELETE")
         except urllib.error.HTTPError:
-            info = {}
-        if not info.get("accessToken"):
-            grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "POST",
-                    {"isEnabled": True, "annotationsEnabled": False,
-                     "timeSelectionEnabled": True, "share": "public"})
-            info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
+            pass
+        grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "POST",
+                {"isEnabled": True, "annotationsEnabled": False,
+                 "timeSelectionEnabled": True, "share": "public"})
+        info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
         token = str(info.get("accessToken") or "")
         if not token:
             return {"status": "error", "message": "Grafana не вернула токен"}
