@@ -20,6 +20,8 @@ PAGES = os.environ.get("PAGES", "/chat,/documents,/admin,/kg,/docs,/architecture
 SCROLL = os.environ.get("SCROLL_SELECTOR", "")
 # Необязательно: селектор элемента — тогда снимок делается только по нему (удобно для панелей)
 ELEMENT = os.environ.get("ELEMENT_SELECTOR", "")
+# Сколько ждать после загрузки перед снимком (внешние панели, например Grafana, грузятся дольше)
+WAIT_MS = int(os.environ.get("WAIT_MS", "1800"))
 
 
 def main() -> None:
@@ -37,7 +39,7 @@ def main() -> None:
                 page.goto(f"{BASE}{path}")
                 page.evaluate("(t) => { document.documentElement.setAttribute('data-theme', t); "
                               "try{localStorage.setItem('kag-theme', t)}catch(e){} }", theme)
-                page.wait_for_timeout(1800)
+                page.wait_for_timeout(WAIT_MS)
                 if SCROLL:
                     # Прокрутка через JS: страница после загрузки данных сама возвращается наверх,
                     # поэтому прокручиваем прямо перед снимком и ждём отрисовку.
