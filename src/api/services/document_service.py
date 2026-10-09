@@ -376,6 +376,21 @@ class DocumentService:
         # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
         self._save_document_to_db(doc_id)
 
+        # Журнал происхождения: хеш, размер, время, источник + хеш-цепочка. Пишем один раз при
+        # загрузке — иначе задним числом не доказать, каким файл был в момент приёма.
+        try:
+            from src.security.provenance import append as provenance_append
+
+            provenance_append(
+                document_id=doc_id,
+                sha256=file_hash,
+                size=file_size,
+                filename=filename,
+                source=source_metadata if isinstance(source_metadata, dict) else None,
+            )
+        except Exception as e:  # noqa: BLE001 — журнал не должен ломать загрузку
+            logger.warning(f"[provenance] журнал недоступен: {e}")
+
         return record
 
     def _find_by_hash(self, file_hash: str) -> Optional[DocumentRecord]:

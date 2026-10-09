@@ -2209,6 +2209,23 @@ async def warm_reranker_endpoint():
         return {"loaded": False, "error": f"{type(e).__name__}: {e}"}
 
 
+@router.get("/provenance", summary="Журнал происхождения файлов и проверка цепочки")
+async def get_provenance(limit: int = 20):
+    """Показать хвост журнала происхождения и проверить целостность цепочки.
+
+    Журнал append-only: каждая запись содержит хеш предыдущей. `chain_ok=false` означает, что
+    записи подменяли, удаляли или вставляли — тогда в поле `broken_at` номер первой битой записи.
+    """
+    try:
+        from src.security.provenance import records, verify
+
+        ok, count, broken = verify()
+        return {"chain_ok": ok, "records": count, "broken_at": broken,
+                "last": records(max(1, min(200, int(limit or 20))))}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/ingest-config", summary="Статус загрузки документов (блокировка поступления)")
 async def get_ingest_config():
     """Вернуть {blocked, message}: запрещена ли ЗАГРУЗКА новых документов.
