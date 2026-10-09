@@ -701,7 +701,18 @@ class EmbeddingsService:
         domain: Optional[str] = None,
         user_id: Optional[str] = None,
         domain_include_empty: bool = False,
+        *,
+        scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
+        """Поиск с выбором коллекции через `scope`: 'news' — коллекция новостей,
+        'documents' (или None) — основная. Параметр опциональный: старые вызовы не меняются.
+        """
+        if scope == "news":
+            return await news_embeddings_service().search(
+                query=query, limit=limit, filters=filters, group_ids=group_ids,
+                is_admin=is_admin, domain=domain, user_id=user_id,
+                domain_include_empty=domain_include_empty)
+
         """
         Семантический поиск по embeddings.
 

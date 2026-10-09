@@ -233,6 +233,7 @@ async def send_message(
             # (UI чата — клик по названию модели). Недоступный провайдер игнорируется.
             provider_id=getattr(request, "provider_id", None),
             model=getattr(request, "model", None),
+            scope=getattr(request, "scope", None),
         )
 
         # Сохраняем сообщения на сервере (если пользователь авторизован).
@@ -327,6 +328,7 @@ async def stream_message(
                 is_admin=is_admin,
                 context_limit=getattr(request, "context_limit", None),
                 min_score_gap=getattr(request, "min_score_gap", None),
+                scope=getattr(request, "scope", None),
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 

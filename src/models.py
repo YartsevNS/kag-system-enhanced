@@ -58,6 +58,9 @@ class ChatRequest(BaseModel):
     # моделью, что стоит в привязке функции. Пусто = привязка функции (админка).
     provider_id: Optional[str] = None
     model: Optional[str] = None
+    # Откуда искать: 'documents' (по умолчанию), 'news' (новости монитора), 'all' (обе).
+    # По умолчанию новости НЕ смешиваются с нормативными документами (решение 09.10.2026).
+    scope: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

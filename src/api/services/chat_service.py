@@ -218,7 +218,7 @@ class ChatService:
 
     async def _search_with_widening(self, query: str, limit: int, *, group_ids=None,
                                     is_admin: bool = False, user_id=None,
-                                    domain: Optional[str] = None) -> list:
+                                    domain: Optional[str] = None, scope: Optional[str] = None) -> list:
         """Поиск с фильтром по домену и расширением, если фильтр обеднил выдачу.
 
         Зачем расширение. Домен вопроса определяет классификатор, и он может не совпасть
@@ -236,13 +236,13 @@ class ChatService:
         kwargs = self._domain_kwargs(domain if domain else None)
         strict = await embeddings_service.search(
             query=query, limit=limit, group_ids=group_ids,
-            is_admin=is_admin, user_id=user_id, **kwargs)
+            is_admin=is_admin, user_id=user_id, scope=scope, **kwargs)
         if kwargs.get("domain"):
             _best = max((float(c.get("score") or 0) for c in strict), default=0.0)
             if len(strict) < max(3, limit // 2) or _best < 0.5:
                 wide = await embeddings_service.search(
                     query=query, limit=limit, group_ids=group_ids,
-                    is_admin=is_admin, user_id=user_id)
+                    is_admin=is_admin, user_id=user_id, scope=scope)
                 _seen = {c.get("id") for c in strict if c.get("id")}
                 _added = [c for c in wide if c.get("id") not in _seen]
                 if _added:
@@ -795,6 +795,7 @@ class ChatService:
         min_score_gap: Optional[float] = None,
         provider_id: Optional[str] = None,
         model: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Сгенерировать ответ с RAG.
@@ -962,7 +963,7 @@ class ChatService:
                 search_results = await self._search_with_widening(
                     user_message, ctx_limit,
                     group_ids=group_ids, is_admin=is_admin, user_id=user_id,
-                    domain=domain,
+                    domain=domain, scope=scope,
                 )
                 _search_ms = (time.monotonic() - _t_search) * 1000
                 logger.info(f"[rag] поиск: {len(search_results)} фрагментов за {_search_ms:.0f} мс "
@@ -1494,6 +1495,7 @@ class ChatService:
         user_id: Optional[str] = None,
         context_limit: Optional[int] = None,
         min_score_gap: Optional[float] = None,
+        scope: Optional[str] = None,
     ):
         """
         Потоковая генерация ответа.
@@ -1547,6 +1549,7 @@ class ChatService:
             group_ids=group_ids,
             is_admin=is_admin,
             user_id=user_id,
+            scope=scope,
             **self._domain_kwargs(_stream_domain),
         )
         search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
