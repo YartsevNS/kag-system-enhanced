@@ -89,35 +89,33 @@ function showLoadError(where, err) {
     + '</div>';
 }
 
-async function loadAll() {
-  try {
-    // Каждый источник грузится САМ ПО СЕБЕ и рисуется, как только пришёл.
-    // Раньше стоял Promise.all: сбор статистики по контейнерам идёт дольше остальных запросов,
-    // и страница ждала его, оставляя ВСЕ панели со спиннером «Загрузка…» (проверено приборно).
-    const withTimeout = (url, ms = 20000) => {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), ms);
-      return fetch(url, {signal: ctl.signal}).then(r => r.json())
-        .catch(e => ({error: (e && e.name) === 'AbortError' ? `нет ответа за ${ms / 1000} с` : String(e)}))
-        .finally(() => clearTimeout(timer));
-    };
-    const sysP = withTimeout('/api/v1/admin/models/system/info').then(d => {
-      try { if (d && !d.error) renderSystem(d); else showLoadError('stats-row', d && d.error); }
-      catch (e) { showLoadError('stats-row', e); }
-    });
-    const rawP = withTimeout('/api/v1/admin/models/storage/raw').then(d => {
-      try { if (d && !d.error) renderStorageRaw(d); else showLoadError('disks', d && d.error); }
-      catch (e) { showLoadError('disks', e); }
-    });
-    const dockerP = withTimeout('/api/v1/admin/models/docker/stats', 45000).then(d => {
-      try { if (d && !d.error) renderDocker(d); else showLoadError('containers', d && d.error); }
-      catch (e) { showLoadError('containers', e); }
-    });
-    await Promise.allSettled([sysP, rawP, dockerP]);
-    const stamp = document.getElementById('load-stamp');
-    if (stamp) stamp.textContent = 'данные сняты в ' + new Date().toLocaleTimeString('ru-RU');
-    return;
+function withTimeout(url, ms) {
+  // Таймаут нужен, потому что сбор статистики по контейнерам идёт дольше остальных запросов:
+  // без него панель ждала бы бесконечно.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms || 20000);
+  return fetch(url, {signal: ctl.signal}).then(r => r.json())
+    .catch(e => ({error: (e && e.name) === 'AbortError' ? ('нет ответа за ' + Math.round((ms || 20000) / 1000) + ' с') : String(e)}))
+    .finally(() => clearTimeout(timer));
+}
 
+async function loadAll() {
+  // Каждый источник грузится САМ ПО СЕБЕ и рисуется, как только пришёл. Раньше стоял Promise.all:
+  // статистика контейнеров идёт дольше остальных, и страница держала ВСЕ панели со спиннером.
+  const stamp = document.getElementById('load-stamp');
+  if (stamp) stamp.textContent = 'снимаю данные…';
+  const jobs = [
+    ['stats-row', withTimeout('/api/v1/admin/models/system/info'), renderSystem],
+    ['disks', withTimeout('/api/v1/admin/models/storage/raw'), renderStorageRaw],
+    ['containers', withTimeout('/api/v1/admin/models/docker/stats', 45000), renderDocker],
+  ].map(([where, promise, render]) => promise.then(d => {
+    try {
+      if (d && !d.error) render(d);
+      else showLoadError(where, d && d.error);
+    } catch (e) { showLoadError(where, e); }
+  }));
+  await Promise.allSettled(jobs);
+  if (stamp) stamp.textContent = 'данные сняты в ' + new Date().toLocaleTimeString('ru-RU');
 }
 
 function fillClass(v, w, c) { return v >= c ? 'fill-err' : v >= w ? 'fill-warn' : 'fill-ok'; }
