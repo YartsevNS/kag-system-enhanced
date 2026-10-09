@@ -43,22 +43,34 @@ TRACKED_DIRS = [
 
 # ── Съём: команды, значения как есть ─────────────────────────────────────────
 
-def read_filesystems() -> List[Dict[str, int | str]]:
-    """`df -B1 -P` — размер/занято/свободно в байтах, плюс точка монтирования.
+# Служебные точки монтирования, которые не описывают место на диске: виртуальные ФС и
+# пробросы одного файла. В метрики их не берём — иначе в графиках появляется «/proc/acpi»
+# с чужим размером и по ним строятся бессмысленные доли. Значения из df при этом не меняются.
+SKIP_MOUNT_PREFIXES = ("/dev", "/proc", "/sys", "/run", "/etc/")
+SKIP_FSTYPES = ("proc", "sysfs", "devpts", "tmpfs", "cgroup", "cgroup2", "mqueue", "overlay",
+                "nsfs", "fuse.lxcfs", "binfmt_misc", "securityfs", "pstore", "bpf", "tracefs",
+                "debugfs", "configfs", "hugetlbfs")
 
-    Без `-x` фильтров: всё, что смонтировано, должно быть видно (в контейнере это, в частности,
-    bind-каталоги стенда, и по ним видно ФС хоста).
+
+def read_filesystems(only_real: bool = True) -> List[Dict[str, int | str]]:
+    """`df -B1 -P` — размер/занято/свободно в байтах, плюс точка монтирования и тип ФС.
+
+    Значения — как их печатает df. `only_real=True` отбрасывает виртуальные ФС и пробросы
+    отдельных файлов: они попадают в вывод df, но места на диске не описывают.
     """
-    out = _run(["df", "-B1", "-P"])
+    out = _run(["df", "-B1", "-P", "-T"])
     rows: List[Dict[str, int | str]] = []
     for line in out.splitlines()[1:]:
         parts = line.split()
-        if len(parts) < 6:
+        if len(parts) < 7:
             continue
-        fs, size, used, avail, _pct, mount = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+        fs, fstype, size, used, avail, _pct, mount = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]
+        if only_real:
+            if str(fstype) in SKIP_FSTYPES or str(mount).startswith(SKIP_MOUNT_PREFIXES):
+                continue
         try:
-            rows.append({"fs": fs, "mount": mount, "size": int(size),
-                         "used": int(used), "free": int(avail)})
+            rows.append({"fs": fs, "fstype": fstype, "mount": mount,
+                         "size": int(size), "used": int(used), "free": int(avail)})
         except ValueError:
             continue
     return rows
