@@ -163,12 +163,17 @@ def harden_grafana(root: pathlib.Path) -> str:
     original = text
     notes = []
 
-    # 1) убрать публикацию порта у сервиса grafana
-    if re.search(r'\n      - "3000:3000"', text):
-        text = re.sub(r'\n      - "3000:3000"', "", text, count=1)
-        text = re.sub(r"(\n  grafana:\n(?:.*?\n)*?    )ports:\n(?=    environment:)",
-                      r"\1", text, count=1)
+    # 1) убрать публикацию порта у сервиса grafana.
+    # ВАЖНО: раньше здесь стояла регулярка с захватом отступов — она оставляла «environment:»
+    # с двойным отступом и compose переставал разбираться (проверено: yaml.parser.ParserError).
+    # Теперь вырезаем ровно два блока строк: ключ ports и единственный порт.
+    ports_block = '    ports:\n      - "3000:3000"\n'
+    if ports_block in text:
+        text = text.replace(ports_block, "", 1)
         notes.append("порт 3000 наружу больше не публикуется")
+    elif '      - "3000:3000"' in text:
+        text = text.replace('      - "3000:3000"\n', "", 1)
+        notes.append("строка порта 3000 удалена (ключ ports смотреть глазами)")
 
     # 2) выключить анонимный доступ ко всей Grafana
     if "GF_AUTH_ANONYMOUS_ENABLED=true" in text:
