@@ -472,16 +472,17 @@ services:
     image: grafana/grafana:10.2.0
     container_name: kag-grafana
     profiles: ["monitoring"]
-    ports:
-      - "3000:3000"
+    # ПОРТ НАРУЖУ НЕ ПУБЛИКУЕТСЯ: система работает во внешней сети, и опубликованный порт Grafana (3000)
+    # был бы доступен извне вместе со страницей входа. Grafana нужна только внутри — панели
+    # показываются через nginx (/grafana/), а он пускает лишь запросы с сессией системы.
+    # Для локальной отладки: раскомментировать ["127.0.0.1:3000:3000"] — привязка к localhost.
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?не задан GRAFANA_ADMIN_PASSWORD (.env)}
       - GF_USERS_ALLOW_SIGN_UP=false
-      # Анонимный доступ ТОЛЬКО на чтение и разрешённое встраивание: панели Grafana
-      # показываются внутри страниц системы (iframe через наш домен, /grafana/).
-      # Редактирование дашбордов при этом закрыто — нужен вход администратора.
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      # Анонимный доступ ко ВСЕЙ Grafana выключен осознанно: с выходом во внешнюю сеть он открывал бы
+      # дашборды любому, кто дотянулся до порта. Панели встраиваются через ПУБЛИЧНЫЙ ДАШБОРД —
+      # это ссылка на конкретный дашборд; её выдаёт админская ручка, и её можно отозвать.
+      - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_SECURITY_ALLOW_EMBEDDING=true
       # Grafana живёт по подпути /grafana/, иначе ссылки в интерфейсе ведут на корень
       - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/

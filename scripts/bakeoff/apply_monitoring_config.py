@@ -148,12 +148,71 @@ def dedupe_compose_env(root: pathlib.Path) -> str:
     return f"compose: убрано дублей — {removed}"
 
 
+def harden_grafana(root: pathlib.Path) -> str:
+    """Закрыть Grafana от внешней сети: без публикации порта, без анонимного доступа.
+
+    Зачем: система работает во внешней сети. Опубликованный порт Grafana (3000) и разрешённый
+    анонимный доступ ко всей Grafana — это открытые наружу дашборды и страница входа.
+    Панели при этом остаются доступны: они встраиваются через публичный дашборд и nginx,
+    который пускает только запросы с сессией системы.
+    """
+    compose = root / "docker-compose.yml"
+    if not compose.exists():
+        return "compose: файла нет"
+    text = compose.read_text(encoding="utf-8")
+    original = text
+    notes = []
+
+    # 1) убрать публикацию порта у сервиса grafana
+    if re.search(r'\n      - "3000:3000"', text):
+        text = re.sub(r'\n      - "3000:3000"', "", text, count=1)
+        text = re.sub(r"(\n  grafana:\n(?:.*?\n)*?    )ports:\n(?=    environment:)",
+                      r"\1", text, count=1)
+        notes.append("порт 3000 наружу больше не публикуется")
+
+    # 2) выключить анонимный доступ ко всей Grafana
+    if "GF_AUTH_ANONYMOUS_ENABLED=true" in text:
+        text = text.replace("GF_AUTH_ANONYMOUS_ENABLED=true", "GF_AUTH_ANONYMOUS_ENABLED=false")
+        notes.append("анонимный доступ к Grafana выключен")
+    if "GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer" in text:
+        text = re.sub(r'\n *- GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer', "", text, count=1)
+        notes.append("роль анонимного пользователя убрана")
+
+    if text != original:
+        backup(compose)
+        compose.write_text(text, encoding="utf-8")
+    return "compose: " + ("; ".join(notes) if notes else "уже закрыто")
+
+
+def harden_nginx_grafana(root: pathlib.Path) -> str:
+    """Пускать к /grafana/ только запросы с сессией системы (страница входа Grafana — не наружу)."""
+    conf = root / "docker/nginx/conf.d/kag.conf"
+    if not conf.exists():
+        return "nginx: файла нет"
+    text = conf.read_text(encoding="utf-8")
+    if "cookie_kag_token" in text:
+        return "nginx: доступ к /grafana/ уже ограничен сессией"
+    gate = ('    location /grafana/ {\n'
+            '        # Система во внешней сети: без этой проверки страница входа Grafana торчала бы наружу\n'
+            '        if ($cookie_kag_token = "") {\n'
+            '            return 403;\n'
+            '        }\n')
+    count = text.count("location /grafana/ {")
+    if not count:
+        return "nginx: блока /grafana/ нет"
+    backup(conf)
+    conf.write_text(text.replace("    location /grafana/ {\n", gate), encoding="utf-8")
+    return f"nginx: проверка сессии добавлена в {count} блока"
+
+
 def main() -> None:
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/yartsevn/kag-system")
     print(patch_nginx(root))
     print(patch_compose(root))
     print(patch_api_env(root))
     print(dedupe_compose_env(root))
+    print(harden_grafana(root))
+    print(harden_nginx_grafana(root))
 
 
 if __name__ == "__main__":
