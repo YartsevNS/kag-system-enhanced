@@ -551,13 +551,53 @@ function logout() {
 // ===== Визуализация графа (Cytoscape.js, локально /static/vendor) =====
 let cy = null;
 const nodeMap = {}; // имя сущности -> cytoscape id
-const TYPE_COLORS = {person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',legal_term:'#a78bfa',document_ref:'#f87171',Chunk:'#475569',Document:'#475569'};
-const KG_PALETTE = ['#94a3f8','#f472b6','#fbbf24','#34d399','#22d3ee','#a78bfa','#f87171','#fb923c','#4ade80','#e879f9','#38bdf8','#facc15','#2dd4bf','#c084fc'];
+// Цвета графа зависят от темы. Исходные (пастельные) рассчитаны на тёмный фон: на белом они
+// выцветают, а подписи узлов #e5e5e5 и плашка подписи связи #171717 в светлой теме просто не видны
+// (владелец: «на светлой теме не видно связи графов и самих графов»). Правило простое:
+// светлое на тёмном, тёмное на светлом.
+const G_DARK = {
+  nodeLabel:'#e5e5e5', nodeBorder:'#333', edge:'#555', arrow:'#777',
+  edgeLabel:'#888', edgeLabelBg:'#171717',
+  types:{person:'#94a3f8',organization:'#f472b6',date:'#fbbf24',money:'#34d399',location:'#22d3ee',
+         legal_term:'#a78bfa',document_ref:'#f87171',Chunk:'#475569',Document:'#475569'},
+  palette:['#94a3f8','#f472b6','#fbbf24','#34d399','#22d3ee','#a78bfa','#f87171','#fb923c','#4ade80','#e879f9','#38bdf8','#facc15','#2dd4bf','#c084fc'],
+};
+const G_LIGHT = {
+  nodeLabel:'#12161b', nodeBorder:'rgba(18,22,27,.35)', edge:'rgba(18,22,27,.42)', arrow:'rgba(18,22,27,.55)',
+  edgeLabel:'#2f3742', edgeLabelBg:'#ffffff',
+  // те же типы, но заметно темнее — на белом они читаются, а прежние сливались с фоном
+  types:{person:'#4f5bd5',organization:'#c026d3',date:'#b45309',money:'#0f8a52',location:'#0e7490',
+         legal_term:'#6d28d9',document_ref:'#b3261e',Chunk:'#64748b',Document:'#64748b'},
+  palette:['#4f5bd5','#c026d3','#b45309','#0f8a52','#0e7490','#6d28d9','#b3261e','#c2410c','#15803d','#a21caf','#0369a1','#a16207','#0f766e','#7e22ce'],
+};
+function kgTheme(){ return document.documentElement.getAttribute('data-theme') === 'dark' ? G_DARK : G_LIGHT; }
 function typeColor(t){
-  if (TYPE_COLORS[t]) return TYPE_COLORS[t];
+  const th = kgTheme();
+  if (th.types[t]) return th.types[t];
   let h = 0; const s = String(t || 'other');
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return KG_PALETTE[h % KG_PALETTE.length];
+  return th.palette[h % th.palette.length];
+}
+
+// Стили объявлены функцией: их нужно пересобирать при смене темы, иначе граф остаётся
+// в цветах прежней темы (светлое на светлом).
+function kgStyles(){
+  const th = kgTheme();
+  return [
+    { selector:'node', style:{
+        'background-color':'data(color)', 'label':'',
+        'color':th.nodeLabel, 'font-size':10, 'text-valign':'bottom', 'text-margin-y':5,
+        'width':'mapData(weight,1,10,18,52)', 'height':'mapData(weight,1,10,18,52)',
+        'border-width':1, 'border-color':th.nodeBorder } },
+    { selector:'edge', style:{
+        'width':1.5, 'line-color':th.edge, 'curve-style':'bezier',
+        'target-arrow-shape':'triangle', 'target-arrow-color':th.arrow,
+        'label':'data(label)', 'font-size':8, 'color':th.edgeLabel, 'text-rotation':'autorotate',
+        'text-background-color':th.edgeLabelBg, 'text-background-opacity':0.75, 'text-background-padding':'2px' } },
+    { selector:'node.with-label', style:{ 'label':'data(label)' } },
+    { selector:'.center', style:{ 'border-width':3, 'border-color':'#08a652' } },
+    { selector:'.matched', style:{ 'border-width':4, 'border-color':'#c2410c' } },
+  ];
 }
 
 // Показывает подписи узлов в зависимости от масштаба и размера графа.
@@ -574,34 +614,36 @@ function applyLabelVisibility(){
   cy.nodes('.matched').addClass('with-label');
 }
 
+// Перекрасить уже построенный граф под текущую тему: обновляем таблицу стилей и данные узлов
+// (фон узла берётся из data(color), поэтому его тоже надо пересчитать).
+function applyKgTheme(){
+  if (typeof cy === 'undefined' || !cy) return;
+  cy.style(kgStyles());
+  cy.nodes().forEach(function(n){
+    const kind = n.data('type') || n.data('kind') || '';
+    n.data('color', typeColor(kind));
+  });
+}
+
 function ensureCy(){
   if (cy) return cy;
   cy = cytoscape({
     container: document.getElementById('cy'),
     elements: [],
-    style: [
-      { selector:'node', style:{
-          // Подпись по умолчанию выключена: включаем классом .with-label, когда
-          // масштаб достаточный (на плотных графах подписи сливаются в кашу).
-          // Через style('label','') это не работает — значение откатывается
-          // к таблице стилей (проверено в браузере).
-          'background-color':'data(color)', 'label':'',
-          'color':'#e5e5e5', 'font-size':10, 'text-valign':'bottom', 'text-margin-y':5,
-          'width':'mapData(weight,1,10,18,52)', 'height':'mapData(weight,1,10,18,52)',
-          'border-width':1, 'border-color':'#333' } },
-      { selector:'edge', style:{
-          'width':1.5, 'line-color':'#555', 'curve-style':'bezier',
-          'target-arrow-shape':'triangle', 'target-arrow-color':'#777',
-          'label':'data(label)', 'font-size':8, 'color':'#888', 'text-rotation':'autorotate',
-          'text-background-color':'#171717', 'text-background-opacity':0.7, 'text-background-padding':'2px' } },
-      { selector:'node.with-label', style:{ 'label':'data(label)' } },
-      { selector:'.center', style:{ 'border-width':3, 'border-color':'#3ecf8e' } },
-      // Найденные по тексту фрагменты — яркая обводка (соседи по уровню обычные)
-      { selector:'.matched', style:{ 'border-width':4, 'border-color':'#f5a524' } }
-    ],
+    // Подпись по умолчанию выключена: включаем классом .with-label, когда масштаб достаточный
+    // (на плотных графах подписи сливаются в кашу). Через style('label','') это не работает —
+    // значение откатывается к таблице стилей (проверено в браузере).
+    style: kgStyles(),
     layout:{ name:'cose', animate:true, padding:30, nodeRepulsion:12000, idealEdgeLength:120, gravity:0.8 },
     wheelSensitivity:0.2, minZoom:0.05, maxZoom:3
   });
+  // При смене темы (переключатель ставит data-theme на <html>) перекрашиваем граф:
+  // иначе он остаётся в цветах прежней темы — светлое на светлом, как и было.
+  if (!window.__kgThemeObserver) {
+    window.__kgThemeObserver = new MutationObserver(function(){ applyKgTheme(); });
+    window.__kgThemeObserver.observe(document.documentElement,
+                                     {attributes:true, attributeFilter:['data-theme']});
+  }
   // Подписи показываем только при достаточном зуме — иначе они накладываются
   cy.on('zoom', applyLabelVisibility);
   cy.on('layoutstop', applyLabelVisibility);
