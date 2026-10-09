@@ -23,10 +23,6 @@
         "name": "mount",
         "label": "Точка монтирования",
         "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
         "query": {
           "query": "label_values(kag_fs_size_bytes, mount)",
           "refId": "A"
