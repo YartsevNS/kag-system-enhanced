@@ -390,8 +390,10 @@ async def search_chunks(
         chunks = await embeddings_service.search(
             query, limit=limit, filters=filters or None,
             group_ids=group_ids, is_admin=is_admin, user_id=user_id,
+            scope=request.get("scope"),
         )
-        return {"chunks": chunks, "total": len(chunks), "filters": filters or None}
+        return {"chunks": chunks, "total": len(chunks), "filters": filters or None,
+                "scope": request.get("scope") or "documents"}
     except HTTPException:
         raise
     except Exception as e:
