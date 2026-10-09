@@ -27,7 +27,9 @@ WAIT_MS = int(os.environ.get("WAIT_MS", "1800"))
 def main() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--no-sandbox"])
-        ctx = browser.new_context(viewport={"width": WIDTH, "height": 950})
+        # ignore_https_errors: система отдаётся по https с самоподписанным сертификатом,
+        # без этого браузер обрывает переход и снимки не делаются
+        ctx = browser.new_context(viewport={"width": WIDTH, "height": 950}, ignore_https_errors=True)
         if PASSWORD:
             r = ctx.request.post(f"{BASE}/api/v1/auth/login",
                                  data={"username": USER, "password": PASSWORD})
