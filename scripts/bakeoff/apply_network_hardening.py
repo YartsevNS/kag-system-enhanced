@@ -92,9 +92,13 @@ def main() -> None:
         print(" -", note)
 
     print("\n=== проверка, что compose разбирается ===")
-    out = compose("config", cwd=root)
-    if "error" in out.lower() or "yaml" in out.lower():
-        print("ОШИБКА разбора compose, дальше не иду:\n", out[:400])
+    # Проверяем КОД ВОЗВРАТА, а не текст: `config -q` молчит при успехе, а вывод обычного `config`
+    # содержит слова «error»/«yaml» в описаниях сервисов — на этом скрипт однажды зря остановился
+    # уже после правки файла (порты переписаны, контейнеры не пересозданы).
+    res = subprocess.run(["docker-compose", "config", "-q"], cwd=str(root),
+                         capture_output=True, text=True)
+    if res.returncode != 0:
+        print("ОШИБКА разбора compose, дальше не иду:\n", (res.stderr or res.stdout)[:400])
         return
     print("ok")
 
