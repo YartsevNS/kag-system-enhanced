@@ -154,6 +154,9 @@ class IngestBlockConfig(BaseModel):
     photo_normalize: Optional[bool] = None
     photo_max_side: Optional[int] = None
     photo_quality: Optional[int] = None
+    # ── лимит скорости загрузки (было зашито: 10 за 60 с) ──
+    rate_limit: Optional[int] = None
+    rate_window: Optional[int] = None
 
 
 class SearchModeConfig(BaseModel):
@@ -2218,12 +2221,15 @@ async def get_ingest_config():
         cfg = config_store.get("system", "uploads") or {}
         if not isinstance(cfg, dict):
             cfg = {}
+        from src.api.routes.upload import RATE_LIMIT_DEFAULT, RATE_WINDOW_DEFAULT
         return {
             "blocked": bool(cfg.get("blocked", False)),
             "message": str(cfg.get("message", "")),
             "photo_normalize": bool(cfg.get("photo_normalize", True)),
             "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
             "photo_quality": int(cfg.get("photo_quality", 92) or 92),
+            "rate_limit": int(cfg.get("rate_limit", RATE_LIMIT_DEFAULT) or RATE_LIMIT_DEFAULT),
+            "rate_window": int(cfg.get("rate_window", RATE_WINDOW_DEFAULT) or RATE_WINDOW_DEFAULT),
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2254,12 +2260,26 @@ async def save_ingest_config(payload: IngestBlockConfig):
                 cfg["photo_quality"] = max(50, min(95, int(data["photo_quality"])))
             except (TypeError, ValueError):
                 cfg["photo_quality"] = 92
+        # Лимит скорости загрузки (браузеру веры нет — границы проверяем на сервере)
+        if "rate_limit" in data:
+            try:
+                cfg["rate_limit"] = max(1, min(1000, int(data["rate_limit"])))
+            except (TypeError, ValueError):
+                cfg["rate_limit"] = 10
+        if "rate_window" in data:
+            try:
+                cfg["rate_window"] = max(1, min(3600, int(data["rate_window"])))
+            except (TypeError, ValueError):
+                cfg["rate_window"] = 30
         config_store.set("system", "uploads", cfg)
+        from src.api.routes.upload import RATE_LIMIT_DEFAULT, RATE_WINDOW_DEFAULT
         return {"status": "ok", "blocked": bool(cfg.get("blocked", False)),
                 "message": str(cfg.get("message", "")),
                 "photo_normalize": bool(cfg.get("photo_normalize", True)),
                 "photo_max_side": int(cfg.get("photo_max_side", 6000) or 6000),
-                "photo_quality": int(cfg.get("photo_quality", 92) or 92)}
+                "photo_quality": int(cfg.get("photo_quality", 92) or 92),
+                "rate_limit": int(cfg.get("rate_limit", RATE_LIMIT_DEFAULT) or RATE_LIMIT_DEFAULT),
+                "rate_window": int(cfg.get("rate_window", RATE_WINDOW_DEFAULT) or RATE_WINDOW_DEFAULT)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

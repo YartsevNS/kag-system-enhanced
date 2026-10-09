@@ -514,7 +514,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                     </div>
                     <div id="photo-size-note" style="font-size:12px;color:var(--text4);margin-top:8px"></div>
                 </div>
-                <button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
+                <div style="margin:10px 0 6px;padding-top:12px;border-top:1px solid var(--border-s)"><label style="display:block;font-size:12px;color:var(--text4);margin-bottom:4px">Скорость загрузки: сколько документов за сколько секунд принимает сервер (защита от случайной массовой заливки). Значения проверяются на сервере.</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input id="up-rate-limit" type="number" min="1" max="1000" value="10" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"><span style="font-size:13px;color:var(--text3)">документов за</span><input id="up-rate-window" type="number" min="1" max="3600" value="30" style="width:90px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"><span style="font-size:13px;color:var(--text3)">секунд</span></div></div><button class="btn btn-primary" onclick="saveUploadConfig()"> Сохранить</button><span id="upload-status" style="font-size:12px;color:var(--text4);margin-left:10px"></span><div style="font-size:12px;color:var(--text3);line-height:1.7;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:12px;margin-top:10px"><strong>Что это.</strong> Запрет действует на ВСЕ источники попадания документов: ручную загрузку со страницы
                 «Документы» и через API, парсинг сайтов (watched_urls) и RSS — новые документы не появляются ниоткуда
                 (API отвечает 423, мониторинг пропускает обход источников).
                 Обработка уже загруженных документов этим переключателем НЕ затрагивается — она управляется отдельной
@@ -1014,6 +1014,10 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 if (pn) pn.checked = d.photo_normalize !== false;
                 if (ps) ps.value = d.photo_max_side || 6000;
                 if (pq) pq.value = d.photo_quality || 92;
+                const rl = document.getElementById('up-rate-limit');
+                const rw = document.getElementById('up-rate-window');
+                if (rl) rl.value = d.rate_limit || 10;
+                if (rw) rw.value = d.rate_window || 30;
                 if (msg && d.message) msg.value = d.message;
             } catch (e) { console.error('ingest-config load:', e); }
         }
@@ -1030,6 +1034,8 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                         photo_normalize: document.getElementById('up-photo-normalize').checked,
                         photo_max_side: parseInt(document.getElementById('up-photo-max-side').value || '6000', 10),
                         photo_quality: parseInt(document.getElementById('up-photo-quality').value || '92', 10),
+                        rate_limit: parseInt(document.getElementById('up-rate-limit').value || '10', 10),
+                        rate_window: parseInt(document.getElementById('up-rate-window').value || '30', 10),
                     })
                 });
                 const d = await r.json();

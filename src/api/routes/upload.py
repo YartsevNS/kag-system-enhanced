@@ -160,22 +160,39 @@ QUEUE_INSPECT_TIMEOUT = 0.7   # три команды inspect → до ~2 с н�
 QUEUE_CACHE_TTL = 5.0
 _QUEUE_CACHE: dict = {"at": 0.0, "inspect": None}
 
-# Rate limiter: не более N запросов в минуту на upload
+# Rate limiter загрузки: не более N запросов за окно. Значения — НАСТРОЙКА (админка →
+# «Загрузка документов»), а не константа: раньше окно 60 с было зашито, и массовая заливка
+# упиралась в него без возможности поправить из интерфейса. Дефолт: 10 за 30 секунд.
 from collections import defaultdict
 _RATE_STORE: dict = defaultdict(list)
-_RATE_LIMIT = 10       # запросов
-_RATE_WINDOW = 60      # секунд
+RATE_LIMIT_DEFAULT = 10     # запросов
+RATE_WINDOW_DEFAULT = 30    # секунд
+
+
+def _rate_params() -> "tuple[int, int]":
+    """Лимит и окно загрузки из настроек, с безопасными границами."""
+    limit, window = RATE_LIMIT_DEFAULT, RATE_WINDOW_DEFAULT
+    try:
+        from src.api.services.config_store import config_store
+        cfg = config_store.get("system", "uploads") or {}
+        if isinstance(cfg, dict):
+            limit = max(1, min(1000, int(cfg.get("rate_limit", limit) or limit)))
+            window = max(1, min(3600, int(cfg.get("rate_window", window) or window)))
+    except Exception:
+        pass
+    return limit, window
 
 
 def _check_rate_limit(ip: str):
-    """Проверить лимит upload-запросов. 429 при превышении."""
+    """Проверить лимит upload-запросов. 429 при превышении. Значения берутся из настроек."""
+    limit, window = _rate_params()
     now = time.time()
-    window_start = now - _RATE_WINDOW
+    window_start = now - window
     _RATE_STORE[ip] = [t for t in _RATE_STORE[ip] if t > window_start]
-    if len(_RATE_STORE[ip]) >= _RATE_LIMIT:
+    if len(_RATE_STORE[ip]) >= limit:
         raise HTTPException(status_code=429, detail={
             "code": "RATE_LIMIT",
-            "message": f"Слишком много запросов. Максимум {_RATE_LIMIT} в минуту.",
+            "message": f"Слишком много запросов. Максимум {limit} за {window} секунд.",
         })
     _RATE_STORE[ip].append(now)
 
