@@ -155,7 +155,11 @@ class KnowledgeGraphService:
         Всё, чего нет в списке, в граф не пишется под своим именем: иначе модель придумывает
         типы на ходу, и в базе копится мусор, который чистится только переобработкой.
         """
-        allowed = {t.upper() for t in self.DEFAULT_RELATION_TYPES} | {"MENTIONS", "HAS_CHUNK", "RELATED_TO"}
+        # Системные и структурные типы НАШЕГО кода (не от модели): упоминания, фрагменты,
+        # разделы, версии редакций. Их нельзя считать «выдуманными» и нельзя преобразовывать.
+        allowed = ({t.upper() for t in self.DEFAULT_RELATION_TYPES}
+                   | {"MENTIONS", "HAS_CHUNK", "RELATED_TO",
+                      "HAS_SECTION", "SECTION_CHUNK", "SUPERSEDED_BY"})
         try:
             schema = self.get_domain_schema() or {}
             for group, items in schema.items():
