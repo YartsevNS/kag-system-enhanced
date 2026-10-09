@@ -166,9 +166,35 @@ function badgeClass(type) {
   return m[type] || 'badge-other';
 }
 
+// Названия для показа — русские. В ДАННЫХ остаются коды (RELATED_TO, person): они не зависят
+// от языка интерфейса, по ним идёт поиск и их видно рядом с названием. Перевод живёт здесь одной
+// таблицей, поэтому второй язык (или выбор по языку браузера) — это ещё один словарь, а не правка
+// данных на стенде и не пересборка графа.
+const UI_LANG = 'ru';   // при надобности выбирать по navigator.language; пока язык интерфейса один
+const REL_LABELS = {
+  ru: { RELATED_TO:'связано с', SIGNED_BY:'подписано', DATED:'датировано', AMOUNT:'на сумму',
+        BELONGS_TO:'принадлежит', LOCATED_AT:'находится по адресу', MENTIONS:'упоминается',
+        HAS_CHUNK:'содержит фрагмент' },
+};
+const TYPE_LABELS = {
+  ru: { person:'Человек', organization:'Организация', date:'Дата', money:'Сумма', location:'Место',
+        legal_term:'Юр. термин', document_ref:'Документ', Document:'Документ', Chunk:'Фрагмент',
+        table:'Таблица', table_row:'Строка таблицы', image:'Изображение' },
+};
+function relLabel(t){
+  if (!t) return '';
+  const dict = REL_LABELS[UI_LANG] || REL_LABELS.ru;
+  if (dict[t]) return dict[t];
+  // незнакомый код (модель может вернуть свой тип) — читаемая форма, без выдумывания смысла
+  return String(t).replace(/_/g, ' ').toLowerCase();
+}
+function typeLabel(t){
+  if (!t) return 'сущность';
+  const dict = TYPE_LABELS[UI_LANG] || TYPE_LABELS.ru;
+  return dict[t] || t;
+}
 function labelType(t) {
-  const m = {person:'',organization:'',date:'',money:'',location:'',legal_term:'',document_ref:''};
-  return (m[t]||'•') + ' ' + (t||'other');
+  return typeLabel(t);
 }
 
 async function searchEntities() {
@@ -502,7 +528,10 @@ async function showDomainSchema() {
       html += '<div style="background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px">';
       html += '<div style="font-weight:600;font-size:14px;margin-bottom:8px;color:var(--accent-h)">' + (group === 'core' ? ' Core' : group === 'relations' ? ' Relations' : ' Extended') + '</div>';
       for (const [type, desc] of Object.entries(types)) {
-        html += '<div style="font-size:12px;padding:4px 0"><code style="background:var(--elevated);padding:1px 6px;border-radius:3px;color:var(--accent-h)">' + type + '</code> <span style="color:var(--text4)">' + desc + '</span></div>';
+        const humanName = (group === 'relations') ? relLabel(type) : typeLabel(type);
+        html += '<div style="font-size:12px;padding:4px 0"><b style="color:var(--text)">' + esc(humanName) +
+                '</b> <code style="background:var(--elevated);padding:1px 6px;border-radius:3px;color:var(--text4)">' +
+                esc(type) + '</code> <span style="color:var(--text4)">' + esc(desc) + '</span></div>';
       }
       html += '</div>';
     }
@@ -936,7 +965,9 @@ function addGraphData(g){
     if (!c.getElementById(sid).length) c.add({ data:{ id:sid, key:e.source, name:e.source_name || e.source, kind:'entity', chunk_id:'', document_id:'', label:shortLabel(e.source_name || e.source), type:'', color:typeColor(''), weight:1 } });
     if (!c.getElementById(tid).length) c.add({ data:{ id:tid, key:e.target, name:e.target_name || e.target, kind:'entity', chunk_id:'', document_id:'', label:shortLabel(e.target_name || e.target), type:'', color:typeColor(''), weight:1 } });
     const eid = sid + '__' + tid + '__' + (e.type||'');
-    if (!c.getElementById(eid).length) c.add({ data:{ id:eid, source:sid, target:tid, label:e.type } });
+    // label — для показа (по-русски), rel — исходный код связи (для подсказок и разбора)
+    if (!c.getElementById(eid).length) c.add({ data:{ id:eid, source:sid, target:tid,
+                                                    label:relLabel(e.type), rel:e.type } });
   });
   c.nodes().forEach(function(nd){ nd.data('weight', Math.min((nd.degree()||0)+1, 10)); });
   return c;
