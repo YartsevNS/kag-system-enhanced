@@ -30,11 +30,18 @@ def main() -> None:
         print("вход:", ctx.request.post(f"{BASE}/api/v1/auth/login",
                                         data={"username": USER, "password": PASSWORD}).status)
         page = ctx.new_page()
-        errors, failed = [], []
+        errors, failed, bad_responses = [], [], []
         page.on("pageerror", lambda e: errors.append(f"исключение: {str(e)[:200]}"))
         page.on("console", lambda m: errors.append(f"консоль: {m.text[:200]}") if m.type == "error" else None)
         page.on("requestfailed", lambda r: failed.append(f"{r.url[:120]} — {r.failure}"))
+        # Главное для разбора: какие именно запросы вернули ошибку (без этого «403» ни о чём не говорит)
+        page.on("response", lambda r: bad_responses.append(f"{r.status} {r.url[:130]}")
+                if r.status >= 400 else None)
 
+        # Запоминаем, что именно вернул API хранилища — по этому видно, дошёл ли до страницы grafana_url
+        page.on("response", lambda r: page.evaluate("k => window.__kagRawKeys = k",
+                                                    list(r.json().keys()))
+                if "/storage/raw" in r.url and r.status == 200 else None)
         page.goto(f"{BASE}/docker")
         page.wait_for_timeout(10000)
 
@@ -46,6 +53,7 @@ def main() -> None:
                 disksLen: txt('disks').length,
                 containers: txt('containers').slice(0, 120),
                 frameSrc: frame ? frame.getAttribute('src') : '(нет кадра)',
+                raw: window.__kagRawKeys || null,
                 stamp: txt('load-stamp'),
             };
         }""")
@@ -57,6 +65,9 @@ def main() -> None:
         print("\nкадр Grafana:", state["frameSrc"][:120])
         print("отметка времени:", state["stamp"])
 
+        print("\nответы с ошибкой:", len(bad_responses))
+        for b in dict.fromkeys(bad_responses):
+            print("  -", b)
         print("\nошибки страницы:", len(errors))
         for e in dict.fromkeys(errors):
             print("  -", e)
