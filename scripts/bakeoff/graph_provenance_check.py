@@ -16,7 +16,9 @@ uri = os.environ.get("NEO4J_URI") or f"bolt://{os.environ.get('NEO4J_HOST', 'neo
 drv = GraphDatabase.driver(uri, auth=(os.environ.get("NEO4J_USER", "neo4j"), os.environ.get("NEO4J_PASSWORD", "")))
 
 ALLOWED = {"RELATED_TO", "SIGNED_BY", "DATED", "AMOUNT", "BELONGS_TO", "LOCATED_AT",
-           "MENTIONS", "HAS_CHUNK", "SUPERSEDED_BY"}
+           "MENTIONS", "HAS_CHUNK", "SUPERSEDED_BY",
+           # структурные типы нашего кода (не от модели)
+           "HAS_SECTION", "SECTION_CHUNK"}
 
 with drv.session() as s:
     ent_total = s.run("MATCH (e:Entity) RETURN count(e) AS n").single()["n"]
