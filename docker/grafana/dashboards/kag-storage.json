@@ -2,7 +2,7 @@
   "id": null,
   "uid": "kag-storage",
   "title": "KAG — хранилище и нагрузка",
-  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные).",
+  "description": "Фактические значения, снятые утилитами (df, du) и Docker API, и их динамика. Значения отдаёт наш api в /metrics (датчики kag_fs_*, kag_dir_bytes, kag_docker_bytes); проценты и доли считает Grafana, а не интерфейс системы — иначе сводка врёт. Разделы-заголовки убраны: публичные дашборды Grafana не поддерживают row-панели (из-за них панели не получали данные). Переменные убраны (публичные дашборды Grafana их не поддерживают): точка монтирования указана явно.",
   "tags": [
     "kag",
     "хранилище",
@@ -18,25 +18,7 @@
     "to": "now"
   },
   "templating": {
-    "list": [
-      {
-        "name": "mount",
-        "label": "Точка монтирования",
-        "type": "query",
-        "query": {
-          "query": "label_values(kag_fs_size_bytes, mount)",
-          "refId": "A"
-        },
-        "current": {
-          "selected": true,
-          "text": "/app/data",
-          "value": "/app/data"
-        },
-        "includeAll": false,
-        "multi": false,
-        "refresh": 1
-      }
-    ]
+    "list": []
   },
   "annotations": {
     "list": []
@@ -54,7 +36,7 @@
       },
       "targets": [
         {
-          "expr": "kag_fs_free_bytes{mount=\"$mount\"}",
+          "expr": "kag_fs_free_bytes{mount=\"/app/data\"}",
           "legendFormat": "Свободно на диске",
           "refId": "A"
         }
@@ -86,7 +68,7 @@
       },
       "targets": [
         {
-          "expr": "kag_fs_used_bytes{mount=\"$mount\"}",
+          "expr": "kag_fs_used_bytes{mount=\"/app/data\"}",
           "legendFormat": "Занято на диске",
           "refId": "A"
         }
@@ -118,7 +100,7 @@
       },
       "targets": [
         {
-          "expr": "kag_fs_size_bytes{mount=\"$mount\"}",
+          "expr": "kag_fs_size_bytes{mount=\"/app/data\"}",
           "legendFormat": "Размер файловой системы",
           "refId": "A"
         }
@@ -150,7 +132,7 @@
       },
       "targets": [
         {
-          "expr": "100 * kag_fs_used_bytes{mount=\"$mount\"} / kag_fs_size_bytes{mount=\"$mount\"}",
+          "expr": "100 * kag_fs_used_bytes{mount=\"/app/data\"} / kag_fs_size_bytes{mount=\"/app/data\"}",
           "legendFormat": "занято, %",
           "refId": "A"
         }
@@ -191,12 +173,12 @@
       },
       "targets": [
         {
-          "expr": "kag_fs_used_bytes{mount=\"$mount\"}",
+          "expr": "kag_fs_used_bytes{mount=\"/app/data\"}",
           "legendFormat": "занято",
           "refId": "A"
         },
         {
-          "expr": "kag_fs_free_bytes{mount=\"$mount\"}",
+          "expr": "kag_fs_free_bytes{mount=\"/app/data\"}",
           "legendFormat": "свободно",
           "refId": "B"
         }
