@@ -33,6 +33,10 @@ services:
       - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-false}
+      # Grafana: нужна админская ручка «включить графики в страницах системы»
+      # (создаёт публичный дашборд). Пароль берётся из того же .env, что и у Grafana.
+      - GRAFANA_URL=${GRAFANA_URL:-http://kag-grafana:3000}
+      - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
       - JWT_SECRET=${JWT_SECRET:?не задан JWT_SECRET — он в .env, генерируется deploy.sh}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333

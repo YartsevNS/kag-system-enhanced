@@ -68,7 +68,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
    нейтральные кнопки других страниц. Светлая тема не меняется: там заливка тёмная, белый текст читается. */
 :root[data-theme="dark"] .btn { background: var(--accent-solid); color: var(--on-accent); }
 </style>
-</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Контейнеры, ресурсы и системная информация. Значения снимаются по запросу (кнопка «Обновить»), динамика — в разделе Grafana ниже</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <span id="load-stamp" style="float:right;font-size:11px;color:var(--text4);margin-left:10px"></span> <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Динамика (Grafana)</h2><div id="grafana-wrap" style="min-height:420px">
+</head><body><nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav><main><h1>Docker & Сервер</h1><div class="sub">Контейнеры, ресурсы и системная информация. Значения снимаются по запросу (кнопка «Обновить»), динамика — в разделе Grafana ниже</div><div class="stats" id="stats-row"><div class="loading"><div class="spin"></div></div></div><div class="panel"><h2> Контейнеры <span id="load-stamp" style="float:right;font-size:11px;color:var(--text4);margin-left:10px"></span> <button class="btn" onclick="loadAll()" style="float:right;font-size:11px">Обновить</button></h2><div id="containers"><div class="loading"><div class="spin"></div> Загрузка...</div></div></div><div class="panel"><h2> Диски</h2><div id="disks"><div class="loading"><div class="spin"></div></div></div></div><div class="panel"><h2> Динамика (Grafana) <button class="btn" onclick="enableGrafana()" style="float:right;font-size:11px">Включить графики</button></h2><div id="grafana-wrap" style="min-height:420px">
         <iframe id="grafana-frame" src="/grafana/d/kag-storage/?kiosk&amp;refresh=1m&amp;from=now-7d&amp;to=now"
                 style="width:100%;height:520px;border:1px solid var(--border-s);border-radius:var(--radius);background:var(--surface)"
                 loading="lazy" referrerpolicy="no-referrer"></iframe>
@@ -173,6 +173,33 @@ function renderStorageRaw(d) {
           + '</tbody></table>';
   }
   box.innerHTML = html;
+
+  // Графики: адрес приходит из API. Публичный дашборд открывается без входа в Grafana —
+  // обычный путь потребует логина, поэтому честно предупреждаем администратора.
+  const frame = document.getElementById('grafana-frame');
+  const url = d.grafana_url || '/grafana/d/kag-storage/';
+  if (frame && frame.getAttribute('data-src') !== url) {
+    frame.setAttribute('data-src', url);
+    frame.src = url + (url.includes('?') ? '&' : '?') + 'kiosk&refresh=1m&from=now-7d&to=now';
+  }
+  if (url.indexOf('public-dashboards') < 0) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:#9a5b00;margin-top:6px';
+    hint.textContent = 'Графики пока открываются только после входа в Grafana. Нажмите «Включить графики», '
+                     + 'чтобы дашборд стал доступен без входа и встроился в эту страницу.';
+    box.appendChild(hint);
+  }
+}
+
+async function enableGrafana() {
+  const stamp = document.getElementById('load-stamp');
+  if (stamp) stamp.textContent = 'включаю графики…';
+  try {
+    const r = await fetch('/api/v1/admin/models/monitoring/public-dashboard', {method: 'POST'});
+    const d = await r.json();
+    if (stamp) stamp.textContent = d.status === 'ok' ? 'графики включены' : ('не удалось: ' + (d.message || ''));
+    if (d.status === 'ok') loadAll();
+  } catch (e) { if (stamp) stamp.textContent = 'ошибка: ' + e.message; }
 }
 
 function renderDiskUsage(d) {

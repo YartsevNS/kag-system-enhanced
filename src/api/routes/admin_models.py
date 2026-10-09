@@ -2306,10 +2306,23 @@ async def storage_raw():
     except Exception as e:
         logger.debug(f"storage/raw: Docker недоступен ({e})")
 
+    # Ссылка на графики: приоритет у публичного дашборда Grafana (открывается без входа,
+    # поэтому встраивается в нашу страницу), иначе — обычный путь к дашборду.
+    grafana_url = "/grafana/d/kag-storage/"
+    try:
+        from src.api.services.config_store import config_store
+        mon = config_store.get("system", "monitoring") or {}
+        token = str((mon or {}).get("grafana_public_token") or "").strip()
+        if token:
+            grafana_url = f"/grafana/public-dashboards/{token}"
+    except Exception:
+        pass
+
     return {
         "df_h": run(["df", "-h"]),
         "du": "\n".join(du_lines),
         "docker": docker_rows,
+        "grafana_url": grafana_url,
         "note": ("Значения сняты командами df, du и через Docker API. Проценты и доли здесь не считаются — "
                  "динамику и доли показывает Grafana по истории метрик (раздел «Динамика»)."),
     }
@@ -2330,6 +2343,54 @@ async def get_report_config():
         return cfg
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.post("/monitoring/public-dashboard", summary="Включить публичный дашборд Grafana")
+async def enable_public_dashboard(uid: str = "kag-storage"):
+    """Разрешить показ дашборда Grafana без входа и запомнить ссылку.
+
+    Зачем: панели встраиваются в страницы системы, а наши пользователи не входят в Grafana отдельно.
+    Публичный дашборд — штатный механизм Grafana для таких случаев (в отличие от анонимного доступа
+    ко всей Grafana). Токен храним в настройках и отдаём странице.
+    """
+    import urllib.error
+    import urllib.request
+
+    from src.api.services.config_store import config_store
+
+    base = os.environ.get("GRAFANA_URL", "http://kag-grafana:3000").rstrip("/")
+    password = os.environ.get("GRAFANA_ADMIN_PASSWORD", "")
+    if not password:
+        return {"status": "error", "message": "не задан GRAFANA_ADMIN_PASSWORD в окружении api"}
+    import base64
+    auth = base64.b64encode(f"admin:{password}".encode()).decode()
+
+    def grafana(path: str, method: str = "GET", body: dict | None = None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(f"{base}{path}", data=data, method=method,
+                                     headers={"Content-Type": "application/json",
+                                              "Authorization": f"Basic {auth}"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read().decode()
+        return json.loads(raw) if raw else {}
+
+    try:
+        grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "POST",
+                {"isEnabled": True, "annotationsEnabled": False,
+                 "timeSelectionEnabled": True, "share": "public"})
+        info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
+        token = str(info.get("accessToken") or "")
+        if not token:
+            return {"status": "error", "message": "Grafana не вернула токен"}
+        cfg = config_store.get("system", "monitoring") or {}
+        cfg["grafana_public_token"] = token
+        cfg["grafana_uid"] = uid
+        config_store.set("system", "monitoring", cfg)
+        return {"status": "ok", "url": f"/grafana/public-dashboards/{token}", "token": token}
+    except urllib.error.HTTPError as e:
+        return {"status": "error", "message": f"Grafana ответила {e.code}: {e.read()[:200]!r}"}
+    except Exception as e:
+        return {"status": "error", "message": f"{type(e).__name__}: {e}"}
 
 
 @router.post("/report-config", summary="Сохранить настройки отчётов")
