@@ -267,7 +267,7 @@ class DocumentAnalyzer:
             # нет, ошибка тонула в debug, и document_type/summary/topics в payload
             # НИКОГДА не попадали. Обновляем через embeddings_service.
             try:
-                from src.indexing.embeddings_service import embeddings_service
+                from src.indexing.embeddings_service import embeddings_service, service_for_document
                 payload_update = {}
                 if "document_type" in result:
                     payload_update["document_type"] = result["document_type"]
@@ -276,7 +276,7 @@ class DocumentAnalyzer:
                 if "topics" in result:
                     payload_update["topics"] = result["topics"]
                 if payload_update:
-                    _n = await embeddings_service.update_document_payload(document_id, payload_update)
+                    _n = await service_for_document(document_id).update_document_payload(document_id, payload_update)
                     logger.info(f"Qdrant payload обновлён для {document_id}: точек {_n}")
             except Exception as e:
                 logger.warning(f"Не удалось обновить Qdrant payload: {e}")

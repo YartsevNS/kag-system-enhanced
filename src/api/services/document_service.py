@@ -25,7 +25,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.indexing.parsers import document_parser
-from src.indexing.embeddings_service import embeddings_service
+from src.indexing.embeddings_service import embeddings_service, service_for_document
 # Карточка документа: контекстуальный префикс эмбеддинга + точка level=document.
 from src.indexing.document_card import (
     build_card_prefix, build_card_source, card_from_record, upsert_card_point,
@@ -416,7 +416,7 @@ class DocumentService:
             async def _get():
                 if embeddings_service._qdrant_client is None:
                     await embeddings_service.initialize()
-                chunks = await embeddings_service.get_document_chunks(document_id)
+                chunks = await service_for_document(document_id).get_document_chunks(document_id)
                 return "\n\n".join([c.get("content", "") for c in chunks])
 
             # Запускаем асинхронно (если уже в event loop) или создаём новый
@@ -511,7 +511,7 @@ class DocumentService:
                 # _qdrant_client=None молча возвращает False (ловит AttributeError
                 # внутри), и старые точки остались бы висеть. Проверяем результат.
                 await embeddings_service.initialize()
-                deleted = await embeddings_service.delete_document(document_id)
+                deleted = await service_for_document(document_id).delete_document(document_id)
                 if deleted:
                     logger.info(f"Удалены старые векторы из Qdrant (force): {document_id}")
                 else:
@@ -993,7 +993,7 @@ class DocumentService:
                                 pass
                 except Exception as e:
                     logger.warning(f"[card] карточка не собрана, эмбеддинг без префикса: {e}")
-            vectors_count = await embeddings_service.embed_and_store(
+            vectors_count = await service_for_document(document_id).embed_and_store(
                 document_id=document_id,
                 chunks=chunks,
                 metadata={
@@ -1027,7 +1027,7 @@ class DocumentService:
             # перезаписывали данные, документ числился completed, а точек было 0.
             # Сверяем exact count; пусто — падаем (документ станет failed),
             # расхождение — warning (частичная запись тоже подозрительна).
-            real_points = await embeddings_service.count_document_points(document_id)
+            real_points = await service_for_document(document_id).count_document_points(document_id)
             verdict = check_points_written(len(chunks), real_points)
             plog.log("verify_points", {
                 "expected": len(chunks), "in_qdrant": real_points, "verdict": verdict
@@ -1329,7 +1329,7 @@ class DocumentService:
         qdrant_ok = False
         try:
             await embeddings_service.initialize()
-            qdrant_ok = await embeddings_service.delete_document(document_id)
+            qdrant_ok = await service_for_document(document_id).delete_document(document_id)
             if not qdrant_ok:
                 logger.warning(f"Qdrant: не удалось удалить чанки {document_id}")
         except Exception as e:

@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "kag-qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "kag_documents"
+    # Новости — ОТДЕЛЬНАЯ коллекция (решение 29.08.2026, подтверждено 09.10.2026):
+    # новости монитора/RSS не должны лежать с нормативными документами — они разбавляют
+    # выдачу и портят замеры полноты поиска.
+    QDRANT_NEWS_COLLECTION: str = "kag_news"
     QDRANT_API_KEY: str = ""
 
     # Redis

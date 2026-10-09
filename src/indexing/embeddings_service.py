@@ -1118,3 +1118,52 @@ class EmbeddingsService:
 
 # Глобальный экземпляр
 embeddings_service = EmbeddingsService()
+
+# ── Новости — отдельная коллекция ───────────────────────────────────────────────
+# Новости (монитор источников, RSS) держим в своей коллекции внутри того же Qdrant:
+# тогда запрос по нормативным документам не вытаскивает свежую новость ЦБ, а новости
+# можно чистить и перестраивать отдельно (своя коллекция удаляется целиком).
+_news_service: Optional["EmbeddingsService"] = None
+
+
+def news_embeddings_service() -> "EmbeddingsService":
+    """Сервис коллекции новостей (та же модель эмбеддингов, другая коллекция)."""
+    global _news_service
+    if _news_service is None:
+        _news_service = EmbeddingsService(collection_name=get_settings().QDRANT_NEWS_COLLECTION)
+    return _news_service
+
+
+def service_for_document(document_id: str) -> "EmbeddingsService":
+    """Сервис ТОЙ коллекции, где лежат векторы документа (основная или новости).
+
+    Единственная точка решения: и запись, и удаление, и обновление payload, и подсчёт
+    обязаны идти в ту же коллекцию, иначе документ «есть» в одной и «нет» в другой —
+    и удаление перестаёт чистить, а права не применяются. Импорт репозитория ленивый,
+    чтобы не заводить циклическую зависимость indexing → api.
+    """
+    try:
+        from src.api.services.document_repository import get_doc_repo
+
+        rec = get_doc_repo().get_dict(document_id) or {}
+        if is_news_document(rec):
+            return news_embeddings_service()
+    except Exception as e:  # noqa: BLE001 — не смогли определить → пишем/чистим в основной
+        logger.warning(f"[collection] не удалось определить коллекцию документа {document_id}: {e}")
+    return embeddings_service
+
+
+def is_news_document(doc: dict) -> bool:
+    """Документ пришёл из монитора источников (новости) → его место в коллекции новостей.
+
+    Признак — МЕТАДАННЫЕ ИСТОЧНИКА (source_name/source_url), их ставит web_monitor при загрузке,
+    плюс явный тип документа `news`. Классификатор типов здесь не используется намеренно:
+    он ошибается (44% корпуса лежит как `other`), и по нему нельзя решать, куда писать векторы.
+    """
+    if not doc:
+        return False
+    meta = doc.get("source_metadata") or {}
+    if isinstance(meta, dict) and (meta.get("source_url") or meta.get("source_name") or meta.get("source_id")):
+        return True
+    return str(doc.get("document_type") or "").strip().lower() == "news"
+

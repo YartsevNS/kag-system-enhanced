@@ -1330,8 +1330,8 @@ async def update_document_access(
 
         # Обновляем payload чанков в Qdrant (быстро, без переиндексации)
         try:
-            from src.indexing.embeddings_service import embeddings_service
-            await embeddings_service.set_document_access(document_id, access)
+            from src.indexing.embeddings_service import embeddings_service, service_for_document
+            await service_for_document(document_id).set_document_access(document_id, access)
         except Exception as e:
             logger.warning(f"payload access не обновлён: {e}")
 
@@ -1698,7 +1698,7 @@ async def get_document_details(
             # limit=100000 «посчитать» — то есть выгрузка всех точек документа
             # на каждый показ карточки).
             from src.indexing.embeddings_service import embeddings_service
-            real_count = await embeddings_service.count_document_points(document_id)
+            real_count = await service_for_document(document_id).count_document_points(document_id)
             if real_count > 0:
                 chunks_count = real_count
                 # Обновим в памяти и в БД
@@ -1874,7 +1874,7 @@ async def update_document_meta(
             try:
                 from src.indexing.embeddings_service import embeddings_service
                 await embeddings_service.initialize()
-                await embeddings_service.update_document_payload(document_id, {"domain": new_domain})
+                await service_for_document(document_id).update_document_payload(document_id, {"domain": new_domain})
             except Exception as e:
                 logger.warning(f"Qdrant domain не обновлён: {e}")
             logger.info(f"[domain] пересчитан после правки метаданных: {document_id} -> {new_domain}")
