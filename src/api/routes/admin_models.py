@@ -2375,10 +2375,19 @@ async def enable_public_dashboard(uid: str = "kag-storage"):
         return json.loads(raw) if raw else {}
 
     try:
-        grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "POST",
-                {"isEnabled": True, "annotationsEnabled": False,
-                 "timeSelectionEnabled": True, "share": "public"})
-        info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
+        # Идемпотентно: сначала спрашиваем, не сделан ли дашборд публичным раньше
+        # (повторный POST Grafana отвергает с «Dashboard is already public» — это не ошибка,
+        # но токен нам всё равно нужен, поэтому берём его из GET).
+        info: dict = {}
+        try:
+            info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
+        except urllib.error.HTTPError:
+            info = {}
+        if not info.get("accessToken"):
+            grafana(f"/api/dashboards/uid/{uid}/public-dashboards", "POST",
+                    {"isEnabled": True, "annotationsEnabled": False,
+                     "timeSelectionEnabled": True, "share": "public"})
+            info = grafana(f"/api/dashboards/uid/{uid}/public-dashboards")
         token = str(info.get("accessToken") or "")
         if not token:
             return {"status": "error", "message": "Grafana не вернула токен"}
