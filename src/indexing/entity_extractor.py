@@ -327,6 +327,15 @@ class EntityExtractor:
         except Exception:
             ontology_fp = "none"
 
+        # Отпечаток правил типизации сущностей: они правят ТИПЫ до записи в граф, поэтому кэш
+        # обязан сбрасываться и при их изменении, иначе старые типы вернутся из кэша.
+        try:
+            from src.indexing.entity_typing import ENTITY_RULES_EPOCH
+
+            entity_fp = str(ENTITY_RULES_EPOCH)
+        except Exception:
+            entity_fp = "none"
+
         payload = "|".join([
             str(getattr(cls, "PROMPT_EPOCH", 1)),
             str(cfg.get("model") or ""),
@@ -336,6 +345,7 @@ class EntityExtractor:
             str(getattr(cls, "_active_preset", "")),
             _json.dumps(schema, ensure_ascii=False, sort_keys=True)[:5000],
             ontology_fp,
+            entity_fp,
         ])
         return _h.sha256(payload.encode("utf-8")).hexdigest()[:8]
 
@@ -919,6 +929,20 @@ JSON:
                     )
                 except Exception as e:
                     logger.warning(f"[graph] Neo4j ошибка {label} для {chunk_id}: {e}")
+
+            # ── Уточнение типов правилами (без модели) ─────────────────────────────────
+            # Строгие формы записи определяются точно: номера ГОСТ → standard, «А.1.1»/«п. 4.4» →
+            # clause, реквизиты актов и номера законов → document_ref, даты → date. Модель в этом
+            # ошибается (замер судьёй 10.10.2026: пункт «А.1.1» получил тип document_ref).
+            try:
+                from src.indexing.entity_typing import refine_entities
+
+                entities, _type_changes = refine_entities(entities)
+                if _type_changes:
+                    logger.info(f"[graph][типы] {chunk_id}: уточнено типов {len(_type_changes)} — "
+                                f"{_type_changes[:3]}")
+            except Exception as _te:  # noqa: BLE001 — без уточнения работаем как раньше
+                logger.warning(f"[graph] уточнение типов не применено: {_te}")
 
             # Сохраняем сущности в Domain Graph (БАТЧ: один UNWIND вместо N одиночных)
             entity_objs = []
