@@ -2299,6 +2299,21 @@ async def get_document_actions(limit: int = 30):
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/shared-properties", summary="Общие свойства онтологии (единый список)")
+async def get_shared_properties():
+    """Свойства, которые есть у нескольких типов объектов, — одно имя, одно определение, один тип.
+
+    Зачем endpoint: список должен быть ОДИН на систему. Пока он есть только в коде, каждое место
+    (извлечение, ручная правка, выгрузки) называет поля по-своему, и фильтры не складываются.
+    """
+    try:
+        from src.indexing.shared_properties import as_table
+
+        return {"items": as_table()}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/provenance", summary="Журнал происхождения файлов и проверка цепочки")
 async def get_provenance(limit: int = 20):
     """Показать хвост журнала происхождения и проверить целостность цепочки.
