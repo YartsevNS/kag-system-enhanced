@@ -628,6 +628,10 @@ class KnowledgeGraphService:
                 "chunk_id": r.chunk_id or "",
                 "schema_version": self.SCHEMA_VERSION,
                 "extractor_version": _extractor_v,
+                # Слой происхождения: 'model' — извлечено моделью (правила пишут свои связи отдельно,
+                # со слоем 'regex'). Без этого свойства нельзя отличить факт модели от правила,
+                # а мы уже знаем, к чему приводит потеря происхождения.
+                "layer": getattr(r, "layer", "") or "model",
             })
         if unknown:
             logger.warning(f"[graph][types] неизвестные типы связей заменены на RELATED_TO: {sorted(unknown)}")
@@ -1496,6 +1500,33 @@ class KnowledgeGraphService:
         except Exception as e:
             logger.warning(f"[aliases] Не удалось загрузить entity_aliases: {e}")
             return []
+
+    def alias_map(self, ttl_seconds: int = 300) -> Dict[str, str]:
+        """Карта «алиас → каноническое имя» для канонизации ПРИ извлечении.
+
+        Принцип (Сбер/DRAGON): склеивать варианты названий нужно в момент извлечения, а не потом —
+        иначе в граф попадают «Банк России», «Центральный банк» и «Банк России (ЦБ)» как разные
+        сущности, и связи дробятся. Пары берём только ОДОБРЕННЫЕ человеком (verdict=approved).
+
+        Карта кэшируется в процессе на ttl_seconds: словарь меняется редко, а спрашивать базу на
+        каждый фрагмент — лишняя нагрузка.
+        """
+        import time as _time
+
+        cache = getattr(self, "_alias_map_cache", None)
+        if cache and (_time.time() - cache[0]) < ttl_seconds:
+            return cache[1]
+        mapping: Dict[str, str] = {}
+        try:
+            for row in self.load_alias_pairs(domain=None):
+                alias = str(row.get("alias") or "").strip().lower()
+                canonical = str(row.get("canonical") or "").strip()
+                if alias and canonical and alias != canonical.lower():
+                    mapping[alias] = canonical
+        except Exception as exc:  # noqa: BLE001 — без канонизации работаем как раньше
+            logger.debug(f"[aliases] карта канонизации не построена: {exc}")
+        self._alias_map_cache = (_time.time(), mapping)
+        return mapping
 
     def apply_alias_pairs(self, domain: str = "") -> Dict[str, int]:
         """Применить известные пары алиасов к графу (детерминированно, без LLM).

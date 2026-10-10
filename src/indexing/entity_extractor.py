@@ -20,6 +20,61 @@ import asyncio
 # поток и через NEO4J_TIMEOUT отдаёт управление, не замораживая worker.
 NEO4J_TIMEOUT = 20
 
+# ── Скорость и устойчивость обращений к модели (принципы Майкрософт: ограничить сбой и
+#    управлять параллельностью глобально, а не на документ) ────────────────────────────────────
+# Таймаут одного обращения. Было жёстко 180 с: при сбое провайдера вызов ждал три минуты на КАЖДЫЙ
+# фрагмент, снаружи это выглядело как «граф медленный», и мы неделю искали проблему в архитектуре.
+# Короткий таймаут делает сбой видимым и не блокирует обработку.
+_llm_semaphore: asyncio.Semaphore | None = None
+
+# Структурированный вывод: включаем просьбу о строгом JSON, но с откатом. Если провайдер ответит 400
+# на это поле, выключаем режим на процесс и больше не пробуем (иначе каждый фрагмент терял бы вызов).
+_json_mode_supported = True
+
+
+def _json_mode_enabled() -> bool:
+    import os
+
+    if not _json_mode_supported:
+        return False
+    return os.environ.get("GRAPH_JSON_MODE", "1").lower() not in ("0", "false", "no")
+
+
+def _disable_json_mode(reason: str) -> None:
+    global _json_mode_supported
+    if _json_mode_supported:
+        _json_mode_supported = False
+        logger.warning(f"[graph] структурный вывод отключён на процесс: {reason}")
+
+
+def llm_timeout() -> float:
+    """Таймаут одного обращения к модели, секунды. Настраивается GRAPH_LLM_TIMEOUT."""
+    import os
+
+    try:
+        return float(os.environ.get("GRAPH_LLM_TIMEOUT", "20") or 20)
+    except Exception:
+        return 20.0
+
+
+def llm_semaphore() -> asyncio.Semaphore:
+    """Общий на ПРОЦЕСС ограничитель одновременных вызовов модели.
+
+    Раньше семафор создавался на документ: при нескольких документах воркер выдавал 12–18 запросов
+    в один провайдер, что заканчивается троттлингом и длинными паузами. Лимит должен быть общим.
+    Настраивается GRAPH_LLM_CONCURRENCY (по умолчанию 6).
+    """
+    import os
+
+    global _llm_semaphore
+    if _llm_semaphore is None:
+        try:
+            limit = int(os.environ.get("GRAPH_LLM_CONCURRENCY", "6") or 6)
+        except Exception:
+            limit = 6
+        _llm_semaphore = asyncio.Semaphore(max(1, limit))
+    return _llm_semaphore
+
 
 # Действующая доменная схема хранится В НАСТРОЙКАХ: {"mode": "preset"|"manual",
 # "preset": имя_или_None, "schema": {...}}. Память процесса обнуляется при
@@ -719,42 +774,56 @@ JSON:
                     pass
                 if _no_think:
                     from src.llm.nothink import nothink_payload
+
                     _extra_nothink = nothink_payload(provider, payload.get("model"))
                     if _extra_nothink:
                         payload.update(_extra_nothink)
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{llm_url}/v1/chat/completions",
-                        json=payload,
-                        headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=180)
-                    ) as resp:
-                        if resp.status != 200:
-                            text = await resp.text()
-                            warning = f"LLM {provider} вернул {resp.status}: {text[:200]}"
-                            logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
-                            return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
-                        data = await resp.json()
-                        response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                # Структурированный вывод (принцип Майкрософт): просим у провайдера строгий JSON.
+                # Это убирает НЕВИДИМЫЕ повторы на разборе битого ответа — они тратили вызовы, и мы
+                # о них не знали. Если провайдер режим не поддерживает, отключаем его на процесс
+                # (первый отказ 400) и дальше работаем как раньше.
+                if _json_mode_enabled():
+                    payload["response_format"] = {"type": "json_object"}
+                async with llm_semaphore():
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{llm_url}/v1/chat/completions",
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=llm_timeout())
+                        ) as resp:
+                            if resp.status != 200:
+                                text = await resp.text()
+                                if resp.status == 400 and "response_format" in text:
+                                    # Провайдер не умеет строгий JSON — выключаем режим и работаем как раньше.
+                                    _disable_json_mode(f"{provider}: {text[:120]}")
+                                    return {"entities": [], "relations": [], "facts": [],
+                                            "warnings": ["response_format не поддержан, режим отключён"]}
+                                warning = f"LLM {provider} вернул {resp.status}: {text[:200]}"
+                                logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
+                                return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+                            data = await resp.json()
+                            response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             else:
                 # Ollama API
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{llm_url}/api/generate",
-                        json={
-                            "model": model,
-                            "prompt": prompt,
-                            "stream": False,
-                            "options": {"temperature": 0.05, "max_tokens": 400}
-                        },
-                        timeout=aiohttp.ClientTimeout(total=180)
-                    ) as resp:
-                        if resp.status != 200:
-                            warning = f"LLM вернул {resp.status} (pass={pass_name})"
-                            logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
-                            return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
-                        data = await resp.json()
-                        response = data.get("response", "")
+                async with llm_semaphore():
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{llm_url}/api/generate",
+                            json={
+                                "model": model,
+                                "prompt": prompt,
+                                "stream": False,
+                                "options": {"temperature": 0.05, "max_tokens": 400}
+                            },
+                            timeout=aiohttp.ClientTimeout(total=llm_timeout())
+                        ) as resp:
+                            if resp.status != 200:
+                                warning = f"LLM вернул {resp.status} (pass={pass_name})"
+                                logger.warning(f"Ошибка LLM для {chunk_id}: {warning}")
+                                return {"entities": [], "relations": [], "facts": [], "warnings": [warning]}
+                            data = await resp.json()
+                            response = data.get("response", "")
             
             result = self._parse_response(response)
             if not result.get("entities") and not result.get("relations") and not result.get("facts"):
@@ -943,6 +1012,42 @@ JSON:
                                 f"{_type_changes[:3]}")
             except Exception as _te:  # noqa: BLE001 — без уточнения работаем как раньше
                 logger.warning(f"[graph] уточнение типов не применено: {_te}")
+
+            # ── Канонизация названий по словарю алиасов (принцип Сбер/DRAGON) ────────────
+            # Варианты одного и того же («Банк России» / «Центральный банк» / «Банк России (ЦБ)»)
+            # склеиваем В МОМЕНТ ИЗВЛЕЧЕНИЯ, а не потом: иначе связи дробятся между дублями.
+            # Берём только пары, одобренные человеком.
+            try:
+                from src.indexing.knowledge_graph import kg_service
+
+                amap = kg_service.alias_map()
+                if amap:
+                    _rewritten = 0
+                    _fixed_entities = []
+                    for e in entities:
+                        name = str(e.get("name") or "")
+                        canon = amap.get(name.strip().lower())
+                        if canon and canon != name:
+                            _rewritten += 1
+                            e = {**e, "name": canon}
+                        _fixed_entities.append(e)
+                    entities = _fixed_entities
+                    _fixed_rel = []
+                    for r in relations:
+                        s = str(r.get("source") or "")
+                        t = str(r.get("target") or "")
+                        s2 = amap.get(s.strip().lower(), s)
+                        t2 = amap.get(t.strip().lower(), t)
+                        if s2 != s or t2 != t:
+                            _rewritten += 1
+                            r = {**r, "source": s2, "target": t2}
+                        _fixed_rel.append(r)
+                    relations = _fixed_rel
+                    if _rewritten:
+                        logger.info(f"[graph][алиасы] {chunk_id}: канонизировано {_rewritten} названий "
+                                    f"по словарю ({len(amap)} пар)")
+            except Exception as _ae:  # noqa: BLE001 — без канонизации работаем как раньше
+                logger.debug(f"[graph] канонизация не применена: {_ae}")
 
             # Сохраняем сущности в Domain Graph (БАТЧ: один UNWIND вместо N одиночных)
             entity_objs = []
