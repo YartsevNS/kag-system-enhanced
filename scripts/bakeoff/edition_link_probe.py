@@ -44,16 +44,11 @@ async def main():
     new_id = rec.document_id
     print(f"новая версия: {new_id[:12]} | v{rec.version} | previous_hash={str(rec.previous_hash)[:12]}")
 
-    # Граф строит отдельный сервис: связь редакций появляется при построении узла документа,
-    # поэтому для тестовой версии запускаем пересборку графа и ждём её завершения.
-    from src.indexing.tasks import rebuild_graph_task
-    job = rebuild_graph_task.delay([new_id])
-    print("пересборка графа запущена:", job.id)
-    for _ in range(30):
-        await asyncio.sleep(2)
-        if job.ready():
-            break
-    print("пересборка завершена, статус:", job.status)
+    # Связь редакций создаётся на шаге ПОСТРОЕНИЯ УЗЛА ДОКУМЕНТА (так делает конвейер при сборке
+    # графа). Пересборку для этого звать нельзя: документ без изменений пересборка пропускает,
+    # и проверка ложно показывала «связи нет» (разобрано 10.10.2026, прибор edition_diag2.py).
+    from src.indexing.knowledge_graph import kg_service
+    kg_service.create_document_node(new_id, str(old.get("filename")))
 
     uri = os.environ.get("NEO4J_URI") or "bolt://neo4j:7687"
     d = GraphDatabase.driver(uri, auth=(os.environ.get("NEO4J_USER", "neo4j"), os.environ.get("NEO4J_PASSWORD", "")))
