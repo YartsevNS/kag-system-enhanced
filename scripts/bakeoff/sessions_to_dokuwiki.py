@@ -39,7 +39,9 @@ TRIVIAL = re.compile(
 # Служебные вставки в роль пользователя (не его слова).
 INJECTED = re.compile(
     r"^\s*\[(?:IMPORTANT|OUT-OF-BAND|Context|Note|System|Tool|Memory|Mnemosyne|"
-    r"You have reached|Background process)",
+    r"You have reached|Background process)|"
+    r"You've reached the maximum number of tool-calling iterations|"
+    r"Please provide a final response summarizing",
     re.IGNORECASE,
 )
 GREETING_TITLES = re.compile(
@@ -148,6 +150,16 @@ def pairs(session: dict, body_limit: int) -> list[dict]:
     return items
 
 
+def shorten(text: str, limit: int) -> str:
+    """Обрезаем заголовок по границе слова, чтобы не рвать фразу на полуслове."""
+    t = " ".join(text.split())
+    if len(t) <= limit:
+        return t
+    cut = t[:limit]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > limit * 0.6 else cut).rstrip(" ,.;:—-") + "…"
+
+
 def build_page(day_iso: str, sessions: list[tuple[dict, list[dict]]], body_limit: int,
                part_no: int = 0, part_total: int = 1) -> str:
     day = dt.datetime.strptime(day_iso, "%Y-%m-%d").strftime("%d.%m.%Y")
@@ -162,7 +174,7 @@ def build_page(day_iso: str, sessions: list[tuple[dict, list[dict]]], body_limit
             k += 1
             q = dokuwiki_escape(it["q"])[:1200]
             a = dokuwiki_escape(trim_body(it["a"], body_limit))
-            title = q.splitlines()[0][:90]
+            title = shorten(q.splitlines()[0], 90)
             body.append(f"===== {k}. {title} =====\n\n**Вопрос:**\n\n{q}\n\n**Ответ:**\n\n{a}\n")
     return head + "\n".join(body)
 

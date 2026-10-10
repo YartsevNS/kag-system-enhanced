@@ -53,21 +53,25 @@ def main() -> int:
 
     total_chunks = int(scalar("MATCH (n:Chunk) RETURN count(n) AS c") or 0)
     print(f"всего фрагментов в графе: {total_chunks}; проверяю документов: {len(rows)}\n")
-    print(f"{'документ':<44} {'в базе':>7} {'в графе':>8} {'вер/сх':>7} {'вер/извл':>9} {'связей':>7}")
+    print(f"{'документ':<44} {'в базе':>7} {'в графе':>8} {'вер/сх':>7} {'вер/извл':>9} {'упомин.':>8}")
     bad = []
     for did, name, chunks in rows:
-        in_graph = int(scalar(f"MATCH (n:Chunk {{document_id: '{did}'}}) RETURN count(n) AS c") or 0)
-        sv = int(scalar(f"MATCH (n:Chunk {{document_id: '{did}'}}) "
-                        f"RETURN count(n.schema_version) AS c") or 0)
-        ev = int(scalar(f"MATCH (n:Chunk {{document_id: '{did}'}}) "
-                        f"RETURN count(n.extractor_version) AS c") or 0)
-        rels = int(scalar(f"MATCH (n:Chunk {{document_id: '{did}'}})-[r]->(e:Entity) "
-                          f"RETURN count(r) AS c") or 0)
+        # Фрагменты связаны с документом ОТНОШЕНИЕМ HAS_CHUNK, а не свойством document_id:
+        # у узла Chunk ключ — id фрагмента. Запрос «по свойству» возвращает ноль на любом документе
+        # и читается как «граф не построен», хотя граф есть.
+        in_graph = int(scalar(f"MATCH (d:Document {{id: '{did}'}})-[:HAS_CHUNK]->(c:Chunk) "
+                              f"RETURN count(c) AS c") or 0)
+        sv = int(scalar(f"MATCH (d:Document {{id: '{did}'}})-[:HAS_CHUNK]->(c:Chunk) "
+                        f"RETURN count(c.schema_version) AS c") or 0)
+        ev = int(scalar(f"MATCH (d:Document {{id: '{did}'}})-[:HAS_CHUNK]->(c:Chunk) "
+                        f"RETURN count(c.extractor_version) AS c") or 0)
+        rels = int(scalar(f"MATCH (d:Document {{id: '{did}'}})-[:HAS_CHUNK]->(c:Chunk)"
+                          f"-[:MENTIONS]->(e) RETURN count(e) AS c") or 0)
         flag = ""
         if in_graph < int(chunks):
             flag = "  ← граф неполный"
             bad.append(str(name))
-        print(f"{str(name)[:42]:<44} {chunks:>7} {in_graph:>8} {sv:>7} {ev:>9} {rels:>7}{flag}")
+        print(f"{str(name)[:42]:<44} {chunks:>7} {in_graph:>8} {sv:>7} {ev:>9} {rels:>8}{flag}")
 
     print(f"\nбез полного графа: {len(bad)}")
     for b in bad[:10]:
@@ -76,8 +80,8 @@ def main() -> int:
     print("\nпримеры связей последнего проверенного документа:")
     if rows:
         did = rows[0][0]
-        for r in q(f"MATCH (n:Chunk {{document_id: '{did}'}})-[r]->(e) RETURN type(r) AS t, "
-                   f"count(r) AS c ORDER BY c DESC LIMIT 5"):
+        for r in q(f"MATCH (d:Document {{id: '{did}'}})-[:HAS_CHUNK]->(c:Chunk)"
+                   f"-[r:MENTIONS]->(e) RETURN e.type AS t, count(e) AS c ORDER BY c DESC LIMIT 5"):
             print(f"  {r}")
     return 0
 

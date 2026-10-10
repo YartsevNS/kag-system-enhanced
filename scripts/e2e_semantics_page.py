@@ -50,13 +50,22 @@ async def main() -> int:
         tiles = await page.evaluate("document.querySelectorAll('#stores .tile').length")
         steps = await page.evaluate("document.querySelectorAll('.steps .step').length")
         svg = await page.evaluate("document.querySelectorAll('main svg').length")
+        diagrams = await page.evaluate(
+            "Array.from(document.querySelectorAll('main img'))"
+            ".filter(i => (i.getAttribute('src')||'').includes('diagrams/'))"
+            ".map(i => ({src: i.getAttribute('src'), w: i.naturalWidth, h: i.naturalHeight}))"
+        )
         stamp = await page.evaluate("(document.getElementById('stamp')||{}).textContent || ''")
 
         check("три таблицы словарей", cards == 3, f"карточек {cards}")
         check("в таблицах есть строки (данные пришли с сервера)", rows >= 20, f"строк {rows}")
         check("плитки хранилищ отрисованы", tiles >= 6, f"плиток {tiles}")
         check("конвейер из 8 шагов", steps == 8, f"шагов {steps}")
-        check("схема осей на месте (SVG)", svg >= 1, f"svg {svg}")
+        # Схемы теперь готовые SVG из репозитория (Graphviz), а не нарисованные в HTML
+        check("обе схемы загрузились (axes + pipeline)", len(diagrams) == 2,
+              "; ".join(f"{d['src']} {d['w']}x{d['h']}" for d in diagrams) or "ни одной")
+        check("схемы отрисовались не нулевой высоты",
+              all(d["h"] > 50 for d in diagrams), f"{[d['h'] for d in diagrams]}")
         check("метка снимка времени", "снимок" in stamp, stamp or "—")
         check("нет ошибок JS", not errors, "; ".join(errors[:2]) if errors else "чисто")
         check("нет ответов не-2xx", not bad, "; ".join(bad[:2]) if bad else "нет")
