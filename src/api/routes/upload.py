@@ -1796,6 +1796,11 @@ async def get_document_details(
         "file_size": file_size or 0,
         "status": status,
         "document_type": cfg_document_type or doc_type or "unknown",
+        # Семантика документа — те же поля, что отдаёт список: иначе страница/проверка видит
+        # расхождение там, где его нет (у карточки были только вид и теги).
+        "rubrics": (record_data or {}).get("rubrics", []) or [],
+        "facets": (record_data or {}).get("facets", {}) or {},
+        "collection": (record_data or {}).get("collection", "") or "",
         "tags": tags,
         "chunks_count": chunks_count,
         "uploaded_by": uploaded_by,

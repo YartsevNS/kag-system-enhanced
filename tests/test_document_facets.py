@@ -106,6 +106,15 @@ def test_страница_фильтрует_по_предмету_защиты_
     assert "действует только на список на странице" in page
 
 
+def test_карточка_и_список_отдают_одни_и_те_же_поля():
+    """Иначе проверка видит расхождение там, где его нет: у карточки фасетов не было вовсе."""
+    src = (ROOT / "src/api/routes/upload.py").read_text(encoding="utf-8")
+    start = src.index('"document_type": cfg_document_type')
+    block = src[start:start + 600]
+    assert '"rubrics":' in block and '"facets":' in block and '"collection":' in block, \
+        "карточка документа обязана отдавать темы, фасеты и маршрут — как список"
+
+
 def test_нет_жёсткого_фильтра_по_фасетам():
     """Фасет — такой же мягкий признак, как тема: в поиске по нему не отсекаем."""
     offenders = []
