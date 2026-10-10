@@ -68,52 +68,55 @@ svg .soft{stroke-dasharray:5 4}
   по умолчанию (это проверяется тестом, а не обещанием).
 </p>
 <div class="card">
-<svg viewBox="0 0 1080 360" width="100%" height="360" role="img" aria-label="Схема трёх осей документа">
+<svg viewBox="0 0 1080 420" width="100%" height="420" role="img" aria-label="Схема трёх осей документа">
   <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4d4d4d"/></marker></defs>
 
   <!-- оси -->
-  <rect class="axis" x="30" y="16" width="300" height="104" rx="10"/>
-  <text class="ttl" x="48" y="42">Вид документа · kinds (закрытый)</text>
-  <text x="48" y="64">что это за документ: ГОСТ, приказ, договор…</text>
-  <text class="acc" x="48" y="84">25 кодов · один на документ</text>
-  <text class="sm" x="48" y="104">правится: словарь в коде + ручная правка с журналом</text>
+  <rect class="axis" x="24" y="16" width="330" height="124" rx="10"/>
+  <text class="ttl" x="42" y="44">Вид документа · kinds (закрытый)</text>
+  <text x="42" y="68">что это за документ: ГОСТ, приказ…</text>
+  <text class="acc" x="42" y="92">25 кодов · один на документ</text>
+  <text class="sm" x="42" y="116">правится: словарь в коде</text>
+  <text class="sm" x="42" y="132">+ ручная правка с журналом</text>
 
-  <rect class="axis" x="360" y="16" width="300" height="104" rx="10"/>
-  <text class="ttl" x="378" y="42">Тема · rubrics (закрытый)</text>
-  <text x="378" y="64">о чём документ: ИБ, право, банки…</text>
-  <text class="acc" x="378" y="84">10 кодов · многозначно · мягко</text>
-  <text class="sm" x="378" y="104">мягко = поиск по теме не ограничиваем</text>
+  <rect class="axis" x="374" y="16" width="330" height="124" rx="10"/>
+  <text class="ttl" x="392" y="44">Тема · rubrics (закрытый)</text>
+  <text x="392" y="68">о чём документ: ИБ, право, банки…</text>
+  <text class="acc" x="392" y="92">10 кодов · многозначно · мягко</text>
+  <text class="sm" x="392" y="116">мягко — поиск по теме</text>
+  <text class="sm" x="392" y="132">не ограничиваем</text>
 
-  <rect class="axis" x="690" y="16" width="360" height="104" rx="10"/>
-  <text class="ttl" x="708" y="42">Фасет · facets (закрытый)</text>
-  <text x="708" y="64">узкое свойство: предмет защиты, нормативная сила</text>
-  <text class="acc" x="708" y="84">2 фасета · значения из перечня · мягко</text>
-  <text class="sm" x="708" y="104">значение вне перечня не пишется</text>
+  <rect class="axis" x="724" y="16" width="332" height="124" rx="10"/>
+  <text class="ttl" x="742" y="44">Фасет · facets (закрытый)</text>
+  <text x="742" y="68">узкое свойство документа</text>
+  <text class="acc" x="742" y="92">2 фасета · значения из перечня</text>
+  <text class="sm" x="742" y="116">значение вне перечня</text>
+  <text class="sm" x="742" y="132">не пишется</text>
 
-  <line x1="180" y1="120" x2="430" y2="176" marker-end="url(#ar)"/>
-  <line x1="510" y1="120" x2="470" y2="176" marker-end="url(#ar)"/>
-  <line x1="860" y1="120" x2="560" y2="176" marker-end="url(#ar)"/>
+  <line x1="190" y1="140" x2="400" y2="196" marker-end="url(#ar)"/>
+  <line x1="540" y1="140" x2="520" y2="196" marker-end="url(#ar)"/>
+  <line x1="890" y1="140" x2="690" y2="196" marker-end="url(#ar)"/>
 
   <!-- документ -->
-  <rect class="axis" x="330" y="180" width="400" height="66" rx="10"/>
-  <text class="ttl" x="352" y="208">ДОКУМЕНТ</text>
-  <text x="352" y="230">запись в базе + карточка; оси хранятся как поля данных</text>
-  <text class="sm" x="352" y="246">плюс издатель (issuer) и маршрут коллекции (collection)</text>
+  <rect class="axis" x="340" y="200" width="400" height="84" rx="10"/>
+  <text class="ttl" x="362" y="228">ДОКУМЕНТ</text>
+  <text x="362" y="250">запись в базе + карточка; оси — поля данных</text>
+  <text class="sm" x="362" y="270">плюс издатель (issuer) и маршрут (collection)</text>
 
-  <!-- дальше -->
-  <line x1="530" y1="246" x2="530" y2="286" marker-end="url(#ar)"/>
-  <rect class="axis" x="330" y="290" width="400" height="56" rx="10"/>
-  <text class="ttl" x="352" y="314">ФРАГМЕНТЫ: чанки + карточка документа</text>
-  <text class="sm" x="352" y="332">оси уходят в payload каждого фрагмента (запись и ручная правка — одинаково)</text>
+  <!-- фрагменты -->
+  <line x1="540" y1="284" x2="540" y2="316" marker-end="url(#ar)"/>
+  <rect class="axis" x="340" y="320" width="400" height="74" rx="10"/>
+  <text class="ttl" x="362" y="348">ФРАГМЕНТЫ: чанки + карточка</text>
+  <text class="sm" x="362" y="370">оси уходят в payload каждого фрагмента</text>
 
-  <line x1="400" y1="346" x2="180" y2="346" marker-end="url(#ar)"/>
-  <line x1="660" y1="346" x2="880" y2="346" marker-end="url(#ar)"/>
-  <rect class="axis" x="30" y="290" width="150" height="56" rx="10"/>
-  <text class="ttl" x="48" y="314">ВЕКТОРЫ</text>
-  <text class="sm" x="48" y="332">Qdrant, по маршруту</text>
-  <rect class="axis" x="880" y="290" width="180" height="56" rx="10"/>
-  <text class="ttl" x="898" y="314">ГРАФ</text>
-  <text class="sm" x="898" y="332">сущности и связи</text>
+  <line x1="340" y1="357" x2="306" y2="357" marker-end="url(#ar)"/>
+  <line x1="740" y1="357" x2="774" y2="357" marker-end="url(#ar)"/>
+  <rect class="axis" x="24" y="320" width="282" height="74" rx="10"/>
+  <text class="ttl" x="46" y="348">ВЕКТОРЫ</text>
+  <text class="sm" x="46" y="370">Qdrant, коллекция по маршруту</text>
+  <rect class="axis" x="774" y="320" width="282" height="74" rx="10"/>
+  <text class="ttl" x="796" y="348">ГРАФ</text>
+  <text class="sm" x="796" y="370">сущности и связи (с версиями)</text>
 </svg>
 </div>
 
