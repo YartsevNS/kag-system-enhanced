@@ -1837,10 +1837,8 @@ class DocumentService:
         # нужно больше времени. Граф вторичен — при превышении пропускается,
         # документ завершается.
         GRAPH_TOTAL_TIMEOUT = 1800
-        # Параллельные LLM-вызовы при извлечении сущностей (адаптивный граф).
-        # 3-4 одновременных запроса: не упираемся в rate-limit DeepSeek и не
-        # вешаем worker; для будущего кластера это число = число реплик модели.
-        MAX_PARALLEL_LLM = 6  # было 3 — DeepSeek flash выдерживает ~12 req/сек
+        # Число одновременных обращений к модели задаётся в извлекателе
+        # (GRAPH_LLM_CONCURRENCY, по умолчанию 6) — общий на процесс ограничитель.
         # Метка тайминга: граф идёт в фоне (create_task) и НЕ попадает в plog,
         # поэтому меряем здесь через time.monotonic() и пишем в logger — это
         # второй кандидат на «медленное» место (LLM-извлечение сущностей + Neo4j).
@@ -1885,12 +1883,9 @@ class DocumentService:
                 # был неполным. Параллельность (Semaphore) компенсирует рост числа
                 # вызовов: LLM-запросы независимы, запускаем до MAX_PARALLEL_LLM
                 # одновременно. Neo4j-записи — последовательно (они дёшевы).
-                # Параллельность берём ОБЩУЮ на процесс (entity_extractor.llm_semaphore), а не
-                # свою на документ: раньше семафор создавался здесь, и при нескольких документах
-                # воркер выдавал 12–18 одновременных запросов в один провайдер — это заканчивалось
-                # троттлингом и длинными паузами. Neo4j-записи идут последовательно (они дёшевы).
-                from src.indexing.entity_extractor import llm_semaphore as _llm_semaphore
-                sem = _llm_semaphore()
+                # Ограничение одновременных обращений к модели живёт В ИЗВЛЕКАТЕЛЕ
+                # (entity_extractor.llm_semaphore — общий на процесс). Отдельный семафор здесь не
+                # нужен: раньше он дублировал ограничение и при общем объекте давал двойной захват.
 
                 # Триаж до LLM: штампы (тот же текст в чужих документах) и дубли внутри
                 # документа не стоят двух LLM-вызовов на чанк. Модуль только
@@ -1936,20 +1931,24 @@ class DocumentService:
                     if i in _skip_llm:
                         return
 
-                    # Извлечение сущностей (LLM) — ограничено семафором и таймаутом
-                    async with sem:
-                        try:
-                            await asyncio.wait_for(
-                                entity_extractor.extract_and_store(
-                                    document_id, chunk_id, chunk_text, chunk_seq, filename
-                                ),
-                                timeout=CHUNK_TIMEOUT,
-                            )
-                        except asyncio.TimeoutError:
-                            logger.warning(
-                                f"[graph] Извлечение сущностей таймаут для {chunk_id} "
-                                f"({CHUNK_TIMEOUT}с) — пропуск чанка"
-                            )
+                    # Извлечение сущностей (LLM). Ограничение одновременных вызовов делает
+                    # САМ извлекатель (entity_extractor.llm_semaphore — общий на процесс).
+                    # ВАЖНО: здесь НЕЛЬЗЯ брать тот же семафор снаружи: получался двойной захват
+                    # одного объекта, все фрагменты ждали сами себя и синхронно падали в таймаут
+                    # (живой случай 10.10.2026: пять фрагментов «таймаут 120 с» при том, что те же
+                    # фрагменты по отдельности обрабатываются за 2–3 с).
+                    try:
+                        await asyncio.wait_for(
+                            entity_extractor.extract_and_store(
+                                document_id, chunk_id, chunk_text, chunk_seq, filename
+                            ),
+                            timeout=CHUNK_TIMEOUT,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"[graph] Извлечение сущностей таймаут для {chunk_id} "
+                            f"({CHUNK_TIMEOUT}с) — пропуск чанка"
+                        )
 
                 # Параллельно обрабатываем все чанки (не только первые 10)
                 tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
