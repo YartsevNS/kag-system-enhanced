@@ -843,7 +843,12 @@ function fillTypeFilter() {
   const sel = document.getElementById('type-filter');
   if (!sel) return;
   const cur = sel.value;
-  const have = new Set(Array.from(sel.options).map(o => o.value));
+  // Пересобираем список ЦЕЛИКОМ. «Дополнять» нельзя: документы и словарь приходят двумя разными
+  // запросами, и если документы успели раньше, код вида попадал в список РАНЬШЕ подписи — а
+  // дополнение уже существующий пункт не заменяет, и в фильтре навсегда оставался `national_standard`
+  // вместо «ГОСТ». Живая проверка в Chromium 10.10.2026 поймала это на втором прогоне (гонка).
+  while (sel.options.length > 1) sel.remove(1);
+  const have = new Set(['']);
   const add = (v, label, title) => {
     if (!v || have.has(v)) return;
     const o = document.createElement('option');
@@ -854,7 +859,10 @@ function fillTypeFilter() {
   Object.keys(KIND_LABELS).forEach(c => add(c, KIND_LABELS[c], KIND_TITLES[c]));
   // Значения СТАРЫХ словарей (пока документ не переразмечен) показываем кодом как есть:
   // иначе такой документ нельзя выбрать фильтром и он выглядит «без типа».
-  (allDocs || []).forEach(d => { if (d.document_type) add(d.document_type, KIND_LABELS[d.document_type] || d.document_type); });
+  (allDocs || []).forEach(d => {
+    if (d.document_type) add(d.document_type, KIND_LABELS[d.document_type] || d.document_type,
+                             KIND_TITLES[d.document_type]);
+  });
   sel.value = cur;
 }
 
