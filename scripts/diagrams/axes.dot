@@ -1,0 +1,42 @@
+// Оси описания документа и то, во что они превращаются.
+// Рендер: dot -Tsvg axes.dot -o axes.svg   (в репозитории: src/api/static/diagrams/axes.svg)
+// Цвета нейтральные и фон прозрачный — схема читается и в светлой, и в тёмной теме.
+digraph axes {
+  rankdir=TB;
+  bgcolor="transparent";
+  splines=ortho;
+  nodesep=0.35;
+  ranksep=0.55;
+  fontname="DejaVu Sans";
+  node [shape=box, style="rounded,filled", fillcolor="#f2f2f2", color="#c9c9c9",
+        fontcolor="#333333", fontname="DejaVu Sans", fontsize=11, margin="0.18,0.12"];
+  edge [color="#9a9a9a", fontcolor="#8a8a8a", fontname="DejaVu Sans", fontsize=10,
+        arrowsize=0.7];
+
+  subgraph cluster_axes {
+    label="Оси описания: три независимых вопроса";
+    fontcolor="#6b6b6b"; color="#e0e0e0"; style="rounded";
+    kind  [label="Вид · kinds\n(закрытый, 25 кодов)\nчто это за документ\nодин на документ"];
+    topic [label="Тема · rubrics\n(закрытый, 10 кодов)\nо чём документ\nмногозначно, МЯГКО"];
+    facet [label="Фасет · facets\n(закрытые перечни)\nузкое свойство\nмногозначно, МЯГКО"];
+    issuer [label="Издатель · issuer\nкто выпустил", fillcolor="#f7f7f7"];
+    route  [label="Маршрут · collection\nгде лежат векторы\n(основная | новости)", fillcolor="#f7f7f7"];
+  }
+
+  doc   [label="ДОКУМЕНТ\nзапись в базе + карточка", fillcolor="#e6f4ee", color="#9fd6bd"];
+  frag  [label="ФРАГМЕНТЫ\nчанки + карточка\nоси — в payload каждого", fillcolor="#eef1fb", color="#b9c3e8"];
+  vec   [label="ВЕКТОРЫ (Qdrant)\nколлекция по маршруту", fillcolor="#fdf3e3", color="#e8cfa0"];
+  kg [label="ГРАФ\nсущности и связи\nс версиями схемы", fillcolor="#f6eefb", color="#d6bce8"];
+
+  kind  -> doc;
+  topic -> doc [style=dashed, label="мягко"];
+  facet -> doc [style=dashed, label="мягко"];
+  issuer -> doc;
+  route -> doc;
+
+  doc  -> frag  [label="нарезка"];
+  frag -> vec   [label="векторизация"];
+  frag -> kg [label="извлечение"];
+
+  { rank=same; vec; kg; }
+}

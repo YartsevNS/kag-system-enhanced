@@ -68,56 +68,10 @@ svg .soft{stroke-dasharray:5 4}
   по умолчанию (это проверяется тестом, а не обещанием).
 </p>
 <div class="card">
-<svg viewBox="0 0 1080 420" width="100%" height="420" role="img" aria-label="Схема трёх осей документа">
-  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4d4d4d"/></marker></defs>
-
-  <!-- оси -->
-  <rect class="axis" x="24" y="16" width="330" height="124" rx="10"/>
-  <text class="ttl" x="42" y="44">Вид документа · kinds (закрытый)</text>
-  <text x="42" y="68">что это за документ: ГОСТ, приказ…</text>
-  <text class="acc" x="42" y="92">25 кодов · один на документ</text>
-  <text class="sm" x="42" y="116">правится: словарь в коде</text>
-  <text class="sm" x="42" y="132">+ ручная правка с журналом</text>
-
-  <rect class="axis" x="374" y="16" width="330" height="124" rx="10"/>
-  <text class="ttl" x="392" y="44">Тема · rubrics (закрытый)</text>
-  <text x="392" y="68">о чём документ: ИБ, право, банки…</text>
-  <text class="acc" x="392" y="92">10 кодов · многозначно · мягко</text>
-  <text class="sm" x="392" y="116">мягко — поиск по теме</text>
-  <text class="sm" x="392" y="132">не ограничиваем</text>
-
-  <rect class="axis" x="724" y="16" width="332" height="124" rx="10"/>
-  <text class="ttl" x="742" y="44">Фасет · facets (закрытый)</text>
-  <text x="742" y="68">узкое свойство документа</text>
-  <text class="acc" x="742" y="92">2 фасета · значения из перечня</text>
-  <text class="sm" x="742" y="116">значение вне перечня</text>
-  <text class="sm" x="742" y="132">не пишется</text>
-
-  <line x1="190" y1="140" x2="400" y2="196" marker-end="url(#ar)"/>
-  <line x1="540" y1="140" x2="520" y2="196" marker-end="url(#ar)"/>
-  <line x1="890" y1="140" x2="690" y2="196" marker-end="url(#ar)"/>
-
-  <!-- документ -->
-  <rect class="axis" x="340" y="200" width="400" height="84" rx="10"/>
-  <text class="ttl" x="362" y="228">ДОКУМЕНТ</text>
-  <text x="362" y="250">запись в базе + карточка; оси — поля данных</text>
-  <text class="sm" x="362" y="270">плюс издатель (issuer) и маршрут (collection)</text>
-
-  <!-- фрагменты -->
-  <line x1="540" y1="284" x2="540" y2="316" marker-end="url(#ar)"/>
-  <rect class="axis" x="340" y="320" width="400" height="74" rx="10"/>
-  <text class="ttl" x="362" y="348">ФРАГМЕНТЫ: чанки + карточка</text>
-  <text class="sm" x="362" y="370">оси уходят в payload каждого фрагмента</text>
-
-  <line x1="340" y1="357" x2="306" y2="357" marker-end="url(#ar)"/>
-  <line x1="740" y1="357" x2="774" y2="357" marker-end="url(#ar)"/>
-  <rect class="axis" x="24" y="320" width="282" height="74" rx="10"/>
-  <text class="ttl" x="46" y="348">ВЕКТОРЫ</text>
-  <text class="sm" x="46" y="370">Qdrant, коллекция по маршруту</text>
-  <rect class="axis" x="774" y="320" width="282" height="74" rx="10"/>
-  <text class="ttl" x="796" y="348">ГРАФ</text>
-  <text class="sm" x="796" y="370">сущности и связи (с версиями)</text>
-</svg>
+  <!-- Схема нарисована Graphviz из текста (scripts/diagrams/axes.dot) и лежит готовым SVG:
+       тулчейн в поставку не тащим, а схему правим текстом и перерисовываем одной командой. -->
+  <img src="/static/diagrams/axes.svg" style="width:100%;height:auto;display:block"
+       alt="Оси описания документа (вид, тема, фасет, издатель, маршрут) → документ → фрагменты → векторы и граф">
 </div>
 
 <h2>Живое состояние словарей</h2>
@@ -132,7 +86,11 @@ svg .soft{stroke-dasharray:5 4}
 </div>
 
 <h2>Как строится графовая база</h2>
-<p class="note">Порядок шагов обработки документа. На каждом шаге сказано, что происходит и чем это проверить — цифрами, а не на слово.</p>
+<p class="note">Порядок шагов обработки документа. Схема — из того же текста, что и описание ниже (Graphviz, <code>scripts/diagrams/pipeline.dot</code>). На каждом шаге сказано, что происходит и чем это проверить — цифрами, а не на слово.</p>
+<div class="card" style="padding:10px 12px">
+  <img src="/static/diagrams/pipeline.svg" style="width:100%;height:auto;display:block"
+       alt="Конвейер: файл → происхождение → разбор → фрагменты → разметка осей → векторы → граф → журнал действий">
+</div>
 <div class="card">
   <div class="steps">
     <div class="step" data-n="1"><div class="t">Файл принят и сохранён</div><div class="d">Считается SHA-256, файл ложится в каталог данных, дубликат по хешу не создаётся второй раз. Документу ставится маршрут коллекции по источнику (обычная загрузка — основная коллекция, новости монитора — своя).</div><div class="v">проверить: <b>документы</b> в хранилищах, <b>маршрут</b> — в распределении выше</div></div>

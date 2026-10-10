@@ -1,0 +1,30 @@
+// Конвейер: как из файла получается графовая база. Два ряда по четыре шага, чтобы схема
+// читалась на странице, а не превращалась в строку шириной 2500 px.
+// Рендер: dot -Tsvg pipeline.dot -o pipeline.svg  (в репозитории: src/api/static/diagrams/pipeline.svg)
+digraph pipeline {
+  rankdir=TB;
+  bgcolor="transparent";
+  nodesep=0.28;
+  ranksep=0.5;
+  fontname="DejaVu Sans";
+  node [shape=box, style="rounded,filled", fillcolor="#f2f2f2", color="#c9c9c9",
+        fontcolor="#333333", fontname="DejaVu Sans", fontsize=10.5, margin="0.16,0.11",
+        width=1.7, height=0.85];
+  edge [color="#9a9a9a", arrowsize=0.7];
+
+  s1 [label="1. Файл принят\nSHA-256, дубликаты\nмаршрут коллекции"];
+  s2 [label="2. Происхождение\nжурнал с хеш-цепочкой", fillcolor="#f7f7f7"];
+  s3 [label="3. Разбор\nтекст, таблицы, OCR\nкодировка"];
+  s4 [label="4. Фрагменты\nчанки + карточка", fillcolor="#eef1fb", color="#b9c3e8"];
+  s5 [label="5. Разметка осей\nвид, темы, фасеты\nпо закрытым словарям", fillcolor="#e6f4ee", color="#9fd6bd"];
+  s6 [label="6. Векторы\nв коллекцию по маршруту", fillcolor="#fdf3e3", color="#e8cfa0"];
+  s7 [label="7. Граф\nсущности и связи\nс версиями", fillcolor="#f6eefb", color="#d6bce8"];
+  s8 [label="8. Действия\nручные правки в журнал", fillcolor="#f7f7f7"];
+
+  s1 -> s2 -> s3 -> s4;
+  s5 -> s6 -> s7 -> s8;
+  s4 -> s5;
+  s4 -> s5 [style=invis];
+  { rank=same; s1; s2; s3; s4; }
+  { rank=same; s5; s6; s7; s8; }
+}

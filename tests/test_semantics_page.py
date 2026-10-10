@@ -28,10 +28,21 @@ def test_страница_в_админском_меню():
 
 
 def test_на_странице_три_оси_и_мягкость():
-    for needle in ("Вид документа", "Тема", "Фасет"):
-        assert needle in PAGE, f"на схеме нет оси «{needle}»"
-    assert PAGE.count("мягк") >= 2, "о мягкости темы и фасета должно быть сказано на схеме"
-    assert "не ограничивает поиск" in PAGE or "не ограничиваем" in PAGE
+    """Схема рисуется Graphviz из текста (axes.dot) и лежит готовым SVG: проверяем и текст
+    источника, и то, что страница ссылается на картинку."""
+    dot = (ROOT / "scripts/diagrams/axes.dot").read_text(encoding="utf-8")
+    for needle in ("Вид", "kinds", "Тема", "rubrics", "Фасет", "facets", "МЯГКО", "мягко"):
+        assert needle in dot, f"на схеме нет «{needle}»"
+    assert "/static/diagrams/axes.svg" in PAGE, "страница обязана показывать схему осей"
+    assert "не ограничивают поиск" in PAGE, "на странице должно быть сказано про мягкость осей"
+
+
+def test_схемы_лежат_готовыми_файлами():
+    """Тулчейн (Graphviz) в поставку не тащим: на странице — готовый SVG из репозитория."""
+    for name in ("axes.svg", "pipeline.svg"):
+        assert (ROOT / "src/api/static/diagrams" / name).exists(), f"нет {name}"
+    for name in ("axes.dot", "pipeline.dot"):
+        assert (ROOT / "scripts/diagrams" / name).exists(), f"нет источника {name}"
 
 
 def test_на_странице_показан_конвейер_графовой_базы():
