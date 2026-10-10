@@ -1,0 +1,197 @@
+[
+ {
+  "document_id": "570d711d-d79f-41aa-be5b-20f76eb1f7f9",
+  "chunks": 3,
+  "kind": "analytics",
+  "confidence": 0.84,
+  "consistency": 1.0,
+  "db_kind": "report",
+  "agrees": true
+ },
+ {
+  "document_id": "74696a05-87c2-4d1b-8d78-a94aaa643a27",
+  "chunks": 3,
+  "kind": "publication",
+  "confidence": 0.44,
+  "consistency": 0.67,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "a1f2eb21-e437-4f4f-8c76-2f3df0c490bf",
+  "chunks": 3,
+  "kind": "national_standard",
+  "confidence": 0.61,
+  "consistency": 0.67,
+  "db_kind": "standard",
+  "agrees": true
+ },
+ {
+  "document_id": "e68bd3fb-dabf-4971-b79c-08b68174c5d7",
+  "chunks": 3,
+  "kind": "regulation",
+  "confidence": 0.45,
+  "consistency": 0.33,
+  "db_kind": "letter",
+  "agrees": false
+ },
+ {
+  "document_id": "ed26c7cf-bdde-4fa4-aa36-c3f3e47d010c",
+  "chunks": 3,
+  "kind": "publication",
+  "confidence": 0.81,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "8fd08f5a-f089-4366-abc7-01742903da04",
+  "chunks": 3,
+  "kind": "analytics",
+  "confidence": 0.76,
+  "consistency": 0.67,
+  "db_kind": "report",
+  "agrees": true
+ },
+ {
+  "document_id": "5586487b-5565-4109-b697-fa5c1ae7dcd2",
+  "chunks": 3,
+  "kind": "other",
+  "confidence": 0.65,
+  "consistency": 0.67,
+  "db_kind": "standard",
+  "agrees": false
+ },
+ {
+  "document_id": "3b9e7687-5ffe-4310-a8e9-f6ec227ee73f",
+  "chunks": 3,
+  "kind": "publication",
+  "confidence": 0.9,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "19cdddfc-64a8-49d4-a57b-17e5601174cf",
+  "chunks": 3,
+  "kind": "standardization_recommendation",
+  "confidence": 0.66,
+  "consistency": 0.33,
+  "db_kind": "standard",
+  "agrees": true
+ },
+ {
+  "document_id": "bfef3544-bbc5-4a85-89d3-1b91a70d3e68",
+  "chunks": 3,
+  "kind": "publication",
+  "confidence": 0.29,
+  "consistency": 0.67,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "3fe87f70-40f2-44c1-addc-9eabb5f93c16",
+  "chunks": 3,
+  "kind": "publication",
+  "confidence": 0.87,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "885889ca-e896-41f5-979d-cd4dd390f89e",
+  "chunks": 2,
+  "kind": "national_standard",
+  "confidence": 0.65,
+  "consistency": 0.5,
+  "db_kind": "standard",
+  "agrees": true
+ },
+ {
+  "document_id": "628ed168-c5f8-4777-ae15-85eb82d03bf8",
+  "chunks": 2,
+  "kind": "reference",
+  "confidence": 0.23,
+  "consistency": 0.5,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "7166c163-2e73-446f-b427-842367d210af",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.69,
+  "consistency": 0.5,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "29dfe266-f0d9-4396-ab76-14f9c10774f3",
+  "chunks": 2,
+  "kind": "national_standard",
+  "confidence": 0.69,
+  "consistency": 1.0,
+  "db_kind": "standard",
+  "agrees": true
+ },
+ {
+  "document_id": "48cd884f-deff-4c52-85e1-3006b5ed0829",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.72,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "835510d2-e9a1-4ccf-abec-466d6bd00483",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.84,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "0e33936d-6eb8-4a40-bae3-bbb568f498e4",
+  "chunks": 2,
+  "kind": "national_standard",
+  "confidence": 0.74,
+  "consistency": 1.0,
+  "db_kind": "standard",
+  "agrees": true
+ },
+ {
+  "document_id": "96d1f5e0-b82c-43a4-929f-5595895e979d",
+  "chunks": 2,
+  "kind": "law",
+  "confidence": 0.65,
+  "consistency": 0.5,
+  "db_kind": "report",
+  "agrees": false
+ },
+ {
+  "document_id": "63bc9a50-18a6-4279-b4ef-87e557b01d20",
+  "chunks": 2,
+  "kind": "official_letter",
+  "confidence": 0.77,
+  "consistency": 0.5,
+  "db_kind": "report",
+  "agrees": false
+ },
+ {
+  "document_id": "6dae7764-4a57-49d3-95f8-9d9efc3127a6",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.84,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "6c261b7f-ac85-4569-bc14-ce6ba696efa4",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.92,
+  "consistency": 1.0,
+  "db_kind": "other"
+ },
+ {
+  "document_id": "0f6ec29d-ca08-4bc3-8222-5c488dc5541f",
+  "chunks": 2,
+  "kind": "publication",
+  "confidence": 0.54,
+  "consistency": 0.5,
+  "db_kind": "other"
+ }
+]
