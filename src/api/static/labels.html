@@ -1,0 +1,274 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
+try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>KAG — спорные случаи разметки</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--green:#3ecf8e;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:28px 34px 60px;max-width:1400px;min-width:0}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:20px;max-width:1000px;line-height:1.55}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 14px}
+.tile .n{font-size:22px;font-weight:700;letter-spacing:-0.5px}
+.tile .l{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.tile.warn .n{color:var(--amber)}
+.pills{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.pill{background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;cursor:pointer}
+.pill.on{border-color:var(--accent);color:var(--text)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--border-s)}
+td{padding:9px 10px;border-bottom:1px solid var(--border-s);vertical-align:top}
+tr.manual td{background:rgba(62,207,142,.05)}
+.doc{font-size:12.5px;color:var(--text);text-decoration:none;border-bottom:1px dotted var(--border)}
+.doc:hover{color:var(--accent-h)}
+.val{font-family:var(--mono);font-size:11.5px;color:var(--accent-l)}
+.conf{font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--text3)}
+.alt{font-size:11px;color:var(--text3)}
+.alt b{color:var(--text2);font-weight:500;font-family:var(--mono)}
+.badge{display:inline-block;font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 5px}
+.badge.man{color:var(--accent-h);border-color:var(--accent-h)}
+select,input[type=text]{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:5px 7px;font-size:12px;font-family:var(--font);max-width:260px}
+select[multiple]{min-height:96px;min-width:210px}
+input[type=text]{min-width:180px}
+button.btn{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;cursor:pointer}
+button.btn:hover{border-color:var(--accent)}
+button.btn[disabled]{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent-solid,var(--accent));border-color:var(--accent-solid,var(--accent));color:var(--on-accent,#06281a)}
+.status{margin:12px 0;font-size:12.5px;color:var(--text3);min-height:18px}
+.status.err{color:var(--red)}
+.status.ok{color:var(--green)}
+.locked{font-size:11.5px;color:var(--text4);max-width:230px;line-height:1.45}
+.muted{color:var(--text4)}
+@media(max-width:900px){nav{display:none}main{margin-left:0;padding:16px}select[multiple]{min-width:150px}}
+</style>
+<link rel="stylesheet" href="/static/theme.css"></head><body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Спорные случаи разметки</h1>
+<div class="sub">
+  Здесь показываются значения, которыми модель НЕ уверена (ниже порога), и значения, которые уже правил
+  человек. Спорное значение можно поставить самому — тогда оно записывается в метаданные документа как
+  ручное: кто, когда и зачем. Ручное значение модель больше не перезаписывает; изменить его может только
+  администратор. Видны только свои документы (администратор видит все).
+</div>
+
+<div class="grid">
+  <div class="tile warn"><div class="n" id="n-disputed">—</div><div class="l">Спорных значений</div></div>
+  <div class="tile"><div class="n" id="n-manual">—</div><div class="l">Ручных правок</div></div>
+  <div class="tile"><div class="n" id="n-docs">—</div><div class="l">Документов</div></div>
+  <div class="tile"><div class="n" id="n-threshold">—</div><div class="l">Порог уверенности</div></div>
+</div>
+
+<div class="pills">
+  <button class="pill on" data-only="" onclick="setFilter(this)">Все</button>
+  <button class="pill" data-only="disputed" onclick="setFilter(this)">Только спорные</button>
+  <button class="pill" data-only="manual" onclick="setFilter(this)">Только ручные правки</button>
+  <button class="pill" onclick="loadReview()">Обновить</button>
+</div>
+<div class="status" id="status">загрузка…</div>
+<div id="list"></div>
+</main>
+<script src="/static/site-nav.js" defer></script>
+<script>
+var DICT = {rubrics: [], facets: [], kinds: []};
+var ONLY = "";
+var ITEMS = [];
+var CAN_ADMIN = false;
+
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function setStatus(text, kind) {
+  var el = document.getElementById("status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "status" + (kind ? " " + kind : "");
+}
+function logout() { fetch("/api/v1/auth/logout", {method: "POST"}).finally(function () { location.href = "/login"; }); }
+
+function isMulti(field) {
+  if (field === "rubrics") return true;
+  if (field === "facets.protection_subject") return true;
+  return false;
+}
+function fieldTitle(field) {
+  if (field === "rubrics") return "Тема";
+  if (field === "document_type") return "Вид документа";
+  if (field.indexOf("facets.") === 0) {
+    var code = field.split(".")[1];
+    for (var i = 0; i < DICT.facets.length; i++) if (DICT.facets[i].code === code) return DICT.facets[i].title;
+    return code;
+  }
+  return field;
+}
+function options(field) {
+  if (field === "rubrics") return DICT.rubrics.map(function (r) { return [r.code, r.title]; });
+  if (field === "document_type") return DICT.kinds.map(function (k) { return [k.code, k.title]; });
+  if (field.indexOf("facets.") === 0) {
+    var code = field.split(".")[1];
+    for (var i = 0; i < DICT.facets.length; i++) {
+      if (DICT.facets[i].code === code) return DICT.facets[i].values.map(function (v) { return [v.code, v.title]; });
+    }
+  }
+  return [];
+}
+function currentValues(item) {
+  var v = item.value;
+  if (v === null || v === undefined) return [];
+  if (Array.isArray(v)) return v.slice();
+  return String(v) ? [String(v)] : [];
+}
+
+function render() {
+  var box = document.getElementById("list");
+  if (!box) return;
+  if (!ITEMS.length) { box.innerHTML = "<p class='muted'>Спорных значений нет — разметка не требует внимания.</p>"; return; }
+  var rows = ITEMS.map(function (item, idx) {
+    var cur = currentValues(item);
+    var multi = isMulti(item.field);
+    var opts = options(item.field);
+    var disabled = item.editable ? "" : " disabled";
+    var input;
+    if (!opts.length) {
+      input = "<span class='muted'>справочник для поля не получен</span>";
+    } else if (multi) {
+      input = "<select multiple id='v" + idx + "'" + disabled + ">" + opts.map(function (o) {
+        return "<option value='" + esc(o[0]) + "'" + (cur.indexOf(o[0]) >= 0 ? " selected" : "") + ">" + esc(o[1]) + "</option>";
+      }).join("") + "</select>";
+    } else {
+      input = "<select id='v" + idx + "'" + disabled + "><option value=''>— не выбрано —</option>" + opts.map(function (o) {
+        return "<option value='" + esc(o[0]) + "'" + (cur.indexOf(o[0]) >= 0 ? " selected" : "") + ">" + esc(o[1]) + "</option>";
+      }).join("") + "</select>";
+    }
+    var model = item.confidence === null || item.confidence === undefined
+      ? "<span class='muted'>—</span>"
+      : "<span class='conf'>" + Number(item.confidence).toFixed(2) + "</span>";
+    var alts = (item.alternatives || []).map(function (a) {
+      return "<b>" + esc(a[0]) + "</b> " + Number(a[1]).toFixed(2);
+    }).join(" · ");
+    var manual = item.kind === "manual"
+      ? "<span class='badge man'>ручная правка</span>"
+      : "<span class='badge'>спорное</span>";
+    var provenance = item.kind === "manual"
+      ? "<div class='alt'>правил " + esc(item.by || "—") + " " + esc((item.at || "").slice(0, 16).replace("T", " ")) +
+        (item.note ? "<br>причина: " + esc(item.note) : "") + "</div>"
+      : "";
+    var actions = item.editable
+      ? "<button class='btn primary' onclick='decide(" + idx + ")'>Сохранить</button>" +
+        "<div style='margin-top:6px'><input type='text' id='n" + idx + "' placeholder='почему так (необязательно)'></div>"
+      : "<div class='locked'>" + esc(item.blocked_reason || "изменение только администратором") + "</div>";
+    if (item.kind === "manual" && CAN_ADMIN) {
+      actions = "<button class='btn' onclick='unlock(" + idx + ")'>Снять пометку</button>" + actions;
+    }
+    return "<tr class='" + (item.kind === "manual" ? "manual" : "") + "'><td style='max-width:300px'>" +
+      "<a class='doc' href='/viewer?id=" + esc(item.document_id) + "' target='_blank'>" + esc(item.title || item.filename || item.document_id) + "</a>" +
+      "<div class='muted' style='font-size:11px'>" + esc(item.document_id.slice(0, 8)) + "</div></td>" +
+      "<td>" + esc(fieldTitle(item.field)) + "<div>" + manual + "</div></td>" +
+      "<td class='val'>" + (cur.length ? esc(cur.join(", ")) : "<span class='muted'>не задано</span>") + "</td>" +
+      "<td>" + model + "<div class='alt'>" + (alts || "") + "</div>" + provenance + "</td>" +
+      "<td style='min-width:260px'>" + input + "</td>" +
+      "<td style='min-width:190px'>" + actions + "</td></tr>";
+  }).join("");
+  box.innerHTML = "<table><thead><tr><th>Документ</th><th>Поле</th><th>Сейчас</th><th>Модель</th>" +
+    "<th>Решение человека</th><th>Действия</th></tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+function chosen(idx) {
+  var el = document.getElementById("v" + idx);
+  if (!el) return [];
+  if (el.multiple) {
+    var out = [];
+    for (var i = 0; i < el.options.length; i++) if (el.options[i].selected) out.push(el.options[i].value);
+    return out;
+  }
+  return el.value ? [el.value] : [];
+}
+
+function decide(idx) {
+  var item = ITEMS[idx];
+  var values = chosen(idx);
+  if (!values.length) { setStatus("Не выбрано значение для поля «" + fieldTitle(item.field) + "».", "err"); return; }
+  var noteEl = document.getElementById("n" + idx);
+  var multi = isMulti(item.field);
+  var body = {
+    document_id: item.document_id,
+    field: item.field,
+    value: multi ? values : values[0],
+    note: noteEl ? noteEl.value : ""
+  };
+  setStatus("сохраняю…");
+  fetch("/api/v1/labels/review/decide", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  }).then(function (r) { return r.json().then(function (j) { return {ok: r.ok, code: r.status, j: j}; }); })
+    .then(function (res) {
+      if (!res.ok) { setStatus("отказ " + res.code + ": " + (res.j.detail || res.j.message || "неизвестно"), "err"); return; }
+      setStatus("значение записано как ручное: " + fieldTitle(item.field), "ok");
+      loadReview();
+    })
+    .catch(function (e) { setStatus("ошибка сети: " + e, "err"); });
+}
+
+function unlock(idx) {
+  var item = ITEMS[idx];
+  setStatus("снимаю пометку…");
+  fetch("/api/v1/labels/review/unlock", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({document_id: item.document_id, field: item.field})
+  }).then(function (r) { return r.json().then(function (j) { return {ok: r.ok, code: r.status, j: j}; }); })
+    .then(function (res) {
+      if (!res.ok) { setStatus("отказ " + res.code + ": " + (res.j.detail || "неизвестно"), "err"); return; }
+      setStatus("пометка снята: поле снова может править модель", "ok");
+      loadReview();
+    })
+    .catch(function (e) { setStatus("ошибка сети: " + e, "err"); });
+}
+
+function setFilter(btn) {
+  ONLY = btn.getAttribute("data-only") || "";
+  var pills = document.querySelectorAll(".pill[data-only]");
+  for (var i = 0; i < pills.length; i++) pills[i].className = "pill";
+  btn.className = "pill on";
+  loadReview();
+}
+
+function loadDictionaries() {
+  return fetch("/api/v1/document-kinds").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j) return;
+      DICT.rubrics = j.rubrics || [];
+      DICT.facets = j.facets || [];
+      DICT.kinds = j.kinds || [];
+    }).catch(function (e) { setStatus("справочники не загрузились: " + e, "err"); });
+}
+
+function loadReview() {
+  setStatus("загрузка…");
+  fetch("/api/v1/labels/review?only=" + encodeURIComponent(ONLY))
+    .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, code: r.status, j: j}; }); })
+    .then(function (res) {
+      if (!res.ok) { setStatus("отказ " + res.code + ": " + (res.j.detail || "нет доступа"), "err"); return; }
+      ITEMS = res.j.items || [];
+      CAN_ADMIN = !!res.j.can_admin;
+      var c = res.j.counts || {};
+      document.getElementById("n-disputed").textContent = c.disputed === undefined ? "—" : c.disputed;
+      document.getElementById("n-manual").textContent = c.manual === undefined ? "—" : c.manual;
+      document.getElementById("n-docs").textContent = c.documents === undefined ? "—" : c.documents;
+      document.getElementById("n-threshold").textContent = res.j.flag_below === undefined ? "—" : res.j.flag_below;
+      render();
+      setStatus("показано " + ITEMS.length + " из " + ((c.disputed || 0) + (c.manual || 0)) + " значений", "");
+    })
+    .catch(function (e) { setStatus("ошибка сети: " + e, "err"); });
+}
+
+window.addEventListener("error", function (e) { setStatus("ошибка страницы: " + (e.message || e), "err"); });
+loadDictionaries().then(loadReview);
+</script>
+</body></html>

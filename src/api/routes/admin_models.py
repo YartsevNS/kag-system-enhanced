@@ -2345,6 +2345,68 @@ async def fix_document_classification(payload: DocumentClassificationFix):
         return {"status": "error", "message": str(e)}
 
 
+class LabelProvenanceItem(BaseModel):
+    document_id: str
+    field: str                                    # rubrics | facets.<код> | document_type
+    value: Optional[Any] = None                   # что ответила модель (для контекста человека)
+    confidence: Optional[float] = None
+    alternatives: Optional[list] = None           # [[код, вероятность], …]
+
+
+class LabelProvenanceBatch(BaseModel):
+    items: list[LabelProvenanceItem]
+
+
+@router.post("/label-provenance", summary="Записать происхождение машинной разметки (уверенность)")
+async def import_label_provenance(payload: LabelProvenanceBatch):
+    """Записать в метаданные, ЧТО модель ответила и насколько была уверена — без изменения значений.
+
+    Зачем отдельно от правки разметки: приборам разметки (JEV) нельзя давать право менять значения —
+    иначе один прогон затрет всё, что поправил человек. Здесь пишется только провенанс: уверенность и
+    топ-варианты. По нему страница разбора показывает, где модель колебалась. Поля с ручной пометкой
+    НЕ трогаются вовсе (см. `src/indexing/label_provenance.py`).
+    """
+    from src.api.services.document_repository import get_doc_repo
+    from src.indexing import label_provenance as prov_mod
+
+    repo = get_doc_repo()
+    written, skipped_manual, missing, changed = 0, 0, 0, 0
+    touched: set = set()
+    try:
+        for item in payload.items:
+            doc = repo.get_dict(item.document_id) or {}
+            if not doc:
+                missing += 1
+                continue
+            prov = prov_mod.parse(doc.get("label_provenance"))
+            if prov_mod.is_manual(prov, item.field):
+                skipped_manual += 1
+                continue
+            before = prov_mod.dump(prov)
+            prov = prov_mod.mark_model(prov, item.field, item.value, item.confidence,
+                                       item.alternatives)
+            after = prov_mod.dump(prov)
+            if before == after:
+                continue
+            repo.upsert(item.document_id, {"label_provenance": after})
+            touched.add(item.document_id)
+            written += 1
+            if prov_mod.is_manual(prov, item.field):
+                changed += 1
+        try:
+            from src.security.provenance import append_action
+
+            append_action(actor="pribor", action="label_provenance_import", target="batch",
+                          details={"written": written, "documents": len(touched),
+                                   "skipped_manual": skipped_manual, "missing": missing})
+        except Exception:  # noqa: BLE001
+            pass
+        return {"status": "ok", "written": written, "documents": len(touched),
+                "skipped_manual": skipped_manual, "missing": missing}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/document-actions", summary="Журнал ручных правок (кто, когда, что, зачем)")
 async def get_document_actions(limit: int = 30):
     try:

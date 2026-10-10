@@ -12,7 +12,7 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks, meta
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks, meta, labels
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
@@ -255,6 +255,9 @@ app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"]
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(chunks.router, prefix="/api/v1", tags=["chunks"])
 app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
+# Разбор спорной разметки: доступен ЛЮБОМУ вошедшему (свои документы), не под /admin —
+# разбирать спорные значения должен тот, кто загрузил документ, а не только администратор.
+app.include_router(labels.router, prefix="/api/v1/labels", tags=["labels"])
 app.include_router(system_state.router, tags=["system"])
 
 
@@ -326,6 +329,17 @@ async def admin_web(request: Request):
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
     return await _html_response(os.path.join(static_path, "admin.html"))
+
+
+@app.get("/labels", summary="Спорные случаи разметки (для всех вошедших)")
+async def labels_page(request: Request):
+    """Страница разбора спорных значений разметки.
+
+    Доступна ЛЮБОМУ вошедшему (не только администратору): спорные значения видит тот, кто загрузил
+    документ, и он же может поставить значение сам. Ограничение области — в API (`/api/v1/labels`):
+    не-администратору отдаются только его документы.
+    """
+    return await _html_response(os.path.join(static_path, "labels.html"))
 
 
 @app.get("/experiments", summary="Опыты и модели (замеры, только для admin)")
