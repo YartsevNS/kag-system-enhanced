@@ -144,14 +144,17 @@ class WebMonitorService:
         },
         {
             "name": "ЦБ РФ — нормативные акты",
-            "url": "https://cbr.ru/rss/",
+            # Проверено пробой источников 10.10.2026: прежний адрес https://cbr.ru/rss/ отдаёт 404
+            # (ЦБ поменял раскладку лент), рабочий — /rss/RssNews (200, application/rss+xml, 100 записей).
+            "url": "https://www.cbr.ru/rss/RssNews",
             "type": "rss",
             "keywords": ["положение", "указание", "инструкция"],
             "description": "Нормативные акты Банка России"
         },
         {
             "name": "ФНС России — письма",
-            "url": "https://www.nalog.gov.ru/rn77/about_fts/about_nalog/rss/",
+            # Проверено 10.10.2026: прежний адрес .../about_nalog/rss/ отдаёт 404, рабочий — /rn77/rss/.
+            "url": "https://www.nalog.gov.ru/rn77/rss/",
             "type": "rss",
             "keywords": ["письмо", "разъяснение", "порядок"],
             "description": "Письма и разъяснения Федеральной налоговой службы"
