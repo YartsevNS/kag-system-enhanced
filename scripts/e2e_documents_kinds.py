@@ -103,6 +103,18 @@ async def main() -> int:
         check("тема «Информационная безопасность» названа по-русски",
               rtexts.get("infosec") == "Информационная безопасность", f"{rtexts.get('infosec')!r}")
 
+        # Фасеты — третья ось: фильтр «предмет защиты» из ЗАКРЫТОГО перечня
+        facade = await page.evaluate(
+            "Array.from(document.querySelectorAll('#facet-filter option'))"
+            ".map(o => ({value: o.value, text: o.textContent}))"
+        )
+        fvalues = {o["value"] for o in facade if o["value"]}
+        ftexts = {o["value"]: o["text"] for o in facade}
+        check("фильтр предмета защиты заполнился перечнем", len(fvalues) >= 5,
+              f"значений {len(fvalues)}: {sorted(fvalues)[:6]}")
+        check("значения предмета защиты названы по-русски",
+              "данные" in (ftexts.get("data") or ""), f"{ftexts.get('data')!r}")
+
         # Ошибка «Список видов не загрузился» — это мой тост: значит fetch не сработал
         toast = await page.evaluate("(document.getElementById('toast')||{}).textContent || ''")
         check("нет жалобы «список видов не загрузился»", "не загрузился" not in toast, toast or "—")
