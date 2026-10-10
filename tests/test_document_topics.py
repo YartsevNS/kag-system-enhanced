@@ -91,24 +91,30 @@ def test_в_промпте_есть_список_тем():
 
 # ── МЯГКОСТЬ: тема не ограничивает поиск ─────────────────────────────────────
 
-def test_нет_жёсткого_фильтра_по_темам():
-    """Правило A4: тема не ограничивает поиск по умолчанию.
+def test_нет_жёсткого_фильтра_по_темам_кроме_особого_режима():
+    """Правило A4: по умолчанию тема поиск НЕ ограничивает.
 
-    Ищем не упоминание слова, а КОНСТРУКЦИЮ фильтра: если в коде появится
-    `key="rubrics"` внутри must/Filter — тест падает.
+    Фильтр по полю тем существует ровно в одном месте (`_theme_condition` в embeddings_service),
+    и мягкий режим в нём допускает документы без темы. Жёсткий вариант включается только осознанной
+    настройкой `chat/domain=hard` (тест режима — в test_domain_filter_modes.py). Любое ДРУГОЕ место,
+    где код отсекает по темам, ломает правило — такой файл здесь и палится.
     """
     offenders = []
     for path in ROOT.joinpath("src").rglob("*.py"):
-        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if "rubrics" in line and re.search(r'key\s*=\s*["\']rubrics["\']', line):
-                offenders.append(f"{path.relative_to(ROOT)}:{i}: {line.strip()[:90]}")
-    assert not offenders, "жёсткий фильтр по темам запрещён:\n" + "\n".join(offenders)
+        text = path.read_text(encoding="utf-8")
+        if 'key="rubrics"' in text and path.name != "embeddings_service.py":
+            offenders.append(str(path.relative_to(ROOT)))
+    assert not offenders, "фильтровать по темам можно только в _theme_condition, а не здесь: " + \
+        ", ".join(offenders)
+    body = (ROOT / "src/indexing/embeddings_service.py").read_text(encoding="utf-8")
+    soft = body.split("def _theme_condition")[1].split("def _legacy_domain_condition")[0]
+    assert "should=[" in soft and 'key="rubrics"' in soft, "мягкий режим обязан быть в условии темы"
 
 
-def test_мягкость_видна_в_условии_домена():
-    """Тема-вьюха поиска (прежний домен) обязана оставаться мягкой: пустой домен не отсекается."""
+def test_мягкость_видна_в_условии_темы():
+    """Мягкий режим темы обязан остаться: документы без темы не отсекаются."""
     emb = (ROOT / "src/indexing/embeddings_service.py").read_text(encoding="utf-8")
-    assert "domain_include_empty" in emb, "мягкий режим темы не должен потеряться"
+    assert "theme_include_empty" in emb, "мягкий режим темы не должен потеряться"
 
 
 # ── Данные: список, сериализация, payload ────────────────────────────────────

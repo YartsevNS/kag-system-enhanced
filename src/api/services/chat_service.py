@@ -188,23 +188,16 @@ class ChatService:
         self._search_limit = 10  # Количество документов для контекста чата
         logger.info("ChatService инициализирован")
 
-    def _domain_mode(self) -> str:
-        """Как домен вопроса участвует в поиске: hard | safe | off (настройка chat/domain).
+    def _theme_mode(self) -> str:
+        """Режим фильтра по ТЕМЕ документа, из настройки `chat/domain` (имя оставлено прежним).
 
-        hard — прежнее поведение: фильтр по домену как отсечение. Опасно: у части
-        документов домен не определён (в payload пусто), и они исчезают из выдачи
-        целиком — чат отвечает «информация не найдена» при наличии документа в корпусе
-        (замер 18.09.2026: 1012 чанков из 4944 без домена, вопрос про 2-МР давал 0.00
-        с фильтром против 0.90 без него).
-        safe — фильтр по домену, но пустой домен в выдачу допускается.
-        off — домен в поиске не участвует (определяется, но не фильтрует).
-
-        ПО УМОЛЧАНИЮ ТЕПЕРЬ `safe` (изменено 10.10.2026 по решению владельца «тема не должна
-        ограничивать поиск по умолчанию»). Основание — замер на нашем корпусе: домен не определён
-        у 213 из 279 документов (76%), то есть при режиме hard любой вопрос, где классификатор
-        угадал тему, отсекал бОльшую часть корпуса. Замер 18.09.2026 (1012 чанков из 4944 без
-        домена; вопрос про 2-МР: 0.00 с жёстким фильтром против 0.90 без него) показывает цену.
-        Возврат к `hard` возможен по новому замеру — ручкой в настройках chat/domain.
+        hard — жёсткий фильтр по теме; safe — фильтр, но документы БЕЗ темы в выдачу допускаются;
+        off — тема в поиске не участвует (определяется, но не фильтрует).
+        Раньше здесь был легаси-домен: у него пусто у 76% корпуса (213 из 279 документов), и жёсткое
+        равенство отсекало ответы (замер 18.09.2026: вопрос про 2-МР — 0.00 с фильтром против 0.90
+        без него). С 10.10.2026 фильтр читает ПОЛЕ ТЕМ (`rubrics`), а значения прежней схемы
+        переводятся в коды словаря тем — ось одна, и она размечается (анализатором, правкой,
+        разметкой корпуса), а не угадывается по документу.
         """
         try:
             from src.api.services.config_store import config_store
@@ -214,21 +207,32 @@ class ChatService:
         mode = str(raw or "safe").strip().lower()
         return mode if mode in ("hard", "safe", "off") else "safe"
 
-    def _domain_kwargs(self, domain: Optional[str]) -> dict:
-        """Аргументы поиска по домену согласно режиму (см. _domain_mode)."""
-        mode = self._domain_mode()
-        if mode == "off" or not domain:
-            return {"domain": None}
-        return {"domain": domain, "domain_include_empty": mode == "safe"}
+    def _theme_kwargs(self, domain_value: Optional[str]) -> dict:
+        """Аргументы поиска по теме: код рубрики из значения прежней схемы + мягкость (см. _theme_mode).
+
+        Значение приходит от классификатора вопроса (infosec/legal/accounting/universal…) — это
+        прежняя схема; переводим её в код словаря тем. Если темы из значения не следует (`universal`,
+        пусто, незнакомое) — фильтр не ставим вовсе, а не «фильтруем по пустому».
+        """
+        mode = self._theme_mode()
+        if mode == "off":
+            return {"theme": None}
+        from src.indexing.document_topics import rubric_for_legacy
+
+        rubric = rubric_for_legacy(domain_value)
+        if not rubric:
+            return {"theme": None}
+        return {"theme": rubric, "theme_include_empty": mode == "safe"}
 
     async def _search_with_widening(self, query: str, limit: int, *, group_ids=None,
                                     is_admin: bool = False, user_id=None,
-                                    domain: Optional[str] = None, scope: Optional[str] = None) -> list:
-        """Поиск с фильтром по домену и расширением, если фильтр обеднил выдачу.
+                                    domain_value: Optional[str] = None,
+                                    scope: Optional[str] = None) -> list:
+        """Поиск с фильтром по ТЕМЕ и расширением, если фильтр обеднил выдачу.
 
-        Зачем расширение. Домен вопроса определяет классификатор, и он может не совпасть
-        с доменом документа, где лежит ответ (или документ помечен universal/пустым).
-        Тогда жёсткий фильтр отдаёт пустоту, и чат честно отвечает «информация не найдена»,
+        Зачем расширение. Тему вопроса определяет классификатор, и она может не совпасть
+        с темой документа, где лежит ответ (или тема у документа не проставлена).
+        Тогда фильтр отдаёт пустоту, и чат честно отвечает «информация не найдена»,
         хотя документ в корпусе есть. Замер 19.09.2026: у вопросов с нулевым баллом
         ВСЕ топовые фрагменты имели пустой домен и отсекались фильтром, а без фильтра
         правильный документ стоял на первом месте со score 0.915.
@@ -238,11 +242,11 @@ class ChatService:
         """
         from src.indexing.embeddings_service import embeddings_service
 
-        kwargs = self._domain_kwargs(domain if domain else None)
+        kwargs = self._theme_kwargs(domain_value)
         strict = await embeddings_service.search(
             query=query, limit=limit, group_ids=group_ids,
             is_admin=is_admin, user_id=user_id, scope=scope, **kwargs)
-        if kwargs.get("domain"):
+        if kwargs.get("theme"):
             _best = max((float(c.get("score") or 0) for c in strict), default=0.0)
             if len(strict) < max(3, limit // 2) or _best < 0.5:
                 wide = await embeddings_service.search(
@@ -252,7 +256,7 @@ class ChatService:
                 _added = [c for c in wide if c.get("id") not in _seen]
                 if _added:
                     logger.info(
-                        f"[rag] домен «{kwargs.get('domain')}» обеднил выдачу: "
+                        f"[rag] тема «{kwargs.get('theme')}» обеднила выдачу: "
                         f"было {len(strict)}, добавлено {len(_added)} без фильтра")
                 strict = strict + _added
         strict.sort(key=lambda c: -float(c.get("score") or 0))
@@ -968,7 +972,7 @@ class ChatService:
                 search_results = await self._search_with_widening(
                     user_message, ctx_limit,
                     group_ids=group_ids, is_admin=is_admin, user_id=user_id,
-                    domain=domain, scope=scope,
+                    domain_value=domain, scope=scope,
                 )
                 _search_ms = (time.monotonic() - _t_search) * 1000
                 logger.info(f"[rag] поиск: {len(search_results)} фрагментов за {_search_ms:.0f} мс "
@@ -1092,7 +1096,7 @@ class ChatService:
                                 _extra = await embeddings_service.search(
                                     query=_sq, limit=5, group_ids=group_ids, is_admin=is_admin,
                                     user_id=user_id,
-                                    **self._domain_kwargs(domain if domain else None),
+                                    **self._theme_kwargs(domain if domain else None),
                                 )
                                 for _r in _extra:
                                     _rid = _r.get("id")
@@ -1555,7 +1559,7 @@ class ChatService:
             is_admin=is_admin,
             user_id=user_id,
             scope=scope,
-            **self._domain_kwargs(_stream_domain),
+            **self._theme_kwargs(_stream_domain),
         )
         search_results = self._access_guard(search_results, user_id, group_ids, is_admin)
 

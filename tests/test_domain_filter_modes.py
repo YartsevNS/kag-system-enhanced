@@ -1,16 +1,14 @@
-"""Режимы домена в поиске чата: жёсткий фильтр скрывал документы без домена.
+"""Фильтр по теме документа: читает ПОЛЕ ТЕМ, мягкий по умолчанию, легаси-домены переводятся.
 
-Ловушка, из-за которой это появилось: chat передавал домен вопроса (из query_analysis)
-в поиск как ЖЁСТКОЕ условие `domain == X`. У документов, где детекция домена при
-индексации не сработала, в payload пустая строка — они не проходили фильтр и исчезали
-из выдачи, а чат отвечал «в документах не найдена» при наличии материала
-(замер 18.09.2026: 1012 чанков из 4944 без домена; вопрос про 2-МР — 0.00 с фильтром
-против 0.90 без).
+Ловушка, из-за которой это появилось: чат передавал домен вопроса (из query_analysis) в поиск как
+ЖЁСТКОЕ условие `domain == X`, а у документов, где детекция домена не сработала, в payload пусто —
+они исчезали из выдачи, и чат отвечал «в документах не найдена» при наличии материала
+(замер 18.09.2026: 1012 чанков из 4944 без домена; вопрос про 2-МР — 0.00 с фильтром против 0.90 без).
 
-Проверки: (1) «мягкое» условие допускает пустой домен и делается ОДНИМ запросом
-(пустую строку ловит MatchValue(""), а не is_empty — проверено на живом Qdrant:
-is_empty=81, пустая строка=1012); (2) режим читается из настройки chat/domain и по
-умолчанию остаётся прежним (hard) — поведение меняется только по замеру.
+Что изменилось 10.10.2026 (и почему тесты переписаны): фильтр остался мягким, но читает уже поле ТЕМ
+(`rubrics`) — коды словаря (src/indexing/document_topics.py), а значения прежней схемы
+(infosec/legal/accounting/universal) переводятся в коды тем. Настройка осталась той же
+(`chat/domain`), её значение — режим фильтра.
 """
 from pathlib import Path
 
@@ -18,47 +16,85 @@ ROOT = Path(__file__).resolve().parents[1]
 EMB = (ROOT / "src/indexing/embeddings_service.py").read_text(encoding="utf-8")
 CHAT = (ROOT / "src/api/services/chat_service.py").read_text(encoding="utf-8")
 
+from src.indexing.document_topics import rubric_for_legacy  # noqa: E402
+from src.indexing.embeddings_service import _theme_condition  # noqa: E402
 
-def test_domain_condition_includes_empty_domain():
-    from src.indexing.embeddings_service import _domain_condition
 
-    strict = _domain_condition("infosec", False)
-    assert getattr(strict, "key", "") == "domain", "жёсткий режим — простое равенство домена"
+# ── Условие фильтра ──────────────────────────────────────────────────────────
+
+def test_жёсткий_режим_это_равенство_по_полю_тем():
+    strict = _theme_condition("infosec", False)
+    assert getattr(strict, "key", "") == "rubrics", "фильтр темы обязан читать поле rubrics"
     assert strict.match.value == "infosec"
 
-    soft = _domain_condition("infosec", True)
+
+def test_мягкий_режим_допускает_документы_без_темы():
+    soft = _theme_condition("infosec", True)
     should = getattr(soft, "should", None)
-    assert should and len(should) == 2, "мягкий режим — «домен ИЛИ пустой» одной выборкой"
+    assert should and len(should) == 2, "мягкий режим — «тема ИЛИ пустое значение» одной выборкой"
+    assert all(getattr(c, "key", "") == "rubrics" for c in should), "оба условия — по полю тем"
     values = sorted(str(c.match.value) for c in should)
-    assert values == ["", "infosec"], "в условии должен быть и пустой домен"
+    assert values == ["", "infosec"], "в условии должен быть и пустой случай"
 
 
-def test_search_accepts_domain_include_empty_flag():
-    assert "domain_include_empty: bool = False" in EMB, "у поиска должен быть флаг мягкого домена"
-    assert "_domain_condition(domain, domain_include_empty)" in EMB, (
-        "фильтр домена должен строиться через общий хелпер (оба пути: с filters и без)"
-    )
+def test_легаси_условие_осталось_для_замера():
+    """«До» и «после» меряются на ОДНОМ образе: старое условие по domain сохранено для прогона."""
+    assert "_legacy_domain_condition" in EMB, "без него не с чем сравнивать"
+    body = EMB.split("def _legacy_domain_condition")[1][:700]
+    assert 'key="domain"' in body
 
 
-def test_chat_domain_modes_read_from_settings():
-    assert "def _domain_mode(" in CHAT and "def _domain_kwargs(" in CHAT
+def test_поиск_принимает_тему_и_её_мягкость():
+    assert "theme: Optional[str] = None" in EMB
+    assert "theme_include_empty: bool = False" in EMB
+    assert "_theme_condition(theme, theme_include_empty)" in EMB, \
+        "фильтр темы должен строиться общим хелпером (оба пути: с filters и без)"
+
+
+# ── Перевод значений прежней схемы ───────────────────────────────────────────
+
+def test_легаси_домены_переводятся_в_коды_тем():
+    assert rubric_for_legacy("infosec") == "infosec"
+    assert rubric_for_legacy("legal") == "law"
+    assert rubric_for_legacy("accounting") == "economics"
+
+
+def test_универсальный_домен_не_даёт_темы():
+    """«universal» — это отсутствие темы; фильтровать по нему значит отсечь почти весь корпус."""
+    assert rubric_for_legacy("universal") is None
+    assert rubric_for_legacy("") is None
+    assert rubric_for_legacy(None) is None
+
+
+def test_незнакомое_значение_не_превращается_в_тему():
+    assert rubric_for_legacy("марсианский") is None
+    assert rubric_for_legacy("general") is None
+
+
+def test_код_словаря_проходит_как_есть():
+    assert rubric_for_legacy("banking") == "banking"
+
+
+# ── Режим и настройка ────────────────────────────────────────────────────────
+
+def test_режим_читается_из_настроек_и_по_умолчанию_мягкий():
+    assert "def _theme_mode(" in CHAT and "def _theme_kwargs(" in CHAT
     assert 'config_store.get("chat", "domain")' in CHAT, "режим должен браться из настроек"
-    # По умолчанию и при неизвестном значении — `safe` (изменено 10.10.2026 по решению владельца
-    # «тема не должна ограничивать поиск»): домен не определён у 76% корпуса, и жёсткий фильтр
-    # отсекал ответы. Тест ждал прежний `hard` и потому падал на живом коде (нашёл 10.10.2026).
     assert 'return mode if mode in ("hard", "safe", "off") else "safe"' in CHAT, (
         "неизвестное значение не должно менять поведение (остаётся безопасный режим)"
     )
     assert 'raw or "safe"' in CHAT
-    # все места, где чат ищет фрагменты, обязаны уважать режим домена.
-    # Основной поиск идёт через _search_with_widening: он берёт режим внутри себя и умеет
-    # расширить выдачу без фильтра, если домен её обеднил (замер 19.09.2026 — из-за этого
-    # были ответы «информация не найдена» при документе в корпусе).
-    assert "_search_with_widening(" in CHAT, "основной поиск должен уметь расширяться"
-    assert "kwargs = self._domain_kwargs(domain if domain else None)" in CHAT, (
-        "расширяющий помощник обязан брать режим из тех же настроек"
-    )
-    # подзапросы декомпозиции и стриминг по-прежнему применяют режим напрямую
-    assert CHAT.count("**self._domain_kwargs(") >= 2, (
-        "подзапросы декомпозиции и стриминг — через режим домена"
-    )
+
+
+def test_off_и_неизвестная_тема_снимают_фильтр():
+    assert 'if mode == "off":' in CHAT
+    assert 'return {"theme": None}' in CHAT, "off и неопределённая тема — без фильтра"
+    assert 'return {"theme": rubric, "theme_include_empty": mode == "safe"}' in CHAT
+
+
+def test_расширение_выдачи_осталось():
+    """Если фильтр обеднил выдачу, поиск повторяется без него — иначе снова «не найдено»."""
+    assert 'if kwargs.get("theme"):' in CHAT
+    assert "обеднила выдачу" in CHAT
+    # подзапросы декомпозиции и стриминг по-прежнему применяют тот же режим
+    assert CHAT.count("**self._theme_kwargs(") >= 2

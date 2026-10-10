@@ -55,16 +55,37 @@ def _build_qdrant_filter_condition(condition: FieldCondition) -> dict:
         raise ValueError(f"Unsupported match type: {type(match)}")
 
 
-def _domain_condition(domain: str, include_empty: bool = False):
-    """Условие поиска по домену: жёсткое равенство или «домен ИЛИ пустой домен».
+def _theme_condition(theme: str, include_empty: bool = False):
+    """Условие поиска по ТЕМЕ документа (поле `rubrics` — коды словаря тем).
 
-    include_empty=True добавляет к условию пустую строку домена. Зачем: у части
-    документов домен не определился при индексации (в payload пусто), и жёсткое
-    равенство выбрасывало их из выдачи целиком — чат отвечал «информация не найдена»
-    при наличии документа в корпусе (замер 18.09.2026: вопрос про 2-МР давал 0.00 и
-    отказ с фильтром против 0.90 без него; в коллекции 1012 чанков из 4944 без домена).
-    Пустую строку ловит именно MatchValue(""), а is_empty НЕ ловит (проверено:
-    is_empty=81, пустая строка=1012), поэтому условие на пустой домен задано явно.
+    include_empty=True добавляет к условию пустое значение темы. Зачем: тема есть не у всех
+    документов (корпус только размечается), и жёсткое равенство выбрасывало бы их из выдачи целиком —
+    ровно тот дефект, из-за которого чат отвечал «информация не найдена» при документе в корпусе
+    (замер 18.09.2026: жёсткий фильтр давал 0.00 и отказ против 0.90 без него; тогда фильтровали по
+    легаси-полю `domain`, у которого пусто у 76% корпуса).
+
+    Почему читаем `rubrics`, а не легаси `domain`: домен — прежняя схема (infosec/accounting/legal/
+    universal), он заполнен у 70 документов из 328 и своей оси не имеет. Тема — словарь v0
+    (`src/indexing/document_topics.py`), её пишут и анализатор, и ручная правка, и разметка корпуса.
+    Значения прежней схемы приходят из классификатора вопроса — их переводит `rubric_for_legacy`.
+    """
+    from qdrant_client.models import FieldCondition as _FC, Filter as _F, MatchValue as _MV
+
+    exact = _FC(key="rubrics", match=_MV(value=theme))
+    if not include_empty:
+        return exact
+    # Пустое значение темы — это НЕ is_empty: у части документов поле отсутствует вовсе, у части
+    # лежит пустой список. Ловим второй случай явно и НЕ отсекаем документы без поля (их отсечёт
+    # только отсутствие match — поэтому в мягком режиме документы без rubrics остаются в выдаче).
+    empty = _FC(key="rubrics", match=_MV(value=""))
+    return _F(should=[exact, empty])
+
+
+def _legacy_domain_condition(domain: str, include_empty: bool = False):
+    """Прежнее условие по легаси-полю `domain` — оставлено для замера «до/после» перехода на рубрики.
+
+    В рабочем пути не используется: чат фильтрует по `rubrics` (см. `_theme_condition`). Нужен, чтобы
+    сравнить варианты на ОДНОМ образе: адресный прогон поиска с обоими условиями на тех же вопросах.
     """
     from qdrant_client.models import FieldCondition as _FC, Filter as _F, MatchValue as _MV
 
@@ -698,20 +719,23 @@ class EmbeddingsService:
         filters: Optional[Dict[str, Any]] = None,
         group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
-        domain: Optional[str] = None,
+        theme: Optional[str] = None,
         user_id: Optional[str] = None,
-        domain_include_empty: bool = False,
+        theme_include_empty: bool = False,
         *,
         scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Поиск с выбором коллекции через `scope`: 'news' — коллекция новостей,
         'documents' (или None) — основная. Параметр опциональный: старые вызовы не меняются.
+
+        `theme` — код темы из словаря (src/indexing/document_topics.py). Мягкий режим
+        (`theme_include_empty=True`) допускает документы без темы — так тема не отсекает выдачу.
         """
         if scope == "news":
             return await news_embeddings_service().search(
                 query=query, limit=limit, filters=filters, group_ids=group_ids,
-                is_admin=is_admin, domain=domain, user_id=user_id,
-                domain_include_empty=domain_include_empty)
+                is_admin=is_admin, theme=theme, user_id=user_id,
+                theme_include_empty=theme_include_empty)
 
         """
         Семантический поиск по embeddings.
@@ -785,13 +809,13 @@ class EmbeddingsService:
                             FieldCondition(key=key, match=_MV_F(value=value))
                         )
 
-            if domain:
-                conditions.append(_domain_condition(domain, domain_include_empty))
+            if theme:
+                conditions.append(_theme_condition(theme, theme_include_empty))
 
-        # domain — независимый параметр: применяется и без filters
+        # Тема — независимый параметр: применяется и без filters
         # (раньше был вложен в `if filters:` и терялся при пустых filters).
-        if domain and not filters:
-            conditions.append(_domain_condition(domain, domain_include_empty))
+        if theme and not filters:
+            conditions.append(_theme_condition(theme, theme_include_empty))
 
         # ── ACL pre-filter: права доступа (visibility + allow/deny) ───────
         # Доступно, если: public ИЛИ пользователь/группа в allow-списках.

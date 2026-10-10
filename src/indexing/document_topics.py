@@ -86,6 +86,31 @@ RUBRICS: Dict[str, Dict[str, str]] = {
 
 RUBRIC_CODES: tuple = tuple(RUBRICS)
 
+# Легаси-домены прежней схемы → коды рубрик. Нужны там, где значение домена приходит ИЗ СТАРЫХ мест
+# (классификатор вопроса в чате, перенос корпуса): «infosec» и «legal» уже рубрики, «accounting»
+# ближе всего к «экономике», «universal» — это отсутствие темы, а не тема.
+LEGACY_DOMAIN_ALIASES: Dict[str, str] = {
+    "infosec": "infosec",
+    "legal": "law",
+    "accounting": "economics",
+    "universal": "",
+    "": "",
+    "general": "",
+    "other": "",
+}
+
+
+def rubric_for_legacy(value: Optional[str]) -> Optional[str]:
+    """Код рубрики для значения прежней схемы; None — если темы из него не следует.
+
+    Неизвестное значение возвращает None, а не `other`: «тему определить не удалось» и «тема иная»
+    — разные вещи, и подставлять второе вместо первого значит выдумывать разметку.
+    """
+    key = str(value or "").strip().lower()
+    if key in LEGACY_DOMAIN_ALIASES:
+        return LEGACY_DOMAIN_ALIASES[key] or None
+    return key if is_valid(key) else None
+
 
 def codes() -> List[str]:
     """Все коды рубрик в порядке словаря."""
