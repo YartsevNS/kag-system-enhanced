@@ -26,22 +26,23 @@ echo "=== $(date '+%d.%m.%Y %H:%M') синхронизация журнала в
 # 1. Свежая копия журнала сессий (саму базу не трогаем — Hermes может быть запущен)
 cp -f "$HOME/AppData/Local/hermes/state.db" "$SCRATCH/state_copy.db"
 
-# 2. Собираем страницы: пары «вопрос → итог хода» из журнала
+# 2. Собираем блоки и страницы: пары «вопрос → итог хода» из журнала
 rm -rf "$D"; mkdir -p "$D"
 "$PY" "$REPO_WIN/scripts/bakeoff/sessions_to_dokuwiki.py" \
-      --db "$SCRATCH_WIN/state_copy.db" --out "$SCRATCH_WIN/dw_sessions" --min-blocks 1 >> "$LOG" 2>&1
+      --db "$SCRATCH_WIN/state_copy.db" --out "$SCRATCH_WIN/dw_sessions" --min-blocks 1 \
+      --blocks-out "$SCRATCH_WIN/blocks_new.json" >> "$LOG" 2>&1
 echo "собрано страниц: $(ls "$D"/*.txt 2>/dev/null | wc -l)" | tee -a "$LOG"
 
-# 3. Копируем страницы и приборы на хост вики
+# 3. Копируем приборы и блоки на хост вики
 "${SCP[@]}" "$REPO/scripts/bakeoff/sessions_to_dokuwiki.py" \
              "$REPO/scripts/dokuwiki/build_catalog.py" \
              "$REPO/scripts/dokuwiki/build_themes.py" "$HOST:/tmp/"
-"${SSH[@]}" "$HOST" 'rm -rf /tmp/dw_sessions && mkdir -p /tmp/dw_sessions'
-"${SCP[@]}" "$D"/*.txt "$HOST:/tmp/dw_sessions/"
+"${SCP[@]}" "$SCRATCH/blocks_new.json" "$HOST:/tmp/blocks_new.json"
 
-# 4. Заливка и сборка навигации (только с localhost)
+# 4. ДОПИСЫВАЕМ новые блоки в вики (страницы не перезаписываются: владелец хочет видеть
+#    запись сразу по каждому вопросу, а не собранной пачкой за день). Затем каталог и темы.
 "${SSH[@]}" "$HOST" 'PASS=$(sed -n "s/^пароль: //p" /root/kag-agent-cred.txt)
-python3 /tmp/sessions_to_dokuwiki.py --push-dir /tmp/dw_sessions --upload \
+python3 /tmp/sessions_to_dokuwiki.py --append-from /tmp/blocks_new.json \
         --url http://127.0.0.1:8080/lib/exe/xmlrpc.php --user kag-agent --password "$PASS"
 python3 /tmp/build_catalog.py
 python3 /tmp/build_themes.py --apply

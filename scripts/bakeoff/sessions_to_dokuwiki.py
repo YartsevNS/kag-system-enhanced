@@ -213,6 +213,119 @@ def xml_safe(text: str) -> str:
     return sx.escape(cleaned)
 
 
+def _call(url: str, user: str, password: str, method: str, params_xml: str) -> str:
+    payload = (
+        '<?xml version="1.0"?><methodCall><methodName>' + method + "</methodName><params>"
+        + params_xml + "</params></methodCall>"
+    ).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "text/xml"})
+    import base64
+
+    req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
+    with urllib.request.urlopen(req, timeout=60) as rsp:
+        return rsp.read().decode("utf-8", "replace")
+
+
+def get_page_text(url: str, user: str, password: str, page: str) -> str:
+    """Текущий текст страницы вики (пусто, если страницы нет)."""
+    import xml.sax.saxutils as sx
+
+    body = _call(url, user, password, "core.getPage",
+                 f"<param><value><string>{sx.escape(page)}</string></value></param>")
+    # Между <value> и <string> в ответе DokuWiki стоят переводы строк и пробелы — разбор обязан
+    # это учитывать, иначе текст страницы считается пустым и дописывание дублирует блоки.
+    m = re.search(r"<value>\s*<string>(.*?)</string>\s*</value>", body, re.S)
+    return sx.unescape(m.group(1)) if m else ""
+
+
+def _norm(text: str) -> str:
+    t = re.sub(r"<[^>]*>", " ", text or "")
+    t = re.sub(r"[*_/=`«»\"']", " ", t)
+    return re.sub(r"\s+", " ", t).strip().lower()
+
+
+def _signature(question: str, limit: int = 90) -> str:
+    """Подпись вопроса: по ней видно, есть уже такой блок на странице или нет."""
+    return _norm(question)[:limit]
+
+
+def append_blocks(url: str, user: str, password: str, blocks: list[dict],
+                  body_limit: int = 2600, dry: bool = False) -> dict:
+    """Дописать в вики только НОВЫЕ блоки. Существующие страницы не перезаписываются.
+
+    Зачем именно так: владелец смотрит диалоги в вики и хочет видеть запись СРАЗУ по каждому
+    вопросу, а не собранной пачкой за день. Поэтому блоки дописываются по мере появления,
+    нумерация продолжается, а повторная запись того же вопроса ничего не меняет.
+    """
+    by_date: dict[str, list[dict]] = {}
+    for b in blocks:
+        by_date.setdefault(b["date"], []).append(b)
+
+    stats = {"добавлено": 0, "уже_было": 0, "страниц": 0, "ошибок": 0}
+    for date in sorted(by_date):
+        items = by_date[date]
+        # Страницы дня бывают ЧАСТЯМИ: «дата-1», «дата-2» (крупные дни делятся). Смотреть только
+        # базовую страницу нельзя — на живом прогоне это создало страницы-двойники по 184 блока,
+        # потому что блоки уже лежали в частях, а дописывание считало их новыми.
+        parts: dict[str, str] = {}
+        for candidate in [f"kag:журнал:{date}"] + [f"kag:журнал:{date}-{i}" for i in range(1, 12)]:
+            text = get_page_text(url, user, password, candidate)
+            if text.strip():
+                parts[candidate] = text
+        if not parts:
+            parts[f"kag:журнал:{date}"] = ""
+
+        def suffix(name: str) -> int:
+            m = re.search(r"-(\d+)$", name)
+            return int(m.group(1)) if m else 0
+
+        target = max(parts, key=suffix)
+        existing = parts[target]
+        nums = [int(n) for name, text in parts.items()
+                for n in re.findall(r"^===== (\d+)\.", text, re.M)]
+        nxt = (max(nums) + 1) if nums else 1
+        existing_norm = _norm(" ".join(parts.values()))
+
+        fresh = [it for it in items if _signature(it["q"]) not in existing_norm]
+        stats["уже_было"] += len(items) - len(fresh)
+        if not fresh:
+            continue
+
+        day = dt.datetime.strptime(date, "%Y-%m-%d").strftime("%d.%m.%Y")
+        head = existing.rstrip()
+        if not head:
+            head = f"====== {day} — журнал работ ======\n\nБлоков «вопрос → ответ»: 0"
+        add = []
+        for it in fresh:
+            q = dokuwiki_escape(it["q"])[:1200]
+            a = dokuwiki_escape(trim_body(it["a"], body_limit))
+            add.append(f"===== {nxt}. {shorten(q.splitlines()[0], 90)} =====\n\n"
+                       f"**Вопрос:**\n\n{q}\n\n**Ответ:**\n\n{a}\n")
+            nxt += 1
+
+        added = "\n".join(add) + "\n"
+        if parts.get(target, "").strip() and len(parts[target]) + len(added) > 45000:
+            # Часть переполнена — открываем следующую. Нумерация сквозная, чтобы блоки не путались.
+            target = f"kag:журнал:{date}-{suffix(target) + 1}"
+            head = f"====== {day} — журнал работ (часть {suffix(target)}) ======\n\n" \
+                   f"Блоков «вопрос → ответ»: 0"
+        text = head + "\n\n" + added
+        total = nxt - 1
+        text = re.sub(r"Блоков «вопрос → ответ»: \d+", f"Блоков «вопрос → ответ»: {total}", text, count=1)
+        if dry:
+            print(f"  {target}: было блоков {len(nums)}, добавить {len(fresh)} "
+                  f"(например: «{fresh[0]['q'].splitlines()[0][:60]}»)")
+            stats["добавлено"] += len(fresh)
+            stats["страниц"] += 1
+            continue
+        if submit(url, user, password, page, text, f"дописано блоков: {len(fresh)}"):
+            stats["добавлено"] += len(fresh)
+            stats["страниц"] += 1
+        else:
+            stats["ошибок"] += 1
+    return stats
+
+
 def submit(url: str, user: str, password: str, page: str, text: str, summary: str) -> bool:
     payload = (
         '<?xml version="1.0"?><methodCall><methodName>core.savePage</methodName><params>'
@@ -247,11 +360,28 @@ def main() -> int:
     ap.add_argument("--min-blocks", type=int, default=2, help="не заводить страницу, если блоков меньше")
     ap.add_argument("--upload", action="store_true")
     ap.add_argument("--push-dir", default="", help="залить уже готовые страницы из каталога (без журнала)")
+    ap.add_argument("--blocks-out", default="", help="выгрузить блоки в JSON (для дописывания в вики)")
+    ap.add_argument("--append-from", default="", help="дописать в вики ТОЛЬКО новые блоки из JSON")
+    ap.add_argument("--append-dry", action="store_true", help="показать, что будет дописано, но не писать")
     ap.add_argument("--url", default="http://127.0.0.1:8080/lib/exe/xmlrpc.php")
     ap.add_argument("--prefix", default="kag:журнал:", help="префикс имён страниц")
     ap.add_argument("--user", default="kag-agent")
     ap.add_argument("--password", default=os.environ.get("DOKUWIKI_PASSWORD", ""))
     args = ap.parse_args()
+
+    if args.append_from:
+        # Дописывание в вики: владелец хочет видеть запись сразу по каждому вопросу, а не пачкой.
+        blocks = json.loads(Path(args.append_from).read_text(encoding="utf-8"))
+        rows = blocks.get("данные") if isinstance(blocks, dict) else blocks
+        if not args.password:
+            print("нет пароля: задать --password или DOKUWIKI_PASSWORD")
+            return 2
+        print(f"=== ДОПИСЫВАНИЕ В ВИКИ ({'примерка' if args.append_dry else 'работа'}) ===")
+        stats = append_blocks(args.url, args.user, args.password, rows or [],
+                              body_limit=args.body_limit, dry=args.append_dry)
+        print(f"блоков к записи: {stats['добавлено']}, уже было: {stats['уже_было']}, "
+              f"страниц затронуто: {stats['страниц']}, ошибок: {stats['ошибок']}")
+        return 0
 
     if args.push_dir:
         src = Path(args.push_dir)
@@ -296,6 +426,14 @@ def main() -> int:
             continue
         by_day.setdefault(s["date"], []).append((s, good))
         print(f"  готово   {s['date']}  {s['title'][:40]:42s} блоков {len(good):3d}")
+
+    # Выгрузка блоков (для дописывания в вики по мере работы).
+    if args.blocks_out:
+        rows = [{"date": day, "q": it["q"], "a": it["a"]}
+                for day, sessions in by_day.items() for _sess, items in sessions for it in items]
+        Path(args.blocks_out).write_text(
+            json.dumps({"данные": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"блоки выгружены: {args.blocks_out} ({len(rows)})")
 
     plan = []
     for day in sorted(by_day):
