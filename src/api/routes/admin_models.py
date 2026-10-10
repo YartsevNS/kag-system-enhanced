@@ -2370,6 +2370,99 @@ async def get_shared_properties():
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/semantics-state", summary="Живое состояние словарей и графовой базы")
+async def get_semantics_state():
+    """Сколько документов размечено каждым кодом словаря и что лежит в хранилищах.
+
+    Зачем эндпоинт: словари (виды, темы, фасеты) нужно ВИДЕТЬ в их текущем состоянии — какие коды
+    есть, сколько документов каждым размечено и сколько осталось без разметки. Отдаём ЗНАЧЕНИЯ
+    (числа), а не флаги: «не размечено» — это и есть объём работы, и его нельзя показывать как ноль.
+    Страница «Семантика» рисует это как есть и не держит собственных списков.
+    """
+    try:
+        from collections import Counter
+
+        from src.api.services.document_repository import get_doc_repo
+        from src.indexing import document_facets, document_kinds, document_topics
+
+        docs = await asyncio.to_thread(lambda: get_doc_repo().get_all())
+
+        kind_hits, rubric_hits, facet_hits = Counter(), Counter(), Counter()
+        unmarked = {"kinds": 0, "rubrics": 0, "facets": 0}
+        collections, schema_versions = Counter(), Counter()
+        for d in docs.values():
+            kind = str(d.get("document_type") or "").strip()
+            if document_kinds.is_valid(kind):
+                kind_hits[kind] += 1
+            else:
+                unmarked["kinds"] += 1
+
+            rubrics = document_topics.normalize(d.get("rubrics"))
+            if rubrics:
+                for r in rubrics:
+                    rubric_hits[r] += 1
+            else:
+                unmarked["rubrics"] += 1
+
+            facets = document_facets.normalize(d.get("facets"))
+            pairs = [(f, v) for f, vals in facets.items() for v in vals]
+            if pairs:
+                for f, v in pairs:
+                    facet_hits[f"{f}:{v}"] += 1
+            else:
+                unmarked["facets"] += 1
+
+            collections[str(d.get("collection") or "(основная)")] += 1
+            schema_versions[str(d.get("schema_version") or "(без версии)")] += 1
+
+        stores: Dict[str, Any] = {"documents": len(docs)}
+        try:
+            from src.indexing.embeddings_service import embeddings_service, news_embeddings_service
+
+            stores["vectors_main"] = (await embeddings_service.get_collection_stats()).get("points_count")
+            stores["vectors_news"] = (await news_embeddings_service().get_collection_stats()).get("points_count")
+        except Exception as e:  # noqa: BLE001 — состояние векторов не должно ломать страницу
+            stores["vectors_error"] = str(e)
+        try:
+            from src.indexing.knowledge_graph import kg_service
+
+            stores.update(await asyncio.to_thread(kg_service.get_stats))
+        except Exception as e:  # noqa: BLE001
+            stores["graph_error"] = str(e)
+
+        def _items(rows, hits, key="code"):
+            out = []
+            for row in rows:
+                item = dict(row)
+                item["documents"] = int(hits.get(row[key], 0))
+                out.append(item)
+            return out
+
+        return {
+            "status": "ok",
+            "vocabularies": {
+                "kinds": {"version": document_kinds.VOCABULARY_VERSION,
+                          "title": "Виды документов (что это за документ)",
+                          "unmarked": unmarked["kinds"],
+                          "items": _items(document_kinds.as_list(), kind_hits)},
+                "rubrics": {"version": document_topics.TOPICS_VERSION,
+                            "title": "Темы (о чём документ)",
+                            "unmarked": unmarked["rubrics"],
+                            "items": _items(document_topics.as_list(), rubric_hits)},
+                "facets": {"version": document_facets.FACETS_VERSION,
+                           "title": "Фасеты (закрытые перечни свойств)",
+                           "unmarked": unmarked["facets"],
+                           "items": _items(document_facets.as_list(), facet_hits)},
+            },
+            "stores": stores,
+            "collections": dict(collections),
+            "schema_versions": dict(schema_versions),
+            "documents_total": len(docs),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/provenance", summary="Журнал происхождения файлов и проверка цепочки")
 async def get_provenance(limit: int = 20):
     """Показать хвост журнала происхождения и проверить целостность цепочки.

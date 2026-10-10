@@ -340,6 +340,19 @@ async def experiments_page(request: Request):
     return await _html_response(os.path.join(static_path, "experiments.html"))
 
 
+@app.get("/semantics", summary="Семантика: словари и графовая база (только для admin)")
+async def semantics_page(request: Request):
+    """Живое состояние словарей (виды, темы, фасеты) и хранилищ + схема осей и конвейера.
+
+    Только для админа: страница показывает внутреннее устройство (словари, версии схемы,
+    маршрут коллекций). Данные — из /api/v1/admin/models/semantics-state, поэтому состояние
+    видно без пересборки образа, а страница не держит собственных списков словарей.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "semantics.html"))
+
+
 @app.get("/docker", summary="Docker Dashboard")
 async def docker_dashboard(request: Request):
     """Страница Docker Dashboard (только для admin)."""

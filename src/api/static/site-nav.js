@@ -40,6 +40,7 @@
       ['/logs', 'Логи'],
       ['/qdrant', 'Qdrant'],
       ['/docker', 'Docker'],
+      ['/semantics', 'Семантика'],
       ['/experiments', 'Опыты и модели']
     ]},
     { title: 'Помощь', compact: true, items: [
