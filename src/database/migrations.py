@@ -41,6 +41,10 @@ _COLUMN_MIGRATIONS = [
     ("documents", "facets", "TEXT DEFAULT '{}'"),
     ("documents", "schema_version", "VARCHAR DEFAULT ''"),
     ("documents", "previous_hash", "VARCHAR DEFAULT ''"),
+    # Идентификатор прежней редакции: известен ПРИ ЗАГРУЗКЕ (найден по хешу дубликата), поэтому
+    # храним его явно — иначе при связывании редакций в графе приходится искать по хешу, и связь
+    # не находится, если у прежней записи хеш пуст или изменён.
+    ("documents", "previous_document_id", "VARCHAR DEFAULT ''"),
     ("documents", "original_text", "TEXT"),
     ("documents", "source_metadata", "TEXT"),
     # documents — права доступа (ACL)

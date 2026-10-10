@@ -293,9 +293,11 @@ class KnowledgeGraphService:
                 file_hash = str(rec.get("file_hash") or "")
                 version = int(rec.get("version") or 1)
                 previous_hash = str(rec.get("previous_hash") or "")
-                # Идентификатор прежней версии ищем в реестре по её хешу: у узлов графа,
-                # построенных ДО этой правки, поля file_hash нет, и связь по хешу не находится.
-                if previous_hash:
+                # Идентификатор прежней редакции: сначала берём готовое поле записи (его пишет
+                # загрузка, где прежняя редакция уже найдена по хешу), и только если его нет —
+                # пробуем найти по хешу. Так связь не теряется из-за пустого/изменённого хеша.
+                previous_doc_id = str(rec.get("previous_document_id") or "")
+                if not previous_doc_id and previous_hash:
                     _prev = _repo.find_by_hash(previous_hash)
                     previous_doc_id = str(getattr(_prev, "id", "") or "")
             except Exception:

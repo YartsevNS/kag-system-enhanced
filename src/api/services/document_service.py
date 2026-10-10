@@ -57,6 +57,7 @@ class DocumentRecord(BaseModel):
     file_hash: Optional[str] = Field(default=None, description="SHA-256 хеш содержимого файла")
     version: int = Field(default=1, description="Версия документа (1 = оригинал)")
     previous_hash: Optional[str] = Field(default=None, description="Хеш предыдущей версии (если была замена)")
+    previous_document_id: Optional[str] = Field(default=None, description="Идентификатор прежней редакции документа")
     original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
     source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
     # Права доступа (ACL)
@@ -314,6 +315,7 @@ class DocumentService:
         doc_id = str(uuid.uuid4())
         version = 1
         previous_hash = None
+        previous_document_id = None
         original_text = None
         upload_id = upload_id or doc_id  # Если upload_id не передан, используем document_id
 
@@ -331,6 +333,9 @@ class DocumentService:
                         logger.warning(f"[{upload_id}] Не удалось создать бэкап: {e}")
                 version = prev.version + 1
                 previous_hash = prev.file_hash
+                # Идентификатор прежней редакции запоминаем сразу: при построении графа
+                # он уже не ищется (поиск по хешу не всегда находит прежнюю запись).
+                previous_document_id = getattr(prev, "id", "") or getattr(prev, "document_id", "")
                 original_text = prev.original_text or self._load_original_text(prev.document_id)
 
         # ========== Этап 4: определяем тип файла по расширению, если не передан ==========
@@ -355,6 +360,7 @@ class DocumentService:
             file_hash=file_hash,
             version=version,
             previous_hash=previous_hash,
+            previous_document_id=previous_document_id,
             original_text=original_text,
             status="pending",
             uploaded_by=uploaded_by,

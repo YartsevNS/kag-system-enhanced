@@ -52,6 +52,8 @@ class Document(Base):
     schema_version = Column(String, default="")
     # Версионность и контекст
     previous_hash = Column(String, default="")
+    # Прежняя редакция документа (идентификатор): нужен для связи редакций в графе
+    previous_document_id = Column(String, default="")
     original_text = Column(Text, default=None)
     source_metadata = Column(Text, default=None)  # JSON dict
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
