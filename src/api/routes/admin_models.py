@@ -2280,10 +2280,30 @@ async def fix_document_classification(payload: DocumentClassificationFix):
                 }
             changes["rubrics"] = _json.dumps(document_topics.normalize(raw), ensure_ascii=False)
         if "facets" in data and data["facets"] is not None:
-            changes["facets"] = _json.dumps(data["facets"], ensure_ascii=False)
+            # Фасеты — по ЗАКРЫТЫМ перечням: незнакомый фасет или значение не пишем, а говорим
+            # об этом (та же логика, что с видами и темами: молчаливое отбрасывание прячет ошибку).
+            from src.indexing import document_facets
+
+            raw = data["facets"] if isinstance(data["facets"], dict) else {}
+            bad = []
+            for f, v in raw.items():
+                if not document_facets.is_valid_facet(f):
+                    bad.append(f"{f} (нет такого фасета)")
+                    continue
+                for item in (v if isinstance(v, (list, tuple)) else [v]):
+                    item = str(item or "").strip().lower()
+                    if item and not document_facets.is_valid_value(f, item):
+                        bad.append(f"{f}={item}")
+            if bad:
+                return {
+                    "status": "error",
+                    "message": (f"фасеты вне закрытых перечней: {bad}; допустимо: "
+                                + document_facets.vocabulary_line()),
+                }
+            changes["facets"] = _json.dumps(document_facets.normalize(raw), ensure_ascii=False)
         if not changes:
             return {"status": "error", "message": "нечего менять"}
-        if "document_type" in changes or "rubrics" in changes:
+        if "document_type" in changes or "rubrics" in changes or "facets" in changes:
             # Версия СЛОВАРЯ, которым размечен документ (а не пометка «правил человек»: автор
             # правки и её причина и так в журнале действий). По этой версии видно, что
             # переразмечать при следующей смене словаря. Вид и темы — обе оси из словарей кодов.

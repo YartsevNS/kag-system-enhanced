@@ -34,13 +34,17 @@ async def document_kinds(
     """
     from src.indexing import document_kinds as kinds
     from src.indexing import document_topics as topics
+    from src.indexing import document_facets as facets
 
     return {
         "version": kinds.VOCABULARY_VERSION,
         "topics_version": topics.TOPICS_VERSION,
+        "facets_version": facets.FACETS_VERSION,
         "groups": kinds.GROUPS,
         "kinds": kinds.as_list(),
         # Темы (рубрики) — вторая ось: «о чём документ». Отдаём тем же роутом, чтобы страницы
         # не держали своих списков ни по видам, ни по темам.
         "rubrics": topics.as_list(),
+        # Фасеты — третья ось: закрытые перечни значений (предмет защиты, нормативная сила).
+        "facets": facets.as_list(),
     }

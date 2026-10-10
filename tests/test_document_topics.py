@@ -127,7 +127,9 @@ def test_колонка_добавлена_миграцией():
 
 def test_rubrics_уходят_в_payload_qdrant():
     src = (ROOT / "src/api/services/document_service.py").read_text(encoding="utf-8")
-    assert '"rubrics": getattr(record' in src, "тема обязана попадать в payload (витрины, выгрузки)"
+    # Тема в payload — настоящим списком (не JSON-строкой): фильтр по строке не работает,
+    # а ручная правка кладёт туда именно список.
+    assert '"rubrics": _as_payload_json' in src, "тема обязана попадать в payload (витрины, выгрузки)"
     assert '"topics", "rubrics", "document_type"' in src, \
         "rubrics обязан быть в списке полей, которые не затираются пустыми значениями"
 

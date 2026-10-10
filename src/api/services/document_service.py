@@ -89,6 +89,26 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _as_payload_json(value: Any, fallback: Any) -> Any:
+    """Поле-строка с JSON (topics/facets/rubrics) → настоящее значение для payload Qdrant.
+
+    В базе эти поля лежат JSON-строками (колонки TEXT), а в payload им место объектами:
+    фильтр по списку не работает, если в payload лежит строка '["a"]', а ручная правка разметки
+    пишет туда именно список — то есть без приведения одно и то же поле имело бы два разных типа
+    в зависимости от того, кто его записал.
+    """
+    if isinstance(value, (list, dict)):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    try:
+        parsed = json.loads(text)
+    except Exception:  # noqa: BLE001 — мусор в поле не должен ломать векторизацию
+        return fallback
+    return parsed if isinstance(parsed, type(fallback)) else fallback
+
+
 class DocumentService:
     """
     Сервис обработки документов.
@@ -1055,11 +1075,14 @@ class DocumentService:
                     # Их видно в payload, значит по ним можно фильтровать поиск, а не выводить
                     # на лету моделью.
                     "issuer": getattr(record, 'issuer', '') or "",
-                    "facets": getattr(record, 'facets', '') or "{}",
-                    "topics": getattr(record, 'topics', '') or "[]",
+                    # Список и объект в payload пишем НАСТОЯЩИМИ (не строками): иначе фильтр по
+                    # значению не сработает, а ручная правка кладёт сюда объект — тип поля не
+                    # должен зависеть от того, кто его записал.
+                    "facets": _as_payload_json(getattr(record, 'facets', None), {}),
+                    "topics": _as_payload_json(getattr(record, 'topics', None), []),
                     # Темы (рубрики) словаря v0 — многозначный список кодов. Мягкий признак:
                     # в payload он есть (витрины, выгрузки), но фильтровать поиск по нему нельзя.
-                    "rubrics": getattr(record, 'rubrics', '') or "[]",
+                    "rubrics": _as_payload_json(getattr(record, 'rubrics', None), []),
                     "schema_version": getattr(record, 'schema_version', '') or "",
                     # Права доступа (ACL): наследуются чанками
                     "visibility": getattr(record, 'visibility', 'public') or 'public',

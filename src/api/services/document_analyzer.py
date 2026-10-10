@@ -69,15 +69,18 @@ class DocumentAnalyzer:
 
         from src.indexing.document_kinds import vocabulary_line
         from src.indexing.document_topics import vocabulary_line as rubrics_line
+        from src.indexing.document_facets import vocabulary_line as facets_line
         type_labels = vocabulary_line()
         rubric_labels = rubrics_line()
+        facet_labels = facets_line()
         system_prompt = (cfgs[0].get("system_prompt") or "").replace("{type_labels}", type_labels)
-        # Админский промпт может подставлять и список тем: без этой подстановки модель видит
+        # Админский промпт может подставлять и списки словарей: без подстановки модель видит
         # плейсхолдер как текст и отвечает темами «из головы».
         system_prompt = system_prompt.replace("{rubric_labels}", rubric_labels)
+        system_prompt = system_prompt.replace("{facet_labels}", facet_labels)
         if not system_prompt:
             system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
-        prompt = self._build_prompt(first_chunk_text, filename, type_labels, rubric_labels)
+        prompt = self._build_prompt(first_chunk_text, filename, type_labels, rubric_labels, facet_labels)
 
         last_error = ""
         # (конфиг, попытка): основной дважды, затем резервный дважды — если резерв задан
@@ -167,7 +170,7 @@ class DocumentAnalyzer:
         logger.warning(f"Анализ {document_id}: результат не получен ({last_error})")
         return {}
     def _build_prompt(self, text: str, filename: str, type_labels: str = "",
-                      rubric_labels: str = "") -> str:
+                      rubric_labels: str = "", facet_labels: str = "") -> str:
         """Строит промпт для LLM."""
         # Берём первые ~2000 символов
         sample = text[:2000]
@@ -179,6 +182,11 @@ class DocumentAnalyzer:
             # по нему обязаны совпадать, иначе модель пишет тему, которой нет в фильтрах.
             from src.indexing.document_topics import vocabulary_line as rubrics_line
             rubric_labels = rubrics_line()
+        if not facet_labels:
+            # Фасеты — из своего словаря (document_facets): значения ЗАКРЫТЫЕ, ответ проверяется
+            # по перечню, лишнее отбрасывается (как с типами связей в графе).
+            from src.indexing.document_facets import vocabulary_line as facets_line
+            facet_labels = facets_line()
 
         return f"""Проанализируй начало документа и верни JSON с метаданными.
 
@@ -190,13 +198,17 @@ class DocumentAnalyzer:
 ---
 
 Верни ТОЛЬКО валидный JSON (без markdown, без ```), строго такой формат:
-{{"title": "краткое название документа", "type": "тип", "rubrics": ["тема"], "summary": "одно предложение о чём документ", "topics": ["тема1", "тема2"]}}
+{{"title": "краткое название документа", "type": "тип", "rubrics": ["тема"], "facets": {{"protection_subject": ["data"], "normative_force": "mandatory"}}, "summary": "одно предложение о чём документ", "topics": ["тема1", "тема2"]}}
 
 Тип выбери из: {type_labels}.
 Если непонятно — поставь "other".
 
 Темы (rubrics) выбери из: {rubric_labels}.
 Тем может быть НЕСКОЛЬКО (это список) или ни одной — тогда пустой список.
+
+Фасеты (facets) — только из ЗАКРЫТЫХ перечней, значение не из перечня писать нельзя: {facet_labels}.
+У фасета protection_subject значений может быть несколько (список), у normative_force — одно.
+Если фасет неприменим — не указывай его вовсе (пустой объект {{}} тоже допустим).
 Пиши на русском."""
 
     @staticmethod
@@ -252,6 +264,13 @@ class DocumentAnalyzer:
         rubrics = _topics.normalize(data.get("rubrics"))
         if rubrics:
             result["rubrics"] = rubrics
+        # Фасеты — по ЗАКРЫТЫМ перечням своего словаря (document_facets): значение вне перечня
+        # отбрасывается, многозначность у protection_subject сохраняется.
+        from src.indexing import document_facets as _facets
+
+        facets = _facets.normalize(data.get("facets"))
+        if facets:
+            result["facets"] = facets
         if data.get("summary"):
             result["summary"] = str(data["summary"])[:500]
         if isinstance(data.get("topics"), list):
@@ -281,6 +300,8 @@ class DocumentAnalyzer:
                     doc_data["topics"] = result["topics"]
                 if "rubrics" in result:
                     doc_data["rubrics"] = result["rubrics"]
+                if "facets" in result:
+                    doc_data["facets"] = result["facets"]
                 
                 get_doc_repo().upsert(document_id, doc_data)
                 logger.info(f"Метаданные обновлены для {document_id}: {result.get('document_type', '?')} — {result.get('recognized_title', '?')}")
@@ -300,6 +321,8 @@ class DocumentAnalyzer:
                     payload_update["topics"] = result["topics"]
                 if "rubrics" in result:
                     payload_update["rubrics"] = result["rubrics"]
+                if "facets" in result:
+                    payload_update["facets"] = result["facets"]
                 if payload_update:
                     _n = await service_for_document(document_id).update_document_payload(document_id, payload_update)
                     logger.info(f"Qdrant payload обновлён для {document_id}: точек {_n}")

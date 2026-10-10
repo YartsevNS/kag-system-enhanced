@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from src.database.document_models import Document, Base
 
 # Поля, хранящиеся в SQL как JSON-строка.
-_JSON_FIELDS = {"group_ids", "topics", "rubrics", "source_metadata",
+_JSON_FIELDS = {"group_ids", "topics", "rubrics", "facets", "source_metadata",
                 # ACL-поля — JSON-списки id (иначе psycopg2 пишет PG array {..})
                 "allow_group_ids", "deny_group_ids",
                 "allow_user_ids", "deny_user_ids"}

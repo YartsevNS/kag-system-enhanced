@@ -1136,6 +1136,9 @@ async def list_documents(
             # Темы (рубрики) словаря v0 — многозначный список кодов. Нужны странице для фильтра
             # «о чём документ»: по кодам он строится, по свободным topics — нет.
             "rubrics": meta.get("rubrics", []),
+            # Фасеты — закрытые перечни значений (предмет защиты, нормативная сила). Нужны
+            # странице для фильтра «на что направлен документ».
+            "facets": meta.get("facets", {}),
             "recognized_title": meta.get("recognized_title", ""),
             "summary": meta.get("summary", ""),
             "topics": meta.get("topics", []),
