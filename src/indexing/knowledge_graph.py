@@ -664,6 +664,12 @@ class KnowledgeGraphService:
                                 rel.chunk_id = coalesce(rel.chunk_id, r.chunk_id),
                                 rel.schema_version = r.schema_version,
                                 rel.extractor_version = r.extractor_version,
+                                // Слой происхождения: заполняем, если его ещё нет. Для связей,
+                                // созданных до введения происхождения, это дозаполнение; для новых
+                                // пишется сразу ('model' от модели, 'regex' от правил). Без этой
+                                // строки свойство оставалось пустым у всех прежних связей — Palantir-
+                                // принцип «у факта всегда есть происхождение» не выполнялся.
+                                rel.layer = coalesce(rel.layer, r.layer),
                                 rel.created_at = coalesce(rel.created_at, datetime())
                             """,
                             batch=_b,
