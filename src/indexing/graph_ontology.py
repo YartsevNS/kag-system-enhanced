@@ -115,16 +115,22 @@ _SYNONYMS: dict[str, str] = {
     "требует": "REQUIRES", "устанавливает": "REQUIRES", "устанавливает требование": "REQUIRES",
     "распространяется на": "APPLIES_TO", "применяется к": "APPLIES_TO", "действует на": "APPLIES_TO",
     "входит в состав": "PART_OF", "является частью": "PART_OF", "часть": "PART_OF",
-    "включает": "PART_OF", "содержит": "PART_OF", "принадлежит": "PART_OF",
+    "включает": "PART_OF", "содержит": "PART_OF",
     "определяет": "DEFINES", "определение": "DEFINES", "термин": "DEFINES",
+    # ВНИМАНИЕ: «принадлежит» (BELONGS_TO) раньше раскладывалось в PART_OF и тем самым выдавало
+    # догадку за факт. Замер судьёй 10.10.2026: из 12 таких связей судья согласился с типом лишь
+    # в части случаев, а чаще относил их к RELATED_TO, APPLIES_TO и DEFINES. Пока тип не определён
+    # честно оставляем RELATED_TO, а точный тип назначается отдельным проходом (JEV по вероятностям).
     # английские и кодовые варианты
     "SIGNED": "SIGNED_BY", "SIGNER": "SIGNED_BY", "ISSUER": "ISSUED_BY", "ISSUED": "ISSUED_BY",
     "DATE": "DATED", "AMOUNT_OF": "AMOUNT", "LOCATION": "LOCATED_AT", "LOCATED": "LOCATED_AT",
     "REPLACES": "SUPERSEDES", "SUPERSEDED": "SUPERSEDES", "AMEND": "AMENDS", "MODIFIES": "AMENDS",
     "REFERS_TO": "REFERENCES", "REFERENCE": "REFERENCES", "HAS_PARAGRAPH": "HAS_CLAUSE",
     "CLAUSE": "HAS_CLAUSE", "REQUIREMENT": "REQUIRES", "REQUIRES_COMPLIANCE": "REQUIRES",
-    "APPLIES": "APPLIES_TO", "BELONGS_TO": "PART_OF", "PART": "PART_OF", "INCLUDES": "PART_OF",
-    "DEFINES_TERM": "DEFINES", "TERM": "DEFINES", "BELONGS": "PART_OF",
+    "APPLIES": "APPLIES_TO", "PART": "PART_OF", "INCLUDES": "PART_OF",
+    "DEFINES_TERM": "DEFINES", "TERM": "DEFINES",
+    "BELONGS_TO": "RELATED_TO", "BELONGS": "RELATED_TO",
+    "входит": "PART_OF", "относится": "RELATED_TO",
 }
 
 
