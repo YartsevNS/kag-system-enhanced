@@ -22,9 +22,17 @@ def test_номера_стандартов_становятся_standard(name):
 
 
 @pytest.mark.parametrize("name", ["А.1.1", "5.2.1", "4.4", "п. 4.4", "раздел 6", "таблица 3",
-                                  "приложение А", "ст. 5"])
+                                  "приложение А", "ст. 5",
+                                  # английские формы: в корпусе есть выгрузки SEC
+                                  "Section 6.7", "Article 5", "Clause 3.2", "Item 601(b)"])
 def test_ссылки_на_пункты_становятся_clause(name):
     assert refine_type(name, "document_ref") == "clause"
+
+
+@pytest.mark.parametrize("name", ["Exhibit 10.39", "Exhibit 99.1", "Appendix B"])
+def test_приложения_становятся_документом(name):
+    """«Exhibit 10.39» — это документ (приложение к отчётности), а не пункт."""
+    assert refine_type(name, "legal_term") == "document_ref"
 
 
 @pytest.mark.parametrize("name", ["152-ФЗ", "44-ФЗ", "Приказ ФСТЭК России № 17",

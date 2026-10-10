@@ -47,6 +47,11 @@ def _disable_json_mode(reason: str) -> None:
         logger.warning(f"[graph] структурный вывод отключён на процесс: {reason}")
 
 
+# Типы, которые модель прямо просили не использовать. Если она всё равно их пишет, связь
+# ВЫБРАСЫВАЕМ, а не переводим в «связано с»: нарушение прямого указания = ненадёжный факт.
+BANNED_TYPES = {"BELONGS_TO"}
+
+
 def llm_timeout() -> float:
     """Таймаут одного обращения к модели, секунды. Настраивается GRAPH_LLM_TIMEOUT."""
     import os
@@ -1078,6 +1083,14 @@ JSON:
             rel_objs = []
             _rejected: list[tuple] = []
             for r in relations:
+                # Запрещённые типы НЕ переводим в «связано с», а выбрасываем: если модель нарушила
+                # прямое указание задания, факт ненадёжен. Живой замер 10.10.2026: 18 связей из 281
+                # всё ещё приходили с запрещённым BELONGS_TO и засоряли выдачу как RELATED_TO.
+                _raw = str(r.get("type") or "").strip().upper()
+                if _raw in BANNED_TYPES:
+                    _rejected.append((r.get("source"), _raw, r.get("target"),
+                                      "запрещённый тип — связь не пишем"))
+                    continue
                 src_t = _types.get(str(r.get("source") or "").strip().lower(), "")
                 dst_t = _types.get(str(r.get("target") or "").strip().lower(), "")
                 code = normalize_relation(r.get("type") or "")
