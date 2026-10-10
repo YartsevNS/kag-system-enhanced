@@ -43,7 +43,12 @@ def main() -> int:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", default="/app/data/labels_docs_v0.jsonl")
-    ap.add_argument("--min-confidence", type=float, default=0.8)
+    ap.add_argument("--min-confidence", type=float, default=0.6,
+                    help="порог для ОСНОВНОЙ темы (argmax вероятностей)")
+    ap.add_argument("--extra-prob", type=float, default=0.4,
+                    help="порог для ДОПОЛНИТЕЛЬНЫХ тем: тема многозначная, берём все выше порога")
+    ap.add_argument("--review-band", type=float, default=0.3,
+                    help="нижняя граница «на ревью»: ниже — не трогаем")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
 
@@ -67,7 +72,7 @@ def main() -> int:
     print(f"строк после свёртки дублей: {len(rows)}")
 
     docs = get_doc_repo().get_all()
-    to_write, review, skipped = [], [], 0
+    to_write, review, skipped, unchanged = [], [], 0, 0
     for r in rows:
         if not r.get("ok"):
             continue
@@ -85,38 +90,117 @@ def main() -> int:
                 return None, 0.0
             return str(choice), float(conf)
 
+        def profile(qname) -> dict:
+            """Профиль вероятностей по критериям: JEV отдаёт его В ТОМ ЖЕ ответе choice.
+
+            Благодаря этому тему можно брать МНОГОЗНАЧНОЙ без дополнительных вызовов: темы с
+            вероятностью выше порога — в список, основная (argmax) — как главная.
+            """
+            aq = a.get(qname) or {}
+            probs = aq.get("probabilities")
+            if not isinstance(probs, dict):
+                return {}
+            out = {}
+            for k, v in probs.items():
+                try:
+                    out[str(k)] = float(v)
+                except (TypeError, ValueError):
+                    continue
+            return out
+
         rubrics, facets, notes = [], {}, []
-        r_code, r_conf = pick("тема")
-        if r_code and dt.is_valid(r_code):
-            if r_conf >= args.min_confidence:
-                rubrics = [r_code]
-                notes.append(f"тема {r_code} ({r_conf:.2f})")
-            else:
-                review.append({"document_id": did, "field": "rubrics", "value": r_code,
-                               "confidence": r_conf, "title": r.get("title")})
-        ps, ps_conf = pick("предмет_защиты")
-        nf, nf_conf = pick("нормативность")
-        if ps and df.is_valid_value("protection_subject", ps) and ps_conf >= args.min_confidence:
-            facets["protection_subject"] = [ps]
-            notes.append(f"предмет защиты {ps} ({ps_conf:.2f})")
-        elif ps:
-            review.append({"document_id": did, "field": "protection_subject", "value": ps,
-                           "confidence": ps_conf, "title": r.get("title")})
-        if nf and df.is_valid_value("normative_force", nf) and nf_conf >= args.min_confidence:
-            facets["normative_force"] = [nf]
-            notes.append(f"нормативность {nf} ({nf_conf:.2f})")
-        elif nf:
-            review.append({"document_id": did, "field": "normative_force", "value": nf,
-                           "confidence": nf_conf, "title": r.get("title")})
+        tema_probs = profile("тема")
+        if tema_probs:
+            # Основная тема — самая вероятная; дополнительные — все, что выше порога (многозначность).
+            ranked = sorted(tema_probs.items(), key=lambda kv: -kv[1])
+            main_code, main_p = ranked[0]
+            second_p = ranked[1][1] if len(ranked) > 1 else 0.0
+            # БЛИЗКАЯ ПАРА — это и есть мультитема: если две темы обе выше порога дополнительных и
+            # отрыв маленький, документ действительно про обе (пример из замера: статистика ЦБ —
+            # «банковское регулирование» 0,59 и «экономика» 0,41). Требовать от основной 0,6 в таком
+            # случае неверно: получалось «на ревью» там, где модель уверенно назвала ДВЕ темы.
+            near_tie = (second_p >= args.extra_prob and (main_p - second_p) <= 0.2)
+            if dt.is_valid(main_code) and (main_p >= args.min_confidence or near_tie):
+                rubrics = [main_code]
+                extras = [c for c, p in ranked
+                          if c != main_code and dt.is_valid(c) and p >= args.extra_prob]
+                rubrics += extras[:2]      # не больше трёх тем на документ
+                notes.append(f"тема {main_code} ({main_p:.2f})" +
+                             (f"; ещё {', '.join(f'{c} {tema_probs[c]:.2f}' for c in extras[:2])}"
+                              if extras else ""))
+            elif main_p >= args.review_band:
+                review.append({"document_id": did, "field": "rubrics", "value": main_code,
+                               "confidence": main_p, "title": r.get("title")})
+        else:
+            r_code, r_conf = pick("тема")
+            if r_code and dt.is_valid(r_code):
+                if r_conf >= args.min_confidence:
+                    rubrics = [r_code]
+                    notes.append(f"тема {r_code} ({r_conf:.2f})")
+                else:
+                    review.append({"document_id": did, "field": "rubrics", "value": r_code,
+                                   "confidence": r_conf, "title": r.get("title")})
+
+        ps_probs = profile("предмет_защиты")
+        if ps_probs:
+            vals = [c for c, p in sorted(ps_probs.items(), key=lambda kv: -kv[1])
+                    if df.is_valid_value("protection_subject", c) and p >= args.extra_prob]
+            if vals:
+                facets["protection_subject"] = vals[:3]
+                notes.append("предмет защиты " + ", ".join(f"{v} {ps_probs[v]:.2f}" for v in vals[:3]))
+            elif max(ps_probs.values() or [0]) >= args.review_band:
+                top = max(ps_probs.items(), key=lambda kv: kv[1])
+                review.append({"document_id": did, "field": "protection_subject", "value": top[0],
+                               "confidence": top[1], "title": r.get("title")})
+        else:
+            ps, ps_conf = pick("предмет_защиты")
+            if ps and df.is_valid_value("protection_subject", ps) and ps_conf >= args.min_confidence:
+                facets["protection_subject"] = [ps]
+                notes.append(f"предмет защиты {ps} ({ps_conf:.2f})")
+            elif ps:
+                review.append({"document_id": did, "field": "protection_subject", "value": ps,
+                               "confidence": ps_conf, "title": r.get("title")})
+
+        nf_probs = profile("нормативность")
+        if nf_probs:
+            top_v, top_p = max(nf_probs.items(), key=lambda kv: kv[1])
+            if df.is_valid_value("normative_force", top_v) and top_p >= args.min_confidence:
+                facets["normative_force"] = [top_v]
+                notes.append(f"нормативность {top_v} ({top_p:.2f})")
+            elif top_p >= args.review_band:
+                review.append({"document_id": did, "field": "normative_force", "value": top_v,
+                               "confidence": top_p, "title": r.get("title")})
+        else:
+            nf, nf_conf = pick("нормативность")
+            if nf and df.is_valid_value("normative_force", nf) and nf_conf >= args.min_confidence:
+                facets["normative_force"] = [nf]
+                notes.append(f"нормативность {nf} ({nf_conf:.2f})")
+            elif nf:
+                review.append({"document_id": did, "field": "normative_force", "value": nf,
+                               "confidence": nf_conf, "title": r.get("title")})
 
         if not rubrics and not facets:
+            continue
+        # Идемпотентность: если в базе уже ровно то, что мы собираемся записать, — не трогаем
+        # документ (иначе повторный прогон плодит одинаковые записи в журнале действий).
+        cur_rubrics = dt.normalize(d.get("rubrics"))
+        cur_facets = d.get("facets")
+        if isinstance(cur_facets, str):
+            try:
+                cur_facets = json.loads(cur_facets) if cur_facets else {}
+            except Exception:  # noqa: BLE001
+                cur_facets = {}
+        cur_facets = df.normalize(cur_facets)
+        want_facets = df.normalize(facets)
+        if rubrics and rubrics == cur_rubrics and (not want_facets or want_facets == cur_facets):
+            unchanged += 1
             continue
         to_write.append({"document_id": did, "rubrics": rubrics, "facets": facets,
                          "note": "разметка моделью (JEV, уровень документа): " + "; ".join(notes),
                          "before": {"rubrics": d.get("rubrics"), "facets": d.get("facets")}})
 
-    print(f"строк разметки: {len(rows)}; к записи: {len(to_write)}; на ревью: {len(review)}; "
-          f"нет в реестре: {skipped}")
+    print(f"строк разметки: {len(rows)}; к записи: {len(to_write)}; без изменений: {unchanged}; "
+          f"на ревью: {len(review)}; нет в реестре: {skipped}")
     for w in to_write[:5]:
         print(f"   {w['document_id'][:12]} {w['note'][:90]}")
     with open(REPORT, "w", encoding="utf-8") as f:
