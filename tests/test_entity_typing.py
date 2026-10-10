@@ -29,10 +29,19 @@ def test_ссылки_на_пункты_становятся_clause(name):
     assert refine_type(name, "document_ref") == "clause"
 
 
-@pytest.mark.parametrize("name", ["Exhibit 10.39", "Exhibit 99.1", "Appendix B"])
+@pytest.mark.parametrize("name", ["Exhibit 10.39", "Exhibit 99.1", "Annex 1"])
 def test_приложения_становятся_документом(name):
-    """«Exhibit 10.39» — это документ (приложение к отчётности), а не пункт."""
+    """«Exhibit 10.39» — отдельный документ в приложении, а не пункт.
+
+    «Appendix B» сюда НЕ входит: это часть документа (как раздел), и он относится к пунктам —
+    иначе два правила противоречили бы друг другу.
+    """
     assert refine_type(name, "legal_term") == "document_ref"
+
+
+def test_appendix_это_часть_документа_а_не_документ():
+    assert refine_type("Appendix B", "legal_term") == "clause"
+    assert refine_type("приложение А", "legal_term") == "clause"
 
 
 @pytest.mark.parametrize("name", ["152-ФЗ", "44-ФЗ", "Приказ ФСТЭК России № 17",
