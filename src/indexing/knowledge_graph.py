@@ -645,11 +645,17 @@ class KnowledgeGraphService:
                 if rec:
                     result["merged"] = rec["merged"]
 
-                # 2. Создание связей между сущностями одного документа
+                # 2. Связи между сущностями — ТОЛЬКО внутри одного фрагмента.
+                # Было: полный граф пар по всему ДОКУМЕНТУ (любая сущность с любой), то есть рост
+                # как квадрат числа сущностей документа: на 279 документах это 125 607 связей,
+                # из них ~74% — «связано с», при том что «эти сущности в одном документе» и так
+                # выражено путём Document-HAS_CHUNK->Chunk-MENTIONS->Entity (замер 09.10.2026).
+                # Стало: пара связывается, только если её сущности упомянуты в ОДНОМ фрагменте —
+                # сигнал «рядом по тексту» сохраняется, а объём растёт линейно по фрагменту.
                 if document_id:
                     link_result = session.run("""
                         MATCH (d:Document {id: $doc_id})-[:HAS_CHUNK]->(c:Chunk)-[:MENTIONS]->(e1:Entity)
-                        MATCH (d)-[:HAS_CHUNK]->(:Chunk)-[:MENTIONS]->(e2:Entity)
+                        MATCH (c)-[:MENTIONS]->(e2:Entity)
                         WHERE id(e1) < id(e2) AND e1.type <> e2.type
                         MERGE (e1)-[:RELATED_TO {doc_id: $doc_id}]->(e2)
                         RETURN count(*) as linked
