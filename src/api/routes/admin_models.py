@@ -2248,14 +2248,35 @@ async def fix_document_classification(payload: DocumentClassificationFix):
         changes: dict = {}
         for field in ("document_type", "domain", "issuer"):
             if field in data and data[field] is not None:
-                changes[field] = str(data[field])[:120]
+                val = str(data[field])[:120]
+                if field == "document_type" and val:
+                    # Вид проверяем по ЕДИНОМУ словарю: код вне словаря не пишем, иначе в базе
+                    # появится значение, которого не знают ни фильтры, ни подписи, ни анализатор.
+                    from src.indexing import document_kinds
+
+                    if not document_kinds.is_valid(val):
+                        return {
+                            "status": "error",
+                            "message": (f"вид «{val}» отсутствует в словаре "
+                                        f"{document_kinds.VOCABULARY_VERSION}; допустимые: "
+                                        + document_kinds.vocabulary_line()),
+                        }
+                changes[field] = val
         if "topics" in data and data["topics"] is not None:
             changes["topics"] = _json.dumps(data["topics"], ensure_ascii=False)
         if "facets" in data and data["facets"] is not None:
             changes["facets"] = _json.dumps(data["facets"], ensure_ascii=False)
         if not changes:
             return {"status": "error", "message": "нечего менять"}
-        changes["schema_version"] = "manual"
+        if "document_type" in changes:
+            # Версия СЛОВАРЯ, которым размечен документ (а не пометка «правил человек»: автор
+            # правки и её причина и так в журнале действий). По этой версии видно, что
+            # переразмечать при следующей смене словаря.
+            from src.indexing import document_kinds
+
+            changes["schema_version"] = document_kinds.VOCABULARY_VERSION
+        else:
+            changes["schema_version"] = "manual"
 
         repo.upsert(doc_id, changes)
         # payload в Qdrant — иначе фильтры поиска не увидят правку
@@ -2460,7 +2481,6 @@ async def storage_raw():
     # поэтому встраивается в нашу страницу), иначе — обычный путь к дашборду.
     grafana_url = "/grafana/d/kag-storage/"
     try:
-        from src.api.services.config_store import config_store
         mon = config_store.get("system", "monitoring") or {}
         token = str((mon or {}).get("grafana_public_token") or "").strip()
         if token:
@@ -2505,8 +2525,6 @@ async def enable_public_dashboard(uid: str = "kag-storage"):
     """
     import urllib.error
     import urllib.request
-
-    from src.api.services.config_store import config_store
 
     base = os.environ.get("GRAFANA_URL", "http://kag-grafana:3000").rstrip("/")
     password = os.environ.get("GRAFANA_ADMIN_PASSWORD", "")
@@ -2690,9 +2708,32 @@ async def save_neo4j_config(payload: Neo4jConfigUpdate):
 
 @router.get("/doc-types", summary="Получить список типов документов")
 async def get_doc_types():
+    """Список видов для интерфейса: ЕДИНЫЙ словарь (document_kinds) + типы, добавленные админом.
+
+    Словарь идёт первым и не вытесняется админским списком: иначе редактор типа в просмотрщике
+    показывал бы чужой набор (на стенде в списке лежали «гость» и «перечень» — мусор старого
+    авто-пополнения). Дополнительные типы админа сохраняются и идут следом.
+    """
     try:
+        from src.indexing.document_kinds import KINDS
+
+        types = [
+            {"key": code, "label": (meta.get("short") or code), "title": meta.get("title", code),
+             "group": meta.get("group", ""), "builtin": True}
+            for code, meta in KINDS.items()
+        ]
+        seen = {t["key"] for t in types}
         type_list = config_store.get("kg_config", "doc_types") or {}
-        types = type_list.get("types", []) if isinstance(type_list, dict) else []
+        custom = type_list.get("types", []) if isinstance(type_list, dict) else []
+        for t in custom:
+            if isinstance(t, dict):
+                key = (t.get("key") or "").lower()
+                label = t.get("label") or key
+            else:
+                key, label = str(t).lower(), str(t)
+            if key and key not in seen:
+                seen.add(key)
+                types.append({"key": key, "label": label, "builtin": False})
         return {"types": types}
     except Exception as e:
         return {"types": [], "error": str(e)}

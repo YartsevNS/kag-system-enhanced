@@ -25,7 +25,10 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.indexing.parsers import document_parser
-from src.indexing.embeddings_service import embeddings_service, service_for_document
+from src.indexing import document_kinds
+from src.indexing.embeddings_service import (
+    embeddings_service, service_for_document, collection_for_source,
+)
 # Карточка документа: контекстуальный префикс эмбеддинга + точка level=document.
 from src.indexing.document_card import (
     build_card_prefix, build_card_source, card_from_record, upsert_card_point,
@@ -59,6 +62,9 @@ class DocumentRecord(BaseModel):
     previous_hash: Optional[str] = Field(default=None, description="Хеш предыдущей версии (если была замена)")
     previous_document_id: Optional[str] = Field(default=None, description="Идентификатор прежней редакции документа")
     original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
+    # Коллекция векторов: '' — основная, 'news' — новости монитора. Ставится по метаданным
+    # источника при загрузке; вид документа на маршрут не влияет.
+    collection: Optional[str] = Field(default=None, description="Коллекция векторов: '' | 'news'")
     source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
     # Права доступа (ACL)
     visibility: str = Field(default="public", description="public | restricted")
@@ -227,7 +233,7 @@ class DocumentService:
             # финальное сохранение конвейера затирало результат пустыми полями
             # (то же сбивало типизацию: document_type откатывался на "unknown").
             _fresh = repo.get_dict(document_id) or {}
-            for _k in ("recognized_title", "summary", "topics", "document_type", "source_metadata"):
+            for _k in ("recognized_title", "summary", "topics", "document_type", "source_metadata", "collection"):
                 if not data.get(_k) and _fresh.get(_k):
                     data[_k] = _fresh[_k]
             repo.upsert(document_id, data)
@@ -365,6 +371,9 @@ class DocumentService:
             status="pending",
             uploaded_by=uploaded_by,
             group_ids=group_ids or [],
+            # Маршрут коллекции ставится ЗДЕСЬ и один раз: по источнику (метаданные web_monitor),
+            # а не по виду документа. Дальше его читает service_for_document при записи и удалении.
+            collection=collection_for_source(source_metadata),
             source_metadata=source_metadata,
             visibility=(access or {}).get("visibility", "public") or "public",
             allow_group_ids=(access or {}).get("allow_group_ids") or [],
@@ -1548,16 +1557,9 @@ class DocumentService:
                     font_type = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
                 except Exception:
                     font_type = ImageFont.load_default()
-                # Карта русских названий типов
-                type_labels = {
-                    'invoice': 'Счёт', 'contract': 'Договор', 'report': 'Отчёт',
-                    'letter': 'Письмо', 'form': 'Форма', 'identity': 'Удостоверение',
-                    'medical': 'Медицинский', 'legal': 'Юридический', 'financial': 'Финансы',
-                    'technical': 'Технический', 'certificate': 'Сертификат',
-                    'order': 'Приказ', 'policy': 'Политика', 'standard': 'Стандарт',
-                    'news': 'Новость', 'other': 'Прочее',
-                }
-                label = type_labels.get(document_type, document_type)
+                # Подпись вида — из ЕДИНОГО словаря (document_kinds): короткая, для плашки
+                # на миниатюре. Раньше здесь был свой словарь подписей, расходившийся со страницами.
+                label = document_kinds.short(document_type)
                 # Прямоугольник с типом в правом верхнем углу
                 bbox = draw.textbbox((0, 0), label, font=font_type)
                 tw = bbox[2] - bbox[0] + 20

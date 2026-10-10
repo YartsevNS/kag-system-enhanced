@@ -105,22 +105,13 @@ class TypeWatchdog:
         else:
             known_types = []
         if not known_types:
+            # Список видов — из ЕДИНОГО словаря (src/indexing/document_kinds.py): раньше здесь
+            # лежал СВОЙ перечень, расходившийся и с анализатором, и с фильтрами страницы.
+            from src.indexing.document_kinds import KINDS
+
             known_types = [
-                {"key": "contract", "label": "Договор"},
-                {"key": "report", "label": "Отчёт"},
-                {"key": "invoice", "label": "Счёт"},
-                {"key": "letter", "label": "Письмо"},
-                {"key": "form", "label": "Форма"},
-                {"key": "certificate", "label": "Удостоверение"},
-                {"key": "legal", "label": "Юридический"},
-                {"key": "medical", "label": "Медицинский"},
-                {"key": "financial", "label": "Финансовый"},
-                {"key": "technical", "label": "Технический"},
-                {"key": "standard", "label": "Стандарт (ГОСТ)"},
-                {"key": "policy", "label": "Политика/Регламент"},
-                {"key": "order", "label": "Приказ"},
-                {"key": "news", "label": "Новость"},
-                {"key": "other", "label": "Прочее"},
+                {"key": code, "label": (meta.get("short") or code)}
+                for code, meta in KINDS.items()
             ]
             config_store.set("kg_config", "doc_types", {"types": known_types})
 

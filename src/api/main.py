@@ -12,7 +12,7 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks
+from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks, meta
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
@@ -254,6 +254,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 app.include_router(chunks.router, prefix="/api/v1", tags=["chunks"])
+app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
 app.include_router(system_state.router, tags=["system"])
 
 

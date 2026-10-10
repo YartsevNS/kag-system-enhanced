@@ -13,6 +13,15 @@ MAIN = (ROOT / "src/api/main.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "src/api/routes/admin_models.py").read_text(encoding="utf-8")
 PAGE = (ROOT / "src/api/static/experiments.html").read_text(encoding="utf-8")
 BRANDING = (ROOT / "src/api/static/branding.js").read_text(encoding="utf-8")
+# Навигация переехала из branding.js в отдельный модуль сайта: один список пунктов на все
+# страницы (src/api/static/site-nav.js). Тест продолжал искать ссылку в branding.js и падал
+# на живом коде (нашёл 10.10.2026).
+NAV = (ROOT / "src/api/static/site-nav.js").read_text(encoding="utf-8")
+
+
+def test_branding_подключает_модуль_навигации():
+    """Проверка, что страницы не рисуют меню сами: пункты живут в site-nav.js."""
+    assert "site-nav.js" in PAGE or "site-nav.js" in BRANDING
 
 
 def test_page_route_is_admin_only():
@@ -45,7 +54,8 @@ def test_endpoints_store_data_in_config_store():
 
 
 def test_nav_link_visible_only_to_admin():
-    assert "/api/v1/auth/me" in BRANDING and "u.is_admin" in BRANDING, (
-        "ссылку добавляем только админу, проверяя /auth/me"
+    assert "/api/v1/auth/me" in NAV and "u.is_admin" in NAV, (
+        "админские пункты добавляем только админу, проверяя /auth/me"
     )
-    assert 'a.href = \'/experiments\'' in BRANDING
+    assert "['/experiments', 'Опыты и модели']" in NAV, "ссылка на «Опыты и модели» в навигации"
+    assert "role: 'admin'" in NAV, "пункт обязан быть в админской группе меню"

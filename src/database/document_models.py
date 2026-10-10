@@ -39,6 +39,11 @@ class Document(Base):
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=True)
     # Классификация (заполняется document_analyzer / type_watchdog)
     document_type = Column(String, default="")
+    # Коллекция векторов: '' — основная (kag_documents), 'news' — новости монитора (kag_news).
+    # Явный признак нужен потому, что раньше маршрут определялся по ВИДУ документа (type == 'news'),
+    # а вид — это разметка: при смене словаря маршрут молча менялся, и новости уезжали в общую
+    # коллекцию к ГОСТам. Маршрут — свойство ИСТОЧНИКА, а не вида (утверждено 10.10.2026).
+    collection = Column(String, default="")
     recognized_title = Column(String, default="")
     summary = Column(Text, default="")
     topics = Column(Text, default="[]")  # JSON list

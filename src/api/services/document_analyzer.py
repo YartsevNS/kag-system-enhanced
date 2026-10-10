@@ -67,8 +67,8 @@ class DocumentAnalyzer:
             logger.warning(f"[analyze] Функция 'doc_analysis' не настроена в админке — анализ пропущен для {document_id}")
             return {}
 
-        from src.indexing.auto_tagger import DocumentType
-        type_labels = ", ".join(t.value for t in DocumentType)
+        from src.indexing.document_kinds import vocabulary_line
+        type_labels = vocabulary_line()
         system_prompt = (cfgs[0].get("system_prompt") or "").replace("{type_labels}", type_labels)
         if not system_prompt:
             system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
@@ -166,8 +166,8 @@ class DocumentAnalyzer:
         # Берём первые ~2000 символов
         sample = text[:2000]
         if not type_labels:
-            from src.indexing.auto_tagger import DocumentType
-            type_labels = ", ".join(t.value for t in DocumentType)
+            from src.indexing.document_kinds import vocabulary_line
+            type_labels = vocabulary_line()
 
         return f"""Проанализируй начало документа и верни JSON с метаданными.
 
@@ -222,14 +222,14 @@ class DocumentAnalyzer:
         if not isinstance(data, dict):
             return {}
 
-        # Валидируем типы — полный список из DocumentType (auto_tagger)
-        from src.indexing.auto_tagger import DocumentType
-        valid_types = {t.value for t in DocumentType}
+        # Валидируем вид по ЕДИНОМУ словарю (document_kinds): код вне словаря не пишем —
+        # иначе в базе появляется значение, которого не знают ни фильтры, ни подписи.
+        from src.indexing.document_kinds import is_valid as is_valid_kind
 
         result = {}
         if data.get("title"):
             result["recognized_title"] = str(data["title"])[:200]
-        if data.get("type") in valid_types:
+        if is_valid_kind(data.get("type")):
             result["document_type"] = data["type"]
         if data.get("summary"):
             result["summary"] = str(data["summary"])[:500]

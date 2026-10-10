@@ -3,9 +3,9 @@ from src.api.services.document_analyzer import document_analyzer as a
 
 
 def test_чистый_json():
-    res = a._parse_response('{"title": "ГОСТ Р 1", "type": "standard", "summary": "о чём", "topics": ["тема"]}', "f.pdf")
+    res = a._parse_response('{"title": "ГОСТ Р 1", "type": "national_standard", "summary": "о чём", "topics": ["тема"]}', "f.pdf")
     assert res["recognized_title"] == "ГОСТ Р 1"
-    assert res["document_type"] == "standard"
+    assert res["document_type"] == "national_standard"
     assert res["topics"] == ["тема"]
 
 

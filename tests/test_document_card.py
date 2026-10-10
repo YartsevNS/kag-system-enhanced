@@ -148,7 +148,10 @@ def test_поиск_документов_по_уровню():
 def test_конвейер_анализ_до_векторизации():
     src = Path("src/api/services/document_service.py").read_text(encoding="utf-8")
     i_analyze = src.index("await self._analyze_document_async(")
-    i_embed = src.index("vectors_count = await embeddings_service.embed_and_store(")
+    # Векторизация идёт через service_for_document (единственная точка выбора коллекции:
+    # kag_documents / kag_news). Раньше тест ждал вызов embeddings_service напрямую — это
+    # было верно до разделения коллекций, и тест падал на живом коде (нашёл 10.10.2026).
+    i_embed = src.index("vectors_count = await service_for_document(document_id).embed_and_store(")
     assert i_analyze < i_embed, "карточка должна собираться ДО эмбеддинга"
     assert 'metadata["card_prefix"]' not in src  # префикс кладётся через метаданные чанка
     assert '_md["card_prefix"] = card_prefix' in src

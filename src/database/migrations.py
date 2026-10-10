@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 _COLUMN_MIGRATIONS = [
     # documents — классификация и версионность (Фаза 2)
     ("documents", "document_type", "VARCHAR DEFAULT ''"),
+    # Коллекция векторов документа: '' — основная, 'news' — новости монитора. Явный признак
+    # вместо прежнего правила «type == 'news'»: маршрут не должен зависеть от разметки вида.
+    ("documents", "collection", "VARCHAR DEFAULT ''"),
     ("documents", "recognized_title", "VARCHAR DEFAULT ''"),
     ("documents", "summary", "TEXT DEFAULT ''"),
     ("documents", "topics", "TEXT DEFAULT '[]'"),

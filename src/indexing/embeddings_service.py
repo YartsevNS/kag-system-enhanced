@@ -1137,6 +1137,24 @@ embeddings_service = EmbeddingsService()
 _news_service: Optional["EmbeddingsService"] = None
 
 
+# Значение признака `documents.collection`, означающее коллекцию новостей.
+# Пустая строка = основная коллекция; любое другое значение — тоже основная (быть может,
+# будущие коллекции), поэтому сравнение идёт именно с этим литералом.
+NEWS_COLLECTION = "news"
+
+
+def collection_for_source(source_metadata: Optional[dict]) -> str:
+    """Коллекция ДЛЯ НОВОГО документа по метаданным источника: 'news' либо '' (основная).
+
+    Единственная точка решения при загрузке: маршрут задаётся источником (метаданные ставит
+    web_monitor), а не видом документа из разметки.
+    """
+    meta = source_metadata or {}
+    if isinstance(meta, dict) and (meta.get("source_url") or meta.get("source_name") or meta.get("source_id")):
+        return NEWS_COLLECTION
+    return ""
+
+
 def news_embeddings_service() -> "EmbeddingsService":
     """Сервис коллекции новостей (та же модель эмбеддингов, другая коллекция)."""
     global _news_service
@@ -1167,14 +1185,25 @@ def service_for_document(document_id: str) -> "EmbeddingsService":
 def is_news_document(doc: dict) -> bool:
     """Документ пришёл из монитора источников (новости) → его место в коллекции новостей.
 
-    Признак — МЕТАДАННЫЕ ИСТОЧНИКА (source_name/source_url), их ставит web_monitor при загрузке,
-    плюс явный тип документа `news`. Классификатор типов здесь не используется намеренно:
-    он ошибается (44% корпуса лежит как `other`), и по нему нельзя решать, куда писать векторы.
+    Решение — по ЯВНОМУ признаку, а не по разметке:
+
+    * `collection == 'news'` — новость (ставится при загрузке монитором и при переносе корпуса);
+    * `collection == 'documents'` — основная коллекция; явный отказ, даже если метаданные
+      источника есть (так переносят отдельную новость в общий корпус руками);
+    * признак пуст — смотрим МЕТАДАННЫЕ ИСТОЧНИКА (`source_url`/`source_name`/`source_id`):
+      их ставит web_monitor при загрузке, поэтому новые новости маршрутизируются верно и без
+      отдельного поля.
+
+    Классификатор видов здесь НЕ используется намеренно. Раньше вторым признаком было
+    `document_type == 'news'`, и для 27 новостей ЦБ (метаданные источника у них пустые) это
+    было ЕДИНСТВЕННОЕ, что держало их в kag_news: смена словаря молча вернула бы новости в
+    общую коллекцию к ГОСТам. Вид документа — разметка, маршрут — свойство источника
+    (утверждено владельцем 10.10.2026).
     """
     if not doc:
         return False
-    meta = doc.get("source_metadata") or {}
-    if isinstance(meta, dict) and (meta.get("source_url") or meta.get("source_name") or meta.get("source_id")):
-        return True
-    return str(doc.get("document_type") or "").strip().lower() == "news"
+    mark = str(doc.get("collection") or "").strip().lower()
+    if mark:
+        return mark == NEWS_COLLECTION
+    return collection_for_source(doc.get("source_metadata")) == NEWS_COLLECTION
 

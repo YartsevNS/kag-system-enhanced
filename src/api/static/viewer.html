@@ -744,10 +744,9 @@ function toast(text, isErr) {
 }
 
 function typeLabel(t) {
-  var m = { invoice: 'Счёт', contract: 'Договор', report: 'Отчёт', letter: 'Письмо',
-            form: 'Форма', identity: 'Удостоверение', medical: 'Медицинский',
-            legal: 'Юридический', financial: 'Финансы' };
-  return m[t] || t || '—';
+  // Подписи видов — из словаря, который загружает loadDocTypes() (единый источник в системе).
+  var k = (typeof docTypesAll !== 'undefined' ? docTypesAll : []).filter(function(x) { return x.key === t; })[0];
+  return (k && k.label) || t || '—';
 }
 
 function fmtBytes(b) {
@@ -780,17 +779,10 @@ function logout() {
 }
 
 // ── Редактирование названия и типа документа ──────────────────────────
-const DOC_TYPES = [
-  ['invoice','Счёт'],['contract','Договор'],['report','Отчёт'],['letter','Письмо'],
-  ['form','Форма'],['identity','Удостоверение'],['financial','Финансы'],
-  ['medical','Медицинский'],['legal','Юридический'],['technical','Технический'],
-  ['certificate','Сертификат'],['standard','Стандарт'],['policy','Политика'],
-  ['order','Приказ'],['news','Новость'],['other','Другое'],['unknown','Неизвестно']
-];
-
-// Полный список типов = встроенные + добавленные в админке
-// (админка → «Типы документов», GET/POST /api/v1/admin/models/doc-types).
-let docTypesAll = DOC_TYPES.map(function(t) { return { key: t[0], label: t[1], builtin: true }; });
+// Список видов берётся из ЕДИНОГО словаря системы (GET /api/v1/document-kinds), а не вписан
+// в страницу: раньше здесь лежал свой список (invoice/standard/letter/news…), который после
+// утверждения словаря v0 показывал бы виды, которых в базе больше нет, и не показывал настоящие.
+let docTypesAll = [];   // [{key, label, builtin}] словарь системы + типы, добавленные админом
 let currentUser = null;
 
 async function loadCurrentUser() {
@@ -804,8 +796,21 @@ async function loadDocTypes() {
   const seen = {};
   docTypesAll.forEach(function(t) { seen[t.key] = true; });
   try {
+    const r = await fetch('/api/v1/document-kinds', { credentials: 'include' });
+    if (r.ok) {
+      const d = await r.json();
+      (d.kinds || []).forEach(function(k) {
+        if (!k.code || seen[k.code]) return;
+        seen[k.code] = true;
+        docTypesAll.push({ key: k.code, label: k.short || k.code, title: k.title || k.code, builtin: true });
+      });
+    }
+  } catch (e) { console.warn('Словарь видов:', e); }
+  // Типы, добавленные админом (админка → «Типы документов»). Не-админу эндпоинт закрыт —
+  // это нормально: словарь уже загружен выше.
+  try {
     const r = await fetch('/api/v1/admin/models/doc-types', { credentials: 'include' });
-    if (!r.ok) return;   // нет прав/ошибка — остаются встроенные
+    if (!r.ok) return;
     const d = await r.json();
     (d.types || []).forEach(function(t) {
       const key = String(typeof t === 'string' ? t : (t.key || '')).trim();

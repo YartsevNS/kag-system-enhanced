@@ -43,11 +43,13 @@ def test_search_accepts_domain_include_empty_flag():
 def test_chat_domain_modes_read_from_settings():
     assert "def _domain_mode(" in CHAT and "def _domain_kwargs(" in CHAT
     assert 'config_store.get("chat", "domain")' in CHAT, "режим должен браться из настроек"
-    assert 'return mode if mode in ("hard", "safe", "off") else "hard"' in CHAT, (
-        "неизвестное значение не должно менять поведение"
+    # По умолчанию и при неизвестном значении — `safe` (изменено 10.10.2026 по решению владельца
+    # «тема не должна ограничивать поиск»): домен не определён у 76% корпуса, и жёсткий фильтр
+    # отсекал ответы. Тест ждал прежний `hard` и потому падал на живом коде (нашёл 10.10.2026).
+    assert 'return mode if mode in ("hard", "safe", "off") else "safe"' in CHAT, (
+        "неизвестное значение не должно менять поведение (остаётся безопасный режим)"
     )
-    # по умолчанию прежнее поведение: включаем новое только по замеру
-    assert 'raw or "hard"' in CHAT
+    assert 'raw or "safe"' in CHAT
     # все места, где чат ищет фрагменты, обязаны уважать режим домена.
     # Основной поиск идёт через _search_with_widening: он берёт режим внутри себя и умеет
     # расширить выдачу без фильтра, если домен её обеднил (замер 19.09.2026 — из-за этого

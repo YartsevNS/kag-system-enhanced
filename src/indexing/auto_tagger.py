@@ -17,22 +17,39 @@ from loguru import logger
 
 
 class DocumentType(str, Enum):
-    """Predefined document categories."""
-    INVOICE = "invoice"
+    """Виды документов — словарь v0 (утверждён 10.10.2026).
+
+    Единственный источник списка — `src/indexing/document_kinds.py`. Перечисление
+    оставлено ради быстрых проверок и совместимости, но значения обязаны совпадать
+    с словарём: тест `tests/test_document_kinds.py` это стережёт.
+
+    Вида `news` здесь нет намеренно: «новость» — свойство источника (в какой коллекции
+    лежат векторы), а не вид документа. За маршрут отвечает `documents.collection`.
+    """
+    NATIONAL_STANDARD = "national_standard"
+    PRELIMINARY_STANDARD = "preliminary_standard"
+    ORG_STANDARD = "org_standard"
+    SPECIFICATION = "specification"
+    CODE_OF_PRACTICE = "code_of_practice"
+    STANDARDIZATION_RECOMMENDATION = "standardization_recommendation"
+    LAW = "law"
+    SUBORDINATE_ACT = "subordinate_act"
+    REGULATION = "regulation"
+    INSTRUCTION = "instruction"
+    DIRECTIVE = "directive"
+    METHODOLOGY = "methodology"
+    OFFICIAL_LETTER = "official_letter"
     CONTRACT = "contract"
+    CONTRACT_AMENDMENT = "contract_amendment"
+    INVOICE = "invoice"
+    ACT = "act"
+    WAYBILL = "waybill"
+    POWER_OF_ATTORNEY = "power_of_attorney"
+    FORM_TEMPLATE = "form_template"
     REPORT = "report"
-    LETTER = "letter"
-    FORM = "form"
-    IDENTITY = "identity"
-    FINANCIAL = "financial"
-    MEDICAL = "medical"
-    LEGAL = "legal"
-    TECHNICAL = "technical"
-    CERTIFICATE = "certificate"
-    STANDARD = "standard"
-    POLICY = "policy"
-    ORDER = "order"
-    NEWS = "news"
+    ANALYTICS = "analytics"
+    PUBLICATION = "publication"
+    REFERENCE = "reference"
     OTHER = "other"
 
 
@@ -70,91 +87,135 @@ class AutoTagger:
     def _init_default_rules(self):
         """Initialize default classification rules for Russian documents."""
         
-        # Финансовые документы
-        self.add_rule(DocumentType.INVOICE, [
-            (r'(?i)(сч[её]т\s*[-—]\s*фактур|invoice|сч[её]т\s*№|сч[её]т\s*на\s*оплат)', 0.9),
-            (r'(?i)(ндс|сумма\s*без\s*ндс|итого\s*к\s*оплат)', 0.7),
-            (r'(?i)(плат[её]ж|квитанц|чек)', 0.5),
+        # Национальные и межгосударственные стандарты (ГОСТ, ГОСТ Р)
+        self.add_rule(DocumentType.NATIONAL_STANDARD, [
+            (r'(?i)(гост\s*р?\s*\d|национальный\s*стандарт|межгосударственный\s*стандарт)', 0.9),
+            (r'(?i)(гост\s*\d+\.\d+—\d{4}|гост\s*\d+-\d{4})', 0.6),
         ])
-        
-        # Договоры
+
+        # Предварительный национальный стандарт (ПНСТ)
+        self.add_rule(DocumentType.PRELIMINARY_STANDARD, [
+            (r'(?i)(пнст|предварительный\s*национальный\s*стандарт)', 0.9),
+        ])
+
+        # Стандарты организации, включая стандарты банка России (СТО БР)
+        self.add_rule(DocumentType.ORG_STANDARD, [
+            (r'(?i)(сто\s*бр|стандарт\s*организации|стандарт\s*банка|сто\s*\d)', 0.9),
+        ])
+
+        # Технические условия и спецификации
+        self.add_rule(DocumentType.SPECIFICATION, [
+            (r'(?i)(технические\s*условия|спецификаци)', 0.8),
+        ])
+
+        # Своды правил
+        self.add_rule(DocumentType.CODE_OF_PRACTICE, [
+            (r'(?i)(свод\s*правил|сп\s*\d+\.\d+)', 0.8),
+        ])
+
+        # Рекомендации по стандартизации (Р 50.1.x, Р 1323565.1.x)
+        self.add_rule(DocumentType.STANDARDIZATION_RECOMMENDATION, [
+            (r'(?i)(рекомендации\s*по\s*стандартизации|р\s*50\.1\.\d|р\s*1323565)', 0.9),
+        ])
+
+        # Законы и кодексы
+        self.add_rule(DocumentType.LAW, [
+            (r'(?i)(федеральный\s*закон|кодекс|фз\s*№?\s*\d+)', 0.9),
+            (r'(?i)(статья\s*\d+\.\d|принят\s*государственной\s*думой)', 0.6),
+        ])
+
+        # Подзаконные акты: указ, постановление, приказ, распоряжение
+        self.add_rule(DocumentType.SUBORDINATE_ACT, [
+            (r'(?i)(указ\s*президента|постановлени|приказ\s*(банка|россии|\d)?|распоряжени)', 0.9),
+            (r'(?i)(№?\s*од-\d|вступает\s*в\s*силу|внести\s*изменени)', 0.6),
+        ])
+
+        # Положения, регламенты, правила
+        self.add_rule(DocumentType.REGULATION, [
+            (r'(?i)(положени\w*\s*(о|об)\s|регламент|правила\s*\w+)', 0.8),
+        ])
+
+        # Инструкции (в том числе инструкции по применению)
+        self.add_rule(DocumentType.INSTRUCTION, [
+            (r'(?i)(инструкци|порядок\s*действий)', 0.8),
+        ])
+
+        # Указания
+        self.add_rule(DocumentType.DIRECTIVE, [
+            (r'(?i)(указание\s*(банка|россии)?|№\s*\d+-у\b)', 0.8),
+        ])
+
+        # Методики и методические рекомендации
+        self.add_rule(DocumentType.METHODOLOGY, [
+            (r'(?i)(методические\s*рекомендации|методический|методика|методология)', 0.9),
+            (r'(?i)(методические\s*документ|фстэк)', 0.6),
+        ])
+
+        # Официальные письма и разъяснения
+        self.add_rule(DocumentType.OFFICIAL_LETTER, [
+            (r'(?i)(информационное\s*письмо|разъяснени|уважаемые\s*руководители)', 0.8),
+            (r'(?i)(письмо|обращение|ходатайств)', 0.5),
+        ])
+
+        # Договоры и контракты
         self.add_rule(DocumentType.CONTRACT, [
             (r'(?i)(договор|контракт|contract|agreement)', 0.9),
             (r'(?i)(стороны|заказчик|исполнитель|подрядчик)', 0.7),
             (r'(?i)(реквизиты\s*сторон|юридический\s*адрес)', 0.6),
         ])
-        
-        # Отчёты
-        self.add_rule(DocumentType.REPORT, [
-            (r'(?i)(отч[её]т|report|анализ|статистик)', 0.8),
-            (r'(?i)(период\s*отч[её]та|показатели|динамика)', 0.6),
+
+        # Дополнительные соглашения (в тексте есть и «договор», и «соглашение»)
+        self.add_rule(DocumentType.CONTRACT_AMENDMENT, [
+            (r'(?i)(дополнительное\s*соглашени|изменени\s*к\s*договору)', 0.9),
         ])
-        
-        # Письма / корреспонденция
-        self.add_rule(DocumentType.LETTER, [
-            (r'(?i)(уважаем|здравствуй|письмо|обращение|ходатайств)', 0.8),
-            (r'(?i)(в\s*ответ\s*на|направля|уведомл|извещ)', 0.6),
+
+        # Счета и квитанции
+        self.add_rule(DocumentType.INVOICE, [
+            (r'(?i)(сч[её]т\s*[-—]\s*фактур|invoice|сч[её]т\s*№|сч[её]т\s*на\s*оплат)', 0.9),
+            (r'(?i)(ндс|сумма\s*без\s*ндс|итого\s*к\s*оплат|квитанц)', 0.7),
         ])
-        
-        # Формы / анкеты
-        self.add_rule(DocumentType.FORM, [
-            (r'(?i)(анкет|заявлени|form|опросный\s*лист)', 0.8),
+
+        # Акты
+        self.add_rule(DocumentType.ACT, [
+            (r'(?i)(акт\s*(выполненных|приёма|приема|сверки|проверки)|составлен\s*акт)', 0.9),
+        ])
+
+        # Накладные
+        self.add_rule(DocumentType.WAYBILL, [
+            (r'(?i)(накладная|торг-12|товарно-транспортн)', 0.9),
+        ])
+
+        # Доверенности
+        self.add_rule(DocumentType.POWER_OF_ATTORNEY, [
+            (r'(?i)(доверенност|настоящей\s*доверенностью)', 0.9),
+        ])
+
+        # Бланки, формы, шаблоны (включая формы отчётности вида 1-Т)
+        self.add_rule(DocumentType.FORM_TEMPLATE, [
+            (r'(?i)(бланк|форма\s*№?\s*\d|шаблон|анкет|заявлени|опросный\s*лист)', 0.8),
             (r'(?i)(заполните|отметьте|выберите|укажите)', 0.6),
         ])
-        
-        # Удостоверения личности
-        self.add_rule(DocumentType.IDENTITY, [
-            (r'(?i)(паспорт|passport|свидетел|удостоверен)', 0.9),
-            (r'(?i)(серия\s*№|кем\s*выдан|прописк|регистраци)', 0.7),
-        ])
-        
-        # Медицинские
-        self.add_rule(DocumentType.MEDICAL, [
-            (r'(?i)(диагноз|анализ\s*кров|медицинск|больниц|клиник|пациент)', 0.8),
-            (r'(?i)(врач|рецепт|лечени|симптом)', 0.6),
-        ])
-        
-        # Юридические
-        self.add_rule(DocumentType.LEGAL, [
-            (r'(?i)(иск\s|суд|прокур|адвокат|нотариус)', 0.8),
-            (r'(?i)(статья\s*\d|закон|кодекс|постановлен)', 0.6),
+
+        # Отчёты
+        self.add_rule(DocumentType.REPORT, [
+            (r'(?i)(отч[её]т|report|показатели|динамика)', 0.8),
+            (r'(?i)(период\s*отч[её]та|за\s*отч[её]тный\s*период)', 0.6),
         ])
 
-        # Стандарты (ГОСТ, СТО БР, национальные стандарты)
-        self.add_rule(DocumentType.STANDARD, [
-            (r'(?i)(гост|национальный\s*стандарт|стандарт\s*банка|сто\s*бр|стандарт)', 0.9),
-            (r'(?i)(межгосударственный\s*стандарт|технический\s*регламент|сертификат\s*соответствия)', 0.6),
+        # Доклады и аналитические материалы
+        self.add_rule(DocumentType.ANALYTICS, [
+            (r'(?i)(доклад|аналитическ|обзор|резюме\s*обсуждени|исследовани)', 0.8),
         ])
 
-        # Политики / методические материалы
-        self.add_rule(DocumentType.POLICY, [
-            (r'(?i)(методические\s*рекомендации|методический|методика|политика\s*безопасности)', 0.9),
-            (r'(?i)(руководство|регламент|положени\w*|концепция)', 0.7),
-            (r'(?i)(требования\s*к\s*обеспечению|концепция|стратегия)', 0.6),
-        ])
-
-        # Приказы / указания / распоряжения
-        self.add_rule(DocumentType.ORDER, [
-            (r'(?i)(приказ\s*(банка|россии)?|указание|распоряжение|информационное\s*письмо)', 0.9),
-            (r'(?i)(№?\s*од-\d|внести\s*изменени|отменить\s*приказ|установить\s*признаки)', 0.7),
-        ])
-
-        # Технические (инструкции, руководства пользователя, ТЗ)
-        self.add_rule(DocumentType.TECHNICAL, [
-            (r'(?i)(инструкци|техническ|эксплуатаци|руководство\s*пользовател)', 0.8),
-            (r'(?i)(техническое\s*задани|требования\s*к\s*программному|интерфейс)', 0.6),
-        ])
-
-        # Сертификаты
-        self.add_rule(DocumentType.CERTIFICATE, [
-            (r'(?i)(сертификат|удостоверение\s*о\s*соответствии|аттестат\s*аккредитации)', 0.9),
-            (r'(?i)(соответствует\s*требованиям|выдан\s*органом)', 0.6),
-        ])
-
-        # Новости / пресс-релизы
-        self.add_rule(DocumentType.NEWS, [
+        # Публикации, новости, пресс-релизы, справочные тексты
+        self.add_rule(DocumentType.PUBLICATION, [
             (r'(?i)(пресс-релиз|новост|сообщени\w*\s*(для\s*прессы|о\s*событии)|интервью)', 0.8),
             (r'(?i)(сегодня|вчера|объявляет|представляет)', 0.5),
+        ])
+
+        # Справки, карточки, перечни, реестры, статистические подборки
+        self.add_rule(DocumentType.REFERENCE, [
+            (r'(?i)(справк|карточк|перечень|удостоверени|реестр)', 0.7),
         ])
     
     def add_rule(self, doc_type: DocumentType, patterns: List[tuple]):

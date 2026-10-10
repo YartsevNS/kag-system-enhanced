@@ -25,6 +25,8 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
+from src.indexing import document_kinds
+
 logger = logging.getLogger(__name__)
 
 # Префикс идёт в КАЖДЫЙ чанк документа: длинный размывает сигнал самого чанка,
@@ -102,14 +104,18 @@ def build_card_prefix(card: Dict[str, Any], max_chars: int = CARD_PREFIX_MAX_CHA
     (текст для эмбеддинга остаётся прежним, fail-open).
     """
     title = (card.get("title") or "").strip()
-    dtype = (card.get("document_type") or "").strip()
+    dtype_raw = (card.get("document_type") or "").strip()
+    # В текст эмбеддинга идёт ЧЕЛОВЕЧЕСКАЯ подпись вида (единый словарь document_kinds), а не
+    # латинский код: корпус русский, и «Стандарт (ГОСТ, ГОСТ Р)» несёт смысл, а `national_standard`
+    # для модели — почти шум. Незнакомый код отдаётся как есть (fail-open).
+    dtype = document_kinds.short(dtype_raw) if dtype_raw else ""
     topics = [t for t in (card.get("topics") or []) if t][:3]
     summary = (card.get("summary") or "").strip()
 
     parts: List[str] = []
     if title:
         parts.append(title)
-    if dtype and dtype.lower() not in ("other", "unknown", "неизвестно"):
+    if dtype_raw and dtype_raw.lower() not in ("other", "unknown", "неизвестно"):
         parts.append(dtype)
     if topics:
         parts.append("темы: " + ", ".join(topics))
@@ -130,7 +136,7 @@ def build_card_text(card: Dict[str, Any]) -> str:
     if card.get("title"):
         parts.append(card["title"])
     if card.get("document_type"):
-        parts.append(f"Тип документа: {card['document_type']}")
+        parts.append(f"Тип документа: {document_kinds.short(card['document_type'])}")
     if card.get("summary"):
         parts.append(card["summary"])
     if card.get("topics"):

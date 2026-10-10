@@ -25,5 +25,11 @@ def test_модули_конвейера_импортируются():
         "src.indexing.knowledge_graph",
         "src.indexing.embeddings_service",
         "src.indexing.queue_guard",
+        # Словарь видов и всё, что берёт из него значения: падение на импорте (например,
+        # обращение к имени, которого нет) уронит и api, и воркер — гейт ловит это за секунду.
+        "src.indexing.document_kinds",
+        "src.indexing.auto_tagger",
+        "src.indexing.type_watchdog",
+        "src.api.routes.meta",
     ):
         importlib.import_module(name)
