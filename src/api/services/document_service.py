@@ -376,6 +376,20 @@ class DocumentService:
         # Сохраняем метаданные в БД (хеш используется для поиска дубликатов)
         self._save_document_to_db(doc_id)
 
+        # Новая редакция документа: связываем с прежней (тип NEW_EDITION_OF из словаря).
+        # Раньше версия жила только числами в таблице (version/previous_hash) и в графе её не было.
+        if previous_hash:
+            try:
+                from src.api.services.document_repository import get_doc_repo
+
+                prev = get_doc_repo().find_by_hash(previous_hash)
+                if prev is not None:
+                    from src.indexing.knowledge_graph import kg_service
+
+                    kg_service.link_document_edition(doc_id, getattr(prev, "id", ""), version)
+            except Exception as e:  # noqa: BLE001 — связь редакций не должна ломать загрузку
+                logger.warning(f"[graph] связь редакций не создана: {e}")
+
         # Журнал происхождения: хеш, размер, время, источник + хеш-цепочка. Пишем один раз при
         # загрузке — иначе задним числом не доказать, каким файл был в момент приёма.
         try:

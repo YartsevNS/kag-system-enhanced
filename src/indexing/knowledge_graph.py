@@ -522,6 +522,35 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка batch_create_entities ({len(batch)}): {e}")
             return 0
 
+    def link_document_edition(self, new_doc_id: str, old_doc_id: str, version: int = 2) -> bool:
+        """Связать документ с его прежней редакцией: (новая)-[:NEW_EDITION_OF]->(старая).
+
+        Зачем: без этого связь редакций берётся только из полей версии/хеша в таблице документов,
+        то есть её не видно ни в графе, ни в связях; а «новая редакция» — один из типов словаря.
+        Направление: от НОВОЙ к СТАРОЙ (как в словаре DataCite: isNewVersionOf).
+        """
+        if not self.driver or not new_doc_id or not old_doc_id:
+            return False
+        try:
+            with self.driver.session() as session:
+                session.run(
+                    """
+                    MATCH (n:Document {id: $new_id})
+                    MATCH (o:Document {id: $old_id})
+                    MERGE (n)-[r:NEW_EDITION_OF]->(o)
+                    SET r.version = $version,
+                        r.schema_version = $sv,
+                        r.created_at = coalesce(r.created_at, datetime())
+                    """,
+                    new_id=new_doc_id, old_id=old_doc_id, version=int(version or 2),
+                    sv=self.SCHEMA_VERSION,
+                )
+            logger.info(f"[graph] редакции связаны: {new_doc_id[:12]} → {old_doc_id[:12]} (v{version})")
+            return True
+        except Exception as e:
+            logger.warning(f"[graph] не удалось связать редакции {new_doc_id[:12]}: {e}")
+            return False
+
     def batch_create_relations(self, rels: List["Relation"]) -> int:
         """Записать пачку связей UNWIND-запросами (по одному на тип связи).
 
