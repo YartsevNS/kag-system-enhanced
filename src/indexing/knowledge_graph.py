@@ -284,13 +284,20 @@ class KnowledgeGraphService:
             # Версия и хеши документа: нужны, чтобы связать редакции в графе. Берём из реестра
             # документов по id — оба вызывающих места (обработка и пересборка) знают только id.
             file_hash, version, previous_hash = "", 1, ""
+            previous_doc_id = ""
             try:
                 from src.api.services.document_repository import get_doc_repo
 
-                rec = get_doc_repo().get_dict(document_id) or {}
+                _repo = get_doc_repo()
+                rec = _repo.get_dict(document_id) or {}
                 file_hash = str(rec.get("file_hash") or "")
                 version = int(rec.get("version") or 1)
                 previous_hash = str(rec.get("previous_hash") or "")
+                # Идентификатор прежней версии ищем в реестре по её хешу: у узлов графа,
+                # построенных ДО этой правки, поля file_hash нет, и связь по хешу не находится.
+                if previous_hash:
+                    _prev = _repo.find_by_hash(previous_hash)
+                    previous_doc_id = str(getattr(_prev, "id", "") or "")
             except Exception:
                 pass
             with self.driver.session() as session:
@@ -307,8 +314,8 @@ class KnowledgeGraphService:
                     // Новая редакция: связь к документу с тем же хешем, что был у прежней версии.
                     // Узел прежнего документа ищем ПО ХЕШУ — так связь находится и тогда, когда
                     // прежняя версия была загружена задолго до и имеет другой id.
-                    OPTIONAL MATCH (o:Document {file_hash: $previous_hash})
-                    WHERE $previous_hash <> '' AND o.id <> d.id
+                    OPTIONAL MATCH (o:Document)
+                    WHERE o.id = $previous_doc_id AND o.id <> d.id
                     FOREACH (_ IN CASE WHEN o IS NOT NULL THEN [1] ELSE [] END |
                         MERGE (d)-[r:NEW_EDITION_OF]->(o)
                         SET r.version = $version,
@@ -322,6 +329,7 @@ class KnowledgeGraphService:
                     file_hash=file_hash,
                     version=version,
                     previous_hash=previous_hash,
+                    previous_doc_id=previous_doc_id or "",
                     schema_version=self.SCHEMA_VERSION,
                 )
         except Exception as e:
