@@ -2217,6 +2217,7 @@ class DocumentClassificationFix(BaseModel):
     domain: Optional[str] = None
     issuer: Optional[str] = None
     topics: Optional[list] = None            # многозначная тема
+    rubrics: Optional[list] = None           # темы (рубрики) словаря v0 — многозначный список кодов
     facets: Optional[dict] = None            # фасеты: предмет защиты, этап, нормативная сила, гриф
     note: Optional[str] = None               # зачем поправили
 
@@ -2264,14 +2265,28 @@ async def fix_document_classification(payload: DocumentClassificationFix):
                 changes[field] = val
         if "topics" in data and data["topics"] is not None:
             changes["topics"] = _json.dumps(data["topics"], ensure_ascii=False)
+        if "rubrics" in data and data["rubrics"] is not None:
+            # Темы проверяем СТРОГО: незнакомый код — ошибка с полным списком, а не молчаливое
+            # отбрасывание (в ручной правке опечатка должна быть видна, а не исчезнуть).
+            from src.indexing import document_topics
+
+            raw = [str(c or "").strip().lower() for c in (data["rubrics"] or [])]
+            bad = [c for c in raw if c and not document_topics.is_valid(c)]
+            if bad:
+                return {
+                    "status": "error",
+                    "message": (f"тема(ы) {bad} отсутствуют в словаре {document_topics.TOPICS_VERSION}; "
+                                "допустимые: " + document_topics.vocabulary_line()),
+                }
+            changes["rubrics"] = _json.dumps(document_topics.normalize(raw), ensure_ascii=False)
         if "facets" in data and data["facets"] is not None:
             changes["facets"] = _json.dumps(data["facets"], ensure_ascii=False)
         if not changes:
             return {"status": "error", "message": "нечего менять"}
-        if "document_type" in changes:
+        if "document_type" in changes or "rubrics" in changes:
             # Версия СЛОВАРЯ, которым размечен документ (а не пометка «правил человек»: автор
             # правки и её причина и так в журнале действий). По этой версии видно, что
-            # переразмечать при следующей смене словаря.
+            # переразмечать при следующей смене словаря. Вид и темы — обе оси из словарей кодов.
             from src.indexing import document_kinds
 
             changes["schema_version"] = document_kinds.VOCABULARY_VERSION
@@ -2284,7 +2299,7 @@ async def fix_document_classification(payload: DocumentClassificationFix):
             from src.indexing.embeddings_service import service_for_document
 
             await service_for_document(doc_id).update_document_payload(doc_id, {
-                k: (_json.loads(v) if k in ("topics", "facets") else v) for k, v in changes.items()
+                k: (_json.loads(v) if k in ("topics", "facets", "rubrics") else v) for k, v in changes.items()
             })
         except Exception as e:  # noqa: BLE001
             logging.getLogger(__name__).warning(f"[manual] payload не обновлён для {doc_id[:12]}: {e}")

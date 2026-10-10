@@ -56,6 +56,9 @@ class DocumentRecord(BaseModel):
     recognized_title: Optional[str] = Field(default=None, description="Распознанное название")
     summary: Optional[str] = Field(default=None, description="Краткое описание")
     topics: Optional[List[str]] = Field(default=None, description="Ключевые темы")
+    # Темы (рубрики) словаря v0 — многозначный список кодов (src/indexing/document_topics.py).
+    # Отличать от свободных `topics`: те — слова модели для карточки, эти — коды для фильтров.
+    rubrics: Optional[List[str]] = Field(default=None, description="Коды рубрик v0 (многозначно)")
     # Контроль дубликатов и версионность
     file_hash: Optional[str] = Field(default=None, description="SHA-256 хеш содержимого файла")
     version: int = Field(default=1, description="Версия документа (1 = оригинал)")
@@ -233,7 +236,8 @@ class DocumentService:
             # финальное сохранение конвейера затирало результат пустыми полями
             # (то же сбивало типизацию: document_type откатывался на "unknown").
             _fresh = repo.get_dict(document_id) or {}
-            for _k in ("recognized_title", "summary", "topics", "document_type", "source_metadata", "collection"):
+            for _k in ("recognized_title", "summary", "topics", "rubrics", "document_type",
+                       "source_metadata", "collection"):
                 if not data.get(_k) and _fresh.get(_k):
                     data[_k] = _fresh[_k]
             repo.upsert(document_id, data)
@@ -1029,7 +1033,7 @@ class DocumentService:
                     # В record (SQLAlchemy-объект конвейера) поля ещё старые: анализ
                     # писал в БД через отдельный объект. Обновляем, иначе в payload
                     # уйдёт document_type="unknown" (регрессия против прежнего порядка).
-                    for _f in ("document_type", "recognized_title", "summary", "topics",
+                    for _f in ("document_type", "recognized_title", "summary", "topics", "rubrics",
                                "issuer", "facets", "schema_version"):
                         if _doc_fresh.get(_f) is not None:
                             try:
@@ -1053,6 +1057,9 @@ class DocumentService:
                     "issuer": getattr(record, 'issuer', '') or "",
                     "facets": getattr(record, 'facets', '') or "{}",
                     "topics": getattr(record, 'topics', '') or "[]",
+                    # Темы (рубрики) словаря v0 — многозначный список кодов. Мягкий признак:
+                    # в payload он есть (витрины, выгрузки), но фильтровать поиск по нему нельзя.
+                    "rubrics": getattr(record, 'rubrics', '') or "[]",
                     "schema_version": getattr(record, 'schema_version', '') or "",
                     # Права доступа (ACL): наследуются чанками
                     "visibility": getattr(record, 'visibility', 'public') or 'public',

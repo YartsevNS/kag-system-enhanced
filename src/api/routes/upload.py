@@ -1133,6 +1133,9 @@ async def list_documents(
             "version": meta.get("version", 1),
             # Классификация (теперь в SQL)
             "document_type": meta.get("document_type", ""),
+            # Темы (рубрики) словаря v0 — многозначный список кодов. Нужны странице для фильтра
+            # «о чём документ»: по кодам он строится, по свободным topics — нет.
+            "rubrics": meta.get("rubrics", []),
             "recognized_title": meta.get("recognized_title", ""),
             "summary": meta.get("summary", ""),
             "topics": meta.get("topics", []),

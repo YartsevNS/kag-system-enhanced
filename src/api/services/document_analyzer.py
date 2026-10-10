@@ -68,11 +68,16 @@ class DocumentAnalyzer:
             return {}
 
         from src.indexing.document_kinds import vocabulary_line
+        from src.indexing.document_topics import vocabulary_line as rubrics_line
         type_labels = vocabulary_line()
+        rubric_labels = rubrics_line()
         system_prompt = (cfgs[0].get("system_prompt") or "").replace("{type_labels}", type_labels)
+        # Админский промпт может подставлять и список тем: без этой подстановки модель видит
+        # плейсхолдер как текст и отвечает темами «из головы».
+        system_prompt = system_prompt.replace("{rubric_labels}", rubric_labels)
         if not system_prompt:
             system_prompt = "Ты — классификатор документов. Отвечай строго валидным JSON без markdown."
-        prompt = self._build_prompt(first_chunk_text, filename, type_labels)
+        prompt = self._build_prompt(first_chunk_text, filename, type_labels, rubric_labels)
 
         last_error = ""
         # (конфиг, попытка): основной дважды, затем резервный дважды — если резерв задан
@@ -161,13 +166,19 @@ class DocumentAnalyzer:
 
         logger.warning(f"Анализ {document_id}: результат не получен ({last_error})")
         return {}
-    def _build_prompt(self, text: str, filename: str, type_labels: str = "") -> str:
+    def _build_prompt(self, text: str, filename: str, type_labels: str = "",
+                      rubric_labels: str = "") -> str:
         """Строит промпт для LLM."""
         # Берём первые ~2000 символов
         sample = text[:2000]
         if not type_labels:
             from src.indexing.document_kinds import vocabulary_line
             type_labels = vocabulary_line()
+        if not rubric_labels:
+            # Темы — из своего словаря (document_topics): список кодов в промпте и проверка ответа
+            # по нему обязаны совпадать, иначе модель пишет тему, которой нет в фильтрах.
+            from src.indexing.document_topics import vocabulary_line as rubrics_line
+            rubric_labels = rubrics_line()
 
         return f"""Проанализируй начало документа и верни JSON с метаданными.
 
@@ -179,10 +190,13 @@ class DocumentAnalyzer:
 ---
 
 Верни ТОЛЬКО валидный JSON (без markdown, без ```), строго такой формат:
-{{"title": "краткое название документа", "type": "тип", "summary": "одно предложение о чём документ", "topics": ["тема1", "тема2"]}}
+{{"title": "краткое название документа", "type": "тип", "rubrics": ["тема"], "summary": "одно предложение о чём документ", "topics": ["тема1", "тема2"]}}
 
 Тип выбери из: {type_labels}.
 Если непонятно — поставь "other".
+
+Темы (rubrics) выбери из: {rubric_labels}.
+Тем может быть НЕСКОЛЬКО (это список) или ни одной — тогда пустой список.
 Пиши на русском."""
 
     @staticmethod
@@ -231,6 +245,13 @@ class DocumentAnalyzer:
             result["recognized_title"] = str(data["title"])[:200]
         if is_valid_kind(data.get("type")):
             result["document_type"] = data["type"]
+        # Темы (рубрики) — по своему словарю: неизвестные коды отбрасываются, дубли убираются,
+        # порядок берётся из словаря. Проверка общая для модели и для ручной правки (normalize).
+        from src.indexing import document_topics as _topics
+
+        rubrics = _topics.normalize(data.get("rubrics"))
+        if rubrics:
+            result["rubrics"] = rubrics
         if data.get("summary"):
             result["summary"] = str(data["summary"])[:500]
         if isinstance(data.get("topics"), list):
@@ -258,6 +279,8 @@ class DocumentAnalyzer:
                     doc_data["summary"] = result["summary"]
                 if "topics" in result:
                     doc_data["topics"] = result["topics"]
+                if "rubrics" in result:
+                    doc_data["rubrics"] = result["rubrics"]
                 
                 get_doc_repo().upsert(document_id, doc_data)
                 logger.info(f"Метаданные обновлены для {document_id}: {result.get('document_type', '?')} — {result.get('recognized_title', '?')}")
@@ -275,6 +298,8 @@ class DocumentAnalyzer:
                     payload_update["summary"] = result["summary"]
                 if "topics" in result:
                     payload_update["topics"] = result["topics"]
+                if "rubrics" in result:
+                    payload_update["rubrics"] = result["rubrics"]
                 if payload_update:
                     _n = await service_for_document(document_id).update_document_payload(document_id, payload_update)
                     logger.info(f"Qdrant payload обновлён для {document_id}: точек {_n}")

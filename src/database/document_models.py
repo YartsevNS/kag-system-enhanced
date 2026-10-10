@@ -47,7 +47,11 @@ class Document(Base):
     recognized_title = Column(String, default="")
     summary = Column(Text, default="")
     topics = Column(Text, default="[]")  # JSON list
-    domain = Column(String(32), default="")  # домен документа (infosec/accounting/legal/universal)
+    domain = Column(String(32), default="")  # ЛЕГАСИ: домен прежней схемы (infosec/accounting/legal/universal)
+    # Темы (рубрики) — вторая ось описания документа: о чём он. JSON-список кодов словаря
+    # (src/indexing/document_topics.py), многозначный. Мягкая по умолчанию: в поиске по ней
+    # фильтровать нельзя (стража — tests/test_document_topics.py).
+    rubrics = Column(Text, default="[]")
     # Издатель (кто выпустил документ): Росстандарт, ФСТЭК, Банк России, организация…
     issuer = Column(String, default="")
     # Фасеты — независимые перечни: предмет защиты, этап, нормативная сила, гриф.

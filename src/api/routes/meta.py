@@ -33,9 +33,14 @@ async def document_kinds(
     домешивают из `/admin/models/doc-types`, если он им доступен.
     """
     from src.indexing import document_kinds as kinds
+    from src.indexing import document_topics as topics
 
     return {
         "version": kinds.VOCABULARY_VERSION,
+        "topics_version": topics.TOPICS_VERSION,
         "groups": kinds.GROUPS,
         "kinds": kinds.as_list(),
+        # Темы (рубрики) — вторая ось: «о чём документ». Отдаём тем же роутом, чтобы страницы
+        # не держали своих списков ни по видам, ни по темам.
+        "rubrics": topics.as_list(),
     }

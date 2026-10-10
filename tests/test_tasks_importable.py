@@ -30,6 +30,7 @@ def test_модули_конвейера_импортируются():
         "src.indexing.document_kinds",
         "src.indexing.auto_tagger",
         "src.indexing.type_watchdog",
+        "src.indexing.document_topics",
         "src.api.routes.meta",
     ):
         importlib.import_module(name)

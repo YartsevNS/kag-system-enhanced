@@ -91,6 +91,18 @@ async def main() -> int:
         check("документы отрисовались", (rendered["cards"] + rendered["rows"]) > 0,
               f"карточек {rendered['cards']}, строк {rendered['rows']}, всего={rendered['stat']}")
 
+        # Темы (рубрики) — вторая ось: фильтр «о чём документ», список тоже с сервера
+        rubrics = await page.evaluate(
+            "Array.from(document.querySelectorAll('#rubric-filter option'))"
+            ".map(o => ({value: o.value, text: o.textContent}))"
+        )
+        rvalues = {o["value"] for o in rubrics if o["value"]}
+        rtexts = {o["value"]: o["text"] for o in rubrics}
+        check("фильтр тем заполнился словарём", len(rvalues) >= 8,
+              f"тем {len(rvalues)}: {sorted(rvalues)[:6]}")
+        check("тема «Информационная безопасность» названа по-русски",
+              rtexts.get("infosec") == "Информационная безопасность", f"{rtexts.get('infosec')!r}")
+
         # Ошибка «Список видов не загрузился» — это мой тост: значит fetch не сработал
         toast = await page.evaluate("(document.getElementById('toast')||{}).textContent || ''")
         check("нет жалобы «список видов не загрузился»", "не загрузился" not in toast, toast or "—")
