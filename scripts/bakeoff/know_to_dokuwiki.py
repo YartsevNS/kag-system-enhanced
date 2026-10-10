@@ -23,7 +23,14 @@ import urllib.request
 from pathlib import Path
 
 KNOW = Path(r"C:\VSCODE_PROJECT\know.html")
-OUT_DIR = Path(__file__).resolve().parents[2] / "reports" / "_scratch" / "dw_pages"
+# Каталог для разбора: считается от расположения скрипта, но на чужой машине структуры может не быть —
+# тогда берём временный каталог, чтобы прибор работал и там (например, при заливке с самого сервера вики).
+try:
+    OUT_DIR = Path(__file__).resolve().parents[2] / "reports" / "_scratch" / "dw_pages"
+except IndexError:
+    import tempfile
+
+    OUT_DIR = Path(tempfile.gettempdir()) / "dw_pages"
 
 
 def html_to_dokuwiki(fragment: str) -> str:
