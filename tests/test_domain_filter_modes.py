@@ -28,13 +28,32 @@ def test_жёсткий_режим_это_равенство_по_полю_те�
     assert strict.match.value == "infosec"
 
 
+def _cond_key(c) -> str:
+    """Ключ условия: у FieldCondition — `key`, у IsEmptyCondition — вложенный PayloadField."""
+    if getattr(c, "key", None):
+        return str(c.key)
+    inner = getattr(c, "is_empty", None)
+    return str(getattr(inner, "key", "") or "")
+
+
 def test_мягкий_режим_допускает_документы_без_темы():
     soft = _theme_condition("infosec", True)
     should = getattr(soft, "should", None)
-    assert should and len(should) == 2, "мягкий режим — «тема ИЛИ пустое значение» одной выборкой"
-    assert all(getattr(c, "key", "") == "rubrics" for c in should), "оба условия — по полю тем"
-    values = sorted(str(c.match.value) for c in should)
-    assert values == ["", "infosec"], "в условии должен быть и пустой случай"
+    assert should and len(should) == 3, (
+        "мягкий режим — три ветки: тема совпала, поле пустое, поля НЕТ ВООБЩЕ"
+    )
+    assert all(_cond_key(c) == "rubrics" for c in should), \
+        f"все ветки — по полю тем: {[_cond_key(c) for c in should]}"
+    values = sorted(str(getattr(c, "match", None).value) if getattr(c, "match", None) else ""
+                    for c in should)
+    assert values == ["", "", "infosec"], f"ветки: тема, пустое, отсутствующее — {values}"
+
+
+def test_семантические_поля_пишутся_в_payload_верхним_уровнем():
+    """Иначе фильтр по теме не находит документы конвейера: их значения лежали только в metadata."""
+    assert 'for _k in ("issuer", "topics", "rubrics", "facets", "schema_version"):' in EMB
+    assert "payload[_k] = _v" in EMB
+    assert '_v not in (None, "", [], {})' in EMB, "пустое значение не пишем: его ловит мягкая ветка"
 
 
 def test_легаси_условие_осталось_для_замера():

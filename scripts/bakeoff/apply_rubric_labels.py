@@ -53,6 +53,18 @@ def main() -> int:
             line = line.strip()
             if line:
                 rows.append(json.loads(line))
+    # В файле могут быть дубли: дозапись (--resume) дописывает повторные попытки, а неудачные строки
+    # остаются. Оставляем по документу ОДНУ удачную строку — иначе один и тот же документ попадёт
+    # в запись дважды и в отчёте будет двойной счёт.
+    by_doc = {}
+    for r in rows:
+        did = r.get("document_id")
+        if not did:
+            continue
+        if r.get("ok") or did not in by_doc:
+            by_doc[did] = r if r.get("ok") else by_doc.get(did, r)
+    rows = [r for r in by_doc.values() if r.get("ok")]
+    print(f"строк после свёртки дублей: {len(rows)}")
 
     docs = get_doc_repo().get_all()
     to_write, review, skipped = [], [], 0

@@ -69,16 +69,21 @@ def _theme_condition(theme: str, include_empty: bool = False):
     (`src/indexing/document_topics.py`), её пишут и анализатор, и ручная правка, и разметка корпуса.
     Значения прежней схемы приходят из классификатора вопроса — их переводит `rubric_for_legacy`.
     """
-    from qdrant_client.models import FieldCondition as _FC, Filter as _F, MatchValue as _MV
+    from qdrant_client.models import (
+        FieldCondition as _FC, Filter as _F, MatchValue as _MV,
+        IsEmptyCondition as _IEC, PayloadField as _PF,
+    )
 
     exact = _FC(key="rubrics", match=_MV(value=theme))
     if not include_empty:
         return exact
-    # Пустое значение темы — это НЕ is_empty: у части документов поле отсутствует вовсе, у части
-    # лежит пустой список. Ловим второй случай явно и НЕ отсекаем документы без поля (их отсечёт
-    # только отсутствие match — поэтому в мягком режиме документы без rubrics остаются в выдаче).
+    # Три ветки, а не две: тема совпала; поле темы пустое; поля темы НЕТ ВОВСЕ. Последний случай
+    # отдельной веткой обязателен — у документа без поля не совпадает ни одно значение, и он
+    # выпал бы из выдачи даже в мягком режиме (ровно тот дефект «информация не найдена», из-за
+    # которого мягкий режим и делали). Форма модели: IsEmptyCondition(is_empty=PayloadField(key=…)).
     empty = _FC(key="rubrics", match=_MV(value=""))
-    return _F(should=[exact, empty])
+    absent = _IEC(is_empty=_PF(key="rubrics"))
+    return _F(should=[exact, empty, absent])
 
 
 def _legacy_domain_condition(domain: str, include_empty: bool = False):
@@ -495,9 +500,20 @@ class EmbeddingsService:
                 "filename": filename,  # Сохраняем filename напрямую для быстрого доступа
                 "document_type": metadata.get("document_type", "") if metadata else "",
                 "domain": metadata.get("domain", "") if metadata else "",
-                # Структура документа: номер стандарта, пункт, раздел
                 **structure,
-                # Права доступа (ACL)
+            }
+            # Семантические поля — ВЕРХНИМ уровнем payload, и только если значение непустое.
+            # Зачем верхним уровнем: по ним фильтрует поиск (тема), и они видны в выдаче. Пока они
+            # лежали только во вложенном `metadata`, фильтр по теме не находил НИЧЕГО у документов,
+            # прошедших конвейер (получалось «фильтр спрятал документ»). Пустое значение НЕ пишем:
+            # отсутствие поля — это законный случай, и его ловит мягкая ветка условия (`IsEmpty`).
+            if metadata:
+                for _k in ("issuer", "topics", "rubrics", "facets", "schema_version"):
+                    _v = metadata.get(_k)
+                    if _v not in (None, "", [], {}):
+                        payload[_k] = _v
+            # Права доступа (ACL) и вложенные метаданные
+            payload.update({
                 "visibility": metadata.get("visibility", "public") if metadata else "public",
                 "allow_group_ids": (metadata.get("allow_group_ids") or []) if metadata else [],
                 "deny_group_ids": (metadata.get("deny_group_ids") or []) if metadata else [],
@@ -509,7 +525,7 @@ class EmbeddingsService:
                     **(chunk.get("metadata", {}))
                 },
                 "created_at": datetime.utcnow().isoformat()
-            }
+            })
 
             points.append(
                 PointStruct(
