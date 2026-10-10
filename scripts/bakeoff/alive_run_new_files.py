@@ -95,16 +95,26 @@ def main() -> int:
     if not started:
         return 1
 
-    sess = get_session_local()()
     deadline = time.time() + args.wait
     pending = {d: name for d, name, _ in started}
     while pending and time.time() < deadline:
         time.sleep(10)
-        rows = sess.execute(text(
-            "select id, status, progress, chunks_count, document_type, rubrics, "
-            "coalesce(recognized_title,''), coalesce(error,'') from documents "
-            f"where id in ({','.join([':id%d' % i for i in range(len(pending))])})"),
-            {f"id{i}": d for i, d in enumerate(pending)}).fetchall()
+        # НОВАЯ сессия на каждый опрос: если предыдущий запрос упал, старая сессия остаётся в
+        # «прерванной транзакции» и все дальнейшие чтения падают молча — прибор тогда пишет
+        # «не дождались завершения», хотя работа давно сделана.
+        sess = get_session_local()()
+        try:
+            rows = sess.execute(text(
+                "select id, status, progress, chunks_count, document_type, rubrics, "
+                "coalesce(recognized_title,''), coalesce(error,'') from documents "
+                f"where id in ({','.join([':id%d' % i for i in range(len(pending))])})"),
+                {f"id{i}": d for i, d in enumerate(pending)}).fetchall()
+        except Exception as e:  # noqa: BLE001
+            print(f"  (опрос не удался: {type(e).__name__}: {str(e)[:80]})")
+            sess.close()
+            continue
+        finally:
+            pass
         for r in rows:
             if r[1] in ("completed", "failed", "error"):
                 name = pending.pop(r[0], "")
@@ -122,7 +132,7 @@ def main() -> int:
                     print(f"  таблиц {rec[0]}, строк в них {rec[1]}")
                 except Exception as e:  # noqa: BLE001
                     print(f"  таблицы: запрос не удался ({type(e).__name__})")
-    sess.close()
+        sess.close()
     if pending:
         print(f"\nне дождались завершения: {list(pending.values())}")
         return 1
