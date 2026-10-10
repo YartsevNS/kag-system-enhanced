@@ -111,18 +111,23 @@ def main() -> int:
 
     print("\nпо документам (какие свойства легли на фрагменты):")
     for doc in ids:
+        found = False
         for prop in ("document_id", "doc_id", "documentId"):
-            rows = q(f"MATCH (n:Chunk {{{prop}: $d}}) RETURN count(n) AS c", d=doc)
+            # Параметры в execute_cypher НЕ передаются (он принимает только текст запроса) — значение
+            # подставляем строкой. Попытка передать словарь параметров даёт ParameterMissing и выглядит
+            # как «граф не отвечает», хотя запрос просто не тот.
+            rows = q(f"MATCH (n:Chunk {{{prop}: '{doc}'}}) RETURN count(n) AS c")
             if rows and isinstance(rows[0], dict) and rows[0].get("c"):
                 print(f"  {doc[:8]} ({prop}): фрагментов {rows[0]['c']}")
-                rows2 = q(f"MATCH (n:Chunk {{{prop}: $d}}) "
+                rows2 = q(f"MATCH (n:Chunk {{{prop}: '{doc}'}}) "
                           f"RETURN count(n.schema_version) AS sv, count(n.extractor_version) AS ev, "
-                          f"count(n.access) AS acc", d=doc)
+                          f"count(n.access) AS acc")
                 print(f"      с версией схемы: {rows2[0].get('sv')}, с версией извлечения: "
                       f"{rows2[0].get('ev')}, с правами: {rows2[0].get('acc')}")
+                found = True
                 break
-        else:
-            print(f"  {doc[:8]}: узлов фрагментов не найдено (проверить имя свойства)")
+        if not found:
+            print(f"  {doc[:8]}: узлов фрагментов не найдено (проверить имя свойства или полноту id)")
 
     rows = q("MATCH (n:Chunk) WHERE n.extractor_version IS NOT NULL RETURN n.extractor_version AS v, "
              "count(n) AS c ORDER BY c DESC LIMIT 5")
