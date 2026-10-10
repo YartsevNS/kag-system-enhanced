@@ -318,7 +318,7 @@ def append_blocks(url: str, user: str, password: str, blocks: list[dict],
             stats["добавлено"] += len(fresh)
             stats["страниц"] += 1
             continue
-        if submit(url, user, password, page, text, f"дописано блоков: {len(fresh)}"):
+        if submit(url, user, password, target, text, f"дописано блоков: {len(fresh)}"):
             stats["добавлено"] += len(fresh)
             stats["страниц"] += 1
         else:
