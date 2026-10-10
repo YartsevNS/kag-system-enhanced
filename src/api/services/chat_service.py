@@ -199,15 +199,20 @@ class ChatService:
         safe — фильтр по домену, но пустой домен в выдачу допускается.
         off — домен в поиске не участвует (определяется, но не фильтрует).
 
-        По умолчанию hard: поведение меняется только по замеру (см. docs/handoff.md).
+        ПО УМОЛЧАНИЮ ТЕПЕРЬ `safe` (изменено 10.10.2026 по решению владельца «тема не должна
+        ограничивать поиск по умолчанию»). Основание — замер на нашем корпусе: домен не определён
+        у 213 из 279 документов (76%), то есть при режиме hard любой вопрос, где классификатор
+        угадал тему, отсекал бОльшую часть корпуса. Замер 18.09.2026 (1012 чанков из 4944 без
+        домена; вопрос про 2-МР: 0.00 с жёстким фильтром против 0.90 без него) показывает цену.
+        Возврат к `hard` возможен по новому замеру — ручкой в настройках chat/domain.
         """
         try:
             from src.api.services.config_store import config_store
             raw = config_store.get("chat", "domain")
         except Exception:
-            return "hard"
-        mode = str(raw or "hard").strip().lower()
-        return mode if mode in ("hard", "safe", "off") else "hard"
+            return "safe"
+        mode = str(raw or "safe").strip().lower()
+        return mode if mode in ("hard", "safe", "off") else "safe"
 
     def _domain_kwargs(self, domain: Optional[str]) -> dict:
         """Аргументы поиска по домену согласно режиму (см. _domain_mode)."""
