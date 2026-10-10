@@ -1055,6 +1055,15 @@ class EmbeddingsService:
         Returns:
             True если успешно
         """
+        # Ленивая инициализация: клиент создаётся в initialize(), а удаление зовут и служебные
+        # приборы, где прогрева не было. Без этого удаление молча падало ('NoneType' object has
+        # no attribute 'delete'), и векторы удалённого документа оставались в базе как мусор.
+        if self._qdrant_client is None:
+            try:
+                await self.initialize()
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Не удалось инициализировать Qdrant для удаления: {e}")
+                return False
         try:
             await asyncio.to_thread(self._qdrant_client.delete, collection_name=self.collection_name,
                 points_selector=Filter(
@@ -1074,6 +1083,12 @@ class EmbeddingsService:
 
     async def delete_all(self) -> bool:
         """Удалить все чанки из Qdrant"""
+        if self._qdrant_client is None:
+            try:
+                await self.initialize()
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Не удалось инициализировать Qdrant для очистки: {e}")
+                return False
         try:
             await asyncio.to_thread(self._qdrant_client.delete, collection_name=self.collection_name,
                 points_selector=Filter(must=[]))

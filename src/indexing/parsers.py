@@ -151,21 +151,22 @@ class DocumentParser:
                 # а искажённые чанки уходили в индекс: по русским запросам они не
                 # находятся. Живой случай: 892c0e3b (27 из 34 чанков), 7465c83e (11 из 11).
                 try:
-                    from src.indexing.text_repair import (
-                        cyrillic_share, looks_like_mojibake, repair_mojibake,
-                    )
-                    if text and looks_like_mojibake(text):
-                        _fixed = repair_mojibake(text)
-                        if cyrillic_share(_fixed) > cyrillic_share(text) + 0.3:
+                    # Единый разбор кодировки ловит ОБА направления порчи: и «cp1251 как latin-1»
+                    # (частая порча слоя в PDF), и «UTF-8 как latin-1» (наш случай в корпусе).
+                    from src.indexing.text_encoding import cyrillic_share, guard
+
+                    if text:
+                        _fixed, _suspect, _note = guard(text)
+                        if _fixed != text and cyrillic_share(_fixed) > cyrillic_share(text) + 0.3:
                             logger.info(
                                 f"Страница {page_num + 1}: восстановлена кодировка текстового "
                                 f"слоя ({len(text)} символов)"
                             )
                             text = _fixed
-                        else:
+                        elif _suspect:
                             logger.warning(
                                 f"Страница {page_num + 1}: текстовый слой битый и не "
-                                f"восстанавливается — отдаю на OCR"
+                                f"восстанавливается — отдаю на OCR ({_note})"
                             )
                             text = ""
                 except Exception as _e:
@@ -245,12 +246,22 @@ class DocumentParser:
         }
 
     def _parse_txt(self, path: Path) -> Dict[str, Any]:
-        """Распарсить текстовый файл"""
-        try:
-            content = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            # Пробуем другие кодировки
-            content = path.read_text(encoding="latin-1")
+        """Распарсить текстовый файл.
+
+        Кодировку решает ЕДИНЫЙ модуль `text_encoding`: раньше здесь стоял откат на latin-1 при
+        любой ошибке UTF-8, и один посторонний байт превращал весь документ в мусор — при этом
+        молча (так в корпусе появились 29 документов с нечитаемым текстом).
+        """
+        from src.indexing.text_encoding import decode_file
+
+        decoded = decode_file(path)
+        content = decoded.text
+        if decoded.suspicious:
+            logger.warning(
+                f"[кодировка] {path.name}: {decoded.note}; кодировка {decoded.encoding}"
+            )
+        elif decoded.repaired:
+            logger.info(f"[кодировка] {path.name}: {decoded.note} (было {decoded.encoding})")
 
         # Разбиваем на абзацы
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
@@ -270,6 +281,9 @@ class DocumentParser:
         return {
             "segments": segments,
             "metadata": {
+                "encoding": decoded.encoding,
+                "encoding_suspect": decoded.suspicious,
+                "encoding_note": decoded.note,
                 "total_pages": 1,
                 "total_paragraphs": len(paragraphs)
             }
@@ -348,16 +362,25 @@ class DocumentParser:
         }
 
     def _parse_csv(self, path: Path) -> Dict[str, Any]:
-        """Распарсить CSV файл"""
+        """Распарсить CSV файл.
+
+        Читаем через единый разбор кодировки: раньше файл открывался жёстко как utf-8, и любой
+        CSV из 1С или Excel (cp1251) ронял разбор или давал мусор.
+        """
         import csv
-        
+        import io
+
+        from src.indexing.text_encoding import decode_file
+
+        decoded = decode_file(path)
+        if decoded.suspicious:
+            logger.warning(f"[кодировка] {path.name}: {decoded.note}; кодировка {decoded.encoding}")
+
         rows = []
         headers = []
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            headers = next(reader, [])
-            rows = [row for row in reader]
+        reader = csv.reader(io.StringIO(decoded.text))
+        headers = next(reader, [])
+        rows = [row for row in reader]
 
         # Преобразуем в текстовые сегменты
         segments = []
@@ -376,6 +399,8 @@ class DocumentParser:
         return {
             "segments": segments,
             "metadata": {
+                "encoding": decoded.encoding,
+                "encoding_suspect": decoded.suspicious,
                 "total_rows": len(rows),
                 "columns": headers
             }

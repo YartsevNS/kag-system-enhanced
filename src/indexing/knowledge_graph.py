@@ -2539,6 +2539,13 @@ class KnowledgeGraphService:
         (нет MENTIONS ни от одного чанка).
         """
         if not self.driver:
+            # Раньше здесь был молчаливый выход: вызывающий код считал, что граф очищен,
+            # а узлы оставались. Живой случай — перезаливка документов с испорченной
+            # кодировкой: старые чанки остались в графе, потому что драйвер не был поднят.
+            logger.warning(
+                f"[граф] clear_document({document_id[:12]}) НЕ выполнен: соединение с Neo4j не "
+                f"поднято (нужен kg_service.initialize или создать сервис заново)"
+            )
             return
         try:
             with self.driver.session() as session:

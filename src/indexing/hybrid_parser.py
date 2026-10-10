@@ -369,6 +369,36 @@ class HybridDocumentParser:
         Метка пути — `scan_ocr`. Раньше здесь стоял движок Occular и метка `ocular_only`; движок удалён
         из образа, метка переименована, чтобы имя пути не выдавало вендора, которого в системе нет.
         """
+        path = Path(file_path)
+
+        # ── Текстовые файлы здесь НЕ распознаём ────────────────────────────────────────────
+        # Раньше .txt/.md/.csv попадали в общий путь «PyMuPDF → распознавание как картинка»:
+        # служба OCR получала байты текста вместо изображения и возвращала либо пустоту,
+        # либо мусор. Так в корпусе появились 29 документов, у которых текст в векторах
+        # и в графе был прочитан как Latin-1 («µÑ�Ñ�Ð²Ð¾» вместо русских слов) — 1959
+        # фрагментов. Читаем текст как текст и проверяем кодировку единым модулем.
+        if path.suffix.lower() in (".txt", ".md", ".markdown", ".csv"):
+            from src.indexing.text_encoding import decode_file
+
+            decoded = decode_file(path)
+            doc = ParsedDocument(filename=filename, parse_method="text")
+            doc.pages.append(ParsedPage(page_num=1, text=decoded.text))
+            doc.full_text = decoded.text
+            doc.metadata = {
+                "file_hash": file_hash,
+                "page_count": 1,
+                "format": path.suffix.lower(),
+                "encoding": decoded.encoding,
+                "encoding_suspect": decoded.suspicious,
+                "encoding_note": decoded.note,
+            }
+            if decoded.suspicious:
+                logger.warning(f"[кодировка] {filename}: {decoded.note} ({decoded.encoding})")
+            else:
+                logger.info(f"текстовый файл прочитан: {filename}, кодировка {decoded.encoding}, "
+                            f"знаков {len(decoded.text)}")
+            return doc
+
         doc = ParsedDocument(filename=filename, parse_method="scan_ocr")
 
         # Путь службы: то же распознавание, но движок вынесен на сервер моделей и лицензионно чист.
@@ -393,12 +423,25 @@ class HybridDocumentParser:
     
     def _parse_fallback(self, file_path: str, filename: str, file_hash: str) -> ParsedDocument:
         """Last-resort fallback: read as plain text."""
+        from src.indexing.text_encoding import decode_file
+
         doc = ParsedDocument(filename=filename, parse_method="fallback")
         try:
-            text = Path(file_path).read_text(errors='replace')
+            # БЫЛО: read_text(errors='replace') без указания кодировки — бралась кодировка системы,
+            # и любой русский файл превращался в мусор ещё до индексации. Теперь кодировку решает
+            # единый модуль, а признак подозрительности едет в метаданные документа.
+            decoded = decode_file(file_path)
+            text = decoded.text
             doc.pages.append(ParsedPage(page_num=1, text=text))
             doc.full_text = text
-            doc.metadata = {"file_hash": file_hash, "fallback": True}
+            doc.metadata = {
+                "file_hash": file_hash,
+                "fallback": True,
+                "encoding": decoded.encoding,
+                "encoding_suspect": decoded.suspicious,
+            }
+            if decoded.suspicious:
+                logger.warning(f"[кодировка] {filename}: {decoded.note}")
         except Exception:
             doc.full_text = f"[Unable to parse {filename}]"
         return doc
@@ -435,6 +478,11 @@ class HybridDocumentParser:
 
         path = Path(file_path)
         if not path.exists():
+            return None
+
+        # Текстовые файлы разбирает текстовая ветка (см. `_parse_scan_ocr`): у PyMuPDF для них
+        # работы нет, а раньше они уезжали в распознавание картинок и читались как Latin-1.
+        if path.suffix.lower() in (".txt", ".md", ".markdown", ".csv"):
             return None
 
         try:

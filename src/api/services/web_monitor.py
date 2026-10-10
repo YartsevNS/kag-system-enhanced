@@ -709,8 +709,16 @@ class WebMonitorService:
                     try:
                         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                         raw = urllib.request.urlopen(req, timeout=30).read()
+                        # Кодируем через единый разбор: часть российских лент (в т.ч. гос.)
+                        # отдаёт cp1251, а жёсткий utf-8 с errors='replace' превращал такие
+                        # ленты в мусор и портил названия новостей.
+                        from src.indexing.text_encoding import decode_bytes
+
+                        decoded = decode_bytes(raw)
+                        if decoded.suspicious:
+                            logger.warning(f"[лента] {url}: {decoded.note}")
+                        raw = decoded.text
                         # Чиним частые проблемы: непарные &, невалидные символы
-                        raw = raw.decode('utf-8', errors='replace')
                         raw = _re.sub(r'&(?!amp;|lt;|gt;|quot;|apos;|#\d+;)', '&amp;', raw)
                         return feedparser.parse(raw)
                     except Exception:
