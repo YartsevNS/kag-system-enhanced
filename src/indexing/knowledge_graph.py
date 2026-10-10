@@ -151,9 +151,13 @@ class KnowledgeGraphService:
     def allowed_relation_types(self) -> set:
         """Закрытый список допустимых типов связей.
 
-        Системные (MENTIONS, HAS_CHUNK, RELATED_TO) + объявленные типы + типы из доменной схемы.
-        Всё, чего нет в списке, в граф не пишется под своим именем: иначе модель придумывает
-        типы на ходу, и в базе копится мусор, который чистится только переобработкой.
+        Системные (MENTIONS, HAS_CHUNK, RELATED_TO) + объявленные типы + типы из доменной схемы
+        + типы НАШЕЙ ОНТОЛОГИИ (graph_ontology.RELATIONS).
+
+        Последняя часть появилась после живой ошибки: онтология задавала осмысленные типы
+        (PART_OF, APPLIES_TO, ISSUED_BY, REQUIRES, REFERENCES, HAS_CLAUSE, DEFINES, SUPERSEDES,
+        AMENDS), но этот список о них не знал, и запись в граф молча подменяла их на RELATED_TO —
+        то есть вся работа над типами связей не отражалась в данных.
         """
         # Системные и структурные типы НАШЕГО кода (не от модели): упоминания, фрагменты,
         # разделы, версии редакций. Их нельзя считать «выдуманными» и нельзя преобразовывать.
@@ -165,6 +169,12 @@ class KnowledgeGraphService:
             for group, items in schema.items():
                 if isinstance(items, dict):
                     allowed |= {str(k).upper() for k in items.keys()}
+        except Exception:
+            pass
+        try:
+            from src.indexing.graph_ontology import SEMANTIC_CODES
+
+            allowed |= {c.upper() for c in SEMANTIC_CODES}
         except Exception:
             pass
         return allowed

@@ -70,7 +70,7 @@ async def chunks_from_qdrant(svc, document_id: str, limit: int = 600) -> list[di
 
 
 def pick_documents(limit: int, types: tuple[str, ...], max_chunks: int, names: list[str],
-                   min_chunks: int = 0) -> list[dict]:
+                   min_chunks: int = 0, domains: tuple[str, ...] = ()) -> list[dict]:
     from src.api.services.document_repository import get_doc_repo
 
     out = []
@@ -80,17 +80,25 @@ def pick_documents(limit: int, types: tuple[str, ...], max_chunks: int, names: l
         fn = d.get("filename") or ""
         n = int(d.get("chunks_count") or 0)
         dt = (d.get("document_type") or d.get("type") or "").lower()
+        rubs = {str(x).lower() for x in (d.get("rubrics") or [])}
         if names:
             if fn not in names:
+                continue
+        elif domains:
+            # Отбор по темам: так берём нормативное подмножество (кибербез, юристы), где связи
+            # вообще имеют проверяемый смысл, и не тратим модель на новости и аналитику.
+            if not (rubs & set(domains)):
+                continue
+            if n < min_chunks or n > max_chunks:
                 continue
         else:
             if dt not in types:
                 continue
             if n < min_chunks or n > max_chunks:
                 continue
-        out.append({"id": did, "filename": fn, "type": dt, "chunks": n})
+        out.append({"id": did, "filename": fn, "type": dt, "chunks": n, "rubrics": sorted(rubs)})
     out.sort(key=lambda x: x["chunks"])
-    return out[:limit]
+    return out[:limit] if limit else out
 
 
 async def main() -> int:
@@ -103,12 +111,14 @@ async def main() -> int:
                     help="нижняя граница: отсекает документы-заглушки (только заголовок и ссылка)")
     ap.add_argument("--types", default=",".join(DEFAULT_TYPES))
     ap.add_argument("--names", default="", help="явный список имён через запятую")
+    ap.add_argument("--domain", default="", help="отбор по темам (например infosec,law)")
     args = ap.parse_args()
     apply = args.apply and not args.dry_run
 
     types = tuple(t.strip() for t in args.types.split(",") if t.strip())
     names = [n.strip() for n in args.names.split(",") if n.strip()]
-    docs = pick_documents(args.limit, types, args.max_chunks, names, args.min_chunks)
+    domains = tuple(d.strip().lower() for d in args.domain.split(",") if d.strip())
+    docs = pick_documents(args.limit, types, args.max_chunks, names, args.min_chunks, domains)
 
     print("=" * 92)
     print(f"ПИЛОТ ГРАФА НА ОНТОЛОГИИ — {'СБОРКА' if apply else 'ПРИМЕРКА'}")

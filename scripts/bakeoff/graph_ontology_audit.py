@@ -22,21 +22,23 @@ from collections import defaultdict
 # Что модель вообще не должна была порождать сама — эти связи пишет код.
 STRUCTURAL = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION"}
 
-# Схема «тип сущности — допустимая связь — тип сущности».
-# Ключ — тип связи, значение — множество допустимых пар (источник, цель) по коду доменной схемы.
-ALLOWED_PAIRS: dict[str, set[tuple[str, str]]] = {
-    "SIGNED_BY": {("document_ref", "person"), ("document_ref", "organization")},
-    "DATED": {("document_ref", "date"), ("organization", "date"), ("person", "date"),
-              ("legal_term", "date"), ("location", "date")},
-    "LOCATED_AT": {("organization", "location"), ("person", "location"),
-                   ("document_ref", "location")},
-    "AMOUNT": {("document_ref", "money"), ("organization", "money"), ("money", "money")},
-    "SUPERSEDED_BY": {("document_ref", "document_ref")},
-    # Пока не проверяем: тип слишком общий, семантику надо сначала определить (см. отчёт).
-    "BELONGS_TO": None,
-    # Запасной тип: код сам сводит сюда всё, что не опознал, поэтому пар не проверяем.
-    "RELATED_TO": None,
-}
+# Проверка идёт по ЕДИНОЙ онтологии (src/indexing/graph_ontology.py), а не по отдельной таблице:
+# раньше здесь лежал свой список, он отстал от онтологии, и типы вроде PART_OF/ISSUED_BY считались
+# «не описанными схемой» — то есть аудит показывал нарушения там, где всё было верно.
+try:
+    from graph_ontology import SEMANTIC_CODES, allowed_pairs, normalize_relation  # type: ignore
+except Exception:  # когда прибор лежит рядом с модулем
+
+    SEMANTIC_CODES = {"RELATED_TO"}  # type: ignore
+
+    def normalize_relation(raw: str) -> str:  # type: ignore
+        return (raw or "").strip().upper()
+
+    def allowed_pairs(code: str):  # type: ignore
+        return None
+
+
+ALLOWED_PAIRS: dict[str, set[tuple[str, str]] | None] = {}
 
 
 def fetch_pairs(session) -> list[dict]:
@@ -105,23 +107,25 @@ def main() -> int:
 
     for r in pairs:
         rel, t_a, t_b, n = r["rel"], r["t_a"], r["t_b"], r["n"]
-        rule = ALLOWED_PAIRS.get(rel, "unknown")
-        if rule is None:
-            unchecked += n
-            by_rel[rel]["unchecked"] += n
-            if rel == "BELONGS_TO":
-                belongs_rows.append(r)
-        elif rule == "unknown":
+        code = normalize_relation(rel)
+        if code not in SEMANTIC_CODES:
+            # Тип связи не из онтологии: это нарушение (модель выдумала тип), а не «не проверялось».
             viol += n
             by_rel[rel]["viol"] += n
-            viol_rows.append({**r, "почему": "тип связи не описан схемой"})
-        elif (t_a, t_b) in rule:
+            viol_rows.append({**r, "почему": "тип связи не из онтологии"})
+            continue
+        allowed = allowed_pairs(code)          # None — пары для этого типа не заданы (RELATED_TO)
+        if allowed is None:
+            unchecked += n
+            by_rel[rel]["unchecked"] += n
+            continue
+        if (t_a, t_b) in allowed:
             ok += n
             by_rel[rel]["ok"] += n
         else:
             viol += n
             by_rel[rel]["viol"] += n
-            viol_rows.append({**r, "почему": "пара типов не допускается схемой"})
+            viol_rows.append({**r, "почему": "пара типов не допускается онтологией"})
 
     print("=" * 78)
     print("АУДИТ ОНТОЛОГИИ ГРАФА (проверка пар «тип сущности — связь — тип сущности»)")
@@ -138,7 +142,7 @@ def main() -> int:
     print("\n--- по типам связей (проходит / нарушает / не проверяется) ---")
     for rel, c in sorted(by_rel.items(), key=lambda kv: -(kv[1]["ok"] + kv[1]["viol"] + kv[1]["unchecked"])):
         tot = c["ok"] + c["viol"] + c["unchecked"]
-        flag = "МУСОРКА" if ALLOWED_PAIRS.get(rel, "unknown") is None else ""
+        flag = "МУСОРКА (тип не определён)" if rel == "RELATED_TO" else ""
         print(f"  {rel:16s} всего {tot:6d} | ок {c['ok']:6d} | наруш {c['viol']:6d} | без проверки {c['unchecked']:6d}  {flag}")
 
     if viol_rows:
