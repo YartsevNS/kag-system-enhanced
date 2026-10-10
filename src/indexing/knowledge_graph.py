@@ -281,17 +281,48 @@ class KnowledgeGraphService:
         if not self.driver:
             return
         try:
+            # Версия и хеши документа: нужны, чтобы связать редакции в графе. Берём из реестра
+            # документов по id — оба вызывающих места (обработка и пересборка) знают только id.
+            file_hash, version, previous_hash = "", 1, ""
+            try:
+                from src.api.services.document_repository import get_doc_repo
+
+                rec = get_doc_repo().get_dict(document_id) or {}
+                file_hash = str(rec.get("file_hash") or "")
+                version = int(rec.get("version") or 1)
+                previous_hash = str(rec.get("previous_hash") or "")
+            except Exception:
+                pass
             with self.driver.session() as session:
                 session.run(
                     """
                     MERGE (d:Document {id: $id})
                     SET d.filename = $filename,
                         d.metadata = $metadata,
+                        d.file_hash = CASE WHEN $file_hash <> '' THEN $file_hash ELSE d.file_hash END,
+                        d.version = $version,
+                        d.previous_hash = CASE WHEN $previous_hash <> '' THEN $previous_hash ELSE d.previous_hash END,
                         d.updated_at = datetime()
+                    WITH d
+                    // Новая редакция: связь к документу с тем же хешем, что был у прежней версии.
+                    // Узел прежнего документа ищем ПО ХЕШУ — так связь находится и тогда, когда
+                    // прежняя версия была загружена задолго до и имеет другой id.
+                    OPTIONAL MATCH (o:Document {file_hash: $previous_hash})
+                    WHERE $previous_hash <> '' AND o.id <> d.id
+                    FOREACH (_ IN CASE WHEN o IS NOT NULL THEN [1] ELSE [] END |
+                        MERGE (d)-[r:NEW_EDITION_OF]->(o)
+                        SET r.version = $version,
+                            r.schema_version = $schema_version,
+                            r.created_at = coalesce(r.created_at, datetime())
+                    )
                     """,
                     id=document_id,
                     filename=filename,
                     metadata=json.dumps(metadata, ensure_ascii=False) if metadata else "{}",
+                    file_hash=file_hash,
+                    version=version,
+                    previous_hash=previous_hash,
+                    schema_version=self.SCHEMA_VERSION,
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания узла документа: {e}")
