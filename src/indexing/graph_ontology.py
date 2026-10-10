@@ -90,6 +90,11 @@ RELATIONS: tuple[RelationSpec, ...] = (
 RELATION_BY_CODE = {r.code: r for r in RELATIONS}
 SEMANTIC_CODES = {r.code for r in RELATIONS}
 
+# Версия онтологии. Поднимать при ЛЮБОМ изменении типов или допустимых пар: от неё зависит
+# ключ кэша извлечения. Без этого старые ответы модели переиспользуются, и правки онтологии
+# не действуют — на живом прогоне 10.10.2026 все связи пришли из кэша и выглядели как RELATED_TO.
+ONTOLOGY_EPOCH = 2
+
 # Системные и структурные связи: их пишет код, модель их не порождает.
 STRUCTURAL_CODES = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION", "NEW_EDITION_OF"}
 

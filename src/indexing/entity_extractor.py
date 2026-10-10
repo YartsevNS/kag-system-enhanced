@@ -316,6 +316,17 @@ class EntityExtractor:
         import json as _json
         cfg = cfg or {}
         schema = getattr(cls, "DOMAIN_SCHEMA", None) or {}
+
+        # Отпечаток онтологии связей. Правила добавляются КОДОМ (в cfg их нет), поэтому без этой
+        # части ключа правка онтологии не сбрасывала кэш: старые ответы модели переиспользовались,
+        # и новые правила не действовали (живой прогон 10.10.2026 — все связи пришли из кэша).
+        try:
+            from src.indexing.graph_ontology import ONTOLOGY_EPOCH, prompt_rules
+
+            ontology_fp = f"{ONTOLOGY_EPOCH}:{len(prompt_rules())}"
+        except Exception:
+            ontology_fp = "none"
+
         payload = "|".join([
             str(getattr(cls, "PROMPT_EPOCH", 1)),
             str(cfg.get("model") or ""),
@@ -324,6 +335,7 @@ class EntityExtractor:
             str(cfg.get("system_prompt") or "")[:2000],
             str(getattr(cls, "_active_preset", "")),
             _json.dumps(schema, ensure_ascii=False, sort_keys=True)[:5000],
+            ontology_fp,
         ])
         return _h.sha256(payload.encode("utf-8")).hexdigest()[:8]
 
@@ -633,9 +645,25 @@ JSON:
         if not system_prompt:
             system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
 
+        # ── Онтология связей в задании (чего не было раньше) ──────────────────────────────
+        # Раньше ограничивались только ТИПЫ СУЩНОСТЕЙ, а про типы СВЯЗЕЙ в задании не было
+        # ничего: модель придумывала названия на ходу и сваливала половину смысловых связей
+        # в одну бессмысленную мусорку BELONGS_TO. Замер 10.10.2026: по схеме проходили 27%
+        # связей, 16,6% были формально невозможны. Теперь список типов и допустимых пар
+        # передаётся модели — она отвечает в рамках схемы.
+        try:
+            from src.indexing.graph_ontology import prompt_rules
+
+            if "РАЗРЕШЁННЫЕ СВЯЗИ" not in system_prompt:
+                system_prompt = system_prompt.rstrip() + "\n\n" + prompt_rules()
+        except Exception as _onto_err:  # noqa: BLE001 — без онтологии извлекаем как раньше
+            logger.warning(f"[graph] правила онтологии не добавлены в задание: {_onto_err}")
+
         # Страховка: не отправлять раздутый system_prompt (старые версии graph.txt
         # ~30 КБ могли остаться в config_store) — обрезаем до компактного дефолта.
-        if len(system_prompt) > 2000:
+        # Порог поднят с 2000: с правилами онтологии задание длиннее, и при старом пороге
+        # оно молча заменялось общим текстом, то есть онтология отключалась бы.
+        if len(system_prompt) > 9000:
             system_prompt = "Ты — эксперт по извлечению структурированных данных из текста. Отвечай строго в JSON формате, без markdown-обёртки."
         try:
             import aiohttp
@@ -910,17 +938,38 @@ JSON:
             if entity_objs:
                 await _neo4j_write(kg_service.batch_create_entities, entity_objs, label="batch_entities")
 
-            # Сохраняем связи (батч)
-            rel_objs = [
-                Relation(
+            # Сохраняем связи (батч) — С ПРОВЕРКОЙ ПО ОНТОЛОГИИ.
+            # Тип приводим к канону (иначе всё сваливается в одну мусорку), пару
+            # «тип источника → тип цели» сверяем со списком допустимых и не пишем
+            # то, чего по смыслу быть не может. Проверка бесплатная и без модели.
+            from src.indexing.graph_ontology import normalize_relation, validate_triple
+
+            _types = {str(e.get("name") or "").strip().lower(): str(e.get("type") or "").strip().lower()
+                      for e in entities}
+            rel_objs = []
+            _rejected: list[tuple] = []
+            for r in relations:
+                src_t = _types.get(str(r.get("source") or "").strip().lower(), "")
+                dst_t = _types.get(str(r.get("target") or "").strip().lower(), "")
+                code = normalize_relation(r.get("type") or "")
+                ok, note = validate_triple(src_t, code, dst_t)
+                if not ok:
+                    _rejected.append((r.get("source"), code, r.get("target"), note))
+                    continue
+                rel_objs.append(Relation(
                     source=r["source"], target=r["target"],
-                    type=r["type"], document_id=document_id,
+                    type=code, document_id=document_id,
                     # Из какого фрагмента извлечена связь: без этого «откуда известно»
                     # восстанавливается только догадкой по упоминаниям.
                     chunk_id=chunk_id,
+                ))
+            if _rejected:
+                logger.info(
+                    f"[graph][онтология] {chunk_id}: отброшено связей {len(_rejected)} "
+                    f"из {len(relations)} — {_rejected[:3]}"
                 )
-                for r in relations
-            ]
+            elif rel_objs:
+                logger.debug(f"[graph][онтология] {chunk_id}: все {len(rel_objs)} связей по схеме")
             if rel_objs:
                 await _neo4j_write(kg_service.batch_create_relations, rel_objs, label="batch_relations")
 
