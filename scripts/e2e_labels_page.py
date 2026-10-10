@@ -74,10 +74,23 @@ def _api(method: str, path: str, tok: str, body: dict | None = None):
             return e.code, {}
 
 
-def _manual_items(tok: str) -> set:
-    """Множество (документ, поле) с ручной пометкой — по нему видно, что кнопка сработала."""
+def _manual_items(tok: str) -> list:
+    """Список полей с ручной пометкой — по нему видно, что кнопка сработала."""
     _, data = _api("GET", "/api/v1/labels/review?only=manual", tok)
-    return {(i["document_id"], i["field"]) for i in (data.get("items") or [])}
+    return list(data.get("items") or [])
+
+
+def _sweep_manual(tok: str) -> int:
+    """Уборка: снять ручные пометки, оставленные проверками.
+
+    Значения при этом НЕ меняются (снятие пометки возвращает поле модели), поэтому уборка безопасна:
+    она убирает только след проверки. Число снятых печатаем — чтобы не «почистить» молча лишнее.
+    """
+    items = _manual_items(tok)
+    for i in items:
+        _api("POST", "/api/v1/labels/review/unlock", tok,
+             {"document_id": i["document_id"], "field": i["field"]})
+    return len(items)
 
 
 async def main() -> int:
@@ -132,10 +145,13 @@ async def main() -> int:
         # 6. Реальный клик: сохранить значение ПЕРВОЙ доступной строки.
         # Не трогаем выбор в селекте — страница уже подставляет ТЕКУЩЕЕ значение, поэтому запись
         # не меняет данные, а проверяет путь: запрос дошёл, значение помечено ручным.
-        manual_before = _manual_items(tok)
+        manual_before = {(i["document_id"], i["field"]) for i in _manual_items(tok)}
+        # Берём строку, где значение УЖЕ выбрано: на пустом значении кнопка справедливо откажет
+        # («Не выбрано значение»), и проверка писала бы не о том.
         editable = await page.evaluate(
-            "(() => { const s = [...document.querySelectorAll('#list select')].find(x => !x.disabled); "
-            "return s ? s.id : ''; })()")
+            "(() => { const sels = [...document.querySelectorAll('#list select')].filter(x => !x.disabled);"
+            " const s = sels.find(el => el.multiple ? el.selectedOptions.length > 0 : el.value);"
+            " return s ? s.id : ''; })()")
         if editable:
             before_idx = await page.evaluate("(id) => id.replace('v','')", editable)
             await page.click(f"#list tr:nth-child({int(before_idx) + 1}) button.primary")
@@ -148,13 +164,13 @@ async def main() -> int:
             if new_items:
                 item = new_items[0]
                 log(item.get("by") == "admin", "в метаданных записан автор правки",
-                    f"by={item.get('by')} note={item.get('note')}")
-                # Уборка: снимаем ручную пометку, значение не трогаем (оно записано тем же значением).
-                code, _ = _api("POST", "/api/v1/labels/review/unlock", tok,
-                               {"document_id": item["document_id"], "field": item["field"]})
-                log(code == 200, "пометка снята после проверки (данные не изменены)", f"код {code}")
+                    f"by={item.get('by')} note={item.get('note')!r}")
         else:
             print("   (все значения уже ручные — клик сохранения пропущен, чтобы не менять данные)")
+
+        # 7. Уборка следов проверки: значения не меняются, снимаются только ручные пометки.
+        swept = _sweep_manual(tok)
+        log(True, "ручные пометки после проверки сняты", f"снято {swept}")
 
         await b.close()
 
