@@ -2432,6 +2432,61 @@ async def get_shared_properties():
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/doc-relations", summary="Периодичность сопоставления документов (настройка и состояние)")
+async def get_doc_relations_settings():
+    """Текущие настройки периодической синхронизации связей между документами.
+
+    Показываем ЗНАЧЕНИЯ, а не флаги: включено или нет, какой период в часах, когда был
+    последний прогон и когда будет следующий. Период меняется из админки и действует без
+    перезапуска планировщика: планировщик дёргает задачу часто, а решение принимает она сама.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from src.api.services.config_store import config_store
+
+    cfg = config_store.get("doc_relations", "settings") or {}
+    enabled = bool(cfg.get("enabled", True))
+    interval = float(cfg.get("interval_hours", 24) or 24)
+    last = cfg.get("last_run") or ""
+    nxt = ""
+    if last:
+        try:
+            nxt = (datetime.fromisoformat(last) + timedelta(hours=interval)).isoformat()
+        except Exception:  # noqa: BLE001
+            nxt = ""
+    return {
+        "status": "ok",
+        "enabled": enabled,
+        "interval_hours": interval,
+        "last_run": last,
+        "next_run": nxt,
+        "check_every_minutes": 15,
+        "explanation": ("Планировщик проверяет каждые 15 минут, но прогон запускается только если с "
+                        "прошлого прошло указанное число часов. Поэтому период можно менять без "
+                        "перезапуска служб."),
+    }
+
+
+@router.post("/doc-relations", summary="Задать периодичность сопоставления документов")
+async def set_doc_relations_settings(payload: dict = Body(...)):
+    """Сохранить период и включённость. В журнал пишется действие человека (кто и когда поменял)."""
+    from src.api.services.config_store import config_store
+
+    cfg = config_store.get("doc_relations", "settings") or {}
+    if "enabled" in payload:
+        cfg["enabled"] = bool(payload["enabled"])
+    if "interval_hours" in payload:
+        try:
+            hours = float(payload["interval_hours"])
+        except Exception:  # noqa: BLE001
+            return {"status": "error", "message": "период должен быть числом часов"}
+        if hours < 1 or hours > 720:
+            return {"status": "error", "message": "период допустим от 1 до 720 часов"}
+        cfg["interval_hours"] = hours
+    ok = config_store.set("doc_relations", "settings", cfg)
+    return {"status": "ok" if ok else "error", "settings": cfg}
+
+
 @router.get("/graph-prompt", summary="Задание модели, которое управляет построением связей графа")
 async def get_graph_prompt():
     """Текст задания, по которому модель извлекает связи, и последствия его правки.

@@ -342,6 +342,19 @@ async def entity_card_page(request: Request):
     return await _html_response(os.path.join(static_path, "entity-card.html"))
 
 
+@app.get("/doc-relations", summary="Связи между документами: периодичность сопоставления")
+async def doc_relations_page(request: Request):
+    """Страница настройки периодической синхронизации связей между документами (только админ).
+
+    Здесь видно, какой период задан сейчас, когда был прошлый прогон и когда будет следующий, и
+    период можно поменять без перезапуска служб: планировщик проверяет часто, а решение принимает
+    сама задача, сверяясь с этой настройкой.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "doc-relations.html"))
+
+
 @app.get("/graph-prompt", summary="Задание извлечения связей: текст, последствия правки, словарь пар")
 async def graph_prompt_page(request: Request):
     """Страница задания, которое управляет построением связей графа.

@@ -702,11 +702,34 @@ def link_document_relations(self, document_ids: Optional[list] = None) -> Dict[s
     за минуты, результат пишется в журнал.
     """
     import asyncio as _aio
+    from datetime import datetime, timezone
 
+    from src.api.services.config_store import config_store
     from src.indexing.document_relations import link_documents
+
+    # Периодичность задаётся из админки (страница «Связи документов»). Beat дёргает задачу часто,
+    # а РЕШАЕТ она сама: так период можно менять без перезапуска планировщика. При запуске по
+    # одному документу (document_ids передан) настройки не проверяем — связь нужна сразу.
+    cfg = config_store.get("doc_relations", "settings") or {}
+    if document_ids is None:
+        if not cfg.get("enabled", True):
+            return {"status": "skipped", "reason": "выключено в настройках"}
+        interval_h = float(cfg.get("interval_hours", 24) or 24)
+        last = cfg.get("last_run") or ""
+        if last:
+            try:
+                passed = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds()
+                if passed < interval_h * 3600:
+                    return {"status": "skipped",
+                            "reason": f"период не истёк (прошло {passed/3600:.1f} ч из {interval_h})"}
+            except Exception:  # noqa: BLE001
+                pass
 
     try:
         result = _aio.run(link_documents(document_ids=document_ids))
+        if document_ids is None:
+            cfg["last_run"] = datetime.now(timezone.utc).isoformat()
+            config_store.set("doc_relations", "settings", cfg)
         logger.info(f"[doc-relations] {result.get('relations_written')} связей у "
                     f"{result.get('linked_documents')} документов")
         return {"status": "ok", **result}

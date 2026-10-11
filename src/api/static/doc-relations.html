@@ -1,0 +1,123 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>KAG — связи между документами: периодичность</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:28px 34px 60px;max-width:1000px}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:6px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:20px}
+h2{font-size:16px;font-weight:600;margin:24px 0 10px}
+p.note{color:var(--text3);font-size:12.5px;line-height:1.55;margin-bottom:12px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 14px}
+.tile .n{font-size:20px;font-weight:700;letter-spacing:-0.4px}
+.tile .l{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+label{display:block;font-size:12.5px;color:var(--text2);margin:10px 0 6px}
+input[type=number],input[type=text]{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;width:160px}
+button.btn{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:9px 16px;font-size:12.5px;cursor:pointer;margin-right:8px}
+button.btn:hover{border-color:var(--accent)}
+ul.plain{list-style:none}
+ul.plain li{position:relative;padding:7px 0 7px 18px;font-size:12.5px;color:var(--text2);line-height:1.5;border-bottom:1px solid var(--border-s)}
+ul.plain li:last-child{border-bottom:none}
+ul.plain li::before{content:'';position:absolute;left:2px;top:15px;width:6px;height:6px;border-radius:9999px;background:var(--accent-h)}
+.muted{color:var(--text4)}.ok{color:var(--accent-h)}.warn{color:var(--amber)}
+#msg{font-size:12.5px;margin-top:10px;min-height:18px}
+</style></head>
+<body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>
+  <a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Связи между документами</h1>
+<div class="sub">Сопоставление документов по идентификаторам: по номеру ГОСТ, приказа, закона. Модель не вызывается — это правила, поэтому операция бесплатная и быстрая.</div>
+
+<div class="grid">
+  <div class="tile"><div class="n" id="t-enabled">—</div><div class="l">состояние</div></div>
+  <div class="tile"><div class="n" id="t-interval">—</div><div class="l">период</div></div>
+  <div class="tile"><div class="n" id="t-last">—</div><div class="l">прошлый прогон</div></div>
+  <div class="tile"><div class="n" id="t-next">—</div><div class="l">следующий прогон</div></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Периодичность</h2>
+  <label>Включено</label>
+  <input type="checkbox" id="f-enabled" style="width:auto">
+  <label>Период, часов (от 1 до 720)</label>
+  <input type="number" id="f-interval" min="1" max="720" step="1">
+  <div style="margin-top:14px">
+    <button class="btn" onclick="save()">Сохранить период</button>
+    <button class="btn" onclick="runNow()">Запустить сейчас</button>
+    <button class="btn" onclick="load()">Обновить</button>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Как это работает</h2>
+  <ul class="plain">
+    <li>При загрузке документа сопоставление запускается сразу — без ожидания периода. Так новый документ сразу получает связи с уже загруженными.</li>
+    <li>Периодический прогон нужен для того, что при загрузке не поймать: старые документы, ссылающиеся на только что загруженный, и документы, чья обработка завершилась позже.</li>
+    <li>Планировщик проверяет каждые 15 минут, но запуск происходит только если с прошлого прогона прошёл заданный период. Поэтому период можно менять здесь, без перезапуска служб.</li>
+    <li>Связь ставится только при точном совпадении идентификатора. Похожие случаи (в тексте «ГОСТ X», в базе «ГОСТ Р X») связью не считаются и попадают в отчёт для человека.</li>
+    <li>Стоимость прогона нулевая: языковая модель не используется, работают правила.</li>
+  </ul>
+</div>
+
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function logout(){try{localStorage.removeItem('kag-token')}catch(e){};location.href='/login'}
+function fmt(iso){
+  if(!iso) return 'не было';
+  try{
+    const d=new Date(iso);
+    const p=n=>String(n).padStart(2,'0');
+    return p(d.getDate())+'.'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes());
+  }catch(e){return iso}
+}
+async function load(){
+  try{
+    const r=await fetch('/api/v1/admin/models/doc-relations',{credentials:'include'});
+    const d=await r.json();
+    if(d.status!=='ok') throw new Error(d.message||'нет данных');
+    document.getElementById('f-enabled').checked=!!d.enabled;
+    document.getElementById('f-interval').value=d.interval_hours;
+    document.getElementById('t-enabled').textContent=d.enabled?'включено':'выключено';
+    document.getElementById('t-enabled').className=d.enabled?'n ok':'n warn';
+    document.getElementById('t-interval').textContent=(d.interval_hours>=24?(d.interval_hours/24)+' сут':'')+((d.interval_hours%24)||d.interval_hours>=24?'':'');
+    if(d.interval_hours<24){document.getElementById('t-interval').textContent=d.interval_hours+' ч';}
+    document.getElementById('t-last').textContent=fmt(d.last_run);
+    document.getElementById('t-next').textContent=d.next_run?fmt(d.next_run):'по периоду';
+  }catch(e){ setMsg('Не удалось прочитать настройки: '+e.message, true) }
+}
+function setMsg(t,bad){const m=document.getElementById('msg');m.textContent=t;m.className=bad?'warn':''}
+async function save(){
+  const enabled=document.getElementById('f-enabled').checked;
+  const interval=Number(document.getElementById('f-interval').value||24);
+  try{
+    const r=await fetch('/api/v1/admin/models/doc-relations',{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:enabled,interval_hours:interval})});
+    const d=await r.json();
+    if(d.status!=='ok') throw new Error(d.message||'не сохранилось');
+    setMsg('Сохранено: '+(d.settings.enabled?'включено':'выключено')+', период '+d.settings.interval_hours+' ч');
+    load();
+  }catch(e){ setMsg('Ошибка сохранения: '+e.message, true) }
+}
+async function runNow(){
+  setMsg('Запускаю…');
+  try{
+    const r=await fetch('/api/v1/kg/link-document-relations',{method:'POST',credentials:'include'});
+    const d=await r.json();
+    if(d.status!=='ok') throw new Error(d.message||'не запустилось');
+    setMsg('Запущено. Результат смотрите в журнале воркера обслуживания.');
+  }catch(e){ setMsg('Ошибка запуска: '+e.message, true) }
+}
+load();
+</script>
+</body></html>
