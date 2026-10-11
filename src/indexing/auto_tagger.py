@@ -17,7 +17,7 @@ from loguru import logger
 
 
 class DocumentType(str, Enum):
-    """Виды документов — словарь v0 (утверждён 10.10.2026).
+    """Виды документов — словарь v1 (11.10.2026: порог 25 снят, добавлены виды из ГОСТ Р 7.0.97-2016).
 
     Единственный источник списка — `src/indexing/document_kinds.py`. Перечисление
     оставлено ради быстрых проверок и совместимости, но значения обязаны совпадать
@@ -34,6 +34,10 @@ class DocumentType(str, Enum):
     STANDARDIZATION_RECOMMENDATION = "standardization_recommendation"
     LAW = "law"
     SUBORDINATE_ACT = "subordinate_act"
+    # ── добавлено 11.10.2026 по перечню ГОСТ Р 7.0.97-2016 ──
+    CHARTER = "charter"
+    DECISION = "decision"
+    MINUTES = "minutes"
     REGULATION = "regulation"
     INSTRUCTION = "instruction"
     DIRECTIVE = "directive"
