@@ -63,6 +63,7 @@ class Entity:
     # Слой происхождения: 'model' — извлечено моделью, 'regex' — найдено правилами. Один и тот же
     # путь записи для обоих слоёв: иначе проверки, добавленные в службу, до правил не доходят.
     layer: str = "model"
+    evidence: str = ""  # дословная цитата-основание (проверяется по тексту фрагмента)
     # Якоря: сущность по имени (по умолчанию) либо документ по id — правила связывают документ со
     # стандартом/пунктом. Пишутся через белый список меток внутри службы.
     source_label: str = "Entity"
@@ -539,7 +540,8 @@ class KnowledgeGraphService:
                         rel.chunk_id = coalesce(rel.chunk_id, $chunk_id),
                         rel.schema_version = $schema_version,
                         rel.extractor_version = $extractor_version,
-                        rel.created_at = coalesce(rel.created_at, datetime())
+                        rel.created_at = coalesce(rel.created_at, datetime()),
+                        rel.evidence = coalesce(rel.evidence, $evidence)
                     """,
                     source=rel.source,
                     target=rel.target,
@@ -547,6 +549,7 @@ class KnowledgeGraphService:
                     chunk_id=rel.chunk_id or "",
                     schema_version=self.SCHEMA_VERSION,
                     extractor_version=self.extractor_version(),
+                    evidence=getattr(rel, "evidence", "") or "",
                 )
         except Exception as e:
             logger.warning(f"Ошибка создания связи {rel.type}: {e}")
