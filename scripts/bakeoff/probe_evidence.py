@@ -48,7 +48,7 @@ for c in chunks:
 if target is None:
     print("не нашёл фрагмент", WANT, "| примеры:", [str(c.get("chunk_id"))[-5:] for c in chunks[:6]])
     raise SystemExit(2)
-text = target.get("text") or target.get("content") or ""
+text = target.get("content") or target.get("text") or ""
 print("фрагмент:", str(target.get("chunk_id"))[-12:], "| знаков:", len(text))
 
 # Правила типов — берём те же, что в рабочем задании.

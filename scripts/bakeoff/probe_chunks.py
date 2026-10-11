@@ -59,7 +59,7 @@ HIT = MISS = 0
 
 for ch in picked:
     cid = str(ch.get("chunk_id") or "")
-    text = ch.get("text") or ch.get("content") or ""
+    text = ch.get("content") or ch.get("text") or ""
     prompt = f"""Извлеки связи между сущностями. Только JSON.
 
 Типы связей:
