@@ -117,6 +117,24 @@ def main() -> int:
     if "api" in images and "worker" not in images:
         print("   (правка только веб-слоя: воркер пересобирать не нужно)")
 
+    # Проверка «неопределённое имя» по изменённым python-файлам. Зачем: 11.10.2026 выкат .34
+    # положил api — при старте NameError (Body не импортирован), потому что py_compile такое НЕ
+    # ловит: синтаксис верный, а имя не определено. Служба падает уже на стенде, в бою.
+    py_files = [f for f in files if f.endswith(".py")]
+    if py_files:
+        try:
+            r = subprocess.run(["ruff", "check", "--select", "F821", "--no-cache",
+                                "--output-format", "concise", *py_files],
+                               capture_output=True, text=True)
+            if r.returncode != 0 and (r.stdout or "").strip():
+                print("\nВНИМАНИЕ: неопределённые имена в изменённых файлах (служба упадёт при старте):")
+                for line in (r.stdout or "").strip().splitlines()[:10]:
+                    print("   " + line)
+            else:
+                print("\nпроверка имён: чисто")
+        except FileNotFoundError:
+            print("\n(ruff не найден — проверку имён пропускаю)")
+
     print("\nДальше обязательно:")
     print("   1) теги образов в docker-compose.yml заменить на новые;")
     print("   2) docker-compose up -d --force-recreate <api|worker|worker-maintenance>;")

@@ -10,7 +10,7 @@ from typing import Literal, Optional, List
 from loguru import logger
 
 from src.api.middleware.auth_v2 import get_current_user_optional, get_current_admin
-from src.indexing.knowledge_graph import kg_service
+from src.indexing.knowledge_graph import CHUNK_TEXT_PREVIEW_CHARS, kg_service
 from src.indexing.ids import display_filename
 from src.database.user_models import User
 from neo4j.exceptions import ClientError as Neo4jClientError

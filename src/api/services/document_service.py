@@ -952,7 +952,10 @@ class DocumentService:
             # видно в админке и можно было поправить без переиндексации.
             try:
                 setattr(record, "domain", domain)
-                get_doc_repo().upsert(document_id, {"domain": domain})
+                # Импорт локальный: репозиторий нужен только на этой ветке, и он тянет драйвер БД.
+                from src.api.services.document_repository import get_doc_repo as _get_repo
+
+                _get_repo().upsert(document_id, {"domain": domain})
             except Exception as e:
                 logger.debug(f"[domain] в базу записать не удалось: {e}")
 
