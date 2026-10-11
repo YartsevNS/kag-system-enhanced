@@ -833,7 +833,12 @@ function showNodeInfo(n){
     // Клик по сущности в режиме «сущность» задаёт термин подсветки: в панели
     // фрагментов будет подсвечено имя самой сущности.
     if (kgMode === 'entity' && d.name) lastQueryText = d.name;
+    // Ссылка на карточку объекта: там все факты о сущности с происхождением каждого
+    // (документ, фрагмент, слой, версия схемы) — то, чем факт можно проверить.
+    const cardHref = '/card?entity=' + encodeURIComponent(d.name || '');
     html += ' <button class="btn-sm" onclick="expandNode(\'' + attrStr(d.name) + '\')" style="margin-left:8px">+ соседи</button>' +
+            ' <a class="btn-sm" style="margin-left:6px;text-decoration:none" href="' + cardHref + '" ' +
+            'title="Все факты об объекте с источником каждого">карточка объекта</a>' +
             '<div id="kg-info-body" style="margin-top:8px;color:var(--text4)">… ищу фрагменты…</div>';
   } else if (d.kind === 'chunk') {
     const page = pageNumOf(d.page);

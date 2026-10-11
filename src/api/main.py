@@ -331,6 +331,17 @@ async def admin_web(request: Request):
     return await _html_response(os.path.join(static_path, "admin.html"))
 
 
+@app.get("/card", summary="Карточка объекта: факты о сущности с происхождением")
+async def entity_card_page(request: Request):
+    """Карточка объекта — доступна любому вошедшему.
+
+    Почему не только админу: карточка нужна в работе с документами (сверить факт, увидеть источник),
+    то есть оператору, а не администратору. Ограничений по данным здесь нет: страница показывает
+    то, что уже отдаёт граф по правам пользователя.
+    """
+    return await _html_response(os.path.join(static_path, "entity-card.html"))
+
+
 @app.get("/graph-prompt", summary="Задание извлечения связей: текст, последствия правки, словарь пар")
 async def graph_prompt_page(request: Request):
     """Страница задания, которое управляет построением связей графа.

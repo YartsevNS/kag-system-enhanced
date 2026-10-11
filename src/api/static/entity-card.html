@@ -1,0 +1,125 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>KAG — карточка объекта</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:28px 34px 60px;max-width:1240px}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:18px}
+h2{font-size:16px;font-weight:600;margin:24px 0 10px;letter-spacing:-0.2px}
+h2 .tagv{font-family:var(--mono);font-size:11px;color:var(--text4);margin-left:8px;font-weight:400}
+p.note{color:var(--text3);font-size:12.5px;line-height:1.55;margin-bottom:12px;max-width:900px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 14px}
+.tile .n{font-size:20px;font-weight:700;letter-spacing:-0.4px}
+.tile .l{font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.searchbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+input[type=text]{flex:1;min-width:240px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px}
+button.btn{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:9px 16px;font-size:12.5px;cursor:pointer}
+button.btn:hover{border-color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--border-s)}
+td{padding:8px 10px;border-bottom:1px solid var(--border-s);vertical-align:top}
+td.code{font-family:var(--mono);font-size:11.5px;color:var(--accent-l);white-space:nowrap}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text2);margin-right:6px}
+.pill.model{border-color:#2f5f47;color:var(--accent-l)}
+.pill.regex{border-color:#5a4a12;color:var(--amber)}
+.muted{color:var(--text4)}
+.warn{color:var(--amber)}
+.empty{color:var(--text3);font-size:13px;padding:16px;text-align:center}
+a{color:var(--accent-l);text-decoration:none}
+a:hover{text-decoration:underline}
+</style></head>
+<body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>
+  <a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Карточка объекта</h1>
+<div class="sub">Всё, что система знает об объекте, с происхождением каждого факта: из какого документа и фрагмента он взят, каким слоем получен и по какой версии схемы.</div>
+
+<div class="searchbar">
+  <input type="text" id="q" placeholder="Название объекта, например: Банк России, ГОСТ Р 57580.1, Росстандарт" autocomplete="off">
+  <button class="btn" onclick="load()">Показать</button>
+</div>
+<div class="grid" style="margin-bottom:16px">
+  <div class="tile"><div class="n" id="t-rel">—</div><div class="l">связей</div></div>
+  <div class="tile"><div class="n" id="t-doc">—</div><div class="l">документов</div></div>
+  <div class="tile"><div class="n" id="t-type">—</div><div class="l">тип объекта</div></div>
+  <div class="tile"><div class="n" id="t-schema">—</div><div class="l">версия схемы</div></div>
+</div>
+
+<div id="out"><div class="card empty">Введите название объекта и нажмите «Показать». Поиск идёт по графу — сущность должна быть уже извлечена из загруженных документов.</div></div>
+
+<h2>Что означает происхождение <span class="tagv">для проверки факта</span></h2>
+<p class="note">
+  У каждой связи видно: <b>слой</b> (правила — значит найдено детерминированно по тексту; модель — значит
+  извлечено языковой моделью), <b>версия схемы</b> и <b>версия извлекателя</b> (по ним понятно, какими
+  правилами получен факт), <b>фрагмент</b> — на какой кусок текста можно сослаться. Связь без происхождения
+  в граф не пишется: это правило системы, а не пожелание.
+</p>
+
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function logout(){try{localStorage.removeItem('kag-token')}catch(e){};location.href='/login'}
+function setTile(id,v){document.getElementById(id).textContent=(v===null||v===undefined||v==='')?'—':v}
+async function load(){
+  const name=(document.getElementById('q').value||'').trim();
+  const out=document.getElementById('out');
+  if(!name){out.innerHTML='<div class="card empty">Введите название объекта.</div>';return}
+  // Имя сущности может содержать «/» и кавычки — кодируем целиком.
+  out.innerHTML='<div class="card empty">Ищу…</div>';
+  try{
+    const r=await fetch('/api/v1/kg/entity-card/'+encodeURIComponent(name),{credentials:'include'});
+    const d=await r.json();
+    if(d.status!=='ok'){fail(d.message||'объект не найден');return}
+    const rels=d.relations||[];
+    setTile('t-rel',rels.length);
+    setTile('t-doc',(d.documents||[]).length);
+    setTile('t-type',d.type||'—');
+    setTile('t-schema',d.schema_version||'—');
+    const byType=Object.entries(d.by_type||{}).sort((a,b)=>b[1]-a[1]);
+    const typeLine=byType.length?byType.map(([k,v])=>`<span class="pill">${esc(k)} ×${v}</span>`).join(''):'<span class="muted">связей нет</span>';
+    let html='<h2>Связи <span class="tagv">'+rels.length+'</span></h2><p class="note">'+typeLine+'</p>';
+    if(rels.length){
+      html+='<div class="card" style="padding:0;overflow:hidden"><table><thead><tr><th>Тип</th><th>Направление</th><th>Второй объект</th><th>Слой</th><th>Схема</th><th>Извлекатель</th><th>Фрагмент</th></tr></thead><tbody>';
+      rels.forEach(x=>{
+        const layer=x.layer||'—';
+        html+=`<tr><td class="code">${esc(x.rel_type)}</td><td class="muted">${esc(x.direction||'')}</td>`
+          +`<td>${esc(x.other_name)} <span class="muted">(${esc(x.other_type||'')})</span></td>`
+          +`<td><span class="pill ${layer==='model'?'model':(layer==='regex'?'regex':'')}">${esc(layer)}</span></td>`
+          +`<td class="muted">${esc(x.schema_version||'—')}</td>`
+          +`<td class="muted">${esc(x.extractor_version||'—')}</td>`
+          +`<td class="muted" style="font-family:var(--mono);font-size:11px">${esc((x.chunk_id||'').slice(-14)||'—')}</td></tr>`;
+      });
+      html+='</tbody></table></div>';
+    }
+    const docs=d.documents||[];
+    if(docs.length){
+      html+='<h2>Документы-источники <span class="tagv">'+docs.length+'</span></h2><div class="card"><ul style="list-style:none">';
+      docs.forEach(x=>{html+=`<li style="padding:6px 0;border-bottom:1px solid var(--border-s);font-size:12.5px">${esc(x.filename||x.id)} <span class="muted" style="font-family:var(--mono);font-size:11px">${esc((x.id||'').slice(0,8))}</span></li>`});
+      html+='</ul></div>';
+    }
+    if((d.aliases||[]).length){html+='<h2>Другие написания</h2><p class="note">'+d.aliases.map(a=>'<span class="pill">'+esc(a)+'</span>').join('')+'</p>'}
+    out.innerHTML=html;
+  }catch(e){fail(e.message)}
+}
+function fail(msg){
+  document.getElementById('out').innerHTML='<div class="card empty">'+esc(msg)+'<br><span class="muted">Проверьте написание или выберите другой объект: имена сущностей берутся из документов.</span></div>';
+  setTile('t-rel','—');setTile('t-doc','—');setTile('t-type','—');setTile('t-schema','—');
+}
+// Можно открыть сразу с именем: /card?entity=Банк России
+(function(){
+  const m=new URLSearchParams(location.search).get('entity');
+  if(m){document.getElementById('q').value=m;load()}
+})();
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
+</script>
+</body></html>
