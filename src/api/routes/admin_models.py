@@ -2444,8 +2444,6 @@ async def get_doc_relations_settings():
     """
     from datetime import datetime, timedelta, timezone
 
-    from src.api.services.config_store import config_store
-
     cfg = config_store.get("doc_relations", "settings") or {}
     enabled = bool(cfg.get("enabled", True))
     interval = float(cfg.get("interval_hours", 24) or 24)
@@ -2472,8 +2470,6 @@ async def get_doc_relations_settings():
 @router.post("/doc-relations", summary="Задать периодичность сопоставления документов")
 async def set_doc_relations_settings(payload: dict = Body(...)):
     """Сохранить период и включённость. В журнал пишется действие человека (кто и когда поменял)."""
-    from src.api.services.config_store import config_store
-
     cfg = config_store.get("doc_relations", "settings") or {}
     if "enabled" in payload:
         cfg["enabled"] = bool(payload["enabled"])

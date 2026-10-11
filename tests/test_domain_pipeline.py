@@ -18,7 +18,11 @@ embeddings_module = importlib.import_module("src.indexing.embeddings_service")
 
 
 class FakeEmbeddings:
-    """Подменяет сервис эмбеддингов: считает вызовы и отдаёт заданные выдачи."""
+    """Подменяет сервис эмбеддингов: считает вызовы и отдаёт заданные выдачи.
+
+    Фильтр чата с 10.10.2026 — по ТЕМЕ документа (`rubrics`), а не по легаси-домену, поэтому
+    запоминаем именно аргумент темы: он и показывает, был ли поиск с фильтром или без.
+    """
 
     def __init__(self, strict, wide):
         self.strict = strict
@@ -26,8 +30,8 @@ class FakeEmbeddings:
         self.calls = []
 
     async def search(self, query, limit=10, **kwargs):
-        self.calls.append(kwargs.get("domain"))
-        if kwargs.get("domain"):
+        self.calls.append(kwargs.get("theme"))
+        if kwargs.get("theme"):
             return list(self.strict)
         return list(self.wide)
 
@@ -35,9 +39,9 @@ class FakeEmbeddings:
 @pytest.mark.asyncio
 async def test_poisk_rasshiryaetsya_kogda_domen_obednil_vydachu(monkeypatch):
     chat = chat_service_module.ChatService.__new__(chat_service_module.ChatService)
-    # режим hard: фильтр по домену строгий (config_store внутри сервиса импортируется
-    # локально, поэтому подменяем сам режим, а не модуль)
-    monkeypatch.setattr(chat_service_module.ChatService, "_domain_mode", lambda self: "hard")
+    # режим hard: фильтр по теме строгий (config_store внутри сервиса импортируется локально,
+    # поэтому подменяем сам режим, а не модуль)
+    monkeypatch.setattr(chat_service_module.ChatService, "_theme_mode", lambda self: "hard")
 
     weak = [{"id": "weak", "score": 0.31, "content": "не то"}]
     wide = [{"id": "right", "score": 0.91, "content": "то"},
@@ -46,9 +50,9 @@ async def test_poisk_rasshiryaetsya_kogda_domen_obednil_vydachu(monkeypatch):
     monkeypatch.setattr(embeddings_module, "embeddings_service", fake)
 
     res = await chat_service_module.ChatService._search_with_widening(
-        chat, "вопрос", 10, domain="infosec")
+        chat, "вопрос", 10, domain_value="infosec")
 
-    # был строгий поиск и затем расширение без фильтра
+    # был строгий поиск по теме и затем расширение без фильтра
     assert fake.calls == ["infosec", None], fake.calls
     ids = [c["id"] for c in res]
     assert ids[0] == "right", "лучший фрагмент должен быть первым после расширения"
@@ -59,13 +63,13 @@ async def test_poisk_rasshiryaetsya_kogda_domen_obednil_vydachu(monkeypatch):
 @pytest.mark.asyncio
 async def test_rasshirenie_ne_vyzyvaetsya_esli_vydacha_horoshaya(monkeypatch):
     chat = chat_service_module.ChatService.__new__(chat_service_module.ChatService)
-    monkeypatch.setattr(chat_service_module.ChatService, "_domain_mode", lambda self: "hard")
+    monkeypatch.setattr(chat_service_module.ChatService, "_theme_mode", lambda self: "hard")
     good = [{"id": f"c{i}", "score": 0.9 - i / 100, "content": "x"} for i in range(10)]
     fake = FakeEmbeddings(strict=good, wide=good)
     monkeypatch.setattr(embeddings_module, "embeddings_service", fake)
 
     res = await chat_service_module.ChatService._search_with_widening(
-        chat, "вопрос", 10, domain="infosec")
+        chat, "вопрос", 10, domain_value="infosec")
     assert fake.calls == ["infosec"], "лишний проход без фильтра не нужен"
     assert len(res) == 10
 

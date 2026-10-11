@@ -1051,6 +1051,35 @@ JSON:
     # Сохранение в граф
     # ============================================================
 
+    async def _extract_chunk(self, chunk_text: str, chunk_id: str,
+                             document_id: str, filename: str) -> dict:
+        """Извлечение по ВЫБРАННОЙ схеме: прежняя (два прохода) или v2 (один вызов).
+
+        Схема — настройка `system/graph_quality.extraction_scheme`: «current» (по умолчанию) или
+        «v2». v2 — обычная синхронная функция с HTTP-запросом, поэтому уходит в отдельный поток:
+        иначе она блокирует цикл событий воркера, и вместе с ним встаёт /health (на этом уже
+        теряли время). Сбой v2 не роняет обработку — работаем прежней схемой.
+        """
+        scheme = "current"
+        try:
+            from src.api.services.config_store import config_store as _cs
+
+            scheme = str((_cs.get("system", "graph_quality") or {})
+                         .get("extraction_scheme") or "current").strip().lower()
+        except Exception:  # noqa: BLE001
+            scheme = "current"
+        if scheme == "v2":
+            try:
+                from src.indexing.extraction_v2 import extract_chunk_v2
+
+                res = await asyncio.to_thread(extract_chunk_v2, chunk_text, chunk_id)
+                res["warnings"] = []
+                res["scheme"] = "v2"
+                return res
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[graph][v2] извлечение не удалось, прежняя схема: {e}")
+        return await self.extract_from_chunk(chunk_text, chunk_id, document_id, filename)
+
     async def extract_and_store(
         self, document_id: str, chunk_id: str, chunk_text: str,
         chunk_seq: int = 0, filename: str = ""
@@ -1066,7 +1095,7 @@ JSON:
         try:
             from src.indexing.knowledge_graph import kg_service, Entity, Relation
 
-            result = await self.extract_from_chunk(chunk_text, chunk_id, document_id, filename)
+            result = await self._extract_chunk(chunk_text, chunk_id, document_id, filename)
 
             entities = result.get("entities", [])
             relations = result.get("relations", [])
