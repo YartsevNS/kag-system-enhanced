@@ -19,7 +19,7 @@ import time
 import requests
 
 DOC = sys.argv[1] if len(sys.argv) > 1 else "2873e687-d476-43e6-b94e-f4dd14eaead8"
-COUNT = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+COUNT = sys.argv[2] if len(sys.argv) > 2 else "3"
 
 from src.api.services.provider_service import provider_service  # noqa: E402
 
@@ -36,8 +36,19 @@ except Exception:  # noqa: BLE001
     rel_desc = ""
 
 chunks = asyncio.run(service_for_document(DOC).get_document_chunks(DOC))
-step = max(1, len(chunks) // COUNT)
-picked = [chunks[i] for i in range(0, len(chunks), step)][:COUNT]
+
+# ФИКСИРОВАННЫЙ набор фрагментов: замер 11.10.2026 показал, что выбор «шагом» даёт разброс
+# между прогонами больше, чем разница между формулировками (вариант B: 92% на одних кусках,
+# 42% на других). Сравнивать формулировки можно только на ОДНИХ И ТЕХ ЖЕ фрагментах.
+FIXED = ["00010", "00030", "00050", "00070", "00090", "00110", "00130", "00150", "00170", "00175"]
+if str(COUNT).lower() == "fixed":
+    by_suffix = {str(c.get("chunk_id") or "")[-5:]: c for c in chunks}
+    picked = [by_suffix[s] for s in FIXED if s in by_suffix]
+    print("РЕЖИМ ФИКСИРОВАННОГО НАБОРА:", len(picked), "фрагментов:", [s for s in FIXED if s in by_suffix])
+else:
+    n = int(COUNT)
+    step = max(1, len(chunks) // n)
+    picked = [chunks[i] for i in range(0, len(chunks), step)][:n]
 print("фрагментов в документе:", len(chunks), "| к проверке:", len(picked))
 
 HEAD = "Извлеки связи между сущностями. Только JSON без пояснений.\n\nТипы связей:\n" + rel_desc + "\n\n"
@@ -85,6 +96,40 @@ JSON:
 Правила:
 - evidence — ДОСЛОВНАЯ часть текста (10-60 знаков), копия без изменений; без цитаты связь не выводи
 - выведи столько связей, сколько подтверждено цитатами (обычно 3-10)""",
+    "E_гибрид": """Пример верной пары:
+{{"source":"ГОСТ Р 57580.1—2017","target":"ГОСТ Р 57580.1","type":"replaces","evidence":"вводится взамен ГОСТ Р 57580.1-2017"}}
+
+Шаг 1. Найди в тексте короткие дословные фразы, из которых видна связь между двумя сущностями.
+Шаг 2. Для каждой фразы укажи тип связи из списка и имена source/target ровно как в тексте.
+
+Текст:
+---
+{text}
+---
+
+JSON:
+{{"relations":[{{"source":"...","target":"...","type":"тип связи","evidence":"дословная цитата из текста"}}]}}
+
+Правила:
+- evidence — ДОСЛОВНАЯ часть текста (10-60 знаков), скопированная без изменений; без неё связь не выводи
+- выведи столько связей, сколько подтверждено цитатами (обычно 3-10)""",
+    "F_английский": """Example of one correct relation (every relation looks like this):
+{{"source":"ГОСТ Р 57580.1—2017","target":"ГОСТ Р 57580.1","type":"replaces","evidence":"вводится взамен ГОСТ Р 57580.1-2017"}}
+
+Text:
+---
+{text}
+---
+
+Output ALL relations explicitly present in the text. Empty list only if there are truly none.
+Write source, target and evidence EXACTLY as they appear in the text (Russian) — do not translate them.
+The type must be one of the allowed types above (Latin codes).
+evidence must be a VERBATIM fragment of the text (10-60 characters), copied without changes.
+If no short verbatim fragment can be found, set evidence: null but still output the relation.
+
+JSON:
+{{"relations":[{{"source":"...","target":"...","type":"...","evidence":"..."}}]}}"""
+,
     "D_минимум_связей": """Текст:
 ---
 {text}
