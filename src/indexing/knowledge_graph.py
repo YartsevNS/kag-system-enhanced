@@ -545,7 +545,8 @@ class KnowledgeGraphService:
                         rel.schema_version = $schema_version,
                         rel.extractor_version = $extractor_version,
                         rel.created_at = coalesce(rel.created_at, datetime()),
-                        rel.evidence = coalesce(rel.evidence, $evidence)
+                        rel.evidence = CASE WHEN coalesce(rel.evidence, '') = ''
+                                            THEN coalesce($evidence, '') ELSE rel.evidence END
                     """,
                     source=rel.source,
                     target=rel.target,
@@ -699,6 +700,10 @@ class KnowledgeGraphService:
                 "src_key": _safe_key(getattr(r, "source_key", "") or "name"),
                 "dst_label": _safe_label(getattr(r, "target_label", "") or "Entity"),
                 "dst_key": _safe_key(getattr(r, "target_key", "") or "name"),
+                # Цитата-основание: доказательство обязано лежать рядом с фактом. Правка, которая
+                # «сохраняла цитату на связи», добавила её только в одиночную запись, а конвейер
+                # пишет ПАЧКОЙ — и цитата терялась молча (замер 11.10.2026: 0 подтверждённых из 1765).
+                "evidence": getattr(r, "evidence", "") or "",
             })
         if unknown:
             logger.warning(f"[graph][types] неизвестные типы связей заменены на related-to: {sorted(unknown)}")
@@ -742,7 +747,11 @@ class KnowledgeGraphService:
                                 // строки свойство оставалось пустым у всех прежних связей — Palantir-
                                 // принцип «у факта всегда есть происхождение» не выполнялся.
                                 rel.layer = coalesce(rel.layer, r.layer),
-                                rel.created_at = coalesce(rel.created_at, datetime())
+                                rel.created_at = coalesce(rel.created_at, datetime()),
+                                // Цитата: непустую не затираем, пустую дозаполняем. coalesce здесь
+                                // не годится — пустая строка для него значение, а не «нет данных».
+                                rel.evidence = CASE WHEN coalesce(rel.evidence, '') = ''
+                                                    THEN coalesce(r.evidence, '') ELSE rel.evidence END
                             """,
                             batch=_b,
                         ))

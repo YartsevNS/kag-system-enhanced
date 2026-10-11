@@ -61,7 +61,25 @@ def test_relation_keeps_evidence_and_entity_does_not():
     assert "evidence" not in fields, "evidence относится к связи, а не к сущности"
 
 
-def test_model_write_uses_evidence():
-    """Запись связи кладёт цитату в граф (иначе доказательство теряется, как было до правки)."""
+def test_batch_write_keeps_evidence():
+    """Пачечная запись обязана класть цитату: конвейер пишет связи ПАЧКОЙ, не поодиночке.
+
+    Живой дефект 11.10.2026: цитату добавили только в одиночную запись (create_relation), а
+    batch_create_relations её не передавал — после пересборки документа из 1765 связей ни у одной
+    не было цитаты. Проверка смотрит сам запрос: параметр в батче и SET у связи.
+    """
     src = (ROOT / "src/indexing/knowledge_graph.py").read_text(encoding="utf-8")
-    assert "rel.evidence = coalesce(rel.evidence, $evidence)" in src
+    i = src.index("def batch_create_relations(")
+    i_end = src.index("def ", i + 10)
+    block = src[i:i_end]
+    assert '"evidence": getattr(r, "evidence", "") or ""' in block, \
+        "батч не передаёт цитату в параметрах запроса"
+    assert "rel.evidence = CASE WHEN" in block, \
+        "батч не записывает цитату на связь (пустую дозаполняет, непустую не затирает)"
+
+
+def test_single_write_keeps_evidence():
+    src = (ROOT / "src/indexing/knowledge_graph.py").read_text(encoding="utf-8")
+    i = src.index("def create_relation(")
+    i_end = src.index("def ", i + 10)
+    assert "rel.evidence = CASE WHEN" in src[i:i_end]
