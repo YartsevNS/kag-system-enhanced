@@ -997,7 +997,12 @@ JSON:
                 {
                     "source": str(r.get("source", "")),
                     "target": str(r.get("target", "")),
-                    "type": str(r.get("type", "RELATED_TO"))
+                    "type": str(r.get("type", "RELATED_TO")),
+                    # ЦИТАТА-ОСНОВАНИЕ. Разбор строит связь заново из трёх полей, и поле evidence
+                    # молча терялось: модель его отдаёт (в ответах оно есть), проверка на кэше
+                    # работает, а до графа поле не доходило — отсюда «все связи без цитаты»
+                    # в конвейере при 81 проценте подтверждённых у щупа (замер 11.10.2026).
+                    "evidence": str(r.get("evidence") or "")[:400]
                 }
                 for r in data["relations"]
                 if r.get("source") and r.get("target")
