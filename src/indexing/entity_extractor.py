@@ -809,7 +809,7 @@ JSON:
                     ],
                     # Температура из параметров привязки (админка), дефолт 0.05.
                     "temperature": temperature if temperature is not None else 0.05,
-                    "max_tokens": 800
+                    "max_tokens": 1600
                 }
                 # ВАЖНО (почему так сделано): deepseek-v4-flash — reasoning-модель.
                 # Она сначала генерирует длинный reasoning_content (размышления),
@@ -889,6 +889,8 @@ JSON:
             result = self._parse_response(response)
             if not result.get("entities") and not result.get("relations") and not result.get("facts"):
                 logger.debug(f"Пустой ответ LLM для {chunk_id} (pass={pass_name}): {response[:120]}")
+            if pass_name and "relation" in str(pass_name):
+                logger.info(f"[graph][сырой ответ] {chunk_id}: знаков {len(response)}, начало: {response[:300]!r}")
             # Сохраняем сырой ответ — нужен type_watchdog (типизация),
             # который парсит JSON-список [{id,type}] напрямую из raw.
             result["raw"] = response
