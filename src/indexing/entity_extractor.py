@@ -1134,6 +1134,47 @@ JSON:
                 _min_specific = int(_qcfg.get("related_to_min_specific", 2) or 0)
             except Exception:  # noqa: BLE001
                 _min_specific = 2
+            # ПРОВЕРКА ЦИТАТЫ: факт обязан подтверждаться текстом фрагмента.
+            # Задание уже требует поле evidence (короткая цитата-основание), но проверки не было:
+            # модель могла выдумать связь, и она попадала в граф. Здесь сверяем цитату с текстом
+            # фрагмента без всякой модели — сравнение строк. Не нашлась — факт не пишем.
+            # Включается настройкой (по умолчанию мягкий режим: связи без цитаты не трогаем, пока
+            # не убедимся замером, что модель поле не забывает).
+            try:
+                from src.api.services.config_store import config_store as _cs_ev
+
+                _require_ev = bool((_cs_ev.get("system", "graph_quality") or {}).get("require_evidence", False))
+            except Exception:  # noqa: BLE001
+                _require_ev = False
+            if _require_ev and relations:
+                def _norm_txt(x: str) -> str:
+                    return re.sub(r"\s+", " ", (x or "").lower()).strip()
+
+                _chunk_norm = _norm_txt(chunk_text)
+                _by_name = {id(r): r for r in relations}
+                _kept, _no_ev, _bad_ev = [], 0, 0
+                for _r in rel_objs:
+                    _src_rel = _by_name.get(id(_r))
+                    _ev = ""
+                    for _orig in relations:
+                        if (str(_orig.get("source")) == _r.source and str(_orig.get("target")) == _r.target
+                                and normalize_relation(_orig.get("type") or "") == _r.type):
+                            _ev = str(_orig.get("evidence") or "")
+                            break
+                    if not _ev.strip():
+                        _no_ev += 1
+                    elif _norm_txt(_ev)[:60] and _norm_txt(_ev)[:60] in _chunk_norm:
+                        _kept.append(_r)
+                    elif _norm_txt(_ev) in _chunk_norm:
+                        _kept.append(_r)
+                    else:
+                        _bad_ev += 1
+                if _bad_ev or _no_ev:
+                    logger.info(
+                        f"[graph][цитата] {chunk_id}: связей {len(rel_objs)}, из них без цитаты "
+                        f"{_no_ev}, с цитатой вне текста {_bad_ev}, записано {len(_kept)}"
+                    )
+                rel_objs = _kept
             if _min_specific > 0 and rel_objs:
                 _specific = [r for r in rel_objs if r.type != "related-to"]
                 if len(_specific) >= _min_specific:
