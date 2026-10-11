@@ -634,6 +634,9 @@ JSON:
                 names = "\n".join([f"  - {e.get('name', '')}" for e in entities if e.get('name')])
                 prompt_relations = f"""Извлеки связи между сущностями. Только JSON.
 
+Пример верной пары (так выглядит каждая связь):
+{{"source":"ГОСТ Р 57580.1—2017","target":"ГОСТ Р 57580.1","type":"replaces","evidence":"вводится взамен ГОСТ Р 57580.1-2017"}}
+
 Типы связей:
 {rel_desc}
 
