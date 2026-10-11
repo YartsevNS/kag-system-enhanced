@@ -507,6 +507,47 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
             await asyncio.gather(*[_one(i, c) for i, c in enumerate(chunks)])
             chunks_done = _state["done"]
 
+            # Слой ПРАВИЛ (скелет) для документа: номера стандартов, пункты, даты, номера
+            # документов. Это детерминированные извлекатели без модели (ноль токенов),
+            # они дают связи «документ ссылается на ГОСТ», «в документе есть пункт 5.2.1»,
+            # которые именно чаще всего и спрашивают. Раньше слой правил жил только в
+            # scripts/bakeoff/build_skeleton.py и в путь ПЕРЕСБОРКИ вообще не входил: граф
+            # собирался одной моделью, и её проверки по словарю отбрасывали почти все связи.
+            try:
+                from src.indexing import deterministic_extractors as _dx
+                from src.indexing.knowledge_graph import Entity as _Ent, Relation as _Rel
+                _ents, _rels = [], []
+                for _ch in chunks:
+                    try:
+                        _sk = _dx.extract(_ch.get("content", ""))
+                    except Exception:
+                        continue
+                    _cid = _ch.get("chunk_id") or ""
+                    for _gost in getattr(_sk, "gost", []) or []:
+                        _ents.append(_Ent(name=_gost, type="standard", document_id=doc_id,
+                                          chunk_id=_cid, layer="regex"))
+                        _rels.append(_Rel(source=doc_id, target=_gost, type="REFERENCES",
+                                          document_id=doc_id, chunk_id=_cid, layer="regex",
+                                          source_label="Document", source_key="id"))
+                    for _sp in getattr(_sk, "sp", []) or []:
+                        _ents.append(_Ent(name=_sp, type="standard", document_id=doc_id,
+                                          chunk_id=_cid, layer="regex"))
+                        _rels.append(_Rel(source=doc_id, target=_sp, type="REFERENCES",
+                                          document_id=doc_id, chunk_id=_cid, layer="regex",
+                                          source_label="Document", source_key="id"))
+                    for _cl in getattr(_sk, "clauses", []) or []:
+                        _ents.append(_Ent(name=_cl, type="clause", document_id=doc_id,
+                                          chunk_id=_cid, layer="regex"))
+                        _rels.append(_Rel(source=doc_id, target=_cl, type="HAS_CLAUSE",
+                                          document_id=doc_id, chunk_id=_cid, layer="regex",
+                                          source_label="Document", source_key="id"))
+                if _ents:
+                    await asyncio.to_thread(kg_service.batch_create_entities, _ents)
+                    await asyncio.to_thread(kg_service.batch_create_relations, _rels)
+                    logger.info(f"[rebuild] {filename}: слой правил добавил сущностей {len(_ents)}, связей {len(_rels)}")
+            except Exception as e:
+                logger.warning(f"[rebuild] слой правил не записан для {filename}: {e}")
+
             # Слой разделов: узлы Section + section_id/breadcrumb на чанках.
             try:
                 from src.indexing.section_parser import (
