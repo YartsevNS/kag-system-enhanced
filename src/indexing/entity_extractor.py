@@ -481,6 +481,41 @@ class EntityExtractor:
             for pid, p in cls.SCHEMA_PRESETS.items()
         ]
 
+    def _filter_by_evidence(self, items, chunk_text: str, chunk_id: str):
+        """Оставить только связи, чья ДОСЛОВНАЯ цитата найдена в тексте фрагмента.
+
+        Замер 11.10.2026: проверка работала только в ветке свежего извлечения, а при ответе
+        из кэша извлечение выходит раньше, и проверка не выполнялась вовсе — поведение
+        зависело от прогрева кэша. Теперь проверка применяется в ОБОИХ путях.
+        Работает и со словарями (кэш), и с объектами (свежий разбор).
+        Включается настройкой system/graph_quality.require_evidence (по умолчанию выключена).
+        """
+        try:
+            from src.api.services.config_store import config_store as _cs
+
+            _require = bool((_cs.get("system", "graph_quality") or {}).get("require_evidence", False))
+        except Exception:  # noqa: BLE001
+            _require = False
+        if not _require or not items:
+            return items
+        _chunk = re.sub(r"\s+", " ", (chunk_text or "").lower()).strip()
+        kept, no_ev, bad_ev = [], 0, 0
+        for _it in items:
+            _raw = (_it.get("evidence") if isinstance(_it, dict) else getattr(_it, "evidence", "")) or ""
+            _e = re.sub(r"\s+", " ", str(_raw).lower()).strip()
+            if not _e:
+                no_ev += 1
+            elif _e[:60] in _chunk or _e in _chunk:
+                kept.append(_it)
+            else:
+                bad_ev += 1
+        if no_ev or bad_ev:
+            logger.info(
+                f"[graph][цитата] {chunk_id}: связей {len(items)}, без цитаты {no_ev}, "
+                f"цитата вне текста {bad_ev}, записано {len(kept)}"
+            )
+        return kept
+
     # ============================================================
     # Основной метод: двухпроходное извлечение
     # ============================================================
@@ -534,9 +569,12 @@ class EntityExtractor:
                         pass
             if _cached and isinstance(_cached, dict) and _cached.get("entities"):
                 logger.debug(f"[graph] Кэш LLM: {chunk_id} ({_cache_key[:16]}…)")
+                # Проверка подтверждений применяется и к ответу из кэша — иначе поведение
+                # зависело от прогрева кэша (правка 3 из docs/plans/graph-quality-changes.md).
+                _cached_rels = self._filter_by_evidence(_cached.get("relations", []), chunk_text, chunk_id)
                 return {
                     "entities": _cached.get("entities", []),
-                    "relations": _cached.get("relations", []),
+                    "relations": _cached_rels,
                     "facts": [],
                     "warnings": ["cache"],
                 }
