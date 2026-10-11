@@ -383,7 +383,12 @@ class EntityExtractor:
         try:
             from src.indexing.graph_ontology import ONTOLOGY_EPOCH, prompt_rules
 
-            ontology_fp = f"{ONTOLOGY_EPOCH}:{len(prompt_rules())}"
+            # Отпечаток — ХЕШ текста задания, а не его длина. Раньше бралась длина, и правка
+            # формулировки той же длины не меняла ключ: кэш оставался старым, и изменения
+            # словаря молча не действовали (тот же класс ошибки, что и «правка без подъёма
+            # версии»). Хеш ловит ЛЮБУЮ правку текста задания.
+            _pr = prompt_rules()
+            ontology_fp = f"{ONTOLOGY_EPOCH}:{_h.sha256(_pr.encode('utf-8')).hexdigest()[:12]}"
         except Exception:
             ontology_fp = "none"
 
