@@ -123,6 +123,25 @@ def load_sessions(db: Path, since: str, skip_subagents: bool) -> list[dict]:
     return out
 
 
+class _CookieTransport(xmlrpc.client.Transport):
+    """XML-RPC с сохранением печенек: без этого вход проходит, а следующие вызовы дают 401."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        import http.cookiejar
+        import urllib.request
+        self.jar = http.cookiejar.CookieJar()
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
+
+    def request(self, host, handler, request_body, verbose=False):
+        import urllib.request
+        req = urllib.request.Request(f"http://{host}{handler}", data=request_body,
+                                     headers={"Content-Type": "text/xml",
+                                              "User-Agent": "kag-agent/1.0"})
+        with self.opener.open(req, timeout=60) as resp:
+            self.verbose = verbose
+            return self.parse_response(resp)
+
 _JOURNAL_CACHE: dict = {}
 
 
@@ -137,7 +156,10 @@ def _all_journal_text(url: str, user: str, password: str, prefix: str = "kag:ж�
         return _JOURNAL_CACHE["text"]
     chunks: list[str] = []
     try:
-        proxy = xmlrpc.client.ServerProxy(url)
+        # Клиент ОБЯЗАН хранить сессионную печеньку: обычный ServerProxy её теряет, и вызовы
+        # после входа возвращают 401. На этом проверка дублей молча ничего не находила, и одни и
+        # те же вопросы дописались на страницы других дат (живой случай 11.10.2026).
+        proxy = xmlrpc.client.ServerProxy(url, transport=_CookieTransport())
         token = proxy.dokuwiki.login(user, password)
         if token:
             for item in proxy.dokuwiki.getPagelist(prefix + ":*", {"depth": 1}):
