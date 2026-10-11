@@ -186,13 +186,13 @@ async def main() -> int:
                 sk = extract(ch["text"])
                 preview = ch["text"]
                 for gost in sk.gost:
-                    sets.append({"kind": "standard", "name": gost, "rel": "REFERENCES",
+                    sets.append({"kind": "standard", "name": gost, "rel": "references",
                                  "chunk": ch["id"], "preview": preview})
                 for sp in sk.sp:
-                    sets.append({"kind": "standard", "name": sp, "rel": "REFERENCES",
+                    sets.append({"kind": "standard", "name": sp, "rel": "references",
                                  "chunk": ch["id"], "preview": preview})
                 for clause in sk.clauses:
-                    sets.append({"kind": "clause", "name": clause, "rel": "HAS_CLAUSE",
+                    sets.append({"kind": "clause", "name": clause, "rel": "has-part",
                                  "chunk": ch["id"], "preview": preview})
                 if args.with_dates:
                     for dt in sk.dates:

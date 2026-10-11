@@ -171,10 +171,31 @@ function badgeClass(type) {
 // таблицей, поэтому второй язык (или выбор по языку браузера) — это ещё один словарь, а не правка
 // данных на стенде и не пересборка графа.
 const UI_LANG = 'ru';   // при надобности выбирать по navigator.language; пока язык интерфейса один
+// Канонические коды пришли из стандартов (STIX 2.1 — безопасность, ELI — правовые документы,
+// Dublin Core — документы и их части). Прежние коды оставлены ниже: они ещё лежат в графе до
+// полной пересборки, и без них связи показывались бы как «part of» вместо русского названия.
 const REL_LABELS = {
-  ru: { RELATED_TO:'связано с', SIGNED_BY:'подписано', DATED:'датировано', AMOUNT:'на сумму',
-        BELONGS_TO:'принадлежит', LOCATED_AT:'находится по адресу', MENTIONS:'упоминается',
-        HAS_CHUNK:'содержит фрагмент' },
+  ru: {
+    // канонические (STIX 2.1)
+    'part-of':'входит в состав', 'member-of':'состоит в', 'located-at':'расположено',
+    'attributed-to':'отнесено к', 'authored-by':'подготовлено', 'derived-from':'основано на',
+    'targets':'воздействует на', 'indicates':'указывает на', 'mitigates':'снижает',
+    // канонические (ELI — правовые документы)
+    'amends':'изменяет', 'repeals':'отменяет', 'corrects':'исправляет', 'consolidates':'объединяет',
+    // канонические (Dublin Core — документы)
+    'references':'ссылается на', 'has-part':'содержит', 'is-version-of':'является редакцией',
+    'replaces':'заменяет', 'requires':'требует',
+    // канонические (наши: в стандартах этого нет)
+    'signed-by':'подписано', 'issued-by':'издано', 'dated':'датировано', 'has-amount':'на сумму',
+    'defines':'определяет', 'applies-to':'распространяется на',
+    'establishes-requirement':'устанавливает требование', 'related-to':'связано с',
+    // прежние коды — только для чтения уже записанных связей
+    RELATED_TO:'связано с', SIGNED_BY:'подписано', DATED:'датировано', AMOUNT:'на сумму',
+    BELONGS_TO:'входит в состав', LOCATED_AT:'расположено', PART_OF:'входит в состав',
+    SUPERSEDES:'заменяет', AMENDS:'изменяет', REFERENCES:'ссылается на', HAS_CLAUSE:'содержит пункт',
+    REQUIRES:'устанавливает требование', APPLIES_TO:'распространяется на', DEFINES:'определяет',
+    ISSUED_BY:'издано', MENTIONS:'упоминается', HAS_CHUNK:'содержит фрагмент',
+  },
 };
 const TYPE_LABELS = {
   ru: { person:'Человек', organization:'Организация', date:'Дата', money:'Сумма', location:'Место',
@@ -186,7 +207,7 @@ function relLabel(t){
   const dict = REL_LABELS[UI_LANG] || REL_LABELS.ru;
   if (dict[t]) return dict[t];
   // незнакомый код (модель может вернуть свой тип) — читаемая форма, без выдумывания смысла
-  return String(t).replace(/_/g, ' ').toLowerCase();
+  return String(t).replace(/[-_]/g, ' ').toLowerCase();
 }
 function typeLabel(t){
   if (!t) return 'сущность';

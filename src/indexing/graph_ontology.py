@@ -50,44 +50,122 @@ class RelationSpec:
 # RELATED_TO оставлен как крайняя мера: если модель не смогла выбрать тип, факт не теряем,
 # но помечаем — и по этой доле видно, что задание надо уточнять.
 RELATIONS: tuple[RelationSpec, ...] = (
-    RelationSpec("SIGNED_BY", "подписано", "документ подписан лицом или организацией",
-                 (("document_ref", "person"), ("document_ref", "organization"))),
-    RelationSpec("ISSUED_BY", "издано", "документ издан или утверждён органом",
-                 (("document_ref", "organization"), ("standard", "organization"))),
-    RelationSpec("DATED", "датировано", "документ или событие имеет дату",
-                 (("document_ref", "date"), ("organization", "date"),
-                  ("person", "date"), ("standard", "date"), ("event", "date"))),
-    RelationSpec("AMOUNT", "на сумму", "документ или организация связаны с суммой",
-                 (("document_ref", "money"), ("organization", "money"), ("money", "money"))),
-    RelationSpec("LOCATED_AT", "расположено", "организация или лицо находится по адресу",
-                 (("organization", "location"), ("person", "location"))),
-    RelationSpec("SUPERSEDES", "отменяет", "документ отменяет или заменяет другой документ",
+    # ══════════════════════════════════════════════════════════════════════════════
+    # Словарь построен НЕ на выдуманных названиях, а на опубликованных стандартах.
+    # Причина: свой словарь пришлось бы защищать на продаже, а стандартный — можно
+    # предъявить и он даёт совместимость выгрузок. Изобретать нужно не здесь.
+    #
+    #   STIX 2.1 (OASIS, безопасность) — part-of, member-of, located-at, attributed-to,
+    #       authored-by, derived-from, targets, indicates, mitigates
+    #   ELI (ЕС, правовые документы)  — amends, repeals, corrects, consolidates, cites
+    #   Dublin Core Terms (DCMI)      — references, has-part, is-version-of, replaces, requires
+    #   своё (в стандартах этого нет) — signed-by, issued-by, dated, has-amount, defines,
+    #       applies-to, establishes-requirement, related-to
+    # ══════════════════════════════════════════════════════════════════════════════
+
+    # ── STIX 2.1 ────────────────────────────────────────────────────────────────
+    RelationSpec("part-of", "входит в состав",
+                 "объект является частью другого: пункт в документе, редакция в деле, "
+                 "подразделение в организации",
+                 (("clause", "standard"), ("clause", "document_ref"), ("clause", "clause"),
+                  ("document_ref", "document_ref"), ("standard", "standard"),
+                  ("document_ref", "standard"), ("standard", "document_ref"),
+                  ("legal_term", "legal_term"), ("organization", "organization"),
+                  ("standard", "clause"))),
+    RelationSpec("member-of", "состоит в",
+                 "лицо или организация входит в объединение или подчинена другой организации",
+                 (("person", "organization"), ("organization", "organization"))),
+    RelationSpec("located-at", "расположено",
+                 "организация, лицо или событие находится в месте",
+                 (("organization", "location"), ("person", "location"),
+                  ("event", "location"), ("location", "location"))),
+    RelationSpec("attributed-to", "отнесено к",
+                 "документ или событие отнесено к организации (кто отвечает, чьё это)",
+                 (("document_ref", "organization"), ("event", "organization"),
+                  ("standard", "organization"))),
+    RelationSpec("authored-by", "подготовлено",
+                 "документ подготовлен организацией или лицом",
+                 (("document_ref", "organization"), ("document_ref", "person"),
+                  ("standard", "organization"))),
+    RelationSpec("derived-from", "основано на",
+                 "документ создан на основе другого документа или стандарта",
+                 (("document_ref", "document_ref"), ("standard", "standard"),
+                  ("standard", "document_ref"), ("document_ref", "standard"))),
+    # Безопасность: то, ради чего в стандарте эти типы и заведены.
+    RelationSpec("targets", "воздействует на",
+                 "угроза, инцидент или требование направлены на объект",
+                 (("event", "organization"), ("event", "document_ref"),
+                  ("document_ref", "document_ref"), ("legal_term", "organization"))),
+    RelationSpec("indicates", "указывает на",
+                 "признак или показатель указывает на событие, угрозу либо нарушение",
+                 (("legal_term", "event"), ("event", "event"), ("document_ref", "event"))),
+    RelationSpec("mitigates", "снижает",
+                 "мера, средство или требование снижает риск или угрозу",
+                 (("document_ref", "event"), ("legal_term", "event"), ("standard", "event"))),
+
+    # ── ELI: отношения между правовыми документами ─────────────────────────────
+    RelationSpec("amends", "изменяет",
+                 "документ вносит изменения в другой документ",
                  (("document_ref", "document_ref"), ("standard", "standard"))),
-    RelationSpec("AMENDS", "изменяет", "документ вносит изменения в другой документ",
+    RelationSpec("repeals", "отменяет",
+                 "документ отменяет или прекращает действие другого документа",
+                 (("document_ref", "document_ref"), ("standard", "standard"))),
+    RelationSpec("corrects", "исправляет",
+                 "документ исправляет ошибки другого документа",
                  (("document_ref", "document_ref"),)),
-    RelationSpec("REFERENCES", "ссылается на", "документ ссылается на другой документ, стандарт или пункт",
+    RelationSpec("consolidates", "объединяет",
+                 "документ объединяет положения нескольких документов",
+                 (("document_ref", "document_ref"),)),
+
+    # ── Dublin Core Terms: связи между документами и их частями ─────────────────
+    RelationSpec("references", "ссылается на",
+                 "документ ссылается на другой документ, стандарт или пункт",
                  (("document_ref", "document_ref"), ("document_ref", "standard"),
                   ("standard", "standard"), ("standard", "document_ref"),
-                  # добавлено 11.10.2026 по замеру отказов: «документ ссылается на пункт/раздел»
-                  # отбрасывалось (45 случаев — самый частый отказ), хотя это законная связь.
                   ("document_ref", "clause"), ("standard", "clause"))),
-    RelationSpec("HAS_CLAUSE", "содержит пункт", "документ содержит пункт, раздел или приложение",
-                 (("document_ref", "clause"), ("standard", "clause"))),
-    RelationSpec("REQUIRES", "устанавливает требование",
-                 "документ, стандарт или пункт устанавливает требование к чему-либо",
-                 (("document_ref", "legal_term"), ("standard", "legal_term"),
-                  ("clause", "legal_term"), ("standard", "organization"))),
-    RelationSpec("APPLIES_TO", "распространяется на", "документ распространяется на кого/что-либо",
+    RelationSpec("has-part", "содержит",
+                 "документ содержит пункт, раздел, таблицу или приложение",
+                 (("document_ref", "clause"), ("standard", "clause"),
+                  ("document_ref", "document_ref"), ("clause", "clause"))),
+    RelationSpec("is-version-of", "является редакцией",
+                 "документ является новой редакцией, версией или переводом другого",
+                 (("document_ref", "document_ref"), ("standard", "standard"))),
+    RelationSpec("replaces", "заменяет",
+                 "документ заменяет другой (взамен ранее выпущенного)",
+                 (("document_ref", "document_ref"), ("standard", "standard"))),
+    RelationSpec("requires", "требует",
+                 "документ требует наличия другого документа или условия",
+                 (("document_ref", "document_ref"), ("standard", "standard"),
+                  ("document_ref", "legal_term"))),
+
+    # ── Своё: этого в стандартах нет, здесь и изобретаем ────────────────────────
+    RelationSpec("signed-by", "подписано",
+                 "документ подписан лицом или организацией",
+                 (("document_ref", "person"), ("document_ref", "organization"))),
+    RelationSpec("issued-by", "издано",
+                 "документ издан или утверждён органом",
+                 (("document_ref", "organization"), ("standard", "organization"))),
+    RelationSpec("dated", "датировано",
+                 "документ или событие имеет дату",
+                 (("document_ref", "date"), ("organization", "date"),
+                  ("person", "date"), ("standard", "date"), ("event", "date"))),
+    RelationSpec("has-amount", "на сумму",
+                 "документ или организация связаны с суммой",
+                 (("document_ref", "money"), ("organization", "money"), ("money", "money"))),
+    RelationSpec("defines", "определяет",
+                 "документ или стандарт определяет термин",
+                 (("document_ref", "legal_term"), ("standard", "legal_term"))),
+    RelationSpec("applies-to", "распространяется на",
+                 "документ распространяется на кого или что-либо",
                  (("document_ref", "organization"), ("document_ref", "legal_term"),
                   ("document_ref", "person"), ("standard", "organization"))),
-    RelationSpec("PART_OF", "входит в состав", "одно входит в состав другого",
-                 (("document_ref", "document_ref"), ("legal_term", "legal_term"),
-                  ("document_ref", "standard"), ("clause", "document_ref"),
-                  ("standard", "document_ref"))),
-    RelationSpec("DEFINES", "определяет", "документ или стандарт определяет термин",
-                 (("document_ref", "legal_term"), ("standard", "legal_term"))),
-    RelationSpec("RELATED_TO", "связано с", "связь есть, но её тип определить не удалось",
-                 None),  # None = пары не проверяем, это крайняя мера
+    RelationSpec("establishes-requirement", "устанавливает требование",
+                 "документ, стандарт или пункт устанавливает требование к чему-либо",
+                 (("document_ref", "legal_term"), ("standard", "legal_term"),
+                  ("clause", "legal_term"))),
+
+    RelationSpec("related-to", "связано с",
+                 "связь есть, но её тип определить не удалось", None),
 )
 
 RELATION_BY_CODE = {r.code: r for r in RELATIONS}
@@ -95,50 +173,89 @@ SEMANTIC_CODES = {r.code for r in RELATIONS}
 
 # Версия онтологии. Поднимать при ЛЮБОМ изменении типов или допустимых пар: от неё зависит
 # ключ кэша извлечения. Без этого старые ответы модели переиспользуются, и правки онтологии
-# не действуют — на живом прогоне 10.10.2026 все связи пришли из кэша и выглядели как RELATED_TO.
+# не действуют (живой прогон 10.10.2026 — все связи пришли из кэша и выглядели как RELATED_TO).
 # 3 — прямые запреты (BELONGS_TO, злоупотребление LOCATED_AT) по итогам замера судьями.
 # 4 — LOCATED_AT убран из списка для модели (судья: 21 из 25 случаев — связь совсем другая).
-# 5 — разрешена пара «документ/стандарт ссылается на пункт» (REFERENCES → clause): по замеру
-#     отказов это самый частый случай (45), и связь законная. Версия поднята, чтобы кэш
-#     извлечения не отдал прежние ответы модели со старым заданием.
-ONTOLOGY_EPOCH = 5
+# 5 — разрешена пара «документ/стандарт ссылается на пункт».
+# 6 — словарь переведён на канонические коды стандартов (STIX 2.1, ELI, Dublin Core).
+#     Старые коды (SIGNED_BY, HAS_CLAUSE, REFERENCES, PART_OF, SUPERSEDES …) принимаются
+#     через MIGRATION и сводятся к новым — данные и старые ответы модели не теряются.
+ONTOLOGY_EPOCH = 6
 
 # Системные и структурные связи: их пишет код, модель их не порождает.
 STRUCTURAL_CODES = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION", "NEW_EDITION_OF"}
 
+# ── Перевод наших прежних кодов на канонические ────────────────────────────────
+# Нужен по двум причинам: (1) в графе уже лежат связи со старыми кодами — они должны
+# читаться и, при пересборке, писаться новыми; (2) старые ответы модели в кэше тоже
+# содержат старые названия.
+MIGRATION: dict[str, str] = {
+    "SIGNED_BY": "signed-by",
+    "ISSUED_BY": "issued-by",
+    "DATED": "dated",
+    "AMOUNT": "has-amount",
+    "LOCATED_AT": "located-at",
+    "SUPERSEDES": "replaces",
+    "AMENDS": "amends",
+    "REFERENCES": "references",
+    "HAS_CLAUSE": "has-part",
+    "REQUIRES": "establishes-requirement",
+    "APPLIES_TO": "applies-to",
+    "PART_OF": "part-of",
+    "DEFINES": "defines",
+    "RELATED_TO": "related-to",
+    "BELONGS_TO": "part-of",
+    "ISSUED": "issued-by",
+    "SIGNED": "signed-by",
+    "REPLACES": "replaces",
+    "CITES": "references",
+    "CITES_DOCUMENT": "references",
+}
+
 # ── Приведение свободных названий к канону ─────────────────────────────────────
-# Это главное лечение мусорки BELONGS_TO: модель писала «входит в состав», «является частью»,
-# «принадлежит» — всё в один тип без смысла. Теперь такие формулировки раскладываются по канону.
 _SYNONYMS: dict[str, str] = {
     # русские формулировки
-    "подписан": "SIGNED_BY", "подписано": "SIGNED_BY", "подписал": "SIGNED_BY",
-    "издан": "ISSUED_BY", "издано": "ISSUED_BY", "утверждён": "ISSUED_BY", "утвержден": "ISSUED_BY",
-    "датирован": "DATED", "дата": "DATED",
-    "сумма": "AMOUNT", "стоимость": "AMOUNT",
-    "расположен": "LOCATED_AT", "находится": "LOCATED_AT", "адрес": "LOCATED_AT",
-    "отменяет": "SUPERSEDES", "заменяет": "SUPERSEDES", "отменён": "SUPERSEDES",
-    "изменяет": "AMENDS", "вносит изменения": "AMENDS",
-    "ссылается": "REFERENCES", "ссылается на": "REFERENCES", "упоминает стандарт": "REFERENCES",
-    "содержит пункт": "HAS_CLAUSE", "пункт": "HAS_CLAUSE", "раздел": "HAS_CLAUSE",
-    "требует": "REQUIRES", "устанавливает": "REQUIRES", "устанавливает требование": "REQUIRES",
-    "распространяется на": "APPLIES_TO", "применяется к": "APPLIES_TO", "действует на": "APPLIES_TO",
-    "входит в состав": "PART_OF", "является частью": "PART_OF", "часть": "PART_OF",
-    "включает": "PART_OF", "содержит": "PART_OF",
-    "определяет": "DEFINES", "определение": "DEFINES", "термин": "DEFINES",
-    # ВНИМАНИЕ: «принадлежит» (BELONGS_TO) раньше раскладывалось в PART_OF и тем самым выдавало
-    # догадку за факт. Замер судьёй 10.10.2026: из 12 таких связей судья согласился с типом лишь
-    # в части случаев, а чаще относил их к RELATED_TO, APPLIES_TO и DEFINES. Пока тип не определён
-    # честно оставляем RELATED_TO, а точный тип назначается отдельным проходом (JEV по вероятностям).
+    "подписан": "signed-by", "подписано": "signed-by", "подписал": "signed-by",
+    "издан": "issued-by", "издано": "issued-by", "утверждён": "issued-by", "утвержден": "issued-by",
+    "датирован": "dated", "дата": "dated",
+    "сумма": "has-amount", "стоимость": "has-amount",
+    "расположен": "located-at", "находится": "located-at", "адрес": "located-at",
+    "отменяет": "repeals", "отменён": "repeals", "прекращает действие": "repeals",
+    "заменяет": "replaces", "взамен": "replaces",
+    "является редакцией": "is-version-of", "новая редакция": "is-version-of",
+    "изменяет": "amends", "вносит изменения": "amends", "дополняет": "amends",
+    "исправляет": "corrects", "объединяет": "consolidates",
+    "ссылается": "references", "ссылается на": "references", "упоминает стандарт": "references",
+    "цитирует": "references",
+    "содержит пункт": "has-part", "содержит": "has-part", "включает": "has-part",
+    "пункт": "has-part", "раздел": "has-part", "приложение": "has-part",
+    "требует": "requires", "устанавливает требование": "establishes-requirement",
+    "устанавливает": "establishes-requirement",
+    "распространяется на": "applies-to", "применяется к": "applies-to", "действует на": "applies-to",
+    "входит в состав": "part-of", "является частью": "part-of", "часть": "part-of",
+    "входит": "part-of", "принадлежит": "part-of",
+    "состоит в": "member-of", "член": "member-of", "подчинена": "member-of",
+    "относится": "related-to", "связано": "related-to", "касается": "related-to",
+    "определяет": "defines", "определение": "defines", "термин": "defines",
+    "подготовлено": "authored-by", "подготовлен": "authored-by", "разработан": "authored-by",
+    "основано на": "derived-from", "разработан на основе": "derived-from",
+    "отнесено к": "attributed-to", "ответственный": "attributed-to",
+    "воздействует на": "targets", "направлен на": "targets",
+    "указывает на": "indicates", "свидетельствует о": "indicates",
+    "снижает": "mitigates", "предотвращает": "mitigates",
     # английские и кодовые варианты
-    "SIGNED": "SIGNED_BY", "SIGNER": "SIGNED_BY", "ISSUER": "ISSUED_BY", "ISSUED": "ISSUED_BY",
-    "DATE": "DATED", "AMOUNT_OF": "AMOUNT", "LOCATION": "LOCATED_AT", "LOCATED": "LOCATED_AT",
-    "REPLACES": "SUPERSEDES", "SUPERSEDED": "SUPERSEDES", "AMEND": "AMENDS", "MODIFIES": "AMENDS",
-    "REFERS_TO": "REFERENCES", "REFERENCE": "REFERENCES", "HAS_PARAGRAPH": "HAS_CLAUSE",
-    "CLAUSE": "HAS_CLAUSE", "REQUIREMENT": "REQUIRES", "REQUIRES_COMPLIANCE": "REQUIRES",
-    "APPLIES": "APPLIES_TO", "PART": "PART_OF", "INCLUDES": "PART_OF",
-    "DEFINES_TERM": "DEFINES", "TERM": "DEFINES",
-    "BELONGS_TO": "RELATED_TO", "BELONGS": "RELATED_TO",
-    "входит": "PART_OF", "относится": "RELATED_TO",
+    "SIGNED": "signed-by", "SIGNER": "signed-by", "ISSUER": "issued-by",
+    "DATE": "dated", "AMOUNT_OF": "has-amount", "LOCATION": "located-at", "LOCATED": "located-at",
+    "REPLACES": "replaces", "SUPERSEDED": "replaces", "REPEALS": "repeals",
+    "AMEND": "amends", "MODIFIES": "amends", "CORRECTS": "corrects", "CONSOLIDATES": "consolidates",
+    "REFERS_TO": "references", "REFERENCE": "references", "CITES": "references",
+    "HAS_PARAGRAPH": "has-part", "CLAUSE": "has-part", "HAS_CLAUSE": "has-part", "PART": "part-of",
+    "REQUIREMENT": "requires", "REQUIRES": "requires", "ESTABLISHES": "establishes-requirement",
+    "APPLIES": "applies-to", "INCLUDES": "has-part", "MEMBER_OF": "member-of",
+    "DEFINES_TERM": "defines", "BELONGS": "part-of", "BELONGS_TO": "part-of",
+    "IS_VERSION_OF": "is-version-of", "VERSION_OF": "is-version-of",
+    "DERIVED_FROM": "derived-from", "ATTRIBUTED_TO": "attributed-to", "AUTHORED_BY": "authored-by",
+    "LOCATED_AT": "located-at", "TARGETS": "targets", "INDICATES": "indicates", "MITIGATES": "mitigates",
 }
 
 
@@ -150,7 +267,16 @@ def normalize_relation(raw: str) -> str:
     """
     name = (raw or "").strip().strip("`\"'")
     if not name:
-        return "RELATED_TO"
+        return "related-to"
+    # Прежние коды (SIGNED_BY, HAS_CLAUSE, RELATED_TO …) → канонические. Проверяем ДО всего:
+    # в графе и в кэше модели лежат связи со старыми названиями, и они должны читаться.
+    _up = name.upper()
+    if _up in MIGRATION:
+        return MIGRATION[_up]
+    # Канонический код как есть (написание сохраняем: part-of, located-at).
+    low = name.lower().replace(" ", "-")
+    if low in SEMANTIC_CODES:
+        return low
     upper = name.upper().replace(" ", "_").replace("-", "_")
     if upper in SEMANTIC_CODES:
         return upper
@@ -163,12 +289,12 @@ def normalize_relation(raw: str) -> str:
     for phrase, code in sorted(_SYNONYMS.items(), key=lambda kv: -len(kv[0])):
         if phrase and phrase in key:
             return code
-    return "RELATED_TO"
+    return "related-to"
 
 
 def allowed_pairs(code: str) -> set[tuple[str, str]] | None:
     """Допустимые пары для типа связи. None — пары не проверяются (RELATED_TO)."""
-    spec = RELATION_BY_CODE.get((code or "").upper())
+    spec = RELATION_BY_CODE.get(code or "") or RELATION_BY_CODE.get((code or "").upper())
     if spec is None or spec.pairs is None:
         return None
     return set(spec.pairs)
@@ -183,7 +309,7 @@ def validate_triple(src_type: str, relation: str, dst_type: str) -> tuple[bool, 
     code = normalize_relation(relation)
     if code not in SEMANTIC_CODES:
         return False, f"тип связи «{relation}» не из онтологии"
-    if code == "RELATED_TO":
+    if code == "related-to":
         return True, "тип не определён моделью — пишем как «связано с»"
     pairs = allowed_pairs(code)
     if pairs is None:
@@ -215,7 +341,7 @@ def prompt_rules() -> str:
         pairs = "; ".join(f"{a} → {b}" for a, b in spec.pairs)
         lines.append(f"- {spec.code} («{spec.title}») — {spec.meaning}. Допустимо: {pairs}")
     lines += [
-        f"- RELATED_TO («{RELATION_BY_CODE['RELATED_TO'].title}») — только если ни один тип выше "
+        f"- related-to («{RELATION_BY_CODE['related-to'].title}») — только если ни один тип выше "
         f"не подходит. Злоупотребление этим типом означает, что связь бесполезна для поиска.",
         "",
         "ТИПЫ СУЩНОСТЕЙ: " + ", ".join(f"{k} ({v})" for k, v in ENTITY_TYPES.items()),

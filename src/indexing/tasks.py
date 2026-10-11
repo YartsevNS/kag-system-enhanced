@@ -526,19 +526,19 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
                     for _gost in getattr(_sk, "gost", []) or []:
                         _ents.append(_Ent(name=_gost, type="standard", document_id=doc_id,
                                           chunk_id=_cid, layer="regex"))
-                        _rels.append(_Rel(source=doc_id, target=_gost, type="REFERENCES",
+                        _rels.append(_Rel(source=doc_id, target=_gost, type="references",
                                           document_id=doc_id, chunk_id=_cid, layer="regex",
                                           source_label="Document", source_key="id"))
                     for _sp in getattr(_sk, "sp", []) or []:
                         _ents.append(_Ent(name=_sp, type="standard", document_id=doc_id,
                                           chunk_id=_cid, layer="regex"))
-                        _rels.append(_Rel(source=doc_id, target=_sp, type="REFERENCES",
+                        _rels.append(_Rel(source=doc_id, target=_sp, type="references",
                                           document_id=doc_id, chunk_id=_cid, layer="regex",
                                           source_label="Document", source_key="id"))
                     for _cl in getattr(_sk, "clauses", []) or []:
                         _ents.append(_Ent(name=_cl, type="clause", document_id=doc_id,
                                           chunk_id=_cid, layer="regex"))
-                        _rels.append(_Rel(source=doc_id, target=_cl, type="HAS_CLAUSE",
+                        _rels.append(_Rel(source=doc_id, target=_cl, type="has-part",
                                           document_id=doc_id, chunk_id=_cid, layer="regex",
                                           source_label="Document", source_key="id"))
                 if _ents:

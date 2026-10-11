@@ -198,6 +198,14 @@ class KnowledgeGraphService:
         allowed = ({t.upper() for t in self.DEFAULT_RELATION_TYPES}
                    | {"MENTIONS", "HAS_CHUNK", "RELATED_TO",
                       "HAS_SECTION", "SECTION_CHUNK", "SUPERSEDED_BY"})
+        # Прежние коды (PART_OF, HAS_CLAUSE, SUPERSEDES …) тоже допустимы: они уже записаны
+        # в графе и должны читаться до пересборки. Онтология приводит их к канону при записи.
+        try:
+            from src.indexing.graph_ontology import MIGRATION
+
+            allowed |= {k.upper() for k in MIGRATION}
+        except Exception:
+            pass
         try:
             schema = self.get_domain_schema() or {}
             for group, items in schema.items():
@@ -231,15 +239,27 @@ class KnowledgeGraphService:
         except Exception:
             return "unknown"
 
-    # Типы связей по умолчанию
+    # Типы связей по умолчанию. Канонические коды пришли из стандартов (STIX 2.1, ELI,
+    # Dublin Core) — единый источник задаёт онтология (graph_ontology.SEMANTIC_CODES).
+    # Прежние написания оставлены в списке: в графе уже лежат связи со старыми кодами,
+    # и они должны читаться до полной пересборки.
     DEFAULT_RELATION_TYPES = [
-        "RELATED_TO",   # Общая связь
-        "SIGNED_BY",    # Документ подписан
-        "DATED",        # Датировано
-        "AMOUNT",       # На сумму
-        "BELONGS_TO",   # Принадлежит
-        "LOCATED_AT",   # Находится по адресу
-        "MENTIONS",     # Упоминается в чанке (системная связь)
+        "related-to",   # Общая связь
+        "signed-by",    # Документ подписан
+        "dated",        # Датировано
+        "has-amount",   # На сумму
+        "located-at",   # Находится по адресу
+        "part-of",      # Входит в состав
+        "member-of",    # Состоит в
+        "references", "has-part", "amends", "repeals", "replaces", "is-version-of",
+        "issued-by", "authored-by", "attributed-to", "derived-from", "defines",
+        "applies-to", "establishes-requirement", "corrects", "consolidates",
+        "requires", "targets", "indicates", "mitigates",
+        # прежние коды — только для чтения уже записанных связей
+        "RELATED_TO", "SIGNED_BY", "DATED", "AMOUNT", "BELONGS_TO", "LOCATED_AT",
+        "PART_OF", "SUPERSEDES", "AMENDS", "REFERENCES", "HAS_CLAUSE", "REQUIRES",
+        "APPLIES_TO", "DEFINES", "ISSUED_BY",
+        "MENTIONS",     # системная связь
     ]
 
     def __init__(self, uri: str = "bolt://neo4j:7687", user: str = "neo4j", password: str = None):
@@ -508,8 +528,8 @@ class KnowledgeGraphService:
                 # Динамическое имя связи — безопасно, т.к. тип проверяется по закрытому списку
                 safe_type = rel.type.replace("`", "").replace(" ", "_")
                 if safe_type.upper() not in self.allowed_relation_types():
-                    logger.warning(f"[graph][types] неизвестный тип связи '{safe_type}' заменён на RELATED_TO")
-                    safe_type = "RELATED_TO"
+                    logger.warning(f"[graph][types] неизвестный тип связи '{safe_type}' заменён на related-to")
+                    safe_type = "related-to"
                 session.run(
                     f"""
                     MATCH (a:Entity {{name: $source}})
@@ -652,9 +672,9 @@ class KnowledgeGraphService:
             safe = r.type.replace("`", "").replace(" ", "_")
             if safe.upper() not in allowed:
                 # Тип не из словаря: под своим именем НЕ пишем (иначе мусор в графе), но и факт
-                # не теряем — пишем как RELATED_TO. Отказ виден в журнале строкой [graph][types].
+                # не теряем — пишем как related-to. Отказ виден в журнале строкой [graph][types].
                 unknown.add(safe)
-                safe = "RELATED_TO"
+                safe = "related-to"
             by_type.setdefault(safe, []).append({
                 "source": r.source,
                 "target": r.target,
@@ -674,7 +694,7 @@ class KnowledgeGraphService:
                 "dst_key": _safe_key(getattr(r, "target_key", "") or "name"),
             })
         if unknown:
-            logger.warning(f"[graph][types] неизвестные типы связей заменены на RELATED_TO: {sorted(unknown)}")
+            logger.warning(f"[graph][types] неизвестные типы связей заменены на related-to: {sorted(unknown)}")
         total = 0
         try:
             from src.api.services.config_store import config_store
