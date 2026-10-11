@@ -1287,8 +1287,10 @@ JSON:
             except Exception:  # noqa: BLE001
                 _require_ev = False
             if _require_ev and relations:
-                def _norm_txt(x: str) -> str:
-                    return re.sub(r"\s+", " ", (x or "").lower()).strip()
+                # Нормализация — ОБЩАЯ с схемой извлечения (graph_ontology.flat_evidence_text):
+                # сравниваем только буквы и цифры, иначе на распознанном тексте тире, кавычки и
+                # переносы не совпадают с цитатой модели и строгий режим вырезал бы верные связи.
+                from src.indexing.graph_ontology import flat_evidence_text as _norm_txt
 
                 _chunk_norm = _norm_txt(chunk_text)
                 _by_name = {id(r): r for r in relations}

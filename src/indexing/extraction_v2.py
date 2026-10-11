@@ -32,8 +32,14 @@ SYSTEM_PROMPT = "Ты — эксперт по извлечению структ�
 
 
 def _flat(x: str) -> str:
-    """Нормализация под распознанный текст: сравниваем только буквы и цифры."""
-    return re.sub(r"[^0-9a-zа-яё]+", " ", (x or "").lower()).strip()
+    """Нормализация цитаты под распознанный текст — ОБЩАЯ для всех путей проверки.
+
+    Реализация живёт в graph_ontology.flat_evidence_text: там же её берёт конвейер. Две разные
+    нормы (в схеме и в конвейере) молча резали бы верные связи при строгом режиме.
+    """
+    from src.indexing.graph_ontology import flat_evidence_text
+
+    return flat_evidence_text(x)
 
 
 def _relations_rules(rel_desc: str, ent_desc: str) -> str:

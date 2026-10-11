@@ -61,6 +61,25 @@ def test_relation_keeps_evidence_and_entity_does_not():
     assert "evidence" not in fields, "evidence относится к связи, а не к сущности"
 
 
+def test_citation_normalization_is_shared():
+    """Проверка цитаты в конвейере и в схеме извлечения использует ОДНУ нормализацию.
+
+    Класс дефекта: две разные нормы (схлопывание пробелов против «только буквы и цифры») дают
+    разный ответ на распознанном тексте — тире, кавычки и переносы в цитате модели и в тексте
+    фрагмента не совпадают буквально. При строгом режиме «писать только подтверждённое» это молча
+    вырезало бы ВЕРНЫЕ связи.
+    """
+    from src.indexing.graph_ontology import flat_evidence_text
+
+    assert flat_evidence_text("ГОСТ Р 57580.1—2017!") == "гост р 57580 1 2017"
+    assert flat_evidence_text("взамен\nГОСТ  Р 34.12—2015") == "взамен гост р 34 12 2015"
+    ext = (ROOT / "src/indexing/entity_extractor.py").read_text(encoding="utf-8")
+    v2 = (ROOT / "src/indexing/extraction_v2.py").read_text(encoding="utf-8")
+    assert "flat_evidence_text" in ext, "конвейер не берёт общую нормализацию цитаты"
+    assert "flat_evidence_text" in v2, "схема извлечения не берёт общую нормализацию цитаты"
+    assert 're.sub(r"\\s+", " "' not in ext, "в конвейере осталась СВОЯ нормализация цитаты"
+
+
 def test_batch_write_keeps_evidence():
     """Пачечная запись обязана класть цитату: конвейер пишет связи ПАЧКОЙ, не поодиночке.
 
