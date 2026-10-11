@@ -578,7 +578,13 @@ function getFiltered() {
   const sf = document.getElementById('status-filter')?.value || '';
   const srcf = document.getElementById('source-filter')?.value || '';
   return allDocs.filter(d => {
-    if (search && !d.filename.toLowerCase().includes(search) && !(d.document_type||'').includes(search) && !(d.tags||[]).some(t=>t.includes(search))) return false;
+    // Ищем и по РАСПОЗНАННОМУ НАЗВАНИЮ, а не только по имени файла: у нас 34 разных стандарта
+    // лежат под одним именем r-1323565.1.pdf, и в списке человек видит их по названию
+    // («Р 1323565.1.006—2017»). Поиск обязан искать то, что видно.
+    if (search && !d.filename.toLowerCase().includes(search)
+        && !(d.recognized_title || '').toLowerCase().includes(search)
+        && !(d.document_type||'').includes(search)
+        && !(d.tags||[]).some(t=>t.includes(search))) return false;
     if (tf && d.document_type !== tf) return false;
     if (rb && !(d.rubrics || []).includes(rb)) return false;
     if (ff && !(((d.facets || {})['protection_subject']) || []).includes(ff)) return false;
