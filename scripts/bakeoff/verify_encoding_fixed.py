@@ -62,8 +62,19 @@ async def _service():
 
 
 async def _embed(service, text: str):
-    """Вектор запроса: имя метода различается между версиями, поэтому пробуем по очереди."""
+    """Вектор запроса. Основной путь — клиент векторов службы; остальные имена — для совместимости."""
     import inspect
+
+    client = getattr(service, "_embedding_client", None)
+    if client is not None:
+        try:
+            result = client.generate(text)
+            if inspect.isawaitable(result):
+                result = await result
+            if isinstance(result, list) and result and isinstance(result[0], (int, float)):
+                return result
+        except Exception:
+            pass
 
     for name in ("generate", "embed", "encode", "get_embedding", "create_embedding"):
         fn = getattr(service, name, None)
