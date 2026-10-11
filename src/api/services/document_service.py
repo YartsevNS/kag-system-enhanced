@@ -1262,7 +1262,20 @@ class DocumentService:
                 "thumbnail": True
             })
             plog.save()
-            
+
+            # Связи между ДОКУМЕНТАМИ: ставим сопоставление сразу после обработки.
+            # Дёшево (правила, без модели) и сразу даёт новому документу связи с уже загруженными:
+            # «взамен ГОСТ Р …», «во исполнение приказа № …». Обратное направление — старые документы,
+            # которые ссылаются на только что загруженный, — закрывает ночной прогон: они в момент
+            # загрузки этого документа ещё не знали о нём.
+            try:
+                from src.indexing.tasks import link_document_relations
+
+                link_document_relations.apply_async(args=[[document_id]], queue="maintenance")
+                plog.log("doc_relations_queued", {"queue": "maintenance"})
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"[doc-relations] не удалось поставить сопоставление: {e}")
+
             logger.info(
                 f"Документ обработан: {document_id}, "
                 f"чанков: {len(chunks)}, векторов: {vectors_count}"
