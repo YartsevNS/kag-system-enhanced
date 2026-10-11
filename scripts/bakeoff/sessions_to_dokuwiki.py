@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import sqlite3
+import xmlrpc.client
 import sys
 import urllib.request
 from pathlib import Path
@@ -100,7 +101,7 @@ def load_sessions(db: Path, since: str, skip_subagents: bool) -> list[dict]:
             continue
         msgs = []
         for m in con.execute(
-            "SELECT id, role, content, tool_calls, active FROM messages "
+            "SELECT id, role, content, tool_calls, active, timestamp FROM messages "
             "WHERE session_id=? AND active=1 ORDER BY id",
             (s["id"],),
         ):
@@ -112,11 +113,60 @@ def load_sessions(db: Path, since: str, skip_subagents: bool) -> list[dict]:
                 continue
             if role == "user" and INJECTED.search(text):
                 continue
-            msgs.append({"role": role, "text": text, "tools": bool(m["tool_calls"])})
+            # Метка времени сообщения: по ней определяется ДАТА ЗАПИСИ, а не по дате старта
+            # сессии. Сессия живёт днями, и из-за привязки к её старту работа ложилась на
+            # страницу начального дня (дефект техдолга 15).
+            msgs.append({"role": role, "text": text, "tools": bool(m["tool_calls"]),
+                         "ts": m["timestamp"]})
         out.append({"id": s["id"], "title": title, "date": stamp, "started": started, "messages": msgs})
     con.close()
     return out
 
+
+_JOURNAL_CACHE: dict = {}
+
+
+def _all_journal_text(url: str, user: str, password: str, prefix: str = "kag:журнал") -> str:
+    """Собрать текст всех страниц журнала. Нужно для ОБЩЕЙ проверки дублей.
+
+    Почему: до исправления дат (техдолг 15) записи могли лежать на странице другого дня. Если
+    проверять только целевую страницу, тот же вопрос допишется второй раз — уже на правильную дату.
+    Кэш на процесс, чтобы не тянуть страницы повторно для каждого блока.
+    """
+    if _JOURNAL_CACHE.get("text") is not None:
+        return _JOURNAL_CACHE["text"]
+    chunks: list[str] = []
+    try:
+        proxy = xmlrpc.client.ServerProxy(url)
+        token = proxy.dokuwiki.login(user, password)
+        if token:
+            for item in proxy.dokuwiki.getPagelist(prefix + ":*", {"depth": 1}):
+                pid = item.get("id") if isinstance(item, dict) else None
+                if not pid:
+                    continue
+                text = get_page_text(url, user, password, pid)
+                if text:
+                    chunks.append(text)
+    except Exception:
+        pass
+    _JOURNAL_CACHE["text"] = " ".join(chunks)
+    return _JOURNAL_CACHE["text"]
+
+def _day_of(ts, fallback: str) -> str:
+    """Дата записи по метке времени сообщения. Если метки нет — дата старта сессии.
+
+    Метка может быть числом (epoch) или строкой ISO — поддерживаем оба вида: в разных версиях
+    журнала встречались оба, и падать из-за формата здесь нельзя.
+    """
+    try:
+        if ts is None:
+            return fallback
+        if isinstance(ts, (int, float)) or (isinstance(ts, str) and ts.replace(".", "", 1).isdigit()):
+            return dt.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d")
+        s = str(ts).strip().replace("Z", "+00:00")
+        return dt.datetime.fromisoformat(s).strftime("%Y-%m-%d")
+    except Exception:
+        return fallback
 
 def pairs(session: dict, body_limit: int) -> list[dict]:
     """Пары «вопрос → итог хода».
@@ -146,7 +196,8 @@ def pairs(session: dict, body_limit: int) -> list[dict]:
             ans = max(turn, key=len)  # ход закончился короткой репликой — берём самую содержательную
         if not ans.strip():
             continue
-        items.append({"q": q, "a": ans})
+        items.append({"q": q, "a": ans,
+                      "date": _day_of(m.get("ts"), session.get("date") or "")})
     return items
 
 
@@ -284,7 +335,11 @@ def append_blocks(url: str, user: str, password: str, blocks: list[dict],
         nums = [int(n) for name, text in parts.items()
                 for n in re.findall(r"^===== (\d+)\.", text, re.M)]
         nxt = (max(nums) + 1) if nums else 1
-        existing_norm = _norm(" ".join(parts.values()))
+        # Проверяем ВЕСЬ журнал, а не только целевую страницу: после исправления дат один и тот же
+        # вопрос может уже лежать на странице другого дня, и без общей проверки он допишется снова.
+        _scope = " ".join(parts.values())
+        _all = _all_journal_text(url, user, password)
+        existing_norm = _norm(_scope + " " + _all)
 
         fresh = [it for it in items if _signature(it["q"]) not in existing_norm]
         stats["уже_было"] += len(items) - len(fresh)
@@ -424,7 +479,9 @@ def main() -> int:
         if len(good) < args.min_blocks:
             print(f"  пропуск  {s['date']}  {s['title'][:40]:42s} блоков {len(good)}")
             continue
-        by_day.setdefault(s["date"], []).append((s, good))
+        # Группируем по дате КАЖДОЙ пары: одна сессия может дать записи на несколько дней.
+        for _it in good:
+            by_day.setdefault(_it.get("date") or s["date"], []).append((s, [_it]))
         print(f"  готово   {s['date']}  {s['title'][:40]:42s} блоков {len(good):3d}")
 
     # Выгрузка блоков (для дописывания в вики по мере работы).
