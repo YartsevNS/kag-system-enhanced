@@ -244,21 +244,23 @@ STRUCTURAL_CODES = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION", "NE
 # читаться и, при пересборке, писаться новыми; (2) старые ответы модели в кэше тоже
 # содержат старые названия.
 MIGRATION: dict[str, str] = {
-    "SIGNED_BY": "signed-by",
+    "SIGNED_BY": "signed-by", "SIGNED-BY": "signed-by",
     "ISSUED_BY": "issued-by",
     "DATED": "dated",
-    "AMOUNT": "has-amount",
-    "LOCATED_AT": "located-at",
+    "AMOUNT": "has-amount", "HAS-AMOUNT": "has-amount",
+    "LOCATED_AT": "located-at", "LOCATED-AT": "located-at",
     "SUPERSEDES": "replaces",
     "AMENDS": "amends",
     "REFERENCES": "references",
-    "HAS_CLAUSE": "has-part",
+    "HAS_CLAUSE": "has-part", "HAS-CLAUSE": "has-part",
     "REQUIRES": "establishes-requirement",
     "APPLIES_TO": "applies-to",
     "PART_OF": "component-of",
+    "PART-OF": "component-of",
     "part-of": "component-of",
     "DEFINES": "defines",
     "RELATED_TO": "related-to",
+    "RELATED-TO": "related-to",
     "BELONGS_TO": "related-to",  # слипшийся тип: смысл неизвестен, точный выбирает модель
     "ISSUED": "issued-by",
     "SIGNED": "signed-by",
@@ -310,7 +312,7 @@ _SYNONYMS: dict[str, str] = {
     "DEFINES_TERM": "defines", "BELONGS": "related-to", "BELONGS_TO": "related-to",
     "IS_VERSION_OF": "is-version-of", "VERSION_OF": "is-version-of",
     "DERIVED_FROM": "derived-from", "ATTRIBUTED_TO": "attributed-to", "AUTHORED_BY": "authored-by",
-    "LOCATED_AT": "located-at", "TARGETS": "targets", "INDICATES": "indicates", "MITIGATES": "mitigates",
+    "LOCATED_AT": "located-at", "LOCATED-AT": "located-at", "TARGETS": "targets", "INDICATES": "indicates", "MITIGATES": "mitigates",
 }
 
 
@@ -325,9 +327,11 @@ def normalize_relation(raw: str) -> str:
         return "related-to"
     # Прежние коды (SIGNED_BY, HAS_CLAUSE, RELATED_TO …) → канонические. Проверяем ДО всего:
     # в графе и в кэше модели лежат связи со старыми названиями, и они должны читаться.
-    _up = name.upper()
-    if _up in MIGRATION:
-        return MIGRATION[_up]
+    # Приведение прежних написаний: проверяем ТРИ формы — как есть, в верхнем регистре и
+    # с заменой дефисов на подчёркивания (модель пишет и «part-of», и «PART_OF», и «RELATED_TO»).
+    for _cand in (name, name.upper(), name.upper().replace("-", "_"), name.lower().replace("_", "-")):
+        if _cand in MIGRATION:
+            return MIGRATION[_cand]
     # Канонический код как есть (написание сохраняем: part-of, located-at).
     low = name.lower().replace(" ", "-")
     if low in SEMANTIC_CODES:
