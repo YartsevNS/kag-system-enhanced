@@ -11,7 +11,11 @@
   * связи «документ ССЫЛАЕТСЯ НА стандарт» (REFERENCES) и «документ СОДЕРЖИТ ПУНКТ» (HAS_CLAUSE);
   * связи «фрагмент УПОМИНАЕТ стандарт/пункт» (MENTIONS) — чтобы от узла можно было дойти до текста.
 
-Происхождение помечается прямо в данных: `layer = 'regex'`, `extractor_version`, `chunk_id`.
+Происхождение помечается прямо в данных: `layer = 'regex'`, `schema_version`, `extractor_version`, `chunk_id`.
+ВАЖНО (правка 11.10.2026): версию схемы скрипт берёт из ЕДИНОГО источника — `knowledge_graph.SCHEMA_VERSION`, а не из своей константы. До этого слой правил писал связи
+без версии схемы (682 связи), и два пути записи разошлись: проверка, добавленная в службу,
+до правил не доходила. Признак, что это не теория: у связей модели версия была, у связей
+правил — нет.
 Без этого нельзя будет отличить правило от модели, а мы уже знаем, к чему приводит потеря происхождения.
 
 Узлы и связи создаются через MERGE — повторный прогон ничего не дублирует.
@@ -101,10 +105,10 @@ def write_skeleton(session, document_id: str, filename: str, sets: list[dict]) -
             """
             MERGE (e:Entity {name: $name, type: $type})
             ON CREATE SET e.created_at = timestamp(), e.confidence = 1.0,
-                          e.layer = 'regex', e.extractor_version = $ver
+                          e.layer = 'regex', e.schema_version = $schema, e.extractor_version = $ver
             SET e.source_docs = CASE WHEN $doc IN coalesce(e.source_docs, []) THEN e.source_docs
                                      ELSE coalesce(e.source_docs, []) + $doc END
-            """, name=name, type=kind, ver=EXTRACTOR_VERSION, doc=document_id)
+            """, schema=SCHEMA_VERSION, name=name, type=kind, ver=EXTRACTOR_VERSION, doc=document_id)
         stat[f"узлов_{kind}"] += 1
 
         # связь документа и фрагмента с узлом.
@@ -118,9 +122,9 @@ def write_skeleton(session, document_id: str, filename: str, sets: list[dict]) -
             WITH d
             MATCH (e:Entity {{name: $name, type: $type}})
             MERGE (d)-[r:`{rel}`]->(e)
-            ON CREATE SET r.layer = 'regex', r.extractor_version = $ver,
+            ON CREATE SET r.layer = 'regex', r.schema_version = $schema, r.extractor_version = $ver,
                           r.chunk_id = $chunk, r.created_at = timestamp()
-            """, doc=document_id, filename=filename, name=name, type=kind,
+            """, schema=SCHEMA_VERSION, doc=document_id, filename=filename, name=name, type=kind,
             ver=EXTRACTOR_VERSION, chunk=item["chunk"])
         stat[f"связей_{rel}"] += 1
 
@@ -137,8 +141,8 @@ def write_skeleton(session, document_id: str, filename: str, sets: list[dict]) -
                 WITH c
                 MATCH (e:Entity {name: $name, type: $type})
                 MERGE (c)-[r:MENTIONS]->(e)
-                ON CREATE SET r.layer = 'regex', r.extractor_version = $ver
-                """, chunk=item["chunk"], doc=document_id, preview=(item.get("preview") or "")[:300],
+                ON CREATE SET r.layer = 'regex', r.schema_version = $schema, r.extractor_version = $ver
+                """, schema=SCHEMA_VERSION, chunk=item["chunk"], doc=document_id, preview=(item.get("preview") or "")[:300],
                 name=name, type=kind, ver=EXTRACTOR_VERSION)
     return stat
 
