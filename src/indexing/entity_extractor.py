@@ -753,6 +753,7 @@ FMT_EVIDENCE_V1
 в тексте нет, связь НЕ выводить.
 Пример верной связи: {"source": "ГОСТ Р 57580.1-2017", "target": "ГОСТ Р 57580.1",
 "type": "replaces", "evidence": "вводится взамен ГОСТ Р 57580.1-2017"}
+"""  # конец FMT_EVIDENCE_V1
         except Exception as _onto_err:  # noqa: BLE001 — без онтологии извлекаем как раньше
             logger.warning(f"[graph] правила онтологии не добавлены в задание: {_onto_err}")
 
