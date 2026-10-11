@@ -1,0 +1,119 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>KAG — задание извлечения связей (управляет графом)</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:28px 34px 60px;max-width:1240px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:22px}
+h2{font-size:17px;font-weight:600;margin:26px 0 10px;letter-spacing:-0.2px}
+h2 .tagv{font-family:var(--mono);font-size:11px;color:var(--text4);margin-left:8px;font-weight:400}
+p.note{color:var(--text3);font-size:12.5px;line-height:1.55;margin-bottom:12px;max-width:900px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.card.warn{border-color:#5a3a12;background:#1e1710}
+.card.warn h3{color:var(--amber);font-size:14px;margin-bottom:8px}
+.card h3{font-size:14px;margin-bottom:8px}
+ul.plain{list-style:none}
+ul.plain li{position:relative;padding:7px 0 7px 18px;font-size:12.5px;color:var(--text2);line-height:1.5;border-bottom:1px solid var(--border-s)}
+ul.plain li:last-child{border-bottom:none}
+ul.plain li::before{content:'';position:absolute;left:2px;top:15px;width:6px;height:6px;border-radius:9999px;background:var(--accent-h)}
+ul.plain li.no::before{background:var(--red)}
+pre.prompt{font-family:var(--mono);font-size:11.5px;line-height:1.5;color:var(--text2);background:var(--panel);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:14px;overflow:auto;max-height:460px;white-space:pre-wrap}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--border-s)}
+td{padding:8px 10px;border-bottom:1px solid var(--border-s);vertical-align:top}
+td.code{font-family:var(--mono);font-size:11.5px;color:var(--accent-l);white-space:nowrap}
+.stamp{font-size:11px;color:var(--text4)}
+.sechead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.muted{color:var(--text4)}
+.ok{color:var(--accent-h)}.no{color:var(--red)}
+</style></head>
+<body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>
+  <a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Задание извлечения связей</h1>
+<div class="sub">Этот текст управляет тем, какие связи попадут в граф знаний. Здесь он целиком, с последствиями правки.</div>
+
+<div class="card">
+  <h3>Что это такое</h3>
+  <p class="note" style="margin-bottom:8px">
+    По каждому фрагменту документа модель извлекает сущности и связи между ними. <b>Задание ниже</b> —
+    это то, что модель читает перед каждым разбором: какие типы связей существуют, между какими типами
+    сущностей они допустимы и примеры правильного и неправильного выбора.
+  </p>
+  <p class="note" style="margin-bottom:0">
+    После ответа модели каждая связь ещё раз проверяется <b>словарём</b>: тип должен быть из списка, а
+    пара «тип источника → тип цели» — разрешённой. Что не прошло проверку — в граф не пишется, но
+    видно в журнале. То есть задание и словарь работают вместе: словарь — это закон, задание — это
+    инструкция для того, кто его исполняет.
+  </p>
+</div>
+
+<div class="card warn">
+  <h3>Правка этого текста — не косметика. Последствия</h3>
+  <ul class="plain" id="consequences"><li>Загрузка…</li></ul>
+</div>
+
+<div class="card">
+  <h3>Правила изменения</h3>
+  <ul class="plain" id="rules"><li>Загрузка…</li></ul>
+</div>
+
+<div class="sechead">
+  <h2>Текст задания <span class="tagv" id="version">—</span></h2>
+  <span class="stamp" id="where">—</span>
+</div>
+<p class="note">Текст формируется кодом (не хранится в базе) — так его нельзя изменить правкой одного поля в интерфейсе, минуя проверку. Ниже — то, что модель получает сейчас.</p>
+<pre class="prompt" id="prompt">Загрузка…</pre>
+
+<h2>Типы связей и допустимые пары <span class="tagv" id="count">—</span></h2>
+<p class="note">Разрешённые пары — это и есть словарь. По нему видно, почему конкретная связь была отброшена при записи в граф.</p>
+<div class="card" style="padding:0;overflow:hidden">
+<table><thead><tr><th>Код</th><th>Название</th><th>Что означает</th><th>Допустимые пары</th><th>Примеры</th></tr></thead>
+<tbody id="rel-rows"><tr><td colspan="5" style="padding:16px;text-align:center" class="muted">Загрузка…</td></tr></tbody></table>
+</div>
+
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function logout(){try{localStorage.removeItem('kag-token')}catch(e){};location.href='/login'}
+function fillList(id, items){
+  const box=document.getElementById(id); box.innerHTML='';
+  (items||[]).forEach(t=>{const li=document.createElement('li');li.textContent=t;box.appendChild(li)});
+  if(!items||!items.length) box.innerHTML='<li class="muted">—</li>';
+}
+async function load(){
+  try{
+    const r=await fetch('/api/v1/admin/models/graph-prompt',{credentials:'include'});
+    const d=await r.json();
+    if(d.status!=='ok') throw new Error(d.message||'нет данных');
+    document.getElementById('version').textContent='версия онтологии '+d.ontology_epoch;
+    document.getElementById('where').textContent=d.where||'';
+    document.getElementById('count').textContent=(d.relations||[]).length+' типов';
+    document.getElementById('prompt').textContent=d.prompt_text||'';
+    fillList('consequences', d.consequences);
+    fillList('rules', d.rules);
+    const tb=document.getElementById('rel-rows'); tb.innerHTML='';
+    (d.relations||[]).forEach(x=>{
+      const tr=document.createElement('tr');
+      const ex=[...(x.good||[]).map(g=>'<span class="ok">верно:</span> '+esc(g)),
+                ...(x.bad||[]).map(b=>'<span class="no">неверно:</span> '+esc(b))].join('<br>');
+      tr.innerHTML='<td class="code">'+esc(x.code)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.meaning)+'</td>'
+        +'<td class="muted" style="font-size:11.5px">'+esc((x.pairs||[]).join('; '))+'</td>'
+        +'<td style="font-size:11.5px">'+(ex||'<span class="muted">—</span>')+'</td>';
+      tb.appendChild(tr);
+    });
+  }catch(e){
+    document.getElementById('prompt').textContent='Не удалось загрузить задание: '+e.message;
+  }
+}
+load();
+</script>
+</body></html>

@@ -70,16 +70,16 @@ RELATIONS: tuple[RelationSpec, ...] = (
     # organization→organization (это member-of или subordinate-to),
     # legal_term→legal_term (это broader-term),
     # document_ref→organization (это issued-by — издатель, а не часть целого).
-    RelationSpec("part-of", "входит в состав",
+    RelationSpec("component-of", "структурная часть",
                  "СТРУКТУРНАЯ часть документа: пункт в документе, раздел в разделе, редакция в деле. "
                  "Не про организации и не про термины — для них member-of, subordinate-to, broader-term",
                  (("clause", "standard"), ("clause", "document_ref"), ("clause", "clause"),
                   ("document_ref", "document_ref"), ("standard", "standard"),
                   ("document_ref", "standard"), ("standard", "document_ref"),
                   ("standard", "clause")),
-                 good=("пункт 5.2 part-of ГОСТ Р 57580.1", "раздел 2 part-of стандарт"),
-                 bad=("ГОСТ part-of Росстандарт — это издатель (issued-by)",
-                      "подразделение part-of организация — это member-of")),
+                 good=("пункт 5.2 component-of ГОСТ Р 57580.1", "раздел 2 component-of стандарт"),
+                 bad=("ГОСТ component-of Росстандарт — это издатель (issued-by)",
+                      "подразделение component-of организация — это member-of")),
     RelationSpec("member-of", "состоит в",
                  "лицо или организация входит в объединение или подчинена другой организации",
                  (("person", "organization"), ("organization", "organization"))),
@@ -187,6 +187,12 @@ RELATIONS: tuple[RelationSpec, ...] = (
     RelationSpec("issued-by", "издано",
                  "документ издан или утверждён органом",
                  (("document_ref", "organization"), ("standard", "organization"))),
+    RelationSpec("effective-from", "действует с",
+                 "дата вступления документа в силу. Отдельно от dated: дата подписания и дата "
+                 "вступления в силу у нормативных документов различаются",
+                 (("document_ref", "date"), ("standard", "date")),
+                 good=("приказ effective-from 1 марта 2026 г.",),
+                 bad=("приказ effective-from дата подписания — это dated",)),
     RelationSpec("dated", "датировано",
                  "документ или событие имеет дату",
                  (("document_ref", "date"), ("organization", "date"),
@@ -219,13 +225,16 @@ SEMANTIC_CODES = {r.code for r in RELATIONS}
 # 3 — прямые запреты (BELONGS_TO, злоупотребление LOCATED_AT) по итогам замера судьями.
 # 4 — LOCATED_AT убран из списка для модели (судья: 21 из 25 случаев — связь совсем другая).
 # 5 — разрешена пара «документ/стандарт ссылается на пункт».
+# 8 — сведено с присланным внешним промптом: part-of переименован в component-of (структурная
+#     часть), добавлен effective-from (дата вступления в силу), в задании — жёсткий разбор слова
+#     «принадлежит» и требование цитаты-доказательства.
 # 7 — разбор «принадлежит»: добавлены subordinate-to, broader-term (SKOS), classified-as,
 #     adopted-by, in-collection; part-of сужен до структуры документа. Обоснование — замер
 #     отказов и разбор литературы (Winston 1987; Keet; Wikidata P749) + ответ внешней модели.
 # 6 — словарь переведён на канонические коды стандартов (STIX 2.1, ELI, Dublin Core).
 #     Старые коды (SIGNED_BY, HAS_CLAUSE, REFERENCES, PART_OF, SUPERSEDES …) принимаются
 #     через MIGRATION и сводятся к новым — данные и старые ответы модели не теряются.
-ONTOLOGY_EPOCH = 7
+ONTOLOGY_EPOCH = 8
 
 # Системные и структурные связи: их пишет код, модель их не порождает.
 STRUCTURAL_CODES = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION", "NEW_EDITION_OF"}
@@ -246,10 +255,11 @@ MIGRATION: dict[str, str] = {
     "HAS_CLAUSE": "has-part",
     "REQUIRES": "establishes-requirement",
     "APPLIES_TO": "applies-to",
-    "PART_OF": "part-of",
+    "PART_OF": "component-of",
+    "part-of": "component-of",
     "DEFINES": "defines",
     "RELATED_TO": "related-to",
-    "BELONGS_TO": "part-of",
+    "BELONGS_TO": "related-to",  # слипшийся тип: смысл неизвестен, точный выбирает модель
     "ISSUED": "issued-by",
     "SIGNED": "signed-by",
     "REPLACES": "replaces",
@@ -277,8 +287,8 @@ _SYNONYMS: dict[str, str] = {
     "требует": "requires", "устанавливает требование": "establishes-requirement",
     "устанавливает": "establishes-requirement",
     "распространяется на": "applies-to", "применяется к": "applies-to", "действует на": "applies-to",
-    "входит в состав": "part-of", "является частью": "part-of", "часть": "part-of",
-    "входит": "part-of", "принадлежит": "part-of",
+    "входит в состав": "component-of", "является частью": "component-of", "часть": "component-of",
+    "входит": "component-of",
     "состоит в": "member-of", "член": "member-of", "подчинена": "member-of",
     "относится": "related-to", "связано": "related-to", "касается": "related-to",
     "определяет": "defines", "определение": "defines", "термин": "defines",
@@ -294,10 +304,10 @@ _SYNONYMS: dict[str, str] = {
     "REPLACES": "replaces", "SUPERSEDED": "replaces", "REPEALS": "repeals",
     "AMEND": "amends", "MODIFIES": "amends", "CORRECTS": "corrects", "CONSOLIDATES": "consolidates",
     "REFERS_TO": "references", "REFERENCE": "references", "CITES": "references",
-    "HAS_PARAGRAPH": "has-part", "CLAUSE": "has-part", "HAS_CLAUSE": "has-part", "PART": "part-of",
+    "HAS_PARAGRAPH": "has-part", "CLAUSE": "has-part", "HAS_CLAUSE": "has-part", "PART": "component-of",
     "REQUIREMENT": "requires", "REQUIRES": "requires", "ESTABLISHES": "establishes-requirement",
     "APPLIES": "applies-to", "INCLUDES": "has-part", "MEMBER_OF": "member-of",
-    "DEFINES_TERM": "defines", "BELONGS": "part-of", "BELONGS_TO": "part-of",
+    "DEFINES_TERM": "defines", "BELONGS": "related-to", "BELONGS_TO": "related-to",
     "IS_VERSION_OF": "is-version-of", "VERSION_OF": "is-version-of",
     "DERIVED_FROM": "derived-from", "ATTRIBUTED_TO": "attributed-to", "AUTHORED_BY": "authored-by",
     "LOCATED_AT": "located-at", "TARGETS": "targets", "INDICATES": "indicates", "MITIGATES": "mitigates",
@@ -411,8 +421,14 @@ def prompt_rules() -> str:
         "   организация подчинена другой? → subordinate-to. Лицо или организация ВХОДИТ в объединение? → member-of",
         "ВНИМАНИЕ: издатель, автор, подписант и принявший орган — это РАЗНЫЕ связи, не одна.",
         "",
+        "СЛОВО «ПРИНАДЛЕЖИТ» — ПОД ЗАПРЕТОМ. Если в тексте написано «принадлежит», «относится»,",
+        "«входит в» — это НЕ готовый тип связи, а приглашение подумать. Выбери по смыслу:",
+        "   структурная часть текста → component-of;   членство в коллективе → member-of;",
+        "   подчинённость организации → subordinate-to;   входит в сборник → in-collection;",
+        "   организация выпустила документ → issued-by;   тематика/рубрика → classified-as.",
+        "",
         "ЧЕГО НЕ ДЕЛАТЬ (частые ошибки на нашем корпусе):",
-        "   не связывай документ с организацией через part-of: частью целого документ не бывает;",
+        "   не связывай документ с организацией как с частью целого: частью документа организация не бывает;",
         "   не связывай документ с предметной областью («Информационная технология», «Криптографическая",
         "   защита информации») — для этого есть classified-as, и это рубрика, а не смысловое отношение;",
         "   не обозначай часть-целое словом «принадлежит» — выбери component-of, member-of,",
@@ -426,8 +442,13 @@ def prompt_rules() -> str:
         "   шаг 1 — найди сущности и определи их типы;",
         "   шаг 2 — для каждой возможной пары сначала назови вопрос из разбора выше и реши его;",
         "   шаг 3 — выбери код из списка и проверь пару по разрешённым;",
-        "   шаг 4 — выдай JSON. В поле relation_reasoning — одна короткая фраза, почему выбран тип",
-        "   (она сохраняется для разбора и не попадает в ответы пользователю).",
+        "   шаг 4 — выдай JSON.",
+        "",
+        "ОБЯЗАТЕЛЬНОЕ ПОЛЕ evidence: для каждой связи приведи КОРОТКУЮ ЦИТАТУ из текста, на которой она",
+        "основана (до 12 слов). Связь без цитаты считается выдуманной и будет отброшена. Это правило",
+        "существует потому, что каждая связь в графе должна быть проверяема по источнику.",
+        "В поле relation_reasoning — одна короткая фраза, почему выбран тип (для разбора, в ответы",
+        "пользователю не попадает).",
     ]
     return "\n".join(lines)
 

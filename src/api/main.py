@@ -331,6 +331,18 @@ async def admin_web(request: Request):
     return await _html_response(os.path.join(static_path, "admin.html"))
 
 
+@app.get("/graph-prompt", summary="Задание извлечения связей: текст, последствия правки, словарь пар")
+async def graph_prompt_page(request: Request):
+    """Страница задания, которое управляет построением связей графа.
+
+    Только для администратора: текст задания и правила его изменения — служебная информация, а не
+    рабочий экран оператора. Не-администратора уводим на страницу документов, как и с /admin.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "graph-prompt.html"))
+
+
 @app.get("/labels", summary="Спорные случаи разметки (для всех вошедших)")
 async def labels_page(request: Request):
     """Страница разбора спорных значений разметки.
