@@ -97,6 +97,21 @@ def _load_active_domain_config():
     return config_store.get("kg_config", DOMAIN_ACTIVE_KEY)
 
 
+# Формат ответа для связей (поле подтверждения). Держится КОНСТАНТОЙ, потому что
+# попадает в отпечаток кэша: правка текста сбрасывает кэш, и старые ответы без цитат
+# не могут быть переиспользованы (замер 11.10.2026 — именно это и произошло).
+RESPONSE_FORMAT_RULES = """
+
+FMT_EVIDENCE_V1
+ФОРМАТ ОТВЕТА (обязателен, без markdown-обёртки):
+{"entities": [...], "relations": [{"source": "имя", "target": "имя", "type": "тип_из_списка", "evidence": "дословная цитата"}]}
+Поле evidence обязательно в КАЖДОЙ связи: это ДОСЛОВНАЯ часть текста фрагмента (10-60 знаков),
+которая подтверждает связь. Не пересказ, не вывод — именно кусок текста. Если дословной цитаты
+в тексте нет, связь НЕ выводить.
+Пример верной связи: {"source": "ГОСТ Р 57580.1-2017", "target": "ГОСТ Р 57580.1",
+"type": "replaces", "evidence": "вводится взамен ГОСТ Р 57580.1-2017"}
+"""
+
 class EntityExtractor:
     """Извлекает сущности и факты из чанков через LLM.
     
@@ -371,7 +386,7 @@ class EntityExtractor:
     # результат молча (ложное «работает по-новому»). Версия считается из того, что
     # реально влияет на извлечение. Меняете ШАБЛОНЫ промптов в коде ниже — увеличьте
     # PROMPT_EPOCH, иначе кэш останется от старой логики.
-    PROMPT_EPOCH = 1
+    PROMPT_EPOCH = 2
 
     @classmethod
     def cache_version(cls, cfg: Optional[Dict[str, Any]] = None) -> str:
@@ -392,7 +407,8 @@ class EntityExtractor:
             # словаря молча не действовали (тот же класс ошибки, что и «правка без подъёма
             # версии»). Хеш ловит ЛЮБУЮ правку текста задания.
             _pr = prompt_rules()
-            ontology_fp = f"{ONTOLOGY_EPOCH}:{_h.sha256(_pr.encode('utf-8')).hexdigest()[:12]}"
+            _fmt = _h.sha256(RESPONSE_FORMAT_RULES.encode("utf-8")).hexdigest()[:12]
+            ontology_fp = f"{ONTOLOGY_EPOCH}:{_h.sha256(_pr.encode('utf-8')).hexdigest()[:12]}:{_fmt}"
         except Exception:
             ontology_fp = "none"
 
@@ -743,17 +759,7 @@ JSON:
             # Здесь формат объявлен явно и с примером — без этого проверка цитаты
             # отбрасывает все связи, то есть строгий режим включать нельзя.
             if "FMT_EVIDENCE_V1" not in system_prompt:
-                system_prompt = system_prompt.rstrip() + """
-
-FMT_EVIDENCE_V1
-ФОРМАТ ОТВЕТА (обязателен, без markdown-обёртки):
-{"entities": [...], "relations": [{"source": "имя", "target": "имя", "type": "тип_из_списка", "evidence": "дословная цитата"}]}
-Поле evidence обязательно в КАЖДОЙ связи: это ДОСЛОВНАЯ часть текста фрагмента (10-60 знаков),
-которая подтверждает связь. Не пересказ, не вывод — именно кусок текста. Если дословной цитаты
-в тексте нет, связь НЕ выводить.
-Пример верной связи: {"source": "ГОСТ Р 57580.1-2017", "target": "ГОСТ Р 57580.1",
-"type": "replaces", "evidence": "вводится взамен ГОСТ Р 57580.1-2017"}
-"""  # конец FMT_EVIDENCE_V1
+                system_prompt = system_prompt.rstrip() + "\n\n" + RESPONSE_FORMAT_RULES
         except Exception as _onto_err:  # noqa: BLE001 — без онтологии извлекаем как раньше
             logger.warning(f"[graph] правила онтологии не добавлены в задание: {_onto_err}")
 
