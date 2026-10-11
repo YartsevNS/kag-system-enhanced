@@ -1121,6 +1121,29 @@ JSON:
                 )
             elif rel_objs:
                 logger.debug(f"[graph][онтология] {chunk_id}: все {len(rel_objs)} связей по схеме")
+            # Отсев БЕЗЫМЯННЫХ связей во фрагментах, которые модель уже поняла.
+            # Правило (владелец, 11.10.2026): если модель дала N и более связей с ТОЧНЫМ типом,
+            # значит фрагмент разобран по смыслу — «связано с» здесь информации не несёт (для
+            # поиска и ответов бесполезно, фильтровать по нему нельзя). Порог НАСТРАИВАЕМЫЙ:
+            # у юридических документов в одном фрагменте может быть и пять точных связей, там
+            # порог будет свой — поэтому значение живёт в настройках, а не в коде.
+            try:
+                from src.api.services.config_store import config_store as _cs
+
+                _qcfg = _cs.get("system", "graph_quality") or {}
+                _min_specific = int(_qcfg.get("related_to_min_specific", 2) or 0)
+            except Exception:  # noqa: BLE001
+                _min_specific = 2
+            if _min_specific > 0 and rel_objs:
+                _specific = [r for r in rel_objs if r.type != "related-to"]
+                if len(_specific) >= _min_specific:
+                    _dropped = len(rel_objs) - len(_specific)
+                    if _dropped:
+                        logger.info(
+                            f"[graph][связи] {chunk_id}: отброшено {_dropped} безымянных "
+                            f"«связано с» — точных связей {len(_specific)} ≥ порога {_min_specific}"
+                        )
+                    rel_objs = _specific
             if rel_objs:
                 await _neo4j_write(kg_service.batch_create_relations, rel_objs, label="batch_relations")
 
