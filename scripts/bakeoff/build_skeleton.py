@@ -115,17 +115,22 @@ def write_skeleton(session, document_id: str, filename: str, sets: list[dict]) -
         # Документ создаём, если его нет: граф был очищен, и узлы есть только у пересобранных
         # документов — без этого связи молча не создавались (MATCH не находил якорь).
         rel = item["rel"]            # REFERENCES | HAS_CLAUSE | DATED
+        # Узел документа нужен как якорь — его создаём напрямую (это структура, не смысл).
         session.run(
-            f"""
-            MERGE (d:Document {{id: $doc}})
+            """
+            MERGE (d:Document {id: $doc})
             ON CREATE SET d.filename = $filename, d.created_at = timestamp(), d.layer = 'skeleton'
-            WITH d
-            MATCH (e:Entity {{name: $name, type: $type}})
-            MERGE (d)-[r:`{rel}`]->(e)
-            ON CREATE SET r.layer = 'regex', r.schema_version = $schema, r.extractor_version = $ver,
-                          r.chunk_id = $chunk, r.created_at = timestamp()
-            """, schema=SCHEMA_VERSION, doc=document_id, filename=filename, name=name, type=kind,
-            ver=EXTRACTOR_VERSION, chunk=item["chunk"])
+            """, doc=document_id, filename=filename)
+        # А саму смысловую связь пишем ЧЕРЕЗ СЛУЖБУ — единственным путём: там проверка типа по
+        # словарю и проставление происхождения. Раньше каркас писал своим запросом, и версия схемы
+        # у его связей не появлялась (замер 11.10.2026: 550 связей правил без версии).
+        from src.indexing.knowledge_graph import KnowledgeGraph, Relation
+        _kg = _KG_SINGLETON if _KG_SINGLETON is not None else KnowledgeGraph()
+        _kg.batch_create_relations([Relation(
+            source=document_id, target=name, type=rel, document_id=document_id,
+            chunk_id=item["chunk"] or "", layer="regex",
+            source_label="Document", source_key="id",
+        )])
         stat[f"связей_{rel}"] += 1
 
         if item.get("chunk"):
@@ -145,6 +150,9 @@ def write_skeleton(session, document_id: str, filename: str, sets: list[dict]) -
                 """, schema=SCHEMA_VERSION, chunk=item["chunk"], doc=document_id, preview=(item.get("preview") or "")[:300],
                 name=name, type=kind, ver=EXTRACTOR_VERSION)
     return stat
+
+
+_KG_SINGLETON = None  # единая служба графа на прогон (свой драйвер)
 
 
 async def main() -> int:

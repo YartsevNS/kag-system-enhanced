@@ -60,6 +60,15 @@ class Entity:
     type: str  # Из доменной схемы: person, organization, date, money, location, document_ref, legal_term, ...
     chunk_id: str = ""
     document_id: str = ""
+    # Слой происхождения: 'model' — извлечено моделью, 'regex' — найдено правилами. Один и тот же
+    # путь записи для обоих слоёв: иначе проверки, добавленные в службу, до правил не доходят.
+    layer: str = "model"
+    # Якоря: сущность по имени (по умолчанию) либо документ по id — правила связывают документ со
+    # стандартом/пунктом. Пишутся через белый список меток внутри службы.
+    source_label: str = "Entity"
+    source_key: str = "name"
+    target_label: str = "Entity"
+    target_key: str = "name"
     confidence: float = 1.0
     properties: Dict[str, Any] = field(default_factory=dict)
 
@@ -119,6 +128,21 @@ def _safe_create_constraint(session, constraint_name: str, label: str, prop: str
 # ============================================================
 # Knowledge Graph Service
 # ============================================================
+
+_SAFE_LABELS = {"Entity", "Document", "Chunk", "Section"}
+_SAFE_KEYS = {"name", "id", "chunk_id"}
+
+
+def _safe_label(value: str) -> str:
+    """Метка узла из белого списка: подставляется в текст запроса, произвольные строки недопустимы."""
+    v = (value or "Entity").strip()
+    return v if v in _SAFE_LABELS else "Entity"
+
+
+def _safe_key(value: str) -> str:
+    v = (value or "name").strip()
+    return v if v in _SAFE_KEYS else "name"
+
 
 class KnowledgeGraphService:
     """Экспертный сервис графа знаний на Neo4j.
@@ -632,6 +656,12 @@ class KnowledgeGraphService:
                 # со слоем 'regex'). Без этого свойства нельзя отличить факт модели от правила,
                 # а мы уже знаем, к чему приводит потеря происхождения.
                 "layer": getattr(r, "layer", "") or "model",
+                # Якоря связи. По умолчанию — сущность по имени; слой правил связывает ДОКУМЕНТ
+                # (у него ключ id) со стандартом (имя). Без этого его связи через службу не проходили.
+                "src_label": _safe_label(getattr(r, "source_label", "") or "Entity"),
+                "src_key": _safe_key(getattr(r, "source_key", "") or "name"),
+                "dst_label": _safe_label(getattr(r, "target_label", "") or "Entity"),
+                "dst_key": _safe_key(getattr(r, "target_key", "") or "name"),
             })
         if unknown:
             logger.warning(f"[graph][types] неизвестные типы связей заменены на RELATED_TO: {sorted(unknown)}")
@@ -657,8 +687,8 @@ class KnowledgeGraphService:
                         run_with_transient_retry(lambda _b=batch[i:i + _bs]: session.run(
                             f"""
                             UNWIND $batch AS r
-                            MATCH (a:Entity {{name: r.source}})
-                            MATCH (b:Entity {{name: r.target}})
+                            MATCH (a:{src_label} {{{src_key}: r.source}})
+                            MATCH (b:{dst_label} {{{dst_key}: r.target}})
                             MERGE (a)-[rel:`{safe_type}`]->(b)
                             SET rel.doc_id = coalesce(rel.doc_id, r.doc_id),
                                 rel.chunk_id = coalesce(rel.chunk_id, r.chunk_id),
@@ -672,6 +702,10 @@ class KnowledgeGraphService:
                                 rel.layer = coalesce(rel.layer, r.layer),
                                 rel.created_at = coalesce(rel.created_at, datetime())
                             """,
+                            src_label=batch[0].get("src_label", "Entity"),
+                            src_key=batch[0].get("src_key", "name"),
+                            dst_label=batch[0].get("dst_label", "Entity"),
+                            dst_key=batch[0].get("dst_key", "name"),
                             batch=_b,
                         ))
                         total += len(batch[i:i + _bs])
