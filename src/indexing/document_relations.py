@@ -17,6 +17,21 @@
   5. пишем связь через СЛУЖБУ ГРАФА (единый путь записи) со слоем `regex` и полным происхождением:
      версия схемы, версия извлекателя, фрагмент-источник.
 
+ВАЖНО: ГОСТ и ГОСТ Р — РАЗНЫЕ документы, и смешивать их нельзя (проверено 11.10.2026 по ФЗ-162
+«О стандартизации в РФ», ст. 14-17 и разъяснениям Росстандарта):
+  * «ГОСТ» (без Р) — МЕЖГОСУДАРСТВЕННЫЙ стандарт: разрабатывается Межгосударственным советом
+    по стандартизации (МГС), действует на территории нескольких стран (СНГ/ЕАЭС), вводится в
+    действие в РФ отдельным решением;
+  * «ГОСТ Р» — НАЦИОНАЛЬНЫЙ стандарт Российской Федерации: утверждает Росстандарт, действует
+    только в РФ;
+  * «ПНСТ» — предварительный национальный стандарт РФ (временный, до принятия ГОСТ Р);
+  * «ГОСТ Р ИСО/МЭК» — национальный стандарт, идентичный международному.
+Один и тот же номер может существовать в обеих сериях — это два разных документа. Поэтому
+«семейство» идентификатора (ГОСТ / ГОСТ Р / ПНСТ / СТО / СП) — часть ключа сопоставления:
+«ГОСТ 57580.1-2017» и «ГОСТ Р 57580.1-2017» НЕ считаются одним документом. Если в тексте
+написание без «Р», а документ в базе — «ГОСТ Р», это НЕ связь-факт: такое попадает в отчёт
+как близкое совпадение (near miss) и решается человеком.
+
 Границы (важно не переоценить):
   * сопоставление работает только когда у документа ЕСТЬ идентификатор. Письма без номера так не
     свяжутся — для них остаётся извлечение моделью с пометкой «предположение»;
@@ -204,6 +219,15 @@ def build_index(documents: List[Dict]) -> Dict[str, str]:
     return index
 
 
+def near_miss_key(ident: Ident) -> str:
+    """Ключ «того же номера в другой серии»: ГОСТ Р 57580.1-2017 → 57580.1-2017.
+
+    Нужен, чтобы отличать настоящее совпадение от похожего: «ГОСТ X» и «ГОСТ Р X» — РАЗНЫЕ
+    документы, и связь между ними ставить нельзя. Такие случаи собираем в отчёт для человека.
+    """
+    return ident.number
+
+
 # ── Прогон: сопоставить документы и записать связи ─────────────────────────────
 
 # Где искать упоминания: шапка документа и фрагменты с оборотом-ссылкой. Сканировать все
@@ -226,13 +250,21 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
     from src.indexing.embeddings_service import embeddings_service
     from src.indexing.knowledge_graph import Relation, kg_service
 
-    repo = get_doc_repo()
-    docs = repo.get_all(limit=None) if hasattr(repo, "get_all") else []
-    if not docs:
-        # Запасной путь: тот же источник, что у анализатора документов.
+    # Источник документов — тот же, что у анализатора документов: его кэш карточек. Он уже
+    # загружен сервисом и не требует знать сигнатуры репозитория (первая попытка через
+    # repo.get_all(limit=…) упала на живом прогоне: у метода другая подпись).
+    try:
         from src.api.services.document_service import document_service
 
         docs = list(getattr(document_service, "_documents_cache", {}).values())
+    except Exception:  # noqa: BLE001
+        docs = []
+    if not docs:
+        try:
+            repo = get_doc_repo()
+            docs = list(repo.get_all())
+        except Exception:  # noqa: BLE001
+            docs = []
     docs = [d for d in docs if isinstance(d, dict)]
     if document_ids:
         want = {str(x) for x in document_ids}
@@ -244,6 +276,7 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
     by_id = {str(d.get("id")): d for d in docs}
 
     total_rels, per_doc, skipped = 0, 0, 0
+    near_misses: List[Dict[str, Any]] = []
     report: List[Dict[str, Any]] = []
     for d in docs:
         doc_id = str(d.get("id"))
@@ -266,6 +299,16 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
             for ident, ctx in mentions(text):
                 other_id = index.get(ident.key)
                 if not other_id or other_id == doc_id:
+                    # Не нашли точного совпадения: возможно, тот же номер в ДРУГОЙ серии
+                    # (в тексте «ГОСТ X», документ в базе — «ГОСТ Р X»). Это НЕ связь-факт:
+                    # пишем в отчёт, решение за человеком.
+                    for alt_key, alt_id in index.items():
+                        if alt_id != doc_id and alt_key.split("|")[-1] == near_miss_key(ident):
+                            near_misses.append({
+                                "document": title[:50], "mentioned": str(ident),
+                                "found_as": alt_key.replace("|", " "),
+                            })
+                            break
                     continue
                 rel_type = relation_type_for(ctx)
                 rels.append(Relation(
@@ -299,6 +342,7 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
     return {
         "documents": len(docs),
         "with_identifiers": len(index),
+        "near_misses": near_misses[:20],
         "linked_documents": per_doc,
         "relations_written": total_rels,
         "skipped_no_chunks": skipped,
