@@ -397,6 +397,9 @@ def rebuild_graph_task(self, document_ids: Optional[list] = None) -> Dict[str, A
     from src.indexing.embeddings_service import embeddings_service
 
     now_iso = lambda: datetime.now(timezone.utc).isoformat()
+    # Задача подтверждает СВОЙ старт: иначе статус остаётся 'running' от эндпоинта, даже если задача
+    # до воркера не дошла (наблюдали 11.10.2026: «running» при нулевом прогрессе и пустых очередях).
+    config_store.set("kg_config", "rebuild_status", "running")
 
     async def _run() -> Dict[str, Any]:
         await embeddings_service.initialize()

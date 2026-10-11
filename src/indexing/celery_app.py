@@ -67,6 +67,11 @@ celery_app.conf.update(
     # Маршрутизация задач
     task_routes={
         "src.indexing.tasks.process_document": {"queue": "documents"},
+        # Пересборка графа — ДОЛГАЯ работа (часы, извлечение по всему корпусу). Её место — воркер
+        # обслуживания (один процесс, запуск по одному), а не documents-воркер: тот занят приёмом
+        # документов, и длинная задача встала бы поперёк загрузки. Без явного маршрута задача уходила
+        # в очередь по умолчанию и попадала не к тому исполнителю (разбирали 11.10.2026).
+        "src.indexing.tasks.rebuild_graph_task": {"queue": "maintenance"},
         "src.indexing.tasks.transcribe_audio": {"queue": "audio"},
         "src.indexing.tasks.clear_cache_task": {"queue": "maintenance"},
     },
