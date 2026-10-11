@@ -260,6 +260,19 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
     except Exception:  # noqa: BLE001
         docs = []
     if not docs:
+        # В воркере кэш карточек ПУСТ: его наполняет api-процесс при старте. Именно на этом
+        # прогон дал ноль («0 связей у 0 документов») — читаем карточки из базы тем же
+        # загрузчиком, что использует api.
+        try:
+            from src.api.services.document_service import document_service
+
+            loader = getattr(document_service, "_load_documents_from_db", None)
+            if callable(loader):
+                loader()
+            docs = list(getattr(document_service, "_documents_cache", {}).values())
+        except Exception:  # noqa: BLE001
+            docs = []
+    if not docs:
         try:
             repo = get_doc_repo()
             docs = list(repo.get_all())
