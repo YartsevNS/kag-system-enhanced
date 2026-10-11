@@ -849,6 +849,8 @@ JSON:
                     "temperature": temperature if temperature is not None else 0.05,
                     "max_tokens": 1600
                 }
+                if pass_name and "relation" in str(pass_name):
+                    logger.info(f"[graph][ЗАПРОС] {chunk_id}: system={len(system_prompt)} знаков, user={len(prompt)} знаков, начало user: {prompt[:400]!r}")
                 # ВАЖНО (почему так сделано): deepseek-v4-flash — reasoning-модель.
                 # Она сначала генерирует длинный reasoning_content (размышления),
                 # и только потом content. max_tokens ограничивает СУММАРНУЮ
