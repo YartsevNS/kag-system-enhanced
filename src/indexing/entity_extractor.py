@@ -498,11 +498,18 @@ class EntityExtractor:
             _require = False
         if not _require or not items:
             return items
-        _chunk = re.sub(r"\s+", " ", (chunk_text or "").lower()).strip()
+        # Нормализация под РАСПОЗНАННЫЙ текст: на сканах тире, кавычки, дефисы, неразрывные
+        # пробелы и переносы не совпадают с тем, что пишет модель, поэтому дословный поиск
+        # проваливался (замер 11.10.2026: ГОСТ 57580 — 76-83 процента, распознанное
+        # распоряжение — 0 из 10 при непустых цитатах). Сравниваем только буквы и цифры.
+        def _flat(x: str) -> str:
+            return re.sub(r"[^0-9a-zа-яё]+", " ", (x or "").lower()).strip()
+
+        _chunk = _flat(chunk_text)
         kept, no_ev, bad_ev = [], 0, 0
         for _it in items:
             _raw = (_it.get("evidence") if isinstance(_it, dict) else getattr(_it, "evidence", "")) or ""
-            _e = re.sub(r"\s+", " ", str(_raw).lower()).strip()
+            _e = _flat(str(_raw))
             if not _e:
                 no_ev += 1
             elif _e[:60] in _chunk or _e in _chunk:
