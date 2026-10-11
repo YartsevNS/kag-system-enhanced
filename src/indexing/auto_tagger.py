@@ -30,6 +30,7 @@ class DocumentType(str, Enum):
     PRELIMINARY_STANDARD = "preliminary_standard"
     ORG_STANDARD = "org_standard"
     SPECIFICATION = "specification"
+    TECHNICAL_SPECIFICATION = "technical_specification"
     CODE_OF_PRACTICE = "code_of_practice"
     STANDARDIZATION_RECOMMENDATION = "standardization_recommendation"
     LAW = "law"
