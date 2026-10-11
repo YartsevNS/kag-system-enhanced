@@ -174,6 +174,23 @@ async def _attach_pages(nodes: list) -> None:
             n["page"] = page
 
 
+@router.get("/entity-card/{entity_name:path}", summary="Карточка объекта: факты, источники, происхождение")
+async def entity_card(entity_name: str,
+                      current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Всё об объекте в одном месте: связи с происхождением, документы, счётчики по типам связей.
+
+    Происхождение каждой связи: слой (правило или модель), версия схемы, версия извлекателя,
+    фрагмент и документ-источник. Это то, по чему ответ можно проверить, а не принять на веру.
+    """
+    try:
+        card = await asyncio.to_thread(kg_service.entity_card, entity_name)
+        if not card:
+            return {"status": "not_found", "message": f"сущность «{entity_name}» не найдена"}
+        return {"status": "ok", **card}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/entity/{entity_name:path}/chunks",
             summary="Чанки, где упоминается сущность (текст и страница из Qdrant)")
 async def entity_chunks(

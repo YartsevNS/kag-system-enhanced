@@ -2058,6 +2058,70 @@ class KnowledgeGraphService:
             logger.warning(f"Ошибка получения графа: {e}")
             return []
 
+    def entity_card(self, entity_name: str, limit_relations: int = 100) -> Dict:
+        """Карточка объекта: всё, что известно о сущности, с происхождением каждого факта.
+
+        Зачем (подход промышленных онтологий): оператор должен открыть объект («Банк России») и
+        увидеть в одном месте его связи, из какого фрагмента и какого документа они взяты, каким
+        слоем получены (правило или модель) и по какой версии схемы. До этого связи лежали в графе
+        без такой сводки: чтобы понять, откуда факт, нужно было вручную ходить по чанкам.
+        """
+        if not self.driver:
+            return {}
+        out: Dict = {"name": entity_name, "relations": [], "by_type": {}, "documents": [], "warnings": []}
+        try:
+            with self.driver.session() as session:
+                node = session.run(
+                    """
+                    MATCH (e:Entity {name: $name})
+                    RETURN e.type AS type, e.confidence AS confidence, e.aliases AS aliases,
+                           coalesce(e.source_docs, []) AS source_docs,
+                           e.schema_version AS schema_version,
+                           e.extractor_version AS extractor_version
+                    LIMIT 1
+                    """, name=entity_name).single()
+                if not node:
+                    return {}
+                out.update({
+                    "type": node["type"],
+                    "confidence": node["confidence"],
+                    "aliases": node["aliases"] or [],
+                    "source_docs_count": len(node["source_docs"] or []),
+                    "schema_version": node["schema_version"],
+                    "extractor_version": node["extractor_version"],
+                })
+
+                rows = session.run(
+                    """
+                    MATCH (e:Entity {name: $name})-[r]-(other:Entity)
+                    WHERE NOT type(r) IN ['MENTIONS']
+                    RETURN type(r) AS rel_type,
+                           CASE WHEN startNode(r) = e THEN 'из' ELSE 'к' END AS direction,
+                           other.name AS other_name, other.type AS other_type,
+                           r.layer AS layer, r.schema_version AS schema_version,
+                           r.extractor_version AS extractor_version,
+                           r.chunk_id AS chunk_id, r.doc_id AS doc_id,
+                           r.version AS version, coalesce(r.created_at, null) AS created_at
+                    LIMIT $limit
+                    """, name=entity_name, limit=int(limit_relations))
+                by_type: Dict[str, int] = {}
+                for rec in rows:
+                    item = dict(rec)
+                    by_type[item["rel_type"]] = by_type.get(item["rel_type"], 0) + 1
+                    out["relations"].append(item)
+                out["by_type"] = by_type
+
+                docs = session.run(
+                    """
+                    MATCH (d:Document)-[:HAS_CHUNK]->(:Chunk)-[:MENTIONS]->(e:Entity {name: $name})
+                    RETURN DISTINCT d.id AS id, d.filename AS filename
+                    LIMIT 50
+                    """, name=entity_name)
+                out["documents"] = [dict(r) for r in docs]
+        except Exception as e:  # noqa: BLE001
+            out["warnings"].append(f"{type(e).__name__}: {str(e)[:160]}")
+        return out
+
     def entity_chunks(self, entity_name: str, limit: int = 8,
                       doc_id: str = "") -> List[Dict]:
         """Чанки, которые упоминают сущность: документ, номер фрагмента, превью.
