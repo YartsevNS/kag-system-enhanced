@@ -127,7 +127,10 @@ def extract_chunk_v2(chunk_text: str, chunk_id: str = "", require_evidence: bool
     try:
         from src.indexing.graph_ontology import prompt_rules
 
-        rel_desc = prompt_rules()
+        # Список типов — ОБРЕЗАННЫЙ, ровно как в щупе, который дал 81 процент подтверждённых.
+        # Полный текст правил (десятки тысяч знаков) не нужен: он раздувает запрос, тормозит вызов
+        # и уводит от схемы, на которой замер доказал результат. Типы нужны модели, простыни — нет.
+        rel_desc = prompt_rules()[:3000]
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[graph][v2] правила онтологии не взяты: {e}")
         rel_desc = ""
