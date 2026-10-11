@@ -694,11 +694,16 @@ class KnowledgeGraphService:
                 for safe_type, batch in by_type.items():
                     for i in range(0, len(batch), _bs):
                         # Дедлоки при параллельной записи документов — повторяем.
+                        _a = batch[0]
+                        _src_label = _safe_label(_a.get("src_label", "") or "Entity")
+                        _src_key = _safe_key(_a.get("src_key", "") or "name")
+                        _dst_label = _safe_label(_a.get("dst_label", "") or "Entity")
+                        _dst_key = _safe_key(_a.get("dst_key", "") or "name")
                         run_with_transient_retry(lambda _b=batch[i:i + _bs]: session.run(
                             f"""
                             UNWIND $batch AS r
-                            MATCH (a:{src_label} {{{src_key}: r.source}})
-                            MATCH (b:{dst_label} {{{dst_key}: r.target}})
+                            MATCH (a:{_src_label} {{{_src_key}: r.source}})
+                            MATCH (b:{_dst_label} {{{_dst_key}: r.target}})
                             MERGE (a)-[rel:`{safe_type}`]->(b)
                             SET rel.doc_id = coalesce(rel.doc_id, r.doc_id),
                                 rel.chunk_id = coalesce(rel.chunk_id, r.chunk_id),
@@ -712,10 +717,6 @@ class KnowledgeGraphService:
                                 rel.layer = coalesce(rel.layer, r.layer),
                                 rel.created_at = coalesce(rel.created_at, datetime())
                             """,
-                            src_label=batch[0].get("src_label", "Entity"),
-                            src_key=batch[0].get("src_key", "name"),
-                            dst_label=batch[0].get("dst_label", "Entity"),
-                            dst_key=batch[0].get("dst_key", "name"),
                             batch=_b,
                         ))
                         total += len(batch[i:i + _bs])
