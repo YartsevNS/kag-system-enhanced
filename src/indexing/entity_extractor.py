@@ -575,7 +575,7 @@ class EntityExtractor:
 ---
 
 JSON:
-{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0,"description":"1-2 слова чем является"}}],"relations":[{{"source":"...","target":"...","type":"тип связи"}}]}}
+{{"entities":[{{"name":"...","type":"тип","confidence":0.0-1.0,"description":"1-2 слова чем является"}}],"relations":[{{"source":"...","target":"...","type":"тип связи","evidence":"дословная цитата из текста"}}]}}
 
 Правила:
 - name строго из текста; type только из списка
@@ -630,7 +630,7 @@ JSON:
 ---
 
 JSON:
-{{"relations":[{{"source":"...","target":"...","type":"тип связи"}}]}}
+{{"relations":[{{"source":"...","target":"...","type":"тип связи","evidence":"дословная цитата из текста"}}]}}
 
 Правила:
 - source и target: точные имена из списка известных сущностей
