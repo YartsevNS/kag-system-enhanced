@@ -2187,6 +2187,43 @@ class KnowledgeGraphService:
             out["warnings"].append(f"{type(e).__name__}: {str(e)[:160]}")
         return out
 
+    def document_relations(self, document_id: str, limit: int = 50) -> Dict[str, Any]:
+        """Связи документа с ДРУГИМИ документами, с происхождением каждой.
+
+        Зачем отдельный метод: связи между документами — не то же, что связи между сущностями.
+        Их надо показывать в карточке документа («связанные документы»), и у каждой должно быть
+        видно, откуда она взята: слой (правила или модель), версия схемы, фрагмент-источник.
+        """
+        if not self.driver:
+            return {"relations": [], "by_type": {}}
+        out: Dict[str, Any] = {"relations": [], "by_type": {}}
+        try:
+            with self.driver.session() as session:
+                rows = session.run(
+                    """
+                    MATCH (a:Document {id: $doc})-[r]->(b:Document)
+                    WHERE NOT type(r) IN ['HAS_CHUNK','HAS_SECTION']
+                    RETURN type(r) AS rel_type, b.id AS other_id, b.filename AS other_filename,
+                           r.layer AS layer, r.schema_version AS schema_version,
+                           r.extractor_version AS extractor_version, r.chunk_id AS chunk_id
+                    UNION
+                    MATCH (a:Document {id: $doc})<-[r]-(b:Document)
+                    WHERE NOT type(r) IN ['HAS_CHUNK','HAS_SECTION']
+                    RETURN type(r) AS rel_type, b.id AS other_id, b.filename AS other_filename,
+                           r.layer AS layer, r.schema_version AS schema_version,
+                           r.extractor_version AS extractor_version, r.chunk_id AS chunk_id
+                    LIMIT $limit
+                    """, doc=document_id, limit=int(limit))
+                by_type: Dict[str, int] = {}
+                for rec in rows:
+                    item = dict(rec)
+                    by_type[item["rel_type"]] = by_type.get(item["rel_type"], 0) + 1
+                    out["relations"].append(item)
+                out["by_type"] = by_type
+        except Exception as e:  # noqa: BLE001
+            out["warning"] = f"{type(e).__name__}: {str(e)[:160]}"
+        return out
+
     def entity_chunks(self, entity_name: str, limit: int = 8,
                       doc_id: str = "") -> List[Dict]:
         """Чанки, которые упоминают сущность: документ, номер фрагмента, превью.

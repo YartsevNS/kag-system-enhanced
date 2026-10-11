@@ -692,6 +692,29 @@ def run_monitor_check(self, source_id: str = None):
         raise self.retry(exc=e)
 
 
+@celery_app.task(bind=True, queue="maintenance", soft_time_limit=1800, time_limit=2400)
+def link_document_relations(self, document_ids: Optional[list] = None) -> Dict[str, Any]:
+    """Сопоставить документы по идентификаторам и записать связи между ними.
+
+    Работает без вызовов модели: документы сами называют друг друга («взамен ГОСТ Р …»,
+    «во исполнение приказа № …»). Поэтому это дешёвая и точная операция, в отличие от
+    фрагментного извлечения. Запускается из админки или задачей; прогресс не нужен — проходит
+    за минуты, результат пишется в журнал.
+    """
+    import asyncio as _aio
+
+    from src.indexing.document_relations import link_documents
+
+    try:
+        result = _aio.run(link_documents(document_ids=document_ids))
+        logger.info(f"[doc-relations] {result.get('relations_written')} связей у "
+                    f"{result.get('linked_documents')} документов")
+        return {"status": "ok", **result}
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[doc-relations] ошибка: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @celery_app.task(bind=True, queue="maintenance", max_retries=2, default_retry_delay=300,
                  soft_time_limit=900, time_limit=1200)
 def scan_orphans(self):

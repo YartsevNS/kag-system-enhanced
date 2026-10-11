@@ -174,6 +174,39 @@ async def _attach_pages(nodes: list) -> None:
             n["page"] = page
 
 
+@router.get("/document-relations/{document_id}", summary="Связанные документы: связи с другими документами и их происхождение")
+async def document_relations(document_id: str,
+                             current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Связи документа с другими документами (взамен, во исполнение, ссылается на).
+
+    Показывает и прямые, и обратные связи: «этот документ ссылается на …» и «на этот документ
+    ссылаются …». У каждой связи — происхождение (слой, версия схемы, фрагмент).
+    """
+    try:
+        data = await asyncio.to_thread(kg_service.document_relations, document_id)
+        return {"status": "ok", "document_id": document_id, **data}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/link-document-relations", summary="Сопоставить документы по идентификаторам (в фоне)")
+async def link_document_relations(current_user: User = Depends(get_current_admin)):
+    """Запустить сопоставление документов по идентификаторам — без вызовов модели.
+
+    Дешёвая операция: правила находят в тексте ссылки на другие документы («взамен ГОСТ Р …»,
+    «во исполнение приказа № …») и сопоставляют их с карточками документов. Запускается в воркере
+    обслуживания, результат виден в журнале.
+    """
+    try:
+        from src.indexing.tasks import link_document_relations as _task
+
+        _task.delay(document_ids=None)
+        return {"status": "ok", "started": True,
+                "message": "Сопоставление документов запущено в фоне"}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/entity-card/{entity_name:path}", summary="Карточка объекта: факты, источники, происхождение")
 async def entity_card(entity_name: str,
                       current_user: Optional[User] = Depends(get_current_user_optional)):

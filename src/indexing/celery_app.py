@@ -72,6 +72,9 @@ celery_app.conf.update(
         # документов, и длинная задача встала бы поперёк загрузки. Без явного маршрута задача уходила
         # в очередь по умолчанию и попадала не к тому исполнителю (разбирали 11.10.2026).
         "src.indexing.tasks.rebuild_graph_task": {"queue": "maintenance"},
+        # Связи между документами: дешёвые (без модели), но идут по всему корпусу —
+        # место в воркере обслуживания, рядом с пересборкой.
+        "src.indexing.tasks.link_document_relations": {"queue": "maintenance"},
         "src.indexing.tasks.transcribe_audio": {"queue": "audio"},
         "src.indexing.tasks.clear_cache_task": {"queue": "maintenance"},
     },
