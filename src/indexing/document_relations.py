@@ -246,36 +246,44 @@ async def link_documents(document_ids: Optional[List[str]] = None, limit: Option
     смотрим шапку и фрагменты с оборотами-ссылками → сопоставляем с индексом → пишем связь
     через службу графа со слоем `regex`.
     """
-    from src.api.services.document_repository import get_doc_repo
     from src.indexing.embeddings_service import embeddings_service
     from src.indexing.knowledge_graph import Relation, kg_service
 
-    # Источник документов — тот же, что у анализатора документов: его кэш карточек. Он уже
-    # загружен сервисом и не требует знать сигнатуры репозитория (первая попытка через
-    # repo.get_all(limit=…) упала на живом прогоне: у метода другая подпись).
+    # Источник документов — БАЗА. Причины, выясненные живыми прогонами:
+    #   * кэш сервиса документов в воркере пуст (его наполняет api при старте), и загрузчик
+    #     кладёт записи в `_documents`, а не в `_documents_cache` — обращение к кэшу давало ноль;
+    #   * в записях сервиса НЕТ распознанного названия (`recognized_title`), а именно по нему
+    #     виден идентификатор документа («ГОСТ Р 57580.1-2017»). Без него сопоставлять нечего.
+    # Поэтому читаем таблицу документов напрямую: это дешёвый SELECT, и он не зависит от того,
+    # какой процесс (api или воркер) и что успел закэшировать.
+    docs: List[Dict[str, Any]] = []
     try:
-        from src.api.services.document_service import document_service
+        import os as _os
 
-        docs = list(getattr(document_service, "_documents_cache", {}).values())
-    except Exception:  # noqa: BLE001
-        docs = []
+        import psycopg2
+        import psycopg2.extras
+
+        dsn = _os.environ.get("KAG_DB_URL") or _os.environ.get("DATABASE_URL") or ""
+        if dsn:
+            with psycopg2.connect(dsn) as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT id::text AS id, filename, recognized_title, document_type "
+                        "FROM documents WHERE coalesce(status,'') <> 'failed'"
+                    )
+                    docs = [dict(r) for r in cur.fetchall()]
+    except Exception as _e:  # noqa: BLE001
+        import logging as _log
+
+        _log.getLogger(__name__).warning(f"[doc-relations] база недоступна: {_e}")
+
     if not docs:
-        # В воркере кэш карточек ПУСТ: его наполняет api-процесс при старте. Именно на этом
-        # прогон дал ноль («0 связей у 0 документов») — читаем карточки из базы тем же
-        # загрузчиком, что использует api.
+        # Запасной путь: карточки из сервиса документов (если база недоступна, но кэш полон).
         try:
             from src.api.services.document_service import document_service
 
-            loader = getattr(document_service, "_load_documents_from_db", None)
-            if callable(loader):
-                loader()
-            docs = list(getattr(document_service, "_documents_cache", {}).values())
-        except Exception:  # noqa: BLE001
-            docs = []
-    if not docs:
-        try:
-            repo = get_doc_repo()
-            docs = list(repo.get_all())
+            cache = getattr(document_service, "_documents", None) or getattr(document_service, "_documents_cache", {})
+            docs = [{"id": k, "filename": getattr(v, "filename", "")} for k, v in dict(cache).items()]
         except Exception:  # noqa: BLE001
             docs = []
     docs = [d for d in docs if isinstance(d, dict)]
