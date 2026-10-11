@@ -65,9 +65,12 @@ RELATIONS: tuple[RelationSpec, ...] = (
                  (("document_ref", "document_ref"), ("standard", "standard"))),
     RelationSpec("AMENDS", "изменяет", "документ вносит изменения в другой документ",
                  (("document_ref", "document_ref"),)),
-    RelationSpec("REFERENCES", "ссылается на", "документ ссылается на другой документ или стандарт",
+    RelationSpec("REFERENCES", "ссылается на", "документ ссылается на другой документ, стандарт или пункт",
                  (("document_ref", "document_ref"), ("document_ref", "standard"),
-                  ("standard", "standard"), ("standard", "document_ref"))),
+                  ("standard", "standard"), ("standard", "document_ref"),
+                  # добавлено 11.10.2026 по замеру отказов: «документ ссылается на пункт/раздел»
+                  # отбрасывалось (45 случаев — самый частый отказ), хотя это законная связь.
+                  ("document_ref", "clause"), ("standard", "clause"))),
     RelationSpec("HAS_CLAUSE", "содержит пункт", "документ содержит пункт, раздел или приложение",
                  (("document_ref", "clause"), ("standard", "clause"))),
     RelationSpec("REQUIRES", "устанавливает требование",
@@ -95,7 +98,10 @@ SEMANTIC_CODES = {r.code for r in RELATIONS}
 # не действуют — на живом прогоне 10.10.2026 все связи пришли из кэша и выглядели как RELATED_TO.
 # 3 — прямые запреты (BELONGS_TO, злоупотребление LOCATED_AT) по итогам замера судьями.
 # 4 — LOCATED_AT убран из списка для модели (судья: 21 из 25 случаев — связь совсем другая).
-ONTOLOGY_EPOCH = 4
+# 5 — разрешена пара «документ/стандарт ссылается на пункт» (REFERENCES → clause): по замеру
+#     отказов это самый частый случай (45), и связь законная. Версия поднята, чтобы кэш
+#     извлечения не отдал прежние ответы модели со старым заданием.
+ONTOLOGY_EPOCH = 5
 
 # Системные и структурные связи: их пишет код, модель их не порождает.
 STRUCTURAL_CODES = {"MENTIONS", "HAS_CHUNK", "SECTION_CHUNK", "HAS_SECTION", "NEW_EDITION_OF"}
