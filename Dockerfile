@@ -13,6 +13,10 @@
 
 FROM kre44et/kag-base:2026.11.04.2
 
+# S3-хранилище оригиналов (ADR-006): boto3 нужен только api (put/get/delete),
+# worker'у не требуется — ставим тонким слоем вместо пересборки kag-base.
+RUN pip install --no-cache-dir "boto3>=1.34.0"
+
 LABEL maintainer="KAG Team"
 LABEL description="KAG - Knowledge Augmentation Generation. AI-powered knowledge management with RAG."
 LABEL version="0.3.0"
