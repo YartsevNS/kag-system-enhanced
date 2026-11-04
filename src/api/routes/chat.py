@@ -516,11 +516,11 @@ async def generate_document_from_ontology(
         raise HTTPException(status_code=500, detail=f"Не удалось собрать документ: {e}")
 
     # Имя файла строго латиницей (latin-1 в Content-Disposition не кодирует кириллицу).
-        slug = {"политика": "politika", "policy": "policy",
+    slug = {"политика": "politika", "policy": "policy",
                 "регламент": "reglament", "regulation": "regulation",
                 "инструкция": "instrukciya", "instruction": "instruction",
                 "стандарт": "standard", "standard": "standard"}.get(doc_kind.lower(), "document")
-        filename = f"{slug}_{datetime.now().strftime('%Y%m%d')}.docx"
+    filename = f"{slug}_{datetime.now().strftime('%Y%m%d')}.docx"
     return Response(
         content=doc_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
