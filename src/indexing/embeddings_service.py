@@ -8,6 +8,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import asyncio
+import os
 import time
 import uuid
 import traceback
@@ -139,7 +140,10 @@ class EmbeddingsService:
         # Размер батча для /api/embed. 32 текста на CPU-Ollama (bge-m3) идут
         # дольше 60с и упирались в timeout (пустые векторы). Уменьшено до 8 —
         # батч ~12с, надёжно укладывается в EMBEDDING_TIMEOUT.
-        self._batch_size = 8
+        # Для локального GPU-эмбеддера Giga-3B (41, ~70 мс/чанк при батче 64)
+        # размер батча настраивается через EMBEDDING_BATCH_SIZE: 8 — это 23
+        # HTTP-запроса на документ из 182 чанков (39 с вместо ~13 с).
+        self._batch_size = int(os.environ.get("EMBEDDING_BATCH_SIZE", "8"))
 
         # Тёплая инициализация. initialize() зовётся на каждый запрос (search в
         # чате, /meta, /access, сторож), а внутри был пробный эмбеддинг — замер
