@@ -1195,6 +1195,39 @@ class ChatService:
                 except Exception as e:
                     logger.debug(f"Neo4j поиск пропущен: {e}")
 
+                # 2b2. Факты TypeDB (дедуктивные правила онтологии, ADR-005)
+                # TypeDB — источник ВЕРИФИЦИРОВАННЫХ ФАКТОВ о нарушениях (не релевантности).
+                # Факты фильтруются по видимым юзеру chunk_id (ADR-002): поиск уже вернул
+                # только видимые чанки, здесь пересекаем факты с их id. Пустой set = юзер
+                # не видит ничего = 0 фактов (guard `if visible and ...` запрещён).
+                try:
+                    from src.indexing.typedb_facts import (
+                        is_available as typedb_available,
+                        query_facts as typedb_query_facts,
+                        format_facts_block,
+                    )
+                    if typedb_available():
+                        visible_chunk_ids = {
+                            r.get("chunk_id") for r in (search_results or []) if r.get("chunk_id")
+                        }
+                        _t_typedb = time.monotonic()
+                        typedb_facts = await asyncio.to_thread(
+                            typedb_query_facts, visible_chunk_ids)
+                        _typedb_ms = (time.monotonic() - _t_typedb) * 1000
+                        if typedb_facts:
+                            facts_block = format_facts_block(typedb_facts)
+                            context += "\n\n--- ФАКТЫ (TypeDB, дедуктивные правила) ---\n"
+                            context += facts_block
+                            logger.info(
+                                f"TypeDB: {len(typedb_facts)} фактов нарушений за {_typedb_ms:.0f} мс")
+                        try:
+                            from src.monitoring.prometheus import record_rag_stage
+                            record_rag_stage("typedb", _typedb_ms / 1000)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.debug(f"TypeDB факты пропущены: {e}")
+
                 # 2c. Вычисления по таблицам: цифры считает SQL, а не модель по тексту.
                 # Зачем: «сколько позиций и на какую сумму» — вопрос к данным, а не к
                 # похожим фрагментам. Если сумма посчитана по найденным кускам, она зависит
