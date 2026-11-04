@@ -394,6 +394,7 @@ class DocumentService:
                     s3_storage.put_original,
                     doc_id, filename, file_content,
                     bucket=bucket_for(source_metadata, collection_for_source(source_metadata)),
+                    owner=uploaded_by or None,
                     metadata={
                         "document_id": doc_id,
                         "filename": filename,

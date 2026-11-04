@@ -5,9 +5,13 @@ S3-слой хранения оригиналов документов (ADR-006)
 на S3-совместимое хранилище (прототип: silo, бакеты regulator-docs /
 company-docs, versioning=ENABLED).
 
-- Ключ объекта: {document_id}/{filename} (стабильный, из БД документа).
 - Бакет: bucket_for(document) — пользовательская загрузка → company-docs,
   web_monitor/источник с сайта → regulator-docs.
+- Ключ объекта (решение владельца 04.11.2026, вариант B):
+    company-docs:   users/{uploaded_by}/{document_id}/{filename}
+    regulator-docs: {document_id}/{filename}
+  Префикс владельца даёт IAM-готовность silo/OpenMaxIO по префиксу
+  и простой аудит «чьи объекты» через list (list_documents(owner=...)).
 - В МЕТАДАННЫХ S3-объекта обязательно: uploaded_by, filename, document_id,
   source_name, source_url, collection, file_hash.
 - Конфигурация через env (как TYPEDB_*): S3_ENDPOINT, S3_ACCESS_KEY,
@@ -19,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,15 @@ def bucket_for(source_metadata: Optional[Dict[str, Any]] = None,
     return _cfg()["bucket_company"]
 
 
+def _keys_for(document_id: str, filename: str,
+              owner: Optional[str] = None) -> List[str]:
+    """Варианты ключей: с префиксом владельца (company) и плоский (regulator/миграция)."""
+    flat = f"{document_id}/{filename}"
+    if owner:
+        return [f"users/{owner}/{flat}", flat]
+    return [flat]
+
+
 class S3Storage:
     """Минимальный S3-клиент для оригиналов документов (silо/OpenMaxIO, MinIO)."""
 
@@ -80,9 +93,6 @@ class S3Storage:
             )
         return self._client
 
-    def _key(self, document_id: str, filename: str) -> str:
-        return f"{document_id}/{filename}"
-
     def _ensure_bucket(self, bucket: str) -> None:
         c = self._bucket_cache.get(bucket)
         if c:
@@ -95,14 +105,15 @@ class S3Storage:
 
     def put_original(self, document_id: str, filename: str, content: bytes, *,
                      bucket: str,
+                     owner: Optional[str] = None,
                      metadata: Optional[Dict[str, str]] = None) -> Optional[str]:
         """Положить оригинал в S3. Возвращает ключ объекта или None при ошибке."""
         if not is_available():
             return None
-        key = self._key(document_id, filename)
+        key = self._keys_for(document_id, filename, owner)[0]
         # S3 metadata допускает только ASCII: значения URL-кодируем (кириллические
         # имена файлов/источников валились бы иначе), при чтении декодируем.
-        from urllib.parse import quote, unquote
+        from urllib.parse import quote
         meta = {k: quote(str(v)) for k, v in (metadata or {}).items() if v is not None}
         try:
             self._ensure_bucket(bucket)
@@ -117,7 +128,8 @@ class S3Storage:
             return None
 
     def get_bytes(self, document_id: str, filename: str, *,
-                  bucket: Optional[str] = None) -> Optional[bytes]:
+                  bucket: Optional[str] = None,
+                  owner: Optional[str] = None) -> Optional[bytes]:
         """Прочитать оригинал из S3 (все бакеты, если bucket не указан)."""
         if not is_available():
             return None
@@ -125,19 +137,20 @@ class S3Storage:
             _cfg()["bucket_company"], _cfg()["bucket_regulator"],
         ])
         for b in candidates:
-            try:
-                resp = self._ensure().get_object(
-                    Bucket=b, Key=self._key(document_id, filename))
-                body = resp.get("Body")
-                if body is None:
+            for key in self._keys_for(document_id, filename, owner):
+                try:
+                    resp = self._ensure().get_object(Bucket=b, Key=key)
+                    body = resp.get("Body")
+                    if body is None:
+                        continue
+                    return body.read()
+                except (BotoCoreError, ClientError):
                     continue
-                return body.read()
-            except (BotoCoreError, ClientError):
-                continue
         return None
 
     def get_metadata(self, document_id: str, filename: str, *,
-                     bucket: Optional[str] = None) -> Optional[Dict[str, str]]:
+                     bucket: Optional[str] = None,
+                     owner: Optional[str] = None) -> Optional[Dict[str, str]]:
         """Метаданные S3-объекта (uploaded_by и т.д.) без чтения тела."""
         if not is_available():
             return None
@@ -146,17 +159,18 @@ class S3Storage:
             _cfg()["bucket_company"], _cfg()["bucket_regulator"],
         ])
         for b in candidates:
-            try:
-                resp = self._ensure().head_object(
-                    Bucket=b, Key=self._key(document_id, filename))
-                md = resp.get("Metadata") or {}
-                return {k: unquote(str(v)) for k, v in md.items()}
-            except (BotoCoreError, ClientError):
-                continue
+            for key in self._keys_for(document_id, filename, owner):
+                try:
+                    resp = self._ensure().head_object(Bucket=b, Key=key)
+                    md = resp.get("Metadata") or {}
+                    return {k: unquote(str(v)) for k, v in md.items()}
+                except (BotoCoreError, ClientError):
+                    continue
         return None
 
     def delete_original(self, document_id: str, filename: str, *,
-                        bucket: Optional[str] = None) -> bool:
+                        bucket: Optional[str] = None,
+                        owner: Optional[str] = None) -> bool:
         """Удалить объект(ы) из S3. При versioning=ENABLED это delete marker."""
         if not is_available():
             return False
@@ -165,17 +179,43 @@ class S3Storage:
         ])
         deleted = False
         for b in candidates:
-            try:
-                self._ensure().delete_object(
-                    Bucket=b, Key=self._key(document_id, filename))
-                deleted = True
-            except (BotoCoreError, ClientError):
-                continue
+            for key in self._keys_for(document_id, filename, owner):
+                try:
+                    self._ensure().delete_object(Bucket=b, Key=key)
+                    deleted = True
+                except (BotoCoreError, ClientError):
+                    continue
         return deleted
 
+    def list_documents(self, owner: Optional[str] = None, *,
+                       bucket: Optional[str] = None) -> List[Dict[str, str]]:
+        """Список объектов в бакете (audit). При owner — только префикс users/{owner}/."""
+        if not is_available():
+            return []
+        candidates = ([bucket] if bucket else [
+            _cfg()["bucket_company"], _cfg()["bucket_regulator"],
+        ])
+        out: List[Dict[str, str]] = []
+        for b in candidates:
+            prefix = f"users/{owner}/" if owner else ""
+            try:
+                paginator = self._ensure().get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=b, Prefix=prefix):
+                    for obj in page.get("Contents", []):
+                        out.append({
+                            "bucket": b,
+                            "key": obj["Key"],
+                            "size": str(obj.get("Size", "")),
+                            "last_modified": str(obj.get("LastModified", "")),
+                        })
+            except (BotoCoreError, ClientError) as e:
+                logger.warning(f"S3: list {b} {prefix} не удался: {e}")
+        return out
+
     def exists(self, document_id: str, filename: str, *,
-               bucket: Optional[str] = None) -> bool:
-        resp = self.get_metadata(document_id, filename, bucket=bucket)
+               bucket: Optional[str] = None,
+               owner: Optional[str] = None) -> bool:
+        resp = self.get_metadata(document_id, filename, bucket=bucket, owner=owner)
         return resp is not None
 
 
