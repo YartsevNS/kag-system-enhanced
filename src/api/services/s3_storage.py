@@ -110,7 +110,7 @@ class S3Storage:
         """Положить оригинал в S3. Возвращает ключ объекта или None при ошибке."""
         if not is_available():
             return None
-        key = self._keys_for(document_id, filename, owner)[0]
+        key = _keys_for(document_id, filename, owner)[0]
         # S3 metadata допускает только ASCII: значения URL-кодируем (кириллические
         # имена файлов/источников валились бы иначе), при чтении декодируем.
         from urllib.parse import quote
@@ -137,7 +137,7 @@ class S3Storage:
             _cfg()["bucket_company"], _cfg()["bucket_regulator"],
         ])
         for b in candidates:
-            for key in self._keys_for(document_id, filename, owner):
+            for key in _keys_for(document_id, filename, owner):
                 try:
                     resp = self._ensure().get_object(Bucket=b, Key=key)
                     body = resp.get("Body")
@@ -159,7 +159,7 @@ class S3Storage:
             _cfg()["bucket_company"], _cfg()["bucket_regulator"],
         ])
         for b in candidates:
-            for key in self._keys_for(document_id, filename, owner):
+            for key in _keys_for(document_id, filename, owner):
                 try:
                     resp = self._ensure().head_object(Bucket=b, Key=key)
                     md = resp.get("Metadata") or {}
@@ -179,7 +179,7 @@ class S3Storage:
         ])
         deleted = False
         for b in candidates:
-            for key in self._keys_for(document_id, filename, owner):
+            for key in _keys_for(document_id, filename, owner):
                 try:
                     self._ensure().delete_object(Bucket=b, Key=key)
                     deleted = True
