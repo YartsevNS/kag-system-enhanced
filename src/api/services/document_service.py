@@ -381,6 +381,32 @@ class DocumentService:
             f"[{upload_id}] 💾 Файл сохранён: {target_path.name} ({file_size} байт)"
         )
 
+        # ========== Этап 5b: дублируем оригинал в S3 (ADR-006) ==========
+        # Место хранения меняется на S3 (silo/OpenMaxIO): пользовательские загрузки ->
+        # company-docs, собранные с сайтов -> regulator-docs. В метаданных S3-объекта
+        # обязательно uploaded_by (id загрузившего). S3-слой guarded: без env/boto3
+        # молча работает диск, прод не падает; при сбое сети фолбэк на диск.
+        try:
+            from src.api.services.s3_storage import s3_storage, bucket_for, is_available as s3_available
+
+            if s3_available():
+                await asyncio.to_thread(
+                    s3_storage.put_original,
+                    doc_id, filename, file_content,
+                    bucket=bucket_for(source_metadata, collection_for_source(source_metadata)),
+                    metadata={
+                        "document_id": doc_id,
+                        "filename": filename,
+                        "uploaded_by": uploaded_by or "",
+                        "source_name": (source_metadata or {}).get("source_name", "") if isinstance(source_metadata, dict) else "",
+                        "source_url": (source_metadata or {}).get("source_url", "") if isinstance(source_metadata, dict) else "",
+                        "collection": collection_for_source(source_metadata),
+                        "file_hash": file_hash,
+                    },
+                )
+        except Exception as e:  # noqa: BLE001 — S3 не должен ронять загрузку
+            logger.warning(f"[{upload_id}] S3: дубль оригинала не записан: {e}")
+
         # ========== Этап 6: создаём запись о документе в памяти ==========
         record = DocumentRecord(
             document_id=doc_id,

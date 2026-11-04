@@ -29,6 +29,8 @@ neo4j==5.27.0
 # Драйвер лёгкий (без torch); guarded import в src/indexing/typedb_facts.py —
 # без пакета контур выключен, прод не падает.
 typedb-driver>=3.14.0
+# S3-хранилище оригиналов (ADR-006): guarded import в src/api/services/s3_storage.py
+boto3>=1.34.0
 
 # Мониторинг
 prometheus-client==0.21.1
