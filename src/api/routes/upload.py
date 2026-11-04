@@ -1951,8 +1951,29 @@ async def get_document_preview(
     """Вернуть файл документа для inline-просмотра в браузере."""
     ensure_can_read(document_id, current_user)
     from pathlib import Path
-    from fastapi.responses import FileResponse
-    
+    from fastapi.responses import FileResponse, Response
+
+    # S3-хранилище оригиналов (ADR-006): пробуем S3 первым, диск — фолбэк.
+    # Файл проверен ensure_can_read — права соблюдены до отдачи байтов.
+    try:
+        from src.api.services.s3_storage import s3_storage, is_available as s3_available
+        if s3_available():
+            s3_record = document_service.get_document_status(document_id)
+            s3_filename = s3_record.filename if s3_record else None
+            if s3_filename:
+                s3_bytes = await asyncio.to_thread(
+                    s3_storage.get_bytes, document_id, s3_filename,
+                    owner=getattr(s3_record, "uploaded_by", None) or None,
+                )
+                if s3_bytes is not None:
+                    import mimetypes
+                    mtype = mimetypes.guess_type(s3_filename)[0] or "application/octet-stream"
+                    return Response(content=s3_bytes, media_type=mtype,
+                                    headers={"Content-Disposition": "inline",
+                                             "Cache-Control": "public, max-age=600"})
+    except Exception as e:  # noqa: BLE001 — S3 не должен ломать просмотр
+        logger.warning(f"[preview] S3 не отдал файл {document_id}: {e}")
+
     # Точный путь по <document_id>_<имя> вместо перебора каталога
     file_path = await asyncio.to_thread(document_service.find_file, document_id)
     if not file_path:

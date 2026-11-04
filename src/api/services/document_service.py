@@ -1393,6 +1393,7 @@ class DocumentService:
                     chunks_count=doc.chunks_count or 0,
                     file_size=doc.file_size or 0,
                     version=doc.version or 1,
+                    uploaded_by=getattr(doc, "uploaded_by", None) or None,
                 )
                 self._documents[document_id] = record  # синхронизируем кэш
                 return record
@@ -1433,6 +1434,18 @@ class DocumentService:
                     file_path.unlink()
                 except Exception as e:
                     logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+
+            # S3-оригинал (ADR-006): delete marker при versioning=ENABLED.
+            try:
+                from src.api.services.s3_storage import s3_storage, is_available as s3_available
+                if s3_available():
+                    owner = getattr(record, "uploaded_by", None) or None
+                    s3_deleted = s3_storage.delete_original(
+                        document_id, filename, owner=owner)
+                    if s3_deleted:
+                        logger.info(f"Удалён S3-оригинал {document_id}/{filename}")
+            except Exception as e:  # noqa: BLE001 — S3 не должен ронять удаление
+                logger.warning(f"S3: не удалось удалить {document_id}: {e}")
 
             ocr_dir = self._ocr_dir
             for suffix in ["", ".md"]:
