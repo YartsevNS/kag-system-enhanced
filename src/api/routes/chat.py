@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse, Response
 from loguru import logger
 import uuid
 import json
+from datetime import datetime
 
 from src.models import ChatRequest, ChatResponse, ChatMessage
 from src.config import get_settings
@@ -477,3 +478,47 @@ async def export_session(
     except Exception as e:
         logger.error(f"Ошибка экспорта: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate-document", summary="Сгенерировать документ ИБ из онтологии (TypeDB)")
+async def generate_document_from_ontology(
+    doc_kind: str = Query(..., description="Вид документа: политика|регламент|инструкция|стандарт"),
+    domain: Optional[str] = Query(default=None, description="Область применения: ГИС|ИСПДн|КИИ|Финансы"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Сгенерировать документ ИБ из «атомов» онтологии TypeDB (ADR-005, новые вводные).
+
+    Запрос к TypeDB собирает: Источник -> Требование (параметры) -> Документ + Доказательства,
+    оформляет в .docx (Word) через python-docx. Файл отдаётся на скачивание.
+
+    Пустая выдача (нужных требований/доказательств нет) — честный 404 с причиной,
+    а не 200 с полупустым документом (правило kag-ui-development).
+    """
+    from src.api.services.document_generator import (
+        is_available, fetch_document_data, build_docx,
+    )
+    if not is_available():
+        raise HTTPException(status_code=503,
+                            detail="TypeDB-контур недоступен: не задан TYPEDB_PASS или пакет не установлен")
+
+    data = fetch_document_data(doc_kind, domain)
+    if not data.get("documents"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Документов вида «{doc_kind}»{(' в области «' + domain + '»') if domain else ''} "
+                   "в онтологии не найдено. Загрузите требования в TypeDB и повторите.",
+        )
+
+    try:
+        doc_bytes = build_docx(data)
+    except Exception as e:
+        logger.error(f"Ошибка сборки документа: {e}")
+        raise HTTPException(status_code=500, detail=f"Не удалось собрать документ: {e}")
+
+    slug = doc_kind.lower()
+    filename = f"{slug}_{datetime.now().strftime('%Y%m%d')}.docx"
+    return Response(
+        content=doc_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
