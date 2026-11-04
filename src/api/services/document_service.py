@@ -1467,9 +1467,14 @@ class DocumentService:
         qdrant_ok = False
         try:
             await embeddings_service.initialize()
-            qdrant_ok = await service_for_document(document_id).delete_document(document_id)
+            # Чистим ВСЕ коллекции, а не только маршрутную: документ мог сменить маршрут
+            # (новость ↔ основной корпус), а карточка документа лежит в основной всегда.
+            # Иначе остаются сироты, которые продолжают находиться поиском (05.11.2026).
+            from src.indexing.embeddings_service import purge_document_points
+            purge = await purge_document_points(document_id)
+            qdrant_ok = bool(purge) and all(purge.values())
             if not qdrant_ok:
-                logger.warning(f"Qdrant: не удалось удалить чанки {document_id}")
+                logger.warning(f"Qdrant: не удалось удалить чанки {document_id}: {purge}")
         except Exception as e:
             logger.warning(f"Qdrant: ошибка удаления {document_id}: {e}")
 

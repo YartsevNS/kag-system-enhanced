@@ -1241,6 +1241,37 @@ def service_for_document(document_id: str) -> "EmbeddingsService":
     return embeddings_service
 
 
+async def purge_document_points(document_id: str) -> dict:
+    """Удалить точки документа из ВСЕХ коллекций Qdrant (основной и новостей).
+
+    Зачем не хватает service_for_document().delete_document(): маршрут документа
+    мог смениться за его жизнь (новость перенесли в общий корпус и наоборот), а
+    карточка документа пишется в основную коллекцию независимо от маршрута.
+    Поэтому удаление «по текущей коллекции» оставляло сирот: документ исчезал из
+    реестра, но его фрагменты продолжали находиться поиском (наблюдено 05.11.2026:
+    3 таких документа, 10 точек). Чистим все известные коллекции — операция
+    идемпотентная и по фильтру, стоит копейки.
+    """
+    results: dict = {}
+    services = [embeddings_service]
+    try:
+        services.append(news_embeddings_service())
+    except Exception as e:  # noqa: BLE001 — не смогли поднять сервис новостей
+        logger.warning(f"[purge] сервис новостей недоступен: {e}")
+    seen_collections = set()
+    for svc in services:
+        name = getattr(svc, "collection_name", "?")
+        if name in seen_collections:
+            continue
+        seen_collections.add(name)
+        try:
+            results[name] = await svc.delete_document(document_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[purge] {name}: не удалось удалить {document_id}: {e}")
+            results[name] = False
+    return results
+
+
 def is_news_document(doc: dict) -> bool:
     """Документ пришёл из монитора источников (новости) → его место в коллекции новостей.
 
