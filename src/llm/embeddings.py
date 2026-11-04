@@ -275,6 +275,33 @@ class EmbeddingClient:
 
         raise last_error
 
+    async def _embed_batch_with_retry(
+        self, batch: List[str], offset: int = 0, attempts: int = 3
+    ) -> List[List[float]]:
+        """Эмбеддинг одного батча с повтором и дроблением.
+
+        Нулевые векторы НЕ подставляются: точка с [0.0]*dim существует и проходит
+        verify_points (он считает количество), но поиск по ней мёртв — дефект
+        невидим в статусах. Замер 04.11.2026 при 6 параллельных worker'ах: 6 таких
+        точек в 6 документах. Поэтому: ошибка -> повтор меньшим батчем; исчерпали
+        попытки -> исключение, документ уходит в failed и переиндексируется.
+        """
+        try:
+            return await self._embed_request(client=await self._get_client(), texts=batch)
+        except Exception as e:  # noqa: BLE001
+            logger.error(
+                f"Ошибка embedding батча offset={offset} size={len(batch)} "
+                f"(попытка {attempts}): {type(e).__name__}: {e}"
+            )
+            if attempts <= 1 or len(batch) <= 1:
+                raise
+            mid = max(1, len(batch) // 2)
+            head = await self._embed_batch_with_retry(batch[:mid], offset=offset, attempts=attempts - 1)
+            tail = await self._embed_batch_with_retry(
+                batch[mid:], offset=offset + mid, attempts=attempts - 1
+            )
+            return head + tail
+
     async def generate_batch(
         self,
         texts: List[str],
@@ -301,13 +328,8 @@ class EmbeddingClient:
 
         for i in range(0, total, batch_size):
             batch = texts[i:i + batch_size]
-            try:
-                batch_emb = await self._embed_request(client=await self._get_client(), texts=batch)
-                embeddings.extend(batch_emb)
-            except Exception as e:
-                logger.error(f"Ошибка embedding батча {i}: {e}")
-                for _ in batch:
-                    embeddings.append([0.0] * (self._dimensions or 768))
+            batch_emb = await self._embed_batch_with_retry(batch, offset=i)
+            embeddings.extend(batch_emb)
 
         logger.info(f"Batch embedding завершён: {len(embeddings)} векторов")
         return embeddings
