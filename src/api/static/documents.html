@@ -151,6 +151,13 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 
 <script>
 const API = '/api/v1';
+// Разделение RSS-новостей и документов (04.11.2026). Новости живут в той же
+// таблице documents, но в отдельной коллекции Qdrant (kag_news) и на своей
+// странице: /documents?collection=news. Они доступны в поиске, но НЕ участвуют
+// в онтологии и графе — поэтому на странице документов по умолчанию скрыты.
+const _qp = new URLSearchParams(location.search);
+const COLLECTION = _qp.get('collection') || '';
+const IS_NEWS = COLLECTION === 'news';
 let allDocs = [];
 // Отмеченные галочками документы. Держим их в переменной, а не только в DOM:
 // таблица перерисовывается автообновлением (15 с, а пока идёт обработка — каждые
@@ -462,7 +469,10 @@ async function loadAll(auto = false) {
   try {
     // Запрашиваем с большим лимитом — иначе backend отдаёт только 50 и пагинация
     // крутит эти же 50. count-filter (50/100/200/500) пагинирует уже на клиенте.
-    const r = await fetch(`${API}/upload/list?limit=1000`);
+    // Разделение коллекций: страница новостей показывает только RSS (collection=news),
+    // страница документов — всё, КРОМЕ новостей (exclude_collection=news).
+    const _collQs = IS_NEWS ? `&collection=${encodeURIComponent(COLLECTION)}` : '&exclude_collection=news';
+    const r = await fetch(`${API}/upload/list?limit=1000${_collQs}`);
     if (!r.ok) throw new Error('Ошибка загрузки списка');
     const data = await r.json();
     allDocs = data.documents || [];
@@ -1424,6 +1434,26 @@ async function viewOcr(id) {
     }
   } catch(e) { toast('Ошибка: ' + e.message, true); }
 }
+
+/* Режим «Новости (RSS)»: та же страница, но без загрузки и служебных блоков.
+ * Новости приходят из RSS-монитора, вручную их не загружают; на странице
+ * остаются список, фильтры, просмотр и удаление. */
+(function initCollectionMode() {
+  if (!IS_NEWS) return;
+  document.title = 'KAG — Новости (RSS)';
+  const h1 = document.querySelector('main h1');
+  if (h1) h1.textContent = 'Новости (RSS)';
+  const sub = document.querySelector('main .sub');
+  if (sub) sub.textContent = 'Материалы из RSS-источников — доступны в поиске и Qdrant, не участвуют в онтологии';
+  ['upload-zone', 'file-input', 'proc-all-wrap', 'processing-banner', 'upload-banner'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  // Блоки импорта папки и прав доступа при загрузке относятся только к загрузке документов
+  document.querySelectorAll('details').forEach(function (d) {
+    d.style.display = 'none';
+  });
+})();
 </script><script src="/static/branding.js"></script>
     <script src="/static/site-nav.js" defer></script>
 </body></html>

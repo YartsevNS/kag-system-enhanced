@@ -1073,19 +1073,26 @@ async def list_documents(
     limit: int = 50,
     offset: int = 0,
     status: Optional[str] = None,
+    collection: Optional[str] = None,
+    exclude_collection: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Получить список документов с пагинацией.
-    
+
     - **limit**: Сколько записей (макс 1000)
     - **offset**: Сдвиг от начала
     - **status**: Фильтр по статусу (pending/processing/completed/error)
+    - **collection**: Только эта коллекция (`news` — RSS-новости)
+    - **exclude_collection**: Все, кроме этой (`news` — страница документов без новостей)
     """
     from src.api.services.document_repository import get_doc_repo
 
     repo = get_doc_repo()
-    documents, total = repo.list(limit=min(limit, 1000), offset=offset, status=status)
+    documents, total = repo.list(
+        limit=min(limit, 1000), offset=offset, status=status,
+        collection=collection, exclude_collection=exclude_collection,
+    )
 
     # ── Устранение N+1 запросов при загрузке страницы документов ────────
     # Раньше фронтенд на КАЖДЫЙ документ слал /upload/{id}/details

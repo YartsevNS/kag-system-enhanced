@@ -81,12 +81,23 @@ class DocumentRepository:
         with self._session() as s:
             return s.query(Document).filter(Document.id == document_id).first()
 
-    def list(self, limit: int = 50, offset: int = 0, status: Optional[str] = None) -> tuple[List[Document], int]:
-        """Возвращает (documents, total_count) с пагинацией."""
+    def list(self, limit: int = 50, offset: int = 0, status: Optional[str] = None,
+             collection: Optional[str] = None, exclude_collection: Optional[str] = None) -> tuple[List[Document], int]:
+        """Возвращает (documents, total_count) с пагинацией.
+
+        collection / exclude_collection разделяют RSS-новости (`kag_news`) и обычные
+        документы (`kag_documents`): новости живут в той же таблице, но показываются
+        на своей странице и не участвуют в онтологии.
+        """
         with self._session() as s:
             q = s.query(Document)
             if status:
                 q = q.filter(Document.status == status)
+            if collection:
+                q = q.filter(Document.collection == collection)
+            if exclude_collection:
+                # NULL и '' тоже считаются «не news»
+                q = q.filter((Document.collection.is_(None)) | (Document.collection != exclude_collection))
             total = q.count()
             docs = q.order_by(Document.created_at.desc()).limit(limit).offset(offset).all()
             return docs, total
