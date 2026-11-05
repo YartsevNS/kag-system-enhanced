@@ -14,9 +14,39 @@
  *
  * Узкие экраны: страницы прячут боковую колонку на ≤768px, поэтому скрипт добавляет бургер
  * и выезжающую панель с тем же меню — навигация остаётся доступной с телефона.
+ *
+ * Стили меню едут вместе с компонентом (06.11.2026). Причина: пункты наследовали вид от
+ * локальных правил страницы, а их не было у /card, /graph-prompt, /doc-relations и др. —
+ * там меню выводилось без отступов и выглядело «не по схеме». Теперь вид задаётся здесь и
+ * одинаков на всех страницах; правила скоуплены на контейнер меню, чтобы не задевать
+ * ссылки самой страницы. Значения совпадают с theme.css, но с fallback-цветами: часть
+ * страниц не подключает theme.css и переменных может не быть.
  */
 (function () {
   'use strict';
+
+  var NAV_CSS = [
+    '[data-site-nav],.kag-nav-drawer{display:block}',
+    '[data-site-nav] .nav-group,.kag-nav-drawer .nav-group{font-size:12px;letter-spacing:.02em;',
+    'color:var(--text3,#898989);padding:14px 24px 4px;text-transform:none}',
+    '[data-site-nav] .nav-group::after,.kag-nav-drawer .nav-group::after{content:"";display:block;',
+    'height:1px;background:var(--border-s,#242424);margin-top:7px}',
+    '[data-site-nav] .nav-item,.kag-nav-drawer .nav-item{display:flex;align-items:center;gap:9px;',
+    'padding:8px 24px;color:var(--text2,#b4b4b4);text-decoration:none;font-size:14px;',
+    'border-left:2px solid transparent;transition:color .15s,background .15s}',
+    '[data-site-nav] .nav-item:hover,.kag-nav-drawer .nav-item:hover{color:var(--text,#fafafa);',
+    'background:var(--elevated,#242424)}',
+    '[data-site-nav] .nav-item.active,.kag-nav-drawer .nav-item.active{color:var(--accent,#3ecf8e);',
+    'font-weight:600;background:var(--accent-tint,rgba(62,207,142,.12));border-left-color:var(--accent,#3ecf8e)}'
+  ].join('');
+
+  function injectNavStyles() {
+    if (document.getElementById('kag-site-nav-styles')) return;
+    var st = document.createElement('style');
+    st.id = 'kag-site-nav-styles';
+    st.textContent = NAV_CSS;
+    document.head.appendChild(st);
+  }
 
   var SECTIONS = [
     { title: 'Работа с документами', compact: true, items: [
@@ -95,6 +125,8 @@
     });
     return frag;
   }
+
+  injectNavStyles();
 
   var targets = [];
   document.querySelectorAll('[data-site-nav]').forEach(function (el) {
