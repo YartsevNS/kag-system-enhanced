@@ -219,7 +219,10 @@ class PromptStore:
             if row and row[0] == content:
                 return {"status": "ok", "unchanged": True, "version": row[1]}
 
-            next_version = (row[1] if row else 0) + 1
+            # Заводской текст — это версия 1, даже если его ни разу не сохраняли.
+            # Иначе первая же правка получила бы номер 1 и перекрылась бы с
+            # заводской в истории: непонятно, что именно откатывать.
+            next_version = (row[1] if row else 1) + 1
             if row:
                 conn.execute(
                     text(
@@ -227,6 +230,14 @@ class PromptStore:
                         "VALUES (:n, :v, :c, :by) ON CONFLICT (name, version) DO NOTHING"
                     ),
                     {"n": name, "v": row[1], "c": row[0], "by": updated_by},
+                )
+            elif content != DEFAULTS[name]:
+                conn.execute(
+                    text(
+                        "INSERT INTO ontology_prompt_history (name, version, content, updated_by) "
+                        "VALUES (:n, 1, :c, :by) ON CONFLICT (name, version) DO NOTHING"
+                    ),
+                    {"n": name, "c": DEFAULTS[name], "by": "заводской"},
                 )
             conn.execute(
                 text(
