@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from src.api.middleware.auth_v2 import get_current_admin
 from src.api.services.ontology_service import OntologyUnavailable, ontology_service
 from src.api.services.ontology_versions import diff_snapshots, ontology_versions, snapshot_of
+from src.api.services.ontology_prompts import DEFAULTS, prompt_store
 from src.api.services.proposal_service import ALLOWED_STATUSES, proposal_service
 from src.database.user_models import User
 from src.indexing import typedb_facts
@@ -368,3 +369,56 @@ async def proposals_review(
     if not res:
         raise HTTPException(status_code=404, detail="предложение не найдено")
     return {"ok": True, "item": res}
+
+
+# ── Промпт извлечения сущностей ───────────────────────────────────────────
+# Текст, по которому модель превращает фрагмент нормативного документа в
+# сущности и N-арные связи TypeDB. Хранится в БД с историей версий, а не в
+# коде: правка не требует пересборки образа, но каждая версия видна и
+# откатываема. Рядом с «Онтологией», потому что прямо на неё влияет.
+
+class PromptBody(BaseModel):
+    content: str = Field(..., description="полный текст промпта с плейсхолдером {text_chunk}")
+
+
+@router.get("/prompt/{name}", summary="Текущий промпт извлечения и последствия правки")
+async def prompt_get(name: str, _: User = Depends(get_current_admin)):
+    try:
+        return await asyncio.to_thread(prompt_store.get, name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"промпт {name} не существует")
+    except Exception as exc:  # БД недоступна и т.п.
+        raise HTTPException(status_code=503, detail=f"хранилище промптов недоступно: {exc}")
+
+
+@router.put("/prompt/{name}", summary="Сохранить новую версию промпта")
+async def prompt_save(name: str, req: PromptBody, user: User = Depends(get_current_admin)):
+    if name not in DEFAULTS:
+        raise HTTPException(status_code=404, detail=f"промпт {name} не существует")
+    res = await asyncio.to_thread(prompt_store.save, name, req.content, _who(user))
+    if res.get("status") == "error":
+        return {"ok": False, "problems": res.get("problems", [])}
+    res["ok"] = True
+    return res
+
+
+@router.post("/prompt/{name}/reset", summary="Вернуть заводской текст промпта")
+async def prompt_reset(name: str, user: User = Depends(get_current_admin)):
+    if name not in DEFAULTS:
+        raise HTTPException(status_code=404, detail=f"промпт {name} не существует")
+    res = await asyncio.to_thread(prompt_store.reset, name, _who(user))
+    res["ok"] = True
+    return res
+
+
+@router.get("/prompt/{name}/history", summary="История версий промпта")
+async def prompt_history(name: str, limit: int = 20, _: User = Depends(get_current_admin)):
+    return {"ok": True, "items": await asyncio.to_thread(prompt_store.history, name, limit)}
+
+
+@router.get("/prompt/{name}/history/{version}", summary="Текст конкретной версии промпта")
+async def prompt_history_version(name: str, version: int, _: User = Depends(get_current_admin)):
+    content = await asyncio.to_thread(prompt_store.history_version, name, version)
+    if content is None:
+        raise HTTPException(status_code=404, detail="версия не найдена")
+    return {"ok": True, "version": version, "content": content}

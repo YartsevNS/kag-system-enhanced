@@ -1,0 +1,201 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>KAG — промпт извлечения сущностей</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--accent-l:#6ee7b7;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:28px 34px 60px;max-width:1240px}
+h1{font-size:28px;font-weight:600;letter-spacing:-0.6px;margin-bottom:6px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:22px}
+h2{font-size:17px;font-weight:600;margin:26px 0 10px;letter-spacing:-0.2px}
+p.note{color:var(--text3);font-size:12.5px;line-height:1.55;margin-bottom:12px;max-width:900px}
+.card{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.card.warn{border-color:#5a3a12;background:#1e1710}
+.card.warn h3{color:var(--amber);font-size:14px;margin-bottom:8px}
+.card h3{font-size:14px;margin-bottom:8px}
+.card.bad{border-color:#5c1f22;background:#1d1214}
+.card.bad h3{color:var(--red)}
+ul.plain{list-style:none}
+ul.plain li{position:relative;padding:7px 0 7px 18px;font-size:12.5px;color:var(--text2);line-height:1.5;border-bottom:1px solid var(--border-s)}
+ul.plain li:last-child{border-bottom:none}
+ul.plain li::before{content:'';position:absolute;left:2px;top:15px;width:6px;height:6px;border-radius:9999px;background:var(--accent-h)}
+ul.plain li.no::before{background:var(--red)}
+textarea{width:100%;min-height:520px;resize:vertical;font-family:var(--mono);font-size:12px;line-height:1.55;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;outline:none}
+textarea:focus{border-color:var(--accent-h)}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+button{font-family:var(--font);font-size:12.5px;padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--elevated);color:var(--text);cursor:pointer}
+button:hover{border-color:var(--text4)}
+button.primary{background:var(--accent-h);border-color:var(--accent-h);color:#0a0a0a;font-weight:600}
+button.primary:hover{background:var(--accent)}
+button.ghost{background:transparent}
+button:disabled{opacity:.5;cursor:default}
+.meta{font-size:12px;color:var(--text3);display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.pill{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--border)}
+.pill.ok{color:var(--accent-h);border-color:var(--accent-h)}
+.pill.warn{color:var(--amber);border-color:var(--amber)}
+.pill.bad{color:var(--red);border-color:var(--red)}
+#msg{font-size:12.5px;min-height:18px;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;color:var(--text4);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--border-s)}
+td{padding:8px 10px;border-bottom:1px solid var(--border-s);vertical-align:top}
+td.mono{font-family:var(--mono);font-size:11.5px}
+.muted{color:var(--text4)}
+.ph{font-family:var(--mono);background:var(--elevated);padding:1px 5px;border-radius:4px;color:var(--accent-l)}
+</style></head>
+<body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div>
+  <a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Промпт извлечения сущностей</h1>
+<div class="sub">Текст, по которому модель превращает фрагмент документа в сущности и связи для графа TypeDB. Правка действует со следующего прогона.</div>
+
+<div class="card">
+  <h3>Что это и на что влияет</h3>
+  <p class="note" style="margin-bottom:8px">
+    Модель читает этот текст перед разбором каждого фрагмента: какие типы сущностей существуют
+    (<span class="ph">regulator</span>, <span class="ph">regulatory_document</span>,
+    <span class="ph">structural_element</span>, <span class="ph">security_measure</span>,
+    <span class="ph">cii_object</span>, <span class="ph">threat_source</span>), какие между ними
+    допустимы связи и как выглядит правильный JSON.
+  </p>
+  <p class="note" style="margin-bottom:0">
+    Текст фрагмента подставляется вместо <span class="ph">{text_chunk}</span> — без этого плейсхолдера
+    модель ничего не увидит. Ниже редактор с проверкой и полной историей версий.
+  </p>
+</div>
+
+<div class="card warn">
+  <h3>Последствия правки</h3>
+  <ul class="plain" id="consequences"><li class="muted">загрузка…</li></ul>
+</div>
+
+<div class="card">
+  <div class="bar" style="margin-top:0">
+    <span class="meta">
+      <span>версия <b id="ver">—</b></span>
+      <span id="who" class="muted"></span>
+      <span id="stamp" class="muted"></span>
+      <span id="state" class="pill">—</span>
+    </span>
+  </div>
+  <textarea id="content" spellcheck="false" placeholder="текст промпта…"></textarea>
+  <div class="bar">
+    <button class="primary" id="save">Сохранить новую версию</button>
+    <button class="ghost" id="revert">Вернуть к заводскому</button>
+    <button class="ghost" id="reload">Отменить правки в поле</button>
+    <span class="meta" style="margin-left:auto"><span id="count" class="muted"></span></span>
+  </div>
+  <div id="msg"></div>
+  <div id="problems"></div>
+</div>
+
+<h2>История версий</h2>
+<p class="note">Каждое сохранение добавляет версию. Кнопка «В редактор» подставляет старый текст в поле — сохранение после этого создаст новую версию, история не перезаписывается.</p>
+<div class="card" style="padding:0">
+  <table>
+    <thead><tr><th style="width:70px">Версия</th><th style="width:90px">Знаков</th><th>Кто</th><th style="width:170px">Когда</th><th style="width:120px"></th></tr></thead>
+    <tbody id="hist"><tr><td colspan="5" class="muted">загрузка…</td></tr></tbody>
+  </table>
+</div>
+</main>
+
+<script src="/static/site-nav.js"></script>
+<script>
+const NAME = 'entity_extraction';
+const API = '/api/v1/ontology/prompt/' + NAME;
+let current = null;
+
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(iso){if(!iso)return '';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleString('ru-RU');}
+
+function showProblems(list){
+  const box=document.getElementById('problems');
+  if(!list||!list.length){box.innerHTML='';return;}
+  box.innerHTML='<div class="card bad" style="margin:10px 0 0"><h3>Проверка не пройдена — сохранить нельзя</h3><ul class="plain">'+
+    list.map(p=>'<li class="no">'+esc(p)+'</li>').join('')+'</ul></div>';
+}
+
+function paint(data){
+  current=data;
+  document.getElementById('content').value=data.content;
+  document.getElementById('ver').textContent=data.version;
+  document.getElementById('who').textContent=data.updated_by?('правил: '+data.updated_by):'';
+  document.getElementById('stamp').textContent=data.updated_at?fmt(data.updated_at):'';
+  const st=document.getElementById('state');
+  if(data.source==='default'){st.textContent='заводской текст';st.className='pill';}
+  else if(data.is_modified){st.textContent='изменён';st.className='pill warn';}
+  else {st.textContent='совпадает с заводским';st.className='pill ok';}
+  document.getElementById('consequences').innerHTML=(data.consequences||[]).map(c=>'<li>'+esc(c)+'</li>').join('');
+  showProblems(data.problems);
+  countChars();
+}
+
+function countChars(){
+  const ta=document.getElementById('content');
+  const has=ta.value.includes('{text_chunk}');
+  document.getElementById('count').innerHTML=ta.value.length+' знаков · '+
+    (has?'<span style="color:#00c573">{text_chunk} есть</span>':'<span style="color:#e5484d">{text_chunk} НЕТ</span>');
+}
+
+async function load(){
+  const r=await fetch(API,{credentials:'same-origin'});
+  if(!r.ok){document.getElementById('msg').innerHTML='<span style="color:#e5484d">не удалось загрузить: HTTP '+r.status+'</span>';return;}
+  paint(await r.json());
+  loadHistory();
+}
+
+async function loadHistory(){
+  const r=await fetch(API+'/history',{credentials:'same-origin'});
+  const tb=document.getElementById('hist');
+  if(!r.ok){tb.innerHTML='<tr><td colspan="5" class="muted">история недоступна</td></tr>';return;}
+  const items=(await r.json()).items||[];
+  if(!items.length){tb.innerHTML='<tr><td colspan="5" class="muted">правок ещё не было — это заводская версия</td></tr>';return;}
+  tb.innerHTML=items.map(it=>'<tr><td class="mono">'+it.version+'</td><td class="mono">'+it.chars+'</td><td>'+
+    esc(it.updated_by||'—')+'</td><td class="muted">'+fmt(it.updated_at)+'</td>'+
+    '<td><button class="ghost" data-v="'+it.version+'">В редактор</button></td></tr>').join('');
+  tb.querySelectorAll('button[data-v]').forEach(b=>b.onclick=async()=>{
+    const rr=await fetch(API+'/history/'+b.dataset.v,{credentials:'same-origin'});
+    if(!rr.ok)return;
+    document.getElementById('content').value=(await rr.json()).content;
+    countChars();
+    msg('в редакторе текст версии '+b.dataset.v+' — сохраните, чтобы применить','#f5a623');
+  });
+}
+
+function msg(text,color){
+  const m=document.getElementById('msg');
+  m.innerHTML='<span style="color:'+(color||'#898989')+'">'+esc(text)+'</span>';
+}
+
+document.getElementById('save').onclick=async()=>{
+  const btn=document.getElementById('save');btn.disabled=true;
+  try{
+    const r=await fetch(API,{method:'PUT',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:document.getElementById('content').value})});
+    const data=await r.json();
+    if(!r.ok){msg('ошибка: HTTP '+r.status,'#e5484d');return;}
+    if(data.ok===false){showProblems(data.problems);msg('не сохранено — см. проверку','#e5484d');return;}
+    msg(data.unchanged?'текст не изменился — новая версия не создана':'сохранено, версия '+data.version,'#00c573');
+    await load();
+  }catch(e){msg('сеть: '+e,'#e5484d');}
+  finally{btn.disabled=false;}
+};
+
+document.getElementById('revert').onclick=async()=>{
+  if(!confirm('Вернуть заводской текст? Текущая версия останется в истории.'))return;
+  const r=await fetch(API+'/reset',{method:'POST',credentials:'same-origin'});
+  const data=await r.json();
+  msg('возвращено к заводскому, версия '+data.version,'#00c573');
+  await load();
+};
+
+document.getElementById('reload').onclick=()=>{if(current)paint(current);msg('правки в поле отменены');};
+document.getElementById('content').addEventListener('input',countChars);
+load();
+</script>
+</body></html>

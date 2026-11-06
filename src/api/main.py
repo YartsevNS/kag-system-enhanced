@@ -432,6 +432,18 @@ async def ontology_proposals_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology_proposals.html"))
 
 
+@app.get("/ontology/prompt", summary="Промпт извлечения сущностей (только для admin)")
+async def ontology_prompt_page(request: Request):
+    """Редактор задания, по которому модель извлекает сущности и связи для TypeDB.
+
+    Промпт хранится в БД с историей версий, поэтому правка не требует пересборки
+    образа и не теряется: видно, кто и когда менял текст, и есть к чему откатиться.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-prompt.html"))
+
+
 @app.get("/docker", summary="Docker Dashboard")
 async def docker_dashboard(request: Request):
     """Страница Docker Dashboard (только для admin)."""
