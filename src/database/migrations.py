@@ -20,6 +20,7 @@ from src.database.chat_models import ChatSession, ChatMessage  # noqa: F401 — 
 from src.database.entity_alias_models import EntityAlias  # noqa: F401 — словарь алиасов для entity resolution
 from src.database.document_table_models import DocumentTable  # noqa: F401 — таблицы документов для table RAG
 from src.database.table_row_models import TableRow  # noqa: F401 — строки таблиц (строчный слой)
+from src.database.ontology_models import OntologySchemaVersion  # noqa: F401 — версии схемы онтологии
 
 logger = logging.getLogger(__name__)
 

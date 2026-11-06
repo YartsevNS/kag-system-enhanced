@@ -4,55 +4,66 @@ try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>KAG — онтология TypeDB</title>
 <style>
-:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+/* Цвета НЕ задаются здесь: палитра приходит из /static/theme.css (брендбук заказчика
+   подменяется одним файлом). В var() — только запасные значения на случай, если
+   theme.css не загрузился, чтобы страница оставалась читаемой. */
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
-nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
-nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
-nav .logo span{color:var(--accent-h)}
-main{margin-left:240px;flex:1;padding:24px 28px 60px}
+body{font-family:var(--font,system-ui,'Segoe UI',sans-serif);background:var(--bg,#fff);color:var(--text,#1a1a1a);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel,#f4f5f7);border-right:1px solid var(--border-s,#e3e5e9);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s,#e3e5e9);margin-bottom:12px}
+nav .logo span{color:var(--accent-h,#08a652)}
+main{margin-left:240px;flex:1;padding:24px 28px 60px;min-width:0}
 h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
-.sub{color:var(--text3);font-size:13px;margin-bottom:16px;max-width:900px;line-height:1.5}
-.status{display:flex;gap:18px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12.5px}
-.status .kv{color:var(--text3)}
-.status .kv b{color:var(--text);font-weight:600}
+.sub{color:var(--text3,#6b7280);font-size:13px;margin-bottom:16px;max-width:900px;line-height:1.5}
+.status{display:flex;gap:16px;flex-wrap:wrap;align-items:center;background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:10px 14px;margin-bottom:12px;font-size:12.5px}
+.status .kv{color:var(--text3,#6b7280)}
+.status .kv b{color:var(--text,#1a1a1a);font-weight:600}
+.status .grow{flex:1}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-.dot.ok{background:var(--accent-h)}.dot.bad{background:var(--red)}.dot.warn{background:var(--amber)}
-.work{display:grid;grid-template-columns:1fr 360px;gap:14px;align-items:start}
-.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.dot.ok{background:var(--accent-h,#08a652)}.dot.bad{background:var(--red,#c62828)}.dot.warn{background:var(--amber,#b26a00)}
+.work{display:grid;grid-template-columns:1fr 380px;gap:14px;align-items:start}
+.panel{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:12px 14px;margin-bottom:12px}
 .panel summary{font-size:14px;font-weight:600;cursor:pointer;user-select:none}
-#cy{height:calc(100vh - 210px);min-height:380px;background:var(--bg);border:1px solid var(--border-s);border-radius:var(--radius)}
-.msg{font-size:12.5px;min-height:18px;margin:8px 0;line-height:1.45}
-.msg.err{color:var(--red)}.msg.ok{color:var(--accent-h)}
-label{display:block;font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
-input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:7px 9px;font-family:var(--font);font-size:13px}
-textarea{min-height:90px;font-family:var(--mono);font-size:12px}
-button.btn{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:7px 14px;font-size:12px;cursor:pointer}
-button.btn:hover{border-color:var(--accent)}
-button.btn.primary{background:var(--accent-h);border-color:var(--accent-h);color:#fff}
-button.btn.danger{border-color:var(--red);color:var(--red)}
+#cy{height:calc(100vh - 230px);min-height:380px;background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px)}
+.msg{font-size:12.5px;min-height:18px;margin:6px 0 10px;line-height:1.45}
+.msg.err{color:var(--red,#c62828)}.msg.ok{color:var(--accent-h,#08a652)}
+label{display:block;font-size:11px;color:var(--text4,#8a919b);text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
+input,select,textarea{width:100%;background:var(--bg,#fff);border:1px solid var(--border,#d5d9df);color:var(--text,#1a1a1a);border-radius:var(--radius-sm,6px);padding:7px 9px;font-family:inherit;font-size:13px}
+textarea{min-height:90px;font-family:var(--mono,'Consolas',monospace);font-size:12px}
+button.btn{background:var(--elevated,#fff);border:1px solid var(--border,#d5d9df);color:var(--text,#1a1a1a);border-radius:var(--radius-sm,6px);padding:7px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+button.btn:hover{border-color:var(--accent-h,#08a652)}
+button.btn.primary{background:var(--accent-h,#08a652);border-color:var(--accent-h,#08a652);color:#fff}
+button.btn.danger{border-color:var(--red,#c62828);color:var(--red,#c62828)}
+button.btn[disabled]{opacity:.45;cursor:default}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
-.kvline{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border-s)}
-.kvline span:last-child{color:var(--text3)}
-.list{max-height:300px;overflow:auto}
+.kvline{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border-s,#e3e5e9)}
+.kvline span:last-child{color:var(--text3,#6b7280)}
+.list{max-height:320px;overflow:auto}
 .list .kvline{cursor:pointer}
-.list .kvline:hover{background:var(--elevated)}
-.badge{display:inline-block;padding:1px 7px;border-radius:9999px;font-size:11px;background:var(--elevated);color:var(--text2);margin:3px 4px 0 0}
-.muted{color:var(--text4);font-size:12.5px}
-.legend{font-size:11.5px;color:var(--text4);margin-top:8px;line-height:1.7}
+.list .kvline:hover{background:var(--elevated,#fff)}
+.badge{display:inline-block;padding:1px 7px;border-radius:9999px;font-size:11px;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);color:var(--text2,#444);margin:3px 4px 0 0}
+.muted{color:var(--text4,#8a919b);font-size:12.5px}
+.legend{font-size:11.5px;color:var(--text4,#8a919b);margin-top:8px;line-height:1.7}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
-@media(max-width:1100px){.work{grid-template-columns:1fr}#cy{height:420px}}
+.ver{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border-s,#e3e5e9);font-size:12px}
+.ver .when{color:var(--text3,#6b7280);font-size:11px;white-space:nowrap}
+.ver .what{flex:1;min-width:0}
+.ver.failed .what{color:var(--red,#c62828)}
+.plan{font-size:12px;line-height:1.6;background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius-sm,6px);padding:8px 10px;margin-top:8px;max-height:180px;overflow:auto}
+@media(max-width:1150px){.work{grid-template-columns:1fr}#cy{height:420px}}
 </style><link rel="stylesheet" href="/static/theme.css"></head><body>
-<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto">Выйти</a></nav>
 <main>
 <h1>Онтология TypeDB</h1>
-<div class="sub">Схема, на которой держится доказательная база: сущности, связи, атрибуты и роли. Правка идёт в TypeDB без пересборки образа; каждое изменение проверяется до записи.</div>
+<div class="sub">Схема, на которой держится доказательная база: сущности, связи, атрибуты и роли. Правка идёт в TypeDB без пересборки образа; каждое изменение проверяется до записи и попадает в журнал версий, откуда его можно откатить.</div>
 
 <div class="status" id="status">
   <span class="kv"><span class="dot" id="st-dot"></span><b id="st-text">проверяю подключение…</b></span>
   <span class="kv">база: <b id="st-db">—</b></span>
-  <span class="kv">адрес: <b id="st-addr">—</b></span>
   <span class="kv">типов: <b id="st-count">—</b></span>
+  <span class="grow"></span>
+  <button class="btn" id="btn-undo" onclick="undoLast()" title="Вернуть схему к предыдущей версии из журнала">Отменить</button>
+  <button class="btn" id="btn-redo" onclick="redoNext()" title="Вернуть отменённое изменение">Повторить</button>
 </div>
 <div class="msg" id="msg"></div>
 
@@ -60,7 +71,7 @@ button.btn.danger{border-color:var(--red);color:var(--red)}
   <div>
     <div id="cy"></div>
     <div class="legend">
-      <div><i style="background:#4f8ef7"></i>сущность &nbsp; <i style="background:#9b6bf0"></i>связь &nbsp; <i style="background:#53d3b8"></i>атрибут</div>
+      <div><i id="lg-entity"></i>сущность &nbsp; <i id="lg-relation"></i>связь &nbsp; <i id="lg-attribute"></i>атрибут</div>
       <div>Рёбра — роль, которую сущность играет в связи. Клик по узлу показывает карточку справа.</div>
     </div>
   </div>
@@ -83,16 +94,66 @@ button.btn.danger{border-color:var(--red);color:var(--red)}
         <summary>Создать тип</summary>
         <div style="margin-top:10px">
           <label for="newkind">Категория</label>
-          <select id="newkind">
+          <select id="newkind" onchange="syncCreateFields()">
             <option value="entity">сущность</option>
             <option value="relation">связь</option>
             <option value="attribute">атрибут</option>
           </select>
           <label for="newlabel">Имя типа</label>
           <input id="newlabel" placeholder="например: security-requirement">
-          <label for="newowns">Атрибуты (owns, через запятую)</label>
-          <input id="newowns" placeholder="name, source-origin">
+          <div id="f-owns">
+            <label for="newowns">Атрибуты (owns, через запятую)</label>
+            <input id="newowns" placeholder="name, source-origin">
+          </div>
+          <div id="f-roles" style="display:none">
+            <label for="newroles">Роли связи (relates, через запятую)</label>
+            <input id="newroles" placeholder="subject, object">
+          </div>
+          <div id="f-value" style="display:none">
+            <label for="newvalue">Тип значения</label>
+            <select id="newvalue">
+              <option value="string">строка</option>
+              <option value="integer">целое</option>
+              <option value="double">дробное</option>
+              <option value="boolean">логическое</option>
+              <option value="date">дата</option>
+              <option value="datetime">дата и время</option>
+              <option value="datetime_tz">дата и время с зоной</option>
+              <option value="decimal">decimal</option>
+              <option value="duration">длительность</option>
+            </select>
+          </div>
           <div class="row"><button class="btn primary" onclick="createType()">Создать</button></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>Версии схемы</summary>
+        <div style="margin-top:10px">
+          <div class="muted" style="margin-bottom:6px">Кто, когда и что менял. Откат возвращает структуру схемы к выбранной версии: типы, появившиеся позже, удаляются, недостающие — создаются.</div>
+          <div class="row">
+            <button class="btn" onclick="loadVersions()">Обновить список</button>
+            <button class="btn" onclick="exportTql()">Скачать схему (.tql)</button>
+          </div>
+          <div class="list" id="versionlist" style="margin-top:8px"><div class="muted">загрузка…</div></div>
+          <div class="plan" id="plan" style="display:none"></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>Шаблон онтологии (.tql)</summary>
+        <div style="margin-top:10px">
+          <div class="muted" style="margin-bottom:6px">Загрузите файл шаблона: он сначала проверяется на схеме (ничего не меняя), и только потом применяется. Файл, не прошедший проверку, схему не меняет.</div>
+          <input type="file" id="tplfile" accept=".tql,.txt" onchange="readTemplateFile()">
+          <textarea id="tpltext" placeholder="define&#10;  entity new-thing;" style="margin-top:8px"></textarea>
+          <div class="row">
+            <button class="btn" onclick="checkTemplate()">Проверить</button>
+            <button class="btn primary" onclick="applyTemplate()">Применить</button>
+          </div>
         </div>
       </details>
     </div>
@@ -101,7 +162,7 @@ button.btn.danger{border-color:var(--red);color:var(--red)}
       <details>
         <summary>Правка текстом (TypeQL)</summary>
         <div style="margin-top:10px">
-          <div class="muted" style="margin-bottom:6px">Для сложных изменений: составьте define или undefine, сначала проверьте — изменения не применятся, пока не нажмёте «Применить».</div>
+          <div class="muted" style="margin-bottom:6px">Для сложных изменений: составьте define или undefine, сначала проверьте — изменения не применятся, пока не нажмёте «Применить». Результат попадёт в журнал версий.</div>
           <textarea id="definetxt" placeholder="define entity new-thing;"></textarea>
           <div class="row">
             <button class="btn" onclick="validateDef()">Проверить</button>
@@ -118,8 +179,23 @@ button.btn.danger{border-color:var(--red);color:var(--red)}
 <script src="/static/vendor/cytoscape.min.js"></script>
 <script>
 let cy = null, schema = null, selected = null;
+let position = '';   // где пользователь стоит в журнале версий (id текущей версии)
 const $ = id => document.getElementById(id);
-const PALETTE = { entity: '#4f8ef7', relation: '#9b6bf0', attribute: '#53d3b8' };
+
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+function palette() {
+  return {
+    entity: cssVar('--accent-h', '#08a652'),
+    relation: cssVar('--amber', '#b26a00'),
+    attribute: cssVar('--text3', '#6b7280'),
+    edge: cssVar('--border', '#c7ccd3'),
+    text: cssVar('--text3', '#6b7280'),
+    border: cssVar('--bg', '#fff')
+  };
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -145,13 +221,13 @@ async function loadStatus() {
   try {
     const s = await api('/api/v1/ontology/status');
     const dot = $('st-dot'), text = $('st-text');
+    $('st-db').textContent = s.db || '—';
     if (s.available) {
-      dot.className = 'dot ok'; text.textContent = 'TypeDB подключён';
-      $('st-db').textContent = s.db; $('st-addr').textContent = s.addr;
+      dot.className = 'dot ok';
+      text.textContent = 'TypeDB подключён';
     } else {
       dot.className = 'dot bad';
       text.textContent = s.driver_installed ? 'TypeDB не настроен: не задан пароль' : 'драйвер typedb-driver не установлен';
-      $('st-db').textContent = s.db; $('st-addr').textContent = s.addr;
       say('Редактор не может читать схему: ' + text.textContent + '. Остальные разделы системы работают.', false);
     }
     return s.available;
@@ -178,6 +254,11 @@ async function reload() {
 }
 
 function renderGraph() {
+  const p = palette();
+  $('lg-entity').style.background = p.entity;
+  $('lg-relation').style.background = p.relation;
+  $('lg-attribute').style.background = p.attribute;
+
   const nodes = [], edges = [], known = new Set();
   const add = (id, label, kind) => { if (!known.has(id)) { known.add(id); nodes.push({ data: { id: id, label: label, kind: kind } }); } };
 
@@ -200,17 +281,17 @@ function renderGraph() {
     elements: nodes.concat(edges),
     style: [
       { selector: 'node', style: {
-          'label': 'data(label)', 'font-size': '10px', 'color': '#5b6573',
-          'background-color': n => PALETTE[n.data('kind')] || '#8a94a6',
+          'label': 'data(label)', 'font-size': '10px', 'color': p.text,
+          'background-color': n => p[n.data('kind')] || p.text,
           'width': '42px', 'height': '42px', 'text-valign': 'bottom', 'text-margin-y': 4,
-          'border-width': 2, 'border-color': '#ffffff' } },
+          'border-width': 2, 'border-color': p.border } },
       { selector: 'node[kind="relation"]', style: { 'shape': 'diamond' } },
       { selector: 'node[kind="attribute"]', style: { 'shape': 'round-rectangle', 'width': '52px' } },
       { selector: 'edge', style: {
           'curve-style': 'bezier', 'target-arrow-shape': 'triangle',
-          'arrow-color': '#b9c1cc', 'line-color': '#b9c1cc', 'width': 1.2,
-          'label': 'data(label)', 'font-size': '8px', 'color': '#8a94a6' } },
-      { selector: ':selected', style: { 'border-width': 3, 'border-color': '#08a652' } }
+          'arrow-color': p.edge, 'line-color': p.edge, 'width': 1.2,
+          'label': 'data(label)', 'font-size': '8px', 'color': p.text } },
+      { selector: ':selected', style: { 'border-width': 3, 'border-color': p.entity } }
     ],
     layout: { name: 'cose', animate: false, padding: 30, nodeRepulsion: 6000 }
   });
@@ -225,9 +306,9 @@ function renderList() {
   rows.forEach(t => {
     const row = document.createElement('div');
     row.className = 'kvline';
-    const owns = (t.owns || []).length;
+    const own = (t.owns || []).length;
     row.innerHTML = '<span>' + esc(t.label) + ' <span class="muted">(' + esc(t.kind) + ')</span></span>' +
-                    '<span>' + (owns ? owns + ' owns' : '') + '</span>';
+                    '<span>' + (own ? own + ' owns' : '') + '</span>';
     row.onclick = () => showCard((t.kind === 'entity' ? 'e:' : t.kind === 'relation' ? 'r:' : 'a:') + t.label);
     el.appendChild(row);
   });
@@ -243,28 +324,49 @@ function showCard(id) {
   if (!t) { card.innerHTML = '<div class="muted">тип не найден в схеме</div>'; return; }
 
   let h = '<div class="kvline"><span><b>' + esc(t.label) + '</b></span><span>' + esc(t.kind) + '</span></div>';
+  if (t.value) h += '<div style="margin-top:6px"><span class="muted">значение:</span> ' + esc(t.value) + '</div>';
   if ((t.owns || []).length) h += '<div style="margin-top:6px"><span class="muted">owns:</span><br>' + t.owns.map(x => '<span class="badge">' + esc(x) + '</span>').join('') + '</div>';
+  if ((t.roles || []).length) h += '<div style="margin-top:6px"><span class="muted">relates:</span><br>' + t.roles.map(x => '<span class="badge">' + esc(x) + '</span>').join('') + '</div>';
   if ((t.plays || []).length) h += '<div style="margin-top:6px"><span class="muted">plays:</span><br>' + t.plays.map(x => '<span class="badge">' + esc(x) + '</span>').join('') + '</div>';
-  if (kind !== 'a') h += '<div class="row"><button class="btn danger" onclick="deleteType(\'' + esc(t.kind) + '\',\'' + esc(t.label) + '\')">Удалить тип</button></div>';
+  if (kind !== 'a') {
+    h += '<div class="row"><button class="btn danger" onclick="deleteType(\'' + esc(t.kind) + '\',\'' + esc(t.label) + '\')">Удалить тип</button></div>';
+  }
   card.innerHTML = h;
 
   if (cy) { const node = cy.$id(id); if (node && node.length) { cy.elements().unselect(); node.select(); } }
 }
 
+function syncCreateFields() {
+  const kind = $('newkind').value;
+  $('f-roles').style.display = kind === 'relation' ? '' : 'none';
+  $('f-owns').style.display = kind === 'attribute' ? 'none' : '';
+  $('f-value').style.display = kind === 'attribute' ? '' : 'none';
+}
+
+function splitList(v) {
+  return String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
 async function createType() {
   const kind = $('newkind').value;
   const label = $('newlabel').value.trim();
-  const owns = $('newowns').value.split(',').map(s => s.trim()).filter(Boolean);
   if (!label) { say('Укажите имя типа', false); return; }
+  const payload = {
+    kind: kind, label: label,
+    owns: kind === 'attribute' ? [] : splitList($('newowns').value),
+    roles: kind === 'relation' ? splitList($('newroles').value) : [],
+    value: kind === 'attribute' ? $('newvalue').value : 'string',
+    comment: 'создан из формы'
+  };
   try {
     const r = await api('/api/v1/ontology/type', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: kind, label: label, owns: owns })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
     if (r.ok) {
       say('Тип ' + label + ' создан', true);
-      $('newlabel').value = ''; $('newowns').value = '';
-      reload();
+      $('newlabel').value = ''; $('newowns').value = ''; $('newroles').value = '';
+      position = r.version_id || position;
+      reload(); loadVersions();
     } else { say('Не создан: ' + (r.error || 'ошибка'), false); }
   } catch (e) { say('Не создан: ' + e.message, false); }
 }
@@ -288,17 +390,141 @@ async function applyDef() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ define: text })
     });
     say(r.ok ? 'Изменения применены к схеме' : ('Не применено: ' + (r.error || '')), r.ok);
-    if (r.ok) reload();
+    if (r.ok) { position = r.version_id || ''; reload(); loadVersions(); }
   } catch (e) { say('Не применено: ' + e.message, false); }
 }
 
 async function deleteType(kind, label) {
-  if (!confirm('Удалить тип ' + label + '? Действие меняет схему TypeDB.')) return;
+  if (!confirm('Удалить тип ' + label + '? Действие меняет схему TypeDB; откатить можно через журнал версий.')) return;
   try {
     const r = await api('/api/v1/ontology/type/' + encodeURIComponent(kind) + '/' + encodeURIComponent(label), { method: 'DELETE' });
     say(r.ok ? 'Тип ' + label + ' удалён' : ('Не удалён: ' + (r.error || '')), r.ok);
-    if (r.ok) { $('card').innerHTML = '<div class="muted">тип удалён</div>'; reload(); }
+    if (r.ok) { $('card').innerHTML = '<div class="muted">тип удалён</div>'; position = r.version_id || ''; reload(); loadVersions(); }
   } catch (e) { say('Не удалён: ' + e.message, false); }
+}
+
+// ---- журнал версий ----------------------------------------------------
+async function loadVersions() {
+  const el = $('versionlist');
+  try {
+    const data = await api('/api/v1/ontology/versions?limit=50');
+    const rows = data.versions || [];
+    if (!rows.length) { el.innerHTML = '<div class="muted">изменений ещё не было</div>'; return; }
+    el.innerHTML = '';
+    rows.forEach(v => {
+      const div = document.createElement('div');
+      div.className = 'ver' + (v.ok ? '' : ' failed');
+      const when = (v.created_at || '').replace('T', ' ').slice(0, 16);
+      const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон' }[v.action] || v.action;
+      const label = v.comment || v.action || '';
+      div.innerHTML =
+        '<div class="what"><div>' + esc(action) + (v.ok ? '' : ' — не удалось') + ': ' + esc(label) + '</div>' +
+        '<div class="when">' + esc(when) + ' · ' + esc(v.author || '—') + ' · типов: ' + esc(v.ntypes) + '</div>' +
+        (v.error ? '<div class="muted" style="color:var(--red,#c62828)">' + esc(v.error) + '</div>' : '') + '</div>' +
+        '<button class="btn" ' + (v.ok ? '' : 'disabled') + '>Откатить</button>';
+      const btn = div.querySelector('button');
+      btn.onclick = () => restoreVersion(v.id);
+      el.appendChild(div);
+    });
+  } catch (e) {
+    el.innerHTML = '<div class="muted">журнал не прочитан: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function showPlan(versionId) {
+  const box = $('plan');
+  try {
+    const d = await api('/api/v1/ontology/diff?version_id=' + encodeURIComponent(versionId));
+    const parts = [];
+    if ((d.drop || []).length) parts.push('удалить типов: ' + d.drop.length + ' (' + d.drop.map(x => x.label).join(', ') + ')');
+    if ((d.add || []).length) parts.push('создать типов: ' + d.add.length + ' (' + d.add.map(x => x.label).join(', ') + ')');
+    if ((d.add_owns || []).length) parts.push('добавить owns: ' + d.add_owns.length);
+    if ((d.add_plays || []).length) parts.push('добавить plays: ' + d.add_plays.length);
+    if ((d.unresolved || []).length) parts.push('снять нельзя (ограничение TypeDB): ' + d.unresolved.length);
+    box.style.display = '';
+    box.textContent = parts.length ? parts.join('; ') : 'схема уже совпадает с этой версией';
+  } catch (e) {
+    box.style.display = '';
+    box.textContent = 'план не получен: ' + e.message;
+  }
+}
+
+async function restoreVersion(versionId) {
+  await showPlan(versionId);
+  if (!confirm('Откатить схему к версии ' + versionId.slice(0, 8) + '?')) return;
+  try {
+    const r = await api('/api/v1/ontology/versions/' + encodeURIComponent(versionId) + '/restore', { method: 'POST' });
+    const extra = (r.unresolved || []).length ? ' Не снято (TypeDB 3.14): ' + r.unresolved.length + ' расхождений.' : '';
+    say((r.ok ? 'Схема приведена к версии' : (r.message || 'откат частичный')) + extra, !!r.ok);
+    position = versionId;
+    reload(); loadVersions();
+  } catch (e) { say('Откат не выполнен: ' + e.message, false); }
+}
+
+async function undoLast() {
+  try {
+    const r = await api('/api/v1/ontology/undo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_version_id: position })
+    });
+    if (!r.ok) { say(r.error || 'отменять нечего', false); return; }
+    position = r.position || '';
+    say('Изменение отменено' + ((r.unresolved || []).length ? '; не снято расхождений: ' + r.unresolved.length : ''), true);
+    reload(); loadVersions();
+  } catch (e) { say('Отмена не выполнена: ' + e.message, false); }
+}
+
+async function redoNext() {
+  if (!position) { say('Неизвестно, что повторять: сначала отмените изменение', false); return; }
+  try {
+    const r = await api('/api/v1/ontology/redo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_version_id: position })
+    });
+    if (!r.ok) { say(r.error || 'повторять нечего', false); return; }
+    position = r.position || '';
+    say('Изменение повторено', true);
+    reload(); loadVersions();
+  } catch (e) { say('Повтор не выполнен: ' + e.message, false); }
+}
+
+// ---- шаблон и экспорт -------------------------------------------------
+function readTemplateFile() {
+  const f = $('tplfile').files && $('tplfile').files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { $('tpltext').value = String(reader.result || ''); say('Файл ' + f.name + ' прочитан, нажмите «Проверить»', null); };
+  reader.onerror = () => say('Файл не прочитан', false);
+  reader.readAsText(f, 'utf-8');
+}
+
+async function checkTemplate() {
+  const text = $('tpltext').value;
+  if (!text.trim()) { say('Выберите файл или вставьте текст шаблона', false); return; }
+  try {
+    const r = await api('/api/v1/ontology/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ define: text })
+    });
+    say(r.ok ? 'Шаблон корректен, схема не изменена' : ('Шаблон отклонён: ' + (r.error || '')), r.ok);
+  } catch (e) { say('Проверка не выполнена: ' + e.message, false); }
+}
+
+async function applyTemplate() {
+  const text = $('tpltext').value;
+  if (!text.trim()) { say('Выберите файл или вставьте текст шаблона', false); return; }
+  const f = $('tplfile').files && $('tplfile').files[0];
+  try {
+    const r = await api('/api/v1/ontology/template', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, comment: 'шаблон ' + (f ? f.name : 'из текста') })
+    });
+    if (r.ok) { say('Шаблон применён', true); position = r.version_id || ''; reload(); loadVersions(); }
+    else { say((r.stage === 'validate' ? 'Шаблон отклонён проверкой: ' : 'Не применён: ') + (r.error || ''), false); }
+  } catch (e) { say('Шаблон не применён: ' + e.message, false); }
+}
+
+function exportTql() {
+  window.location.href = '/api/v1/ontology/export';
 }
 
 function logout() {
@@ -307,8 +533,14 @@ function logout() {
 }
 
 (async function init() {
+  syncCreateFields();
   const ok = await loadStatus();
-  if (ok) await reload();
+  if (ok) {
+    await reload();
+    await loadVersions();
+    const last = await api('/api/v1/ontology/versions?limit=1').catch(() => null);
+    position = (last && last.versions && last.versions[0]) ? last.versions[0].id : '';
+  }
 })();
 </script>
 <script src="/static/site-nav.js" defer></script>
