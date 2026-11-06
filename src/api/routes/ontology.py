@@ -42,6 +42,7 @@ class TypeRequest(BaseModel):
     owns: List[str] = []
     roles: List[str] = []
     value: str = "string"
+    comment: str = Field(default="", description="Пояснение для журнала версий")
 
 
 class TemplateRequest(BaseModel):
