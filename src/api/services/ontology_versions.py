@@ -143,6 +143,13 @@ class OntologyVersionService:
             error=(error or "")[:2000],
             restored_from=(restored_from or "")[:64],
         )
+        # Значения фиксируем ДО закрытия сессии: после commit объект отсоединён, и обращение
+        # к row.id/row.ntypes поднимает «Instance is not bound to a Session» — снаружи это
+        # выглядело как «версия не записалась», хотя запись уже была в таблице.
+        row_id = row.id
+        ntypes_val = int(snapshot.get("ntypes") or 0)
+        ok_val = bool(ok)
+
         try:
             Session = get_session_local()
             db = Session()
@@ -151,7 +158,7 @@ class OntologyVersionService:
                 db.commit()
             finally:
                 db.close()
-            return {"id": row.id, "ntypes": row.ntypes, "ok": row.ok}
+            return {"id": row_id, "ntypes": ntypes_val, "ok": ok_val}
         except Exception as exc:  # noqa: BLE001 — версия не записалась, но схема уже изменена
             logger.error("версия схемы не записана: %s", str(exc).splitlines()[-1][:200])
             return {"id": "", "error": str(exc).splitlines()[-1][:200]}
