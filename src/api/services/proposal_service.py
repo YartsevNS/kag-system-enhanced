@@ -119,7 +119,7 @@ class ProposalService:
             where.append("kind = :kind")
             params["kind"] = kind
         if scope:
-            where.append("scopes @> :scope::jsonb")
+            where.append("scopes @> CAST(:scope AS jsonb)")
             params["scope"] = f'["{scope}"]'
         if query:
             where.append("(text ILIKE :q OR quote ILIKE :q OR requirement_id ILIKE :q)")
@@ -237,7 +237,7 @@ class ProposalService:
                     """UPDATE ontology_proposals SET
                            status = :status, reviewer = :reviewer,
                            reviewed_at = now(), review_note = :note
-                       WHERE id = ANY(:ids::uuid[]) AND status <> 'accepted'
+                       WHERE id = ANY(CAST(:ids AS uuid[])) AND status <> 'accepted'
                        RETURNING id"""
                 ),
                 {"ids": ids, "status": status, "reviewer": reviewer, "note": note},
