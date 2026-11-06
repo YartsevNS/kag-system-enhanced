@@ -1,0 +1,300 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KAG — очередь предложений онтологии</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+/* Палитра приходит из /static/theme.css; в var() — запасные значения. */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font,system-ui,'Segoe UI',sans-serif);background:var(--bg,#fff);color:var(--text,#1a1a1a);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel,#f4f5f7);border-right:1px solid var(--border-s,#e3e5e9);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s,#e3e5e9);margin-bottom:12px}
+nav .logo span{color:var(--accent-h,#08a652)}
+main{margin-left:240px;flex:1;padding:24px 28px 60px;min-width:0}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
+.sub{color:var(--text3,#6b7280);font-size:13px;margin-bottom:16px;max-width:920px;line-height:1.5}
+.tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.tile{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:10px 14px;min-width:120px}
+.tile .n{font-size:22px;font-weight:600;line-height:1.1}
+.tile .l{font-size:11px;color:var(--text4,#8a919b);text-transform:uppercase;letter-spacing:.04em}
+.tile.acc .n{color:var(--accent-h,#08a652)}.tile.rej .n{color:var(--red,#c62828)}.tile.sch .n{color:var(--amber,#b26a00)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:10px 12px;margin-bottom:12px}
+.filters label{display:block;font-size:11px;color:var(--text4,#8a919b);text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px}
+select,input{background:var(--bg,#fff);border:1px solid var(--border,#d5d9df);color:var(--text,#1a1a1a);border-radius:var(--radius-sm,6px);padding:7px 9px;font-family:inherit;font-size:13px}
+input[type=text]{min-width:220px}
+button.btn{background:var(--elevated,#fff);border:1px solid var(--border,#d5d9df);color:var(--text,#1a1a1a);border-radius:var(--radius-sm,6px);padding:7px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+button.btn:hover{border-color:var(--accent-h,#08a652)}
+button.btn.primary{background:var(--accent-h,#08a652);border-color:var(--accent-h,#08a652);color:#fff}
+button.btn.danger{border-color:var(--red,#c62828);color:var(--red,#c62828)}
+button.btn.warn{border-color:var(--amber,#b26a00);color:var(--amber,#b26a00)}
+button.btn[disabled]{opacity:.45;cursor:default}
+.bulkbar{display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:12.5px;color:var(--text3,#6b7280)}
+.card{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:12px 14px;margin-bottom:10px}
+.card.accepted{border-left:3px solid var(--accent-h,#08a652)}
+.card.rejected{border-left:3px solid var(--red,#c62828);opacity:.72}
+.card.needs_schema{border-left:3px solid var(--amber,#b26a00)}
+.head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.rid{font-family:var(--mono,'Consolas',monospace);font-size:12.5px;font-weight:600;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:4px;padding:2px 7px}
+.badge{font-size:11px;border-radius:10px;padding:2px 8px;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);color:var(--text3,#6b7280)}
+.badge.ob{color:var(--accent-h,#08a652);border-color:var(--accent-h,#08a652)}
+.badge.rec{color:var(--amber,#b26a00);border-color:var(--amber,#b26a00)}
+.prov{font-size:11.5px;color:var(--text4,#8a919b)}
+.txt{font-size:14px;line-height:1.55;margin:6px 0 8px}
+details summary{cursor:pointer;font-size:12px;color:var(--text3,#6b7280);user-select:none}
+.quote{font-size:12.5px;line-height:1.5;color:var(--text2,#3c424b);background:var(--bg,#fff);border:1px dashed var(--border-s,#e3e5e9);border-radius:6px;padding:8px 10px;margin-top:6px;white-space:pre-wrap}
+.params{font-family:var(--mono,'Consolas',monospace);font-size:11.5px;color:var(--text3,#6b7280);margin-top:6px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.edit{display:none;margin-top:10px}
+.edit textarea{width:100%;min-height:80px;background:var(--bg,#fff);border:1px solid var(--border,#d5d9df);border-radius:6px;padding:8px;font-family:inherit;font-size:13px;color:var(--text,#1a1a1a)}
+.pager{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12.5px;color:var(--text3,#6b7280)}
+.msg{font-size:12.5px;min-height:18px;margin:6px 0 10px}
+.msg.err{color:var(--red,#c62828)}.msg.ok{color:var(--accent-h,#08a652)}
+.empty{padding:30px;text-align:center;color:var(--text4,#8a919b);font-size:13px}
+</style></head><body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto">Выйти</a></nav>
+<main>
+<h1>Очередь предложений онтологии</h1>
+<div class="sub">Требования, извлечённые из нормативных документов. В онтологию (TypeDB) они попадут только после проверки человеком: принять, отклонить, поправить формулировку или отложить как «нужен новый тип схемы». Пока статус «предложено», правил вывода эти факты не касаются — ложных нарушений из непроверенных данных не будет.</div>
+
+<div class="tiles" id="tiles">
+  <div class="tile"><div class="n" id="t-proposed">—</div><div class="l">предложено</div></div>
+  <div class="tile acc"><div class="n" id="t-accepted">—</div><div class="l">принято</div></div>
+  <div class="tile rej"><div class="n" id="t-rejected">—</div><div class="l">отклонено</div></div>
+  <div class="tile sch"><div class="n" id="t-schema">—</div><div class="l">нужна схема</div></div>
+</div>
+
+<div class="filters">
+  <div><label>статус</label>
+    <select id="f-status" onchange="page=0;loadList()">
+      <option value="proposed">предложено</option>
+      <option value="accepted">принято</option>
+      <option value="rejected">отклонено</option>
+      <option value="needs_schema">нужна схема</option>
+      <option value="all">все</option>
+    </select>
+  </div>
+  <div><label>документ</label><select id="f-doc" onchange="page=0;loadList()"><option value="">все</option></select></div>
+  <div><label>вид</label>
+    <select id="f-kind" onchange="page=0;loadList()">
+      <option value="">все</option>
+      <option value="table_measure">мера из таблицы</option>
+      <option value="requirement_clause">пункт документа</option>
+    </select>
+  </div>
+  <div><label>область</label><select id="f-scope" onchange="page=0;loadList()"><option value="">все</option></select></div>
+  <div><label>поиск</label><input type="text" id="f-q" placeholder="текст, код меры, пункт" onkeydown="if(event.key==='Enter'){page=0;loadList()}"></div>
+  <button class="btn" onclick="page=0;loadList()">Показать</button>
+</div>
+
+<div class="msg" id="msg"></div>
+
+<div class="bulkbar">
+  <label><input type="checkbox" id="sel-all" onchange="toggleAll(this.checked)"> выбрать все на странице</label>
+  <span class="grow" style="flex:1"></span>
+  <button class="btn primary" onclick="bulk('accepted')">Принять выбранные</button>
+  <button class="btn danger" onclick="bulk('rejected')">Отклонить выбранные</button>
+</div>
+
+<div id="list"><div class="empty">загружаю…</div></div>
+
+<div class="pager">
+  <button class="btn" id="prev" onclick="if(page>0){page--;loadList()}">← назад</button>
+  <span id="pg">—</span>
+  <button class="btn" id="next" onclick="page++;loadList()">вперёд →</button>
+</div>
+</main>
+
+<script src="/static/site-nav.js" defer></script>
+<script>
+let page = 0;
+const LIMIT = 30;
+
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, opts || {}));
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = {}; }
+  if (!r.ok) throw new Error((data && data.detail) || ('HTTP ' + r.status));
+  return data;
+}
+
+function msg(text, ok) {
+  const el = document.getElementById('msg');
+  el.textContent = text || '';
+  el.className = 'msg ' + (text ? (ok ? 'ok' : 'err') : '');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function loadStats() {
+  try {
+    const s = await api('/api/v1/ontology/proposals/stats');
+    const st = s.by_status || {};
+    document.getElementById('t-proposed').textContent = st.proposed || 0;
+    document.getElementById('t-accepted').textContent = st.accepted || 0;
+    document.getElementById('t-rejected').textContent = st.rejected || 0;
+    document.getElementById('t-schema').textContent = st.needs_schema || 0;
+  } catch (e) { msg('сводка недоступна: ' + e.message); }
+}
+
+async function loadDocs() {
+  try {
+    const d = await api('/api/v1/ontology/proposals/documents');
+    const sel = document.getElementById('f-doc');
+    (d.items || []).forEach(it => {
+      const o = document.createElement('option');
+      o.value = it.document_id;
+      o.textContent = it.document_id + ' (' + it.n + ')';
+      sel.appendChild(o);
+    });
+  } catch (e) { /* не критично */ }
+}
+
+const SCOPE_LABELS = ['доступ','сети','целостность','вредоносный_код','утечки','инциденты',
+  'виртуализация','физический_доступ','криптография','резервное_копирование','аудит','персонал','разработка'];
+
+function initScopes() {
+  const sel = document.getElementById('f-scope');
+  SCOPE_LABELS.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  });
+}
+
+async function loadList() {
+  msg('');
+  const qs = new URLSearchParams({
+    status: document.getElementById('f-status').value,
+    limit: LIMIT,
+    offset: page * LIMIT,
+  });
+  const doc = document.getElementById('f-doc').value;
+  const kind = document.getElementById('f-kind').value;
+  const scope = document.getElementById('f-scope').value;
+  const q = document.getElementById('f-q').value.trim();
+  if (doc) qs.set('document_id', doc);
+  if (kind) qs.set('kind', kind);
+  if (scope) qs.set('scope', scope);
+  if (q) qs.set('q', q);
+
+  const box = document.getElementById('list');
+  box.innerHTML = '<div class="empty">загружаю…</div>';
+  try {
+    const d = await api('/api/v1/ontology/proposals?' + qs.toString());
+    render(d);
+  } catch (e) {
+    box.innerHTML = '<div class="empty">ошибка: ' + esc(e.message) + '</div>';
+  }
+}
+
+function render(d) {
+  const box = document.getElementById('list');
+  const items = d.items || [];
+  document.getElementById('pg').textContent =
+    'стр. ' + (page + 1) + ' · ' + (d.total || 0) + ' записей · показано ' + items.length;
+  document.getElementById('prev').disabled = page === 0;
+  document.getElementById('next').disabled = (page + 1) * LIMIT >= (d.total || 0);
+
+  if (!items.length) {
+    box.innerHTML = '<div class="empty">пусто — по этому фильтру предложений нет</div>';
+    return;
+  }
+
+  box.innerHTML = items.map(it => {
+    const scopes = (it.scopes || []).map(s => '<span class="badge">' + esc(s) + '</span>').join(' ');
+    const obClass = (it.obligation_level || '').includes('рекоменд') ? 'rec' : 'ob';
+    const params = Object.keys(it.params || {}).length
+      ? '<div class="params">параметры: ' + esc(JSON.stringify(it.params)) + '</div>' : '';
+    const levels = it.levels ? '<span class="badge">уровни ' + esc(it.levels) + '</span>' : '';
+    const conf = (it.confidence != null) ? '<span class="badge">уверенность ' + Number(it.confidence).toFixed(2) + '</span>' : '';
+    return `
+    <div class="card ${esc(it.status)}" data-id="${esc(it.id)}">
+      <div class="head">
+        <input type="checkbox" class="sel" value="${esc(it.id)}">
+        <span class="rid">${esc(it.requirement_id || it.clause || '—')}</span>
+        <span class="badge ${obClass}">${esc(it.obligation_level || 'не указано')}</span>
+        ${levels}${conf}
+        <span class="prov">${esc(it.document_id)} · ${esc(it.clause || 'без пункта')} · стр. ${esc(it.page)}</span>
+      </div>
+      <div class="txt" id="txt-${esc(it.id)}">${esc(it.text)}</div>
+      ${params}
+      <details><summary>цитата-источник</summary><div class="quote">${esc(it.quote || '(пусто)')}</div></details>
+      <div class="actions">
+        <button class="btn primary" onclick="decide('${esc(it.id)}','accepted')">Принять</button>
+        <button class="btn danger" onclick="decide('${esc(it.id)}','rejected')">Отклонить</button>
+        <button class="btn warn" onclick="decide('${esc(it.id)}','needs_schema')">Нужна схема</button>
+        <button class="btn" onclick="toggleEdit('${esc(it.id)}')">Править</button>
+      </div>
+      <div class="edit" id="edit-${esc(it.id)}">
+        <textarea id="ta-${esc(it.id)}">${esc(it.text)}</textarea>
+        <div class="actions">
+          <button class="btn" onclick="saveText('${esc(it.id)}', false)">Сохранить правку</button>
+          <button class="btn primary" onclick="saveText('${esc(it.id)}', true)">Сохранить и принять</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleEdit(id) {
+  const el = document.getElementById('edit-' + id);
+  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+}
+
+async function decide(id, status) {
+  try {
+    await api('/api/v1/ontology/proposals/' + id + '/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    msg('готово', true);
+    loadStats(); loadList();
+  } catch (e) { msg('не удалось: ' + e.message); }
+}
+
+async function saveText(id, accept) {
+  const text = document.getElementById('ta-' + id).value.trim();
+  if (!text) { msg('пустая формулировка'); return; }
+  try {
+    await api('/api/v1/ontology/proposals/' + id + '/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: accept ? 'accepted' : 'proposed', text })
+    });
+    msg(accept ? 'сохранено и принято' : 'формулировка сохранена', true);
+    loadStats(); loadList();
+  } catch (e) { msg('не удалось: ' + e.message); }
+}
+
+function toggleAll(on) {
+  document.querySelectorAll('.sel').forEach(cb => { cb.checked = on; });
+}
+
+async function bulk(status) {
+  const ids = Array.from(document.querySelectorAll('.sel:checked')).map(cb => cb.value);
+  if (!ids.length) { msg('ничего не выбрано'); return; }
+  if (!confirm((status === 'accepted' ? 'Принять' : 'Отклонить') + ' ' + ids.length + ' предложений?')) return;
+  try {
+    const r = await api('/api/v1/ontology/proposals/review-bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, status })
+    });
+    msg('изменено: ' + (r.changed || 0), true);
+    loadStats(); loadList();
+  } catch (e) { msg('не удалось: ' + e.message); }
+}
+
+function logout() {
+  fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }).finally(() => location.href = '/login');
+}
+
+initScopes();
+loadStats();
+loadDocs();
+loadList();
+</script>
+</body></html>

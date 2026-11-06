@@ -419,6 +419,19 @@ async def ontology_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology.html"))
 
 
+@app.get("/ontology/proposals", summary="Очередь предложений онтологии (только для admin)")
+async def ontology_proposals_page(request: Request):
+    """Проверка извлечённых требований до записи в TypeDB.
+
+    Здесь человек решает, что попадёт в онтологию: принять, отклонить, поправить
+    формулировку или отложить как «нужен новый тип схемы». До решения факт в
+    TypeDB отсутствует, поэтому ложных нарушений из непроверенных данных не будет.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology_proposals.html"))
+
+
 @app.get("/docker", summary="Docker Dashboard")
 async def docker_dashboard(request: Request):
     """Страница Docker Dashboard (только для admin)."""

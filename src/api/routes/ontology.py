@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from src.api.middleware.auth_v2 import get_current_admin
 from src.api.services.ontology_service import OntologyUnavailable, ontology_service
 from src.api.services.ontology_versions import diff_snapshots, ontology_versions, snapshot_of
+from src.api.services.proposal_service import ALLOWED_STATUSES, proposal_service
 from src.database.user_models import User
 from src.indexing import typedb_facts
 
@@ -265,3 +266,105 @@ async def ontology_template(req: TemplateRequest, user: User = Depends(get_curre
         return await asyncio.to_thread(_run)
     except OntologyUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ОЧЕРЕДЬ ПРЕДЛОЖЕНИЙ (human-in-the-loop)
+#
+# Извлечённые из документов требования попадают сюда, а НЕ сразу в TypeDB.
+# Причина: логический вывод строит «нарушения», и если правила увидят
+# непроверенный факт, заказчик получит ложное нарушение с цитатой из мусора.
+# Пока status='proposed', в онтологии этих фактов нет физически.
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ReviewRequest(BaseModel):
+    status: str = Field(..., description="proposed | accepted | rejected | needs_schema")
+    note: str | None = Field(None, description="комментарий проверяющего")
+    text: str | None = Field(None, description="исправленная формулировка требования")
+
+
+class BulkReviewRequest(BaseModel):
+    ids: List[str]
+    status: str
+    note: str | None = None
+
+
+def _check_status(status: str) -> None:
+    if status not in ALLOWED_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"недопустимый статус '{status}', разрешены: {', '.join(ALLOWED_STATUSES)}",
+        )
+
+
+@router.get("/proposals/stats", summary="Сводка очереди предложений")
+async def proposals_stats(_: User = Depends(get_current_admin)):
+    """Счётчики по статусам, документам и областям — для плиток в шапке страницы."""
+    return await asyncio.to_thread(proposal_service.stats)
+
+
+@router.get("/proposals/documents", summary="Документы, у которых есть предложения")
+async def proposals_documents(_: User = Depends(get_current_admin)):
+    return {"items": await asyncio.to_thread(proposal_service.documents)}
+
+
+@router.get("/proposals", summary="Список предложений с фильтрами")
+async def proposals_list(
+    status: str = "proposed",
+    document_id: str | None = None,
+    kind: str | None = None,
+    scope: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    _: User = Depends(get_current_admin),
+):
+    """status='all' — без фильтра по статусу."""
+    return await asyncio.to_thread(
+        proposal_service.list_proposals,
+        status=status,
+        document_id=document_id,
+        kind=kind,
+        query=q,
+        scope=scope,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/proposals/review-bulk", summary="Принять/отклонить пачкой")
+async def proposals_bulk_review(req: BulkReviewRequest, user: User = Depends(get_current_admin)):
+    _check_status(req.status)
+    changed = await asyncio.to_thread(
+        proposal_service.bulk_review, req.ids, req.status, _who(user), req.note
+    )
+    return {"ok": True, "changed": changed}
+
+
+@router.get("/proposals/{proposal_id}", summary="Одно предложение целиком")
+async def proposals_get(proposal_id: str, _: User = Depends(get_current_admin)):
+    item = await asyncio.to_thread(proposal_service.get, proposal_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="предложение не найдено")
+    return item
+
+
+@router.post("/proposals/{proposal_id}/review", summary="Решение по предложению")
+async def proposals_review(
+    proposal_id: str, req: ReviewRequest, user: User = Depends(get_current_admin)
+):
+    """Проверяющий принимает, отклоняет или правит формулировку.
+
+    Принятие пока НЕ пишет в TypeDB автоматически: запись — отдельный шаг,
+    который показывает, что именно уйдёт в онтологию, и что вернулось.
+    """
+    _check_status(req.status)
+    if req.text is not None and not req.text.strip():
+        raise HTTPException(status_code=400, detail="пустая формулировка недопустима")
+    res = await asyncio.to_thread(
+        proposal_service.review,
+        proposal_id, req.status, _who(user), req.note, req.text,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="предложение не найдено")
+    return {"ok": True, "item": res}
