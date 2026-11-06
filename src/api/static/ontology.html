@@ -418,9 +418,10 @@ async function loadVersions() {
       div.className = 'ver' + (v.ok ? '' : ' failed');
       const when = (v.created_at || '').replace('T', ' ').slice(0, 16);
       const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон' }[v.action] || v.action;
-      const label = v.comment || v.action || '';
+      const label = v.comment || '';
+      const head = esc(action) + (v.ok ? '' : ' — не удалось') + (label ? ': ' + esc(label) : '');
       div.innerHTML =
-        '<div class="what"><div>' + esc(action) + (v.ok ? '' : ' — не удалось') + ': ' + esc(label) + '</div>' +
+        '<div class="what"><div>' + head + '</div>' +
         '<div class="when">' + esc(when) + ' · ' + esc(v.author || '—') + ' · типов: ' + esc(v.ntypes) + '</div>' +
         (v.error ? '<div class="muted" style="color:var(--red,#c62828)">' + esc(v.error) + '</div>' : '') + '</div>' +
         '<button class="btn" ' + (v.ok ? '' : 'disabled') + '>Откатить</button>';
