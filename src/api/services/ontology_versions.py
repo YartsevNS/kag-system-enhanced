@@ -275,6 +275,19 @@ class OntologyVersionService:
             ),
         }
 
+    def latest_version(self) -> Optional[Dict[str, Any]]:
+        """Последняя удачная версия в журнале — точка, от которой считаются отмена и повтор."""
+        Session = get_session_local()
+        db = Session()
+        try:
+            row = (db.query(OntologySchemaVersion)
+                   .filter(OntologySchemaVersion.ok.is_(True))
+                   .order_by(OntologySchemaVersion.created_at.desc())
+                   .first())
+            return row.to_dict() if row else None
+        finally:
+            db.close()
+
     def previous_version(self, current_id: str = "") -> Optional[Dict[str, Any]]:
         """Ближайшая удачная версия ДО указанной (или до последней) — для «Отменить»."""
         Session = get_session_local()

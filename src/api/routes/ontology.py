@@ -52,6 +52,7 @@ class TemplateRequest(BaseModel):
 
 class PositionRequest(BaseModel):
     current_version_id: str = Field(default="", description="Где сейчас стоит пользователь в журнале")
+    target_version_id: str = Field(default="", description="Куда повторять (для redo)")
 
 
 def _who(user: User) -> str:
@@ -181,11 +182,18 @@ async def ontology_restore(version_id: str, user: User = Depends(get_current_adm
 @router.post("/undo", summary="Отменить последнее изменение схемы")
 async def ontology_undo(req: PositionRequest, user: User = Depends(get_current_admin)):
     try:
-        prev = await asyncio.to_thread(ontology_versions.previous_version, req.current_version_id)
+        # Точка, от которой отменяем: позиция пользователя, а если её нет — последняя версия.
+        cur = req.current_version_id
+        if not cur:
+            latest = await asyncio.to_thread(ontology_versions.latest_version)
+            cur = (latest or {}).get("id", "")
+        prev = await asyncio.to_thread(ontology_versions.previous_version, cur)
         if not prev:
             return {"ok": False, "error": "предыдущей версии нет — это первое изменение в журнале"}
         res = await asyncio.to_thread(ontology_versions.restore, prev["id"], _who(user), "отмена изменения")
         res["position"] = prev["id"]
+        # Куда вернуться по «Повторить»: состояние, от которого отменили.
+        res["redo_target"] = cur
         return res
     except OntologyUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -193,14 +201,14 @@ async def ontology_undo(req: PositionRequest, user: User = Depends(get_current_a
 
 @router.post("/redo", summary="Повторить отменённое изменение")
 async def ontology_redo(req: PositionRequest, user: User = Depends(get_current_admin)):
-    if not req.current_version_id:
-        return {"ok": False, "error": "неизвестна текущая позиция в журнале"}
+    # Повтор — это возврат к состоянию, от которого отменяли, а НЕ «следующая версия в журнале»:
+    # сам откат тоже пишет версию, и поиск «следующей» возвращал бы запись отката (петля).
+    target = req.target_version_id
+    if not target:
+        return {"ok": False, "error": "неизвестно, что повторять: сначала отмените изменение"}
     try:
-        nxt = await asyncio.to_thread(ontology_versions.next_version, req.current_version_id)
-        if not nxt:
-            return {"ok": False, "error": "повторять нечего — новее версий нет"}
-        res = await asyncio.to_thread(ontology_versions.restore, nxt["id"], _who(user), "повтор изменения")
-        res["position"] = nxt["id"]
+        res = await asyncio.to_thread(ontology_versions.restore, target, _who(user), "повтор изменения")
+        res["position"] = target
         return res
     except OntologyUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))

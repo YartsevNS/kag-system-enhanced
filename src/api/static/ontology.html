@@ -180,6 +180,7 @@ button.btn[disabled]{opacity:.45;cursor:default}
 <script>
 let cy = null, schema = null, selected = null;
 let position = '';   // где пользователь стоит в журнале версий (id текущей версии)
+let redoTarget = ''; // состояние, от которого отменили — цель для «Повторить»
 const $ = id => document.getElementById(id);
 
 function cssVar(name, fallback) {
@@ -366,6 +367,7 @@ async function createType() {
       say('Тип ' + label + ' создан', true);
       $('newlabel').value = ''; $('newowns').value = ''; $('newroles').value = '';
       position = r.version_id || position;
+      redoTarget = '';
       reload(); loadVersions();
     } else { say('Не создан: ' + (r.error || 'ошибка'), false); }
   } catch (e) { say('Не создан: ' + e.message, false); }
@@ -390,7 +392,7 @@ async function applyDef() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ define: text })
     });
     say(r.ok ? 'Изменения применены к схеме' : ('Не применено: ' + (r.error || '')), r.ok);
-    if (r.ok) { position = r.version_id || ''; reload(); loadVersions(); }
+    if (r.ok) { position = r.version_id || ''; redoTarget = ''; reload(); loadVersions(); }
   } catch (e) { say('Не применено: ' + e.message, false); }
 }
 
@@ -399,7 +401,7 @@ async function deleteType(kind, label) {
   try {
     const r = await api('/api/v1/ontology/type/' + encodeURIComponent(kind) + '/' + encodeURIComponent(label), { method: 'DELETE' });
     say(r.ok ? 'Тип ' + label + ' удалён' : ('Не удалён: ' + (r.error || '')), r.ok);
-    if (r.ok) { $('card').innerHTML = '<div class="muted">тип удалён</div>'; position = r.version_id || ''; reload(); loadVersions(); }
+    if (r.ok) { $('card').innerHTML = '<div class="muted">тип удалён</div>'; position = r.version_id || ''; redoTarget = ''; reload(); loadVersions(); }
   } catch (e) { say('Не удалён: ' + e.message, false); }
 }
 
@@ -457,6 +459,7 @@ async function restoreVersion(versionId) {
     const extra = (r.unresolved || []).length ? ' Не снято (TypeDB 3.14): ' + r.unresolved.length + ' расхождений.' : '';
     say((r.ok ? 'Схема приведена к версии' : (r.message || 'откат частичный')) + extra, !!r.ok);
     position = versionId;
+    redoTarget = '';
     reload(); loadVersions();
   } catch (e) { say('Откат не выполнен: ' + e.message, false); }
 }
@@ -469,20 +472,22 @@ async function undoLast() {
     });
     if (!r.ok) { say(r.error || 'отменять нечего', false); return; }
     position = r.position || '';
+    redoTarget = r.redo_target || '';
     say('Изменение отменено' + ((r.unresolved || []).length ? '; не снято расхождений: ' + r.unresolved.length : ''), true);
     reload(); loadVersions();
   } catch (e) { say('Отмена не выполнена: ' + e.message, false); }
 }
 
 async function redoNext() {
-  if (!position) { say('Неизвестно, что повторять: сначала отмените изменение', false); return; }
+  if (!redoTarget) { say('Повторять нечего: отмена не выполнялась в этой сессии', false); return; }
   try {
     const r = await api('/api/v1/ontology/redo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ current_version_id: position })
+      body: JSON.stringify({ current_version_id: position, target_version_id: redoTarget })
     });
     if (!r.ok) { say(r.error || 'повторять нечего', false); return; }
     position = r.position || '';
+    redoTarget = '';
     say('Изменение повторено', true);
     reload(); loadVersions();
   } catch (e) { say('Повтор не выполнен: ' + e.message, false); }
@@ -518,7 +523,7 @@ async function applyTemplate() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text, comment: 'шаблон ' + (f ? f.name : 'из текста') })
     });
-    if (r.ok) { say('Шаблон применён', true); position = r.version_id || ''; reload(); loadVersions(); }
+    if (r.ok) { say('Шаблон применён', true); position = r.version_id || ''; redoTarget = ''; reload(); loadVersions(); }
     else { say((r.stage === 'validate' ? 'Шаблон отклонён проверкой: ' : 'Не применён: ') + (r.error || ''), false); }
   } catch (e) { say('Шаблон не применён: ' + e.message, false); }
 }
