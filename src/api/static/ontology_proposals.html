@@ -39,6 +39,9 @@ button.btn[disabled]{opacity:.45;cursor:default}
 .mv.ok{color:var(--accent-h,#08a652);border-color:var(--accent-h,#08a652)}
 .mv.bad{color:var(--red,#c62828);border-color:var(--red,#c62828)}
 .mv.ctx{color:#6b5bd2;border-color:#6b5bd2}
+.cov{font-size:11.5px;border-radius:10px;padding:2px 8px;border:1px solid var(--border-s,#e3e5e9);color:var(--text3,#6b7280)}
+.cov.low{color:var(--red,#c62828);border-color:var(--red,#c62828)}
+.cov.mid{color:var(--amber,#b26a00);border-color:var(--amber,#b26a00)}
 .head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 .rid{font-family:var(--mono,'Consolas',monospace);font-size:12.5px;font-weight:600;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:4px;padding:2px 7px}
 .badge{font-size:11px;border-radius:10px;padding:2px 8px;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);color:var(--text3,#6b7280)}
@@ -78,6 +81,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text3,#6b7280);user-se
       <option value="rejected">отклонено</option>
       <option value="needs_schema">нужна схема</option>
       <option value="insufficient_context">мало контекста</option>
+      <option value="superseded">архив (pilot-1)</option>
       <option value="all">все</option>
     </select>
   </div>
@@ -218,6 +222,14 @@ function render(d) {
       ? '<div class="params">параметры: ' + esc(JSON.stringify(it.params)) + '</div>' : '';
     const levels = it.levels ? '<span class="badge">уровни ' + esc(it.levels) + '</span>' : '';
     const conf = (it.confidence != null) ? '<span class="badge">уверенность ' + Number(it.confidence).toFixed(2) + '</span>' : '';
+    // Покрытие говорит, можно ли опереться на цитату: 1.0 — все значимые слова
+    // утверждения в ней есть; ниже 0.9 — цитата обрезана (обычно строка таблицы).
+    let cov = '';
+    if (it.quote_coverage != null) {
+      const c = Number(it.quote_coverage);
+      const cls = c >= 0.9 ? '' : (c >= 0.6 ? ' mid' : ' low');
+      cov = '<span class="cov' + cls + '" title="доля слов утверждения, найденных в цитате">покрытие ' + c.toFixed(2) + '</span>';
+    }
     const vmap = {accept: ['ok', 'модель: подтверждает'], reject: ['bad', 'модель: отклоняет'], insufficient_context: ['ctx', 'модель: мало контекста']};
     let mv = '';
     if (it.verdict && vmap[it.verdict]) {
@@ -231,7 +243,7 @@ function render(d) {
         <input type="checkbox" class="sel" value="${esc(it.id)}">
         <span class="rid">${esc(it.requirement_id || it.clause || '—')}</span>
         <span class="badge ${obClass}">${esc(it.obligation_level || 'не указано')}</span>
-        ${levels}${conf}${mv}
+        ${levels}${conf}${cov}${mv}
         <span class="prov">${esc(it.document_id)} · ${esc(it.clause || 'без пункта')} · стр. ${esc(it.page)}</span>
       </div>
       <div class="txt" id="txt-${esc(it.id)}">${esc(it.text)}</div>

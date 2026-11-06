@@ -78,6 +78,10 @@ _DDL = [
     """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict_reason text""",
     """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict_confidence numeric""",
     """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS evidence_ok boolean""",
+    # Покрытие: доля значимых слов утверждения, найденных в цитате. Считается
+    # при извлечении. Ниже 0.9 — цитата не доказывает утверждение, даже если
+    # она дословная: так выглядит обрезанный пункт или строка таблицы без шапки.
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS quote_coverage numeric""",
 ]
 
 _SELECT_FIELDS = """
@@ -85,7 +89,8 @@ _SELECT_FIELDS = """
     requirement_id, text, obligation_level, scopes, params, confidence,
     source_origin, status, reviewer, reviewed_at, review_note, typedb_fact_id,
     write_error, created_at, extraction_version,
-    verdict, verdict_model, verdict_reason, verdict_confidence, evidence_ok
+    verdict, verdict_model, verdict_reason, verdict_confidence, evidence_ok,
+    quote_coverage
 """
 
 
