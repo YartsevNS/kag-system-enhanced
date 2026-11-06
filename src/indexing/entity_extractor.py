@@ -1092,6 +1092,17 @@ JSON:
         3. Сохранение в Neo4j (Domain Graph)
         4. Сохранение в config_store (для UI)
         """
+        # Единая точка отключения: system/graph.skip закрывает ЛЮБОЙ путь извлечения —
+        # и обработку документа, и ручное «Перестроить граф», и будущие вызовы.
+        # Иначе настройка в админке обходится кнопкой и LLM всё равно вызывается.
+        try:
+            from src.indexing.processing_guard import graph_skip_requested
+            _skip, _msg = graph_skip_requested()
+            if _skip:
+                return {"status": "skipped",
+                        "reason": _msg or "извлечение для Neo4j отключено (system/graph.skip)"}
+        except Exception as e:  # noqa: BLE001 — сбой чтения настройки не должен ломать обработку
+            logger.debug(f"[graph] проверку system/graph пропустил: {e}")
         try:
             from src.indexing.knowledge_graph import kg_service, Entity, Relation
 
