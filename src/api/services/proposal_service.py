@@ -18,7 +18,11 @@ from typing import Any, Iterable
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-ALLOWED_STATUSES = ("proposed", "accepted", "rejected", "needs_schema")
+# insufficient_context: утверждение верное, но в цитате нет смысла для вывода
+# (обрезана таблица, ссылка «согласно п. X», нет условий применения) — нужна
+# не правка текста, а расширение окна нарезки. Отдельный статус, чтобы такие
+# случаи не терялись среди отклонённых: по ним чинится чанкер.
+ALLOWED_STATUSES = ("proposed", "accepted", "rejected", "needs_schema", "insufficient_context")
 
 _DDL = [
     """
@@ -45,6 +49,13 @@ _DDL = [
         review_note        text,
         typedb_fact_id     text,
         write_error        text,
+        -- машинная проверка ансамблем моделей (HITL-предфильтр): подсказка
+        -- человеку, а не решение. Решение по-прежнему ставит человек.
+        verdict            text,
+        verdict_model      text,
+        verdict_reason     text,
+        verdict_confidence numeric,
+        evidence_ok        boolean,
         created_at         timestamptz NOT NULL DEFAULT now(),
         extraction_version text        NOT NULL DEFAULT 'pilot-1'
     )
@@ -61,13 +72,20 @@ _DDL = [
     CREATE INDEX IF NOT EXISTS ontology_proposals_scopes_idx
         ON ontology_proposals USING gin (scopes)
     """,
+    # Миграции: таблица уже живёт на стенде, CREATE TABLE её не изменит.
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict text""",
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict_model text""",
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict_reason text""",
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS verdict_confidence numeric""",
+    """ALTER TABLE ontology_proposals ADD COLUMN IF NOT EXISTS evidence_ok boolean""",
 ]
 
 _SELECT_FIELDS = """
     id, document_id, chunk_id, clause, page, kind, measure_code, levels, quote,
     requirement_id, text, obligation_level, scopes, params, confidence,
     source_origin, status, reviewer, reviewed_at, review_note, typedb_fact_id,
-    write_error, created_at, extraction_version
+    write_error, created_at, extraction_version,
+    verdict, verdict_model, verdict_reason, verdict_confidence, evidence_ok
 """
 
 
