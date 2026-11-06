@@ -50,6 +50,11 @@ button.btn[disabled]{opacity:.45;cursor:default}
 .ver .what{flex:1;min-width:0}
 .ver.failed .what{color:var(--red,#c62828)}
 .plan{font-size:12px;line-height:1.6;background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius-sm,6px);padding:8px 10px;margin-top:8px;max-height:180px;overflow:auto}
+.note{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:12px 14px;margin-top:16px}
+.note summary{font-size:14px;font-weight:600;cursor:pointer;user-select:none}
+.note ul{margin:10px 0 0 18px;font-size:12.5px;line-height:1.7;color:var(--text2,#444)}
+.note li{margin-bottom:6px}
+.note code{font-family:var(--mono,'Consolas',monospace);font-size:12px;background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:4px;padding:0 4px}
 @media(max-width:1150px){.work{grid-template-columns:1fr}#cy{height:420px}}
 </style><link rel="stylesheet" href="/static/theme.css"></head><body>
 <nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto">Выйти</a></nav>
@@ -173,6 +178,37 @@ button.btn[disabled]{opacity:.45;cursor:default}
       </details>
     </div>
   </aside>
+</div>
+<div class="note">
+  <details>
+    <summary>Ограничения TypeDB 3.14, с которыми работает этот редактор</summary>
+    <ul>
+      <li><b>Снять отдельный owns, plays или relates нельзя.</b> Команда <code>undefine</code> в TypeDB 3.14
+        удаляет только тип целиком: <code>undefine &lt;тип&gt;;</code>. Попытки
+        <code>undefine entity X;</code> или <code>undefine X owns Y;</code> дают ошибку [TSV11].
+        Чтобы убрать один атрибут у существующего типа, пришлось бы удалить тип и создать заново —
+        вместе с его экземплярами и связями, то есть с частью доказательной базы. Редактор этого
+        сам не делает.</li>
+      <li><b>Поэтому откат к версии неполный по построению.</b> Он удаляет типы, которых в выбранной
+        версии не было, и создаёт недостающие типы, owns и plays. А лишние owns и plays у существующих
+        типов он не снимает: они показываются списком «снять нельзя (ограничение TypeDB)» —
+        это честный отчёт, а не молчаливый пропуск.</li>
+      <li><b>Каждый факт — отдельным определением.</b> В одном <code>define</code> можно перечислить
+        несколько определений, но <code>owns a, b</code> и <code>relates a, b</code> списком
+        не принимаются: пишите <code>entity X owns a;</code> и <code>entity X owns b;</code>
+        отдельными строками. Две инструкции <code>define …; define …;</code> в одном тексте
+        тоже недопустимы — нужен один <code>define</code> с несколькими определениями.</li>
+      <li><b>Типы значений атрибутов считываются из схемы</b> (string, integer, double, boolean, date,
+        datetime, datetime_tz, decimal, duration), поэтому экспортированный .tql сохраняет их
+        корректно и проходит проверку без правок.</li>
+      <li><b>Откат не удаляет и не восстанавливает данные.</b> Он меняет только схему. Если тип
+        с экземплярами нужно удалить, TypeDB откажет, и редактор покажет эту ошибку — данные
+        останутся на месте.</li>
+      <li><b>Журнал пишет и неудачные попытки.</b> Не прошедший проверку шаблон или отклонённая
+        правка остаются в истории с текстом ошибки: «пробовал и не вышло» — это событие,
+        которое ищут при разборе, почему схема не такая, как ожидали.</li>
+    </ul>
+  </details>
 </div>
 </main>
 
