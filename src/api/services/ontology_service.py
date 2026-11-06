@@ -156,18 +156,18 @@ class OntologyService:
         return self.apply(define)
 
     def delete_type(self, kind: str, label: str) -> Dict[str, Any]:
-        """Удалить тип через undefine. Тип с экземплярами TypeDB не даст удалить — вернёт ошибку."""
+        """Удалить тип через undefine. Тип с экземплярами TypeDB не даст удалить — вернёт ошибку.
+
+        Синтаксис TypeQL 3.x (проверено 05.11.2026 на 3.14.1): `undefine <label>;` — БЕЗ
+        ключевого слова категории. Варианты `undefine entity <label>;` и
+        `undefine relation <label>;` дают TSV11 Query failed.
+        """
         label = (label or "").strip()
         if not label or " " in label:
             return {"ok": False, "error": "пустое имя типа"}
-        kinds = {"entity": "entity", "relation": "relation", "attribute": "attribute"}
-        if kind not in kinds:
+        if kind not in ("entity", "relation", "attribute"):
             return {"ok": False, "error": f"неизвестная категория: {kind}"}
-        if kind == "attribute":
-            define = f"undefine attribute {label};"
-        else:
-            define = f"undefine {kinds[kind]} {label};"
-        return self.apply(define)
+        return self.apply(f"undefine {label};")
 
 
 ontology_service = OntologyService()
