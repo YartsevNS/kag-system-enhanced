@@ -227,7 +227,9 @@ function render(d) {
     let cov = '';
     if (it.quote_coverage != null) {
       const c = Number(it.quote_coverage);
-      const cls = c >= 0.9 ? '' : (c >= 0.6 ? ' mid' : ' low');
+      // Порог 0.9 был завышен: у табличных мер в строке нет шапки, и они
+      // массово попадали в «плохие» (53 из 62), хотя смысл не терялся.
+      const cls = c >= 0.75 ? '' : (c >= 0.6 ? ' mid' : ' low');
       cov = '<span class="cov' + cls + '" title="доля слов утверждения, найденных в цитате">покрытие ' + c.toFixed(2) + '</span>';
     }
     const vmap = {accept: ['ok', 'модель: подтверждает'], reject: ['bad', 'модель: отклоняет'], insufficient_context: ['ctx', 'модель: мало контекста']};
