@@ -1,0 +1,315 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
+try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KAG — онтология TypeDB</title>
+<style>
+:root{--bg:#171717;--panel:#0f0f0f;--surface:#1c1c1c;--elevated:#242424;--text:#fafafa;--text2:#b4b4b4;--text3:#898989;--text4:#4d4d4d;--accent:#3ecf8e;--accent-h:#00c573;--red:#e5484d;--amber:#f5a623;--border:#2e2e2e;--border-s:#242424;--radius:8px;--radius-sm:6px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'Cascadia Code','Fira Code','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel);border-right:1px solid var(--border-s);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s);margin-bottom:12px}
+nav .logo span{color:var(--accent-h)}
+main{margin-left:240px;flex:1;padding:24px 28px 60px}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
+.sub{color:var(--text3);font-size:13px;margin-bottom:16px;max-width:900px;line-height:1.5}
+.status{display:flex;gap:18px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12.5px}
+.status .kv{color:var(--text3)}
+.status .kv b{color:var(--text);font-weight:600}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot.ok{background:var(--accent-h)}.dot.bad{background:var(--red)}.dot.warn{background:var(--amber)}
+.work{display:grid;grid-template-columns:1fr 360px;gap:14px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.panel summary{font-size:14px;font-weight:600;cursor:pointer;user-select:none}
+#cy{height:calc(100vh - 210px);min-height:380px;background:var(--bg);border:1px solid var(--border-s);border-radius:var(--radius)}
+.msg{font-size:12.5px;min-height:18px;margin:8px 0;line-height:1.45}
+.msg.err{color:var(--red)}.msg.ok{color:var(--accent-h)}
+label{display:block;font-size:11px;color:var(--text4);text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:7px 9px;font-family:var(--font);font-size:13px}
+textarea{min-height:90px;font-family:var(--mono);font-size:12px}
+button.btn{background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:7px 14px;font-size:12px;cursor:pointer}
+button.btn:hover{border-color:var(--accent)}
+button.btn.primary{background:var(--accent-h);border-color:var(--accent-h);color:#fff}
+button.btn.danger{border-color:var(--red);color:var(--red)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.kvline{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border-s)}
+.kvline span:last-child{color:var(--text3)}
+.list{max-height:300px;overflow:auto}
+.list .kvline{cursor:pointer}
+.list .kvline:hover{background:var(--elevated)}
+.badge{display:inline-block;padding:1px 7px;border-radius:9999px;font-size:11px;background:var(--elevated);color:var(--text2);margin:3px 4px 0 0}
+.muted{color:var(--text4);font-size:12.5px}
+.legend{font-size:11.5px;color:var(--text4);margin-top:8px;line-height:1.7}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+@media(max-width:1100px){.work{grid-template-columns:1fr}#cy{height:420px}}
+</style><link rel="stylesheet" href="/static/theme.css"></head><body>
+<nav><div class="logo"><span>KAG</span></div><div data-site-nav></div><a href="#" class="nav-item" onclick="logout();return false" style="margin-top:auto;color:var(--red)">Выйти</a></nav>
+<main>
+<h1>Онтология TypeDB</h1>
+<div class="sub">Схема, на которой держится доказательная база: сущности, связи, атрибуты и роли. Правка идёт в TypeDB без пересборки образа; каждое изменение проверяется до записи.</div>
+
+<div class="status" id="status">
+  <span class="kv"><span class="dot" id="st-dot"></span><b id="st-text">проверяю подключение…</b></span>
+  <span class="kv">база: <b id="st-db">—</b></span>
+  <span class="kv">адрес: <b id="st-addr">—</b></span>
+  <span class="kv">типов: <b id="st-count">—</b></span>
+</div>
+<div class="msg" id="msg"></div>
+
+<div class="work">
+  <div>
+    <div id="cy"></div>
+    <div class="legend">
+      <div><i style="background:#4f8ef7"></i>сущность &nbsp; <i style="background:#9b6bf0"></i>связь &nbsp; <i style="background:#53d3b8"></i>атрибут</div>
+      <div>Рёбра — роль, которую сущность играет в связи. Клик по узлу показывает карточку справа.</div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="panel" id="card-panel">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Выбранный тип</div>
+      <div id="card"><div class="muted">Кликните по узлу графа или по строке в списке типов.</div></div>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>Типы схемы</summary>
+        <div class="list" id="typelist" style="margin-top:10px"></div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>Создать тип</summary>
+        <div style="margin-top:10px">
+          <label for="newkind">Категория</label>
+          <select id="newkind">
+            <option value="entity">сущность</option>
+            <option value="relation">связь</option>
+            <option value="attribute">атрибут</option>
+          </select>
+          <label for="newlabel">Имя типа</label>
+          <input id="newlabel" placeholder="например: security-requirement">
+          <label for="newowns">Атрибуты (owns, через запятую)</label>
+          <input id="newowns" placeholder="name, source-origin">
+          <div class="row"><button class="btn primary" onclick="createType()">Создать</button></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <details>
+        <summary>Правка текстом (TypeQL)</summary>
+        <div style="margin-top:10px">
+          <div class="muted" style="margin-bottom:6px">Для сложных изменений: составьте define или undefine, сначала проверьте — изменения не применятся, пока не нажмёте «Применить».</div>
+          <textarea id="definetxt" placeholder="define entity new-thing;"></textarea>
+          <div class="row">
+            <button class="btn" onclick="validateDef()">Проверить</button>
+            <button class="btn primary" onclick="applyDef()">Применить</button>
+            <button class="btn" onclick="reload()">Обновить схему</button>
+          </div>
+        </div>
+      </details>
+    </div>
+  </aside>
+</div>
+</main>
+
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script>
+let cy = null, schema = null, selected = null;
+const $ = id => document.getElementById(id);
+const PALETTE = { entity: '#4f8ef7', relation: '#9b6bf0', attribute: '#53d3b8' };
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function say(text, ok) {
+  const el = $('msg');
+  el.className = 'msg ' + (ok === true ? 'ok' : ok === false ? 'err' : '');
+  el.textContent = text || '';
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, opts || {}));
+  let body = {};
+  try { body = await r.json(); } catch (e) { body = {}; }
+  if (!r.ok) {
+    const detail = body.detail || body.error || ('HTTP ' + r.status);
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+  }
+  return body;
+}
+
+async function loadStatus() {
+  try {
+    const s = await api('/api/v1/ontology/status');
+    const dot = $('st-dot'), text = $('st-text');
+    if (s.available) {
+      dot.className = 'dot ok'; text.textContent = 'TypeDB подключён';
+      $('st-db').textContent = s.db; $('st-addr').textContent = s.addr;
+    } else {
+      dot.className = 'dot bad';
+      text.textContent = s.driver_installed ? 'TypeDB не настроен: не задан пароль' : 'драйвер typedb-driver не установлен';
+      $('st-db').textContent = s.db; $('st-addr').textContent = s.addr;
+      say('Редактор не может читать схему: ' + text.textContent + '. Остальные разделы системы работают.', false);
+    }
+    return s.available;
+  } catch (e) {
+    $('st-dot').className = 'dot bad';
+    $('st-text').textContent = 'нет ответа от api';
+    say('Статус не получен: ' + e.message, false);
+    return false;
+  }
+}
+
+async function reload() {
+  try {
+    schema = await api('/api/v1/ontology/schema');
+    $('st-count').textContent = schema.ntypes || 0;
+    $('st-dot').className = 'dot ok';
+    $('st-text').textContent = 'TypeDB подключён';
+    $('st-db').textContent = schema.source || '—';
+    renderGraph(); renderList();
+    say('');
+  } catch (e) {
+    say('Схема не прочитана: ' + e.message, false);
+  }
+}
+
+function renderGraph() {
+  const nodes = [], edges = [], known = new Set();
+  const add = (id, label, kind) => { if (!known.has(id)) { known.add(id); nodes.push({ data: { id: id, label: label, kind: kind } }); } };
+
+  (schema.entities || []).forEach(e => add('e:' + e.label, e.label, 'entity'));
+  (schema.relations || []).forEach(r => add('r:' + r.label, r.label, 'relation'));
+  (schema.attributes || []).forEach(a => add('a:' + a.label, a.label, 'attribute'));
+
+  (schema.entities || []).forEach(e => {
+    (e.plays || []).forEach(role => {
+      const rel = String(role).split(':')[0];
+      if (known.has('r:' + rel)) {
+        edges.push({ data: { id: 'p:' + e.label + ':' + role, source: 'e:' + e.label, target: 'r:' + rel, label: String(role).replace(rel + ':', '') } });
+      }
+    });
+  });
+
+  if (cy) { cy.destroy(); cy = null; }
+  cy = cytoscape({
+    container: $('cy'),
+    elements: nodes.concat(edges),
+    style: [
+      { selector: 'node', style: {
+          'label': 'data(label)', 'font-size': '10px', 'color': '#5b6573',
+          'background-color': n => PALETTE[n.data('kind')] || '#8a94a6',
+          'width': '42px', 'height': '42px', 'text-valign': 'bottom', 'text-margin-y': 4,
+          'border-width': 2, 'border-color': '#ffffff' } },
+      { selector: 'node[kind="relation"]', style: { 'shape': 'diamond' } },
+      { selector: 'node[kind="attribute"]', style: { 'shape': 'round-rectangle', 'width': '52px' } },
+      { selector: 'edge', style: {
+          'curve-style': 'bezier', 'target-arrow-shape': 'triangle',
+          'arrow-color': '#b9c1cc', 'line-color': '#b9c1cc', 'width': 1.2,
+          'label': 'data(label)', 'font-size': '8px', 'color': '#8a94a6' } },
+      { selector: ':selected', style: { 'border-width': 3, 'border-color': '#08a652' } }
+    ],
+    layout: { name: 'cose', animate: false, padding: 30, nodeRepulsion: 6000 }
+  });
+  cy.on('tap', 'node', evt => showCard(evt.target.id()));
+}
+
+function renderList() {
+  const el = $('typelist');
+  el.innerHTML = '';
+  const rows = [...(schema.entities || []), ...(schema.relations || []), ...(schema.attributes || [])];
+  if (!rows.length) { el.innerHTML = '<div class="muted">схема пуста</div>'; return; }
+  rows.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'kvline';
+    const owns = (t.owns || []).length;
+    row.innerHTML = '<span>' + esc(t.label) + ' <span class="muted">(' + esc(t.kind) + ')</span></span>' +
+                    '<span>' + (owns ? owns + ' owns' : '') + '</span>';
+    row.onclick = () => showCard((t.kind === 'entity' ? 'e:' : t.kind === 'relation' ? 'r:' : 'a:') + t.label);
+    el.appendChild(row);
+  });
+}
+
+function showCard(id) {
+  selected = id;
+  const kind = String(id).split(':')[0];
+  const pool = kind === 'e' ? schema.entities : kind === 'r' ? schema.relations : schema.attributes;
+  const label = String(id).slice(2);
+  const t = (pool || []).find(x => x.label === label);
+  const card = $('card');
+  if (!t) { card.innerHTML = '<div class="muted">тип не найден в схеме</div>'; return; }
+
+  let h = '<div class="kvline"><span><b>' + esc(t.label) + '</b></span><span>' + esc(t.kind) + '</span></div>';
+  if ((t.owns || []).length) h += '<div style="margin-top:6px"><span class="muted">owns:</span><br>' + t.owns.map(x => '<span class="badge">' + esc(x) + '</span>').join('') + '</div>';
+  if ((t.plays || []).length) h += '<div style="margin-top:6px"><span class="muted">plays:</span><br>' + t.plays.map(x => '<span class="badge">' + esc(x) + '</span>').join('') + '</div>';
+  if (kind !== 'a') h += '<div class="row"><button class="btn danger" onclick="deleteType(\'' + esc(t.kind) + '\',\'' + esc(t.label) + '\')">Удалить тип</button></div>';
+  card.innerHTML = h;
+
+  if (cy) { const node = cy.$id(id); if (node && node.length) { cy.elements().unselect(); node.select(); } }
+}
+
+async function createType() {
+  const kind = $('newkind').value;
+  const label = $('newlabel').value.trim();
+  const owns = $('newowns').value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!label) { say('Укажите имя типа', false); return; }
+  try {
+    const r = await api('/api/v1/ontology/type', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: kind, label: label, owns: owns })
+    });
+    if (r.ok) {
+      say('Тип ' + label + ' создан', true);
+      $('newlabel').value = ''; $('newowns').value = '';
+      reload();
+    } else { say('Не создан: ' + (r.error || 'ошибка'), false); }
+  } catch (e) { say('Не создан: ' + e.message, false); }
+}
+
+async function validateDef() {
+  const text = $('definetxt').value;
+  if (!text.trim()) { say('Пустой текст', false); return; }
+  try {
+    const r = await api('/api/v1/ontology/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ define: text })
+    });
+    say(r.ok ? 'Текст корректен, изменения не применены' : ('Ошибка: ' + (r.error || '')), r.ok);
+  } catch (e) { say('Проверка не выполнена: ' + e.message, false); }
+}
+
+async function applyDef() {
+  const text = $('definetxt').value;
+  if (!text.trim()) { say('Пустой текст', false); return; }
+  try {
+    const r = await api('/api/v1/ontology/apply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ define: text })
+    });
+    say(r.ok ? 'Изменения применены к схеме' : ('Не применено: ' + (r.error || '')), r.ok);
+    if (r.ok) reload();
+  } catch (e) { say('Не применено: ' + e.message, false); }
+}
+
+async function deleteType(kind, label) {
+  if (!confirm('Удалить тип ' + label + '? Действие меняет схему TypeDB.')) return;
+  try {
+    const r = await api('/api/v1/ontology/type/' + encodeURIComponent(kind) + '/' + encodeURIComponent(label), { method: 'DELETE' });
+    say(r.ok ? 'Тип ' + label + ' удалён' : ('Не удалён: ' + (r.error || '')), r.ok);
+    if (r.ok) { $('card').innerHTML = '<div class="muted">тип удалён</div>'; reload(); }
+  } catch (e) { say('Не удалён: ' + e.message, false); }
+}
+
+function logout() {
+  try { localStorage.removeItem('kag-token'); } catch (e) {}
+  fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }).finally(() => location.href = '/login');
+}
+
+(async function init() {
+  const ok = await loadStatus();
+  if (ok) await reload();
+})();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

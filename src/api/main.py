@@ -18,6 +18,7 @@ from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
 from src.api.routes import system_state
+from src.api.routes import ontology
 from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
@@ -260,6 +261,7 @@ app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
 # разбирать спорные значения должен тот, кто загрузил документ, а не только администратор.
 app.include_router(labels.router, prefix="/api/v1/labels", tags=["labels"])
 app.include_router(system_state.router, tags=["system"])
+app.include_router(ontology.router, prefix="/api/v1/ontology", tags=["ontology"])
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -402,6 +404,19 @@ async def semantics_page(request: Request):
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
     return await _html_response(os.path.join(static_path, "semantics.html"))
+
+
+@app.get("/ontology", summary="Онтология TypeDB: просмотр и редактирование (только для admin)")
+async def ontology_page(request: Request):
+    """Редактор онтологии: граф типов, карточка, создание/удаление, валидация и применение.
+
+    Только для админа: правка схемы меняет доказательную базу ответов (ADR-004).
+    Данные — из /api/v1/ontology/*, поэтому состояние берётся из самой TypeDB,
+    а не из списка в странице: правка снаружи видна после обновления.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology.html"))
 
 
 @app.get("/docker", summary="Docker Dashboard")
