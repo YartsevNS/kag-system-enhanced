@@ -85,23 +85,32 @@ def fetch_document_data(doc_kind: str, domain: Optional[str] = None) -> Dict[str
     Возвращает структуру для генератора. Пустые списки = данных нет (эндпоинт вернёт 404).
     """
     docs_by_kind: Dict[str, List[Dict[str, Any]]] = {}   # title -> список требований
-    domain_filter = f'$d has name "{domain}";' if domain else ""
+    # Область применения живёт НЕ на документе, а на требовании: requirement-scope -> application-domain.
+    # Без этого условия выбор «КИИ» игнорировался и выдавался любой документ нужного вида.
+    domain_clause = ""
+    if domain:
+        domain_clause = (
+            '$sc (requirement: $r, domain: $dom) isa requirement-scope; '
+            f'$dom has name "{domain}"; '
+        )
 
     # 1. Документы нужного вида + связанные требования (без union; параметры — отдельным запросом)
     q_docs = (
         'match $doc isa compliance-document, has title $dtitle, has doc-kind $dk; '
-        '$dk == "%s"; '
+        f'$dk == "{doc_kind}"; '
         '$req (requirement: $r, document: $doc) isa requirement-regulation; '
         '$r isa security-requirement, has requirement-id $rid; '
+        f'{domain_clause}'
         'fetch { "документ": $dtitle, "вид": $dk, "требование": $rid };'
-    ) % doc_kind
+    )
     try:
         with _driver() as driver:
             with driver.transaction(_cfg()["db"], TransactionType.READ) as tx:
                 rows = list(tx.query(q_docs).resolve())
     except Exception as e:
         logger.warning(f"TypeDB запрос документа пропущен: {e}")
-        return {"title": _KIND_LABEL.get(doc_kind, doc_kind), "documents": {}}
+        return {"title": _KIND_LABEL.get(doc_kind, doc_kind),
+                "doc_kind": doc_kind, "domain": domain or "", "documents": {}}
 
     visible_docs: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -184,6 +193,8 @@ def fetch_document_data(doc_kind: str, domain: Optional[str] = None) -> Dict[str
             req["evidences"] = (p or {}).get("evidences", [])
 
     return {"title": _KIND_LABEL.get(doc_kind, doc_kind),
+            "doc_kind": doc_kind,
+            "domain": domain or "",
             "documents": visible_docs}
 
 
@@ -204,6 +215,8 @@ def build_docx(data: Dict[str, Any]) -> bytes:
     run.bold = True
     run.font.size = Pt(20)
     doc.add_paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y')}")
+    if data.get("domain"):
+        doc.add_paragraph(f"Область применения: {data['domain']}")
 
     # Основные положения / основания
     doc.add_heading("1. Общие положения", level=1)

@@ -503,6 +503,18 @@ async def generate_document_from_ontology(
 
     data = fetch_document_data(doc_kind, domain)
     if not data.get("documents"):
+        if domain:
+            # Частая причина: требования в онтологии есть, но у них не проставлена область
+            # (requirement-scope -> application-domain). Тогда фильтр по области даёт пусто —
+            # говорим об этом прямо, иначе выглядит как «документов вида нет вообще».
+            base = fetch_document_data(doc_kind, None)
+            if base.get("documents"):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"В области «{domain}» размеченных требований нет, хотя документы вида "
+                           f"«{doc_kind}» в онтологии есть. Проставьте связь requirement-scope "
+                           f"(требование → область «{domain}») и повторите.",
+                )
         raise HTTPException(
             status_code=404,
             detail=f"Документов вида «{doc_kind}»{(' в области «' + domain + '»') if domain else ''} "
@@ -520,7 +532,12 @@ async def generate_document_from_ontology(
                 "регламент": "reglament", "regulation": "regulation",
                 "инструкция": "instrukciya", "instruction": "instruction",
                 "стандарт": "standard", "standard": "standard"}.get(doc_kind.lower(), "document")
-    filename = f"{slug}_{datetime.now().strftime('%Y%m%d')}.docx"
+    # Область — в имени файла: иначе две генерации подряд дают одно имя,
+    # браузер сохраняет вторую как «… (1)», и легко открыть старый документ.
+    dom_slug = {"ГИС": "gis", "ИСПДн": "ispdn", "КИИ": "kii",
+                "Финансы": "fin"}.get((domain or ""), "")
+    parts = [slug] + ([dom_slug] if dom_slug else []) + [datetime.now().strftime('%Y%m%d')]
+    filename = "_".join(parts) + ".docx"
     return Response(
         content=doc_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
