@@ -34,12 +34,25 @@ except Exception:  # pragma: no cover - срабатывает только бе
 
 
 def _cfg() -> Dict[str, str]:
-    return {
-        "addr": os.getenv("TYPEDB_ADDR", "localhost:1729"),
-        "db": os.getenv("TYPEDB_DB", "cybersecurity_ontology"),
-        "user": os.getenv("TYPEDB_USER", "admin"),
-        "pass": os.getenv("TYPEDB_PASS", ""),
-    }
+    """Подключение берётся из конфигурации приложения (src/config.py или .env),
+    а не хардкодится: смена базы — это настройка, а не правка кода."""
+    try:
+        from src.config import get_settings
+
+        s = get_settings()
+        return {
+            "addr": s.TYPEDB_ADDR,
+            "db": s.TYPEDB_DB,
+            "user": s.TYPEDB_USER,
+            "pass": s.TYPEDB_PASS,
+        }
+    except Exception:  # noqa: BLE001
+        return {
+            "addr": os.getenv("TYPEDB_ADDR", "localhost:1729"),
+            "db": os.getenv("TYPEDB_DB", "cybersecurity_ontology"),
+            "user": os.getenv("TYPEDB_USER", "admin"),
+            "pass": os.getenv("TYPEDB_PASS", ""),
+        }
 
 
 def is_available() -> bool:

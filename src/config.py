@@ -241,7 +241,17 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Database (for user auth)
-    DATABASE_URL: str = "postgresql://kag:kagpass123@kag-db:5432/kag"
+    DATABASE_URL: str = "postgresql://kag:***@kag-db:5432/kag"
+
+    # ── Онтология TypeDB ────────────────────────────────────────────────────
+    # Подключение задаётся ЗДЕСЬ (или в .env теми же именами), а не в коде:
+    # смена базы — это конфигурация, а не правка исходников и пересборка.
+    TYPEDB_ADDR: str = "localhost:1729"
+    TYPEDB_DB: str = "cybersecurity_ontology"
+    TYPEDB_USER: str = "admin"
+    TYPEDB_PASS: str = ""
+    # Запись онтологии при обработке документа и при принятии предложения.
+    TYPEDB_WRITE_ENABLED: bool = True
 
     class Config:
         env_file = ".env"

@@ -2082,8 +2082,8 @@ class DocumentService:
                         )
 
                     # ── TypeDB: запись в онтологию (ADR-007) ─────────────────────
-                    # Отдельный контур: промпт из БД (/ontology/prompt), продуктовый
-                    # слой kebab-case. Сбой TypeDB не влияет на Neo4j-граф и на
+                    # Отдельный контур: промпт из БД (/ontology/prompt), типы
+                    # контура корпуса. Сбой TypeDB не влияет на Neo4j-граф и на
                     # обработку документа — модуль не бросает исключений наружу.
                     try:
                         from src.indexing import typedb_writer

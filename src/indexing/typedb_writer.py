@@ -42,8 +42,11 @@ except Exception:  # pragma: no cover - срабатывает только бе
 
 
 # ── схема: что вообще разрешено писать (по промпту из БД) ───────────────────
-# Типы соответствуют TBox промпта извлечения сущностей (snake_case) — это тот
-# слой, который в БД уже объявлен с ent-key и провенансом.
+# КОНТУР КОРПУСА — типы, которые извлекаются из нормативных документов
+# (регулятор, документ, пункт, мера, объект КИИ, источник угрозы). Именно они
+# объявлены в БД с ent-key и провенансом, и именно по ним идёт наполнение.
+# Второй контур — ДОКАЗАТЕЛЬНЫЙ (требования, документы компании, СЗИ, доказательства) —
+# наполняется внутренними документами заказчика, см. write_proposal().
 ENTITY_TYPES: Dict[str, tuple] = {
     "regulator": ("name",),                     # или short_name
     "regulatory_document": ("title",),          # или number
@@ -71,12 +74,25 @@ _PROVENANCE_TYPES = tuple(ENTITY_TYPES.keys())
 
 
 def _cfg() -> Dict[str, str]:
-    return {
-        "addr": os.getenv("TYPEDB_ADDR", "localhost:1729"),
-        "db": os.getenv("TYPEDB_DB", "cybersecurity_ontology"),
-        "user": os.getenv("TYPEDB_USER", "admin"),
-        "pass": os.getenv("TYPEDB_PASS", ""),
-    }
+    """Параметры подключения: сначала файл конфигурации/окружение приложения,
+    затем — переменные процесса (совместимость со старыми вызовами)."""
+    try:
+        from src.config import get_settings
+
+        s = get_settings()
+        return {
+            "addr": s.TYPEDB_ADDR,
+            "db": s.TYPEDB_DB,
+            "user": s.TYPEDB_USER,
+            "pass": s.TYPEDB_PASS,
+        }
+    except Exception:  # noqa: BLE001 — конфиг недоступен (пилотный скрипт, тест)
+        return {
+            "addr": os.getenv("TYPEDB_ADDR", "localhost:1729"),
+            "db": os.getenv("TYPEDB_DB", "cybersecurity_ontology"),
+            "user": os.getenv("TYPEDB_USER", "admin"),
+            "pass": os.getenv("TYPEDB_PASS", ""),
+        }
 
 
 def is_available() -> bool:
@@ -85,7 +101,8 @@ def is_available() -> bool:
 
 
 def write_enabled() -> bool:
-    """Отдельный выключатель записи (system/typedb.write_enabled), по умолчанию — вкл."""
+    """Выключатель записи: настройка админки system/typedb.write_enabled главнее,
+    затем — TYPEDB_WRITE_ENABLED из конфигурации приложения."""
     try:
         from src.api.services.config_store import config_store
 
@@ -94,7 +111,12 @@ def write_enabled() -> bool:
             return bool(cfg["write_enabled"])
     except Exception:  # noqa: BLE001
         pass
-    return True
+    try:
+        from src.config import get_settings
+
+        return bool(get_settings().TYPEDB_WRITE_ENABLED)
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _driver():
@@ -274,7 +296,7 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
     return entities, relations, stats
 
 
-# ── схема: провенанс (типы snake_case уже объявлены в БД) ───────────────────
+# ── схема: провенанс (типы контура корпуса уже объявлены в БД) ──────────────
 # В базе у всех шести типов уже есть ent-key, source-chunk-id и
 # source-chunk-ids @card(0..) — дополнительных определений не нужно. Функция
 # оставлена как быстрая проверка: если атрибута нет, добавляет только его.
@@ -435,7 +457,7 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
 
 # ── запись ПРИНЯТОГО предложения (очередь онтологии → TypeDB) ──────────────
 def write_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
-    """Записать принятое человеком предложение в онтологию (snake_case).
+    """Записать принятое человеком предложение в онтологию (контур корпуса).
 
     Очередь предложений живёт в Postgres, онтология — в TypeDB, и пока между
     ними не было звена, «принято» означало только смену статуса: у всех
