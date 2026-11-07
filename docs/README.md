@@ -14,6 +14,8 @@
 | Файл | Содержание |
 |---|---|
 | [PROJECT-MAP.md](PROJECT-MAP.md) | **Карта проекта** — читать перед любыми изменениями |
+| [ARCHITECTURE-JOURNAL.md](ARCHITECTURE-JOURNAL.md) | Журнал архитектуры: фактический состав серверов, потоки данных, что и когда изменилось |
+| [changes/](changes/README.md) | Изменения по методике OpenSpec: proposal → specs → design → tasks → result |
 | [architecture-current.md](architecture-current.md) | Архитектура: сервисы, потоки данных, базы, модули |
 | [guides/deploy.md](guides/deploy.md) | Сборка образов, выкат, состав стенда, откат, переезд |
 | [guides/table-structure-bakeoff.md](guides/table-structure-bakeoff.md) | Все замеры OCR и таблиц с обоснованиями |
