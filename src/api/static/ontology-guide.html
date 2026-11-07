@@ -1,0 +1,445 @@
+<!DOCTYPE html><html lang="ru"><head>
+<script id="kag-theme-boot">/* тема до отрисовки: светлая по умолчанию, выбор пользователя хранится в localStorage */
+try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag-theme")||"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KAG — как устроена онтология: уроки и примеры</title>
+<style>
+/* Цвета только через переменные theme.css: брендбук заказчика подменяется одним файлом. */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font,system-ui,'Segoe UI',sans-serif);background:var(--bg,#fff);color:var(--text,#1a1a1a);display:flex;min-height:100vh}
+nav{width:240px;background:var(--panel,#f4f5f7);border-right:1px solid var(--border-s,#e3e5e9);position:fixed;height:100vh;z-index:10;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;letter-spacing:-0.4px;border-bottom:1px solid var(--border-s,#e3e5e9);margin-bottom:12px}
+nav .logo span{color:var(--accent-h,#08a652)}
+main{margin-left:240px;flex:1;padding:24px 28px 60px;min-width:0;max-width:1180px}
+h1{font-size:26px;font-weight:600;letter-spacing:-0.5px;margin-bottom:4px}
+.sub{color:var(--text3,#6b7280);font-size:13px;margin-bottom:16px;max-width:900px;line-height:1.6}
+.panel{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:12px 14px;margin-bottom:10px}
+.panel summary{font-size:15px;font-weight:600;cursor:pointer;user-select:none}
+.panel .num{color:var(--text4,#8a919b);font-weight:600;margin-right:8px}
+.lead{color:var(--text2,#444);font-size:13.5px;line-height:1.7;margin:12px 0 10px}
+p{font-size:13.5px;line-height:1.7;margin:8px 0;color:var(--text2,#444)}
+ul,ol{margin:8px 0 8px 22px;font-size:13.5px;line-height:1.75;color:var(--text2,#444)}
+li{margin:4px 0}
+pre{background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius-sm,6px);padding:12px;overflow:auto;font-family:var(--mono,'Consolas',monospace);font-size:12.5px;line-height:1.6;margin:10px 0;color:var(--text,#1a1a1a)}
+code{font-family:var(--mono,'Consolas',monospace);font-size:12.5px;background:var(--elevated,#fff);border:1px solid var(--border-s,#e3e5e9);padding:1px 5px;border-radius:4px;white-space:nowrap}
+pre code{background:none;border:none;padding:0;white-space:pre}
+.note{background:var(--elevated,#fff);border-left:3px solid var(--accent-h,#08a652);padding:10px 14px;margin:12px 0;font-size:13px;line-height:1.65;border-radius:0 6px 6px 0;color:var(--text2,#444)}
+.note.warn{border-left-color:var(--amber,#b26a00)}
+.note.bad{border-left-color:var(--red,#c62828)}
+.note b{color:var(--text,#1a1a1a)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:12px 0}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border-s,#e3e5e9);vertical-align:top;line-height:1.55}
+th{color:var(--text4,#8a919b);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em}
+td code{font-size:11.5px}
+.toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:6px 20px;font-size:13px;padding:4px 0}
+.toc a{color:var(--accent-h,#08a652);text-decoration:none;padding:3px 0;line-height:1.5}
+.toc a:hover{text-decoration:underline}
+.muted{color:var(--text4,#8a919b);font-size:12.5px}
+</style>
+<link rel="stylesheet" href="/static/theme.css">
+</head><body>
+<nav><div data-site-nav></div></nav>
+<main>
+<h1>Как устроена онтология: уроки и примеры</h1>
+<div class="sub">Учебная страница рядом с <a href="/ontology" style="color:var(--accent-h,#08a652)">редактором онтологии</a>.
+Она ничего не меняет в базе: только объясняет, как устроена схема TypeDB и почему в ней именно такие типы.
+Все примеры синтаксиса взяты из нашей рабочей схемы и проверены на TypeDB 3.14.1.</div>
+
+<div class="panel"><details>
+<summary>Содержание</summary>
+<div class="toc" style="margin-top:12px">
+<a href="#u1">1. Онтология — это три слоя</a>
+<a href="#u2">2. Кирпичи схемы: сущность, атрибут, связь, роль</a>
+<a href="#u3">3. Урок: первая сущность</a>
+<a href="#u4">4. Урок: связь с ролями</a>
+<a href="#u5">5. Урок: запись данных</a>
+<a href="#u6">6. Урок: вопросы к базе</a>
+<a href="#u7">7. Урок: правило, которое выводит нарушение</a>
+<a href="#u8">8. Кардинальность и уникальность</a>
+<a href="#u9">9. Провенанс: откуда взялся факт</a>
+<a href="#u10">10. Наша схема целиком</a>
+<a href="#u11">11. Восемь ошибок новичка</a>
+<a href="#u12">12. Как добавить новый тип: пошагово</a>
+<a href="#u13">13. Чек-лист перед применением</a>
+<a href="#u14">14. Словарь терминов</a>
+</div>
+</details></div>
+
+<div class="panel" id="u1"><details>
+<summary><span class="num">01</span>Онтология — это три слоя</summary>
+<div class="style-wrap" style="margin-top:12px">
+<p>Онтология в TypeDB — не картинка и не список сущностей. Это три уровня, каждый живёт отдельно:</p>
+<table>
+<tr><th>Слой</th><th>Что описывает</th><th>Как создаётся</th><th>Меняется когда</th></tr>
+<tr><td><b>Схема</b> (TBox)</td><td>какие бывают типы, какие у них свойства и связи</td><td><code>define</code></td><td>редко, по решению человека</td></tr>
+<tr><td><b>Данные</b> (ABox)</td><td>конкретные объекты: этот документ, эта мера</td><td><code>insert</code></td><td>при каждом разборе документа</td></tr>
+<tr><td><b>Правила</b></td><td>что следует из данных: «если A и B, то нарушение»</td><td><code>fun</code></td><td>когда меняется логика проверки</td></tr>
+</table>
+<p>Путаница, которая случается чаще всего: пытаются «завести новый вид документа» как данные.
+Если у документа другие свойства и другие связи — это новый тип в схеме. Если те же свойства —
+это новый объект существующего типа.</p>
+<div class="note"><b>Почему в этом продукте схема важнее данных.</b> Данные извлекает модель из текста,
+и она ошибается. Схема — это рамка, за которую модель не может выйти: если в схеме нет типа
+<code>penalty</code>, то «штраф» не появится в базе как отдельная сущность, сколько бы раз он ни
+встретился в тексте. Поэтому сначала договариваются о схеме, потом наполняют.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u2"><details>
+<summary><span class="num">02</span>Кирпичи схемы: сущность, атрибут, связь, роль</summary>
+<div style="margin-top:12px">
+<table>
+<tr><th>Понятие</th><th>В TypeQL</th><th>Смысл</th><th>Пример из нашей схемы</th></tr>
+<tr><td>Атрибут</td><td><code>attribute code, value string;</code></td><td>значение с типом: строка, число, дата</td><td><code>code</code> — код меры защиты</td></tr>
+<tr><td>Сущность</td><td><code>entity security_measure, owns code;</code></td><td>объект, у которого есть свойства</td><td>мера защиты</td></tr>
+<tr><td>Связь</td><td><code>relation measure_definition, relates core_measure;</code></td><td>факт об отношениях между объектами</td><td>«пункт определяет меру»</td></tr>
+<tr><td>Роль</td><td><code>relates core_measure @card(1..1)</code></td><td>место в связи, которое занимает сущность</td><td>мера в роли определяемой</td></tr>
+</table>
+<p>Три глагола, которые надо запомнить:</p>
+<ul>
+<li><code>owns</code> — «сущность имеет атрибут». Пишется у сущности.</li>
+<li><code>relates</code> — «в связи есть такая роль». Пишется у связи.</li>
+<li><code>plays</code> — «сущность может занимать эту роль». Пишется у сущности.</li>
+</ul>
+<div class="note">Связь в TypeDB — не стрелка между двумя объектами «напрямую», а отдельный объект с ролями.
+Это позволяет одной связью описать и пару, и тройку участников, и добавить связи собственные атрибуты
+(например, дату вступления в силу).</div>
+</div>
+</details></div>
+
+<div class="panel" id="u3"><details>
+<summary><span class="num">03</span>Урок: первая сущность</summary>
+<div style="margin-top:12px">
+<p><b>Задача.</b> Нужно хранить нормативные документы: номер, название, вид.</p>
+<p><b>Шаг 1. Объявить атрибуты.</b> Один атрибут — одно значение одного типа. Не надо делать
+«универсальное поле» на всё сразу.</p>
+<pre><code>define
+attribute number, value string;
+attribute title, value string;
+attribute doc_type, value string;</code></pre>
+<p><b>Шаг 2. Объявить сущность и привязать атрибуты.</b></p>
+<pre><code>entity regulatory_document,
+  owns number,
+  owns title,
+  owns doc_type;</code></pre>
+<p><b>Что это даёт.</b> Теперь в базе может появиться объект этого типа, и TypeDB не пропустит
+атрибут, которого нет у типа: попытка записать «дату» туда, где объявлены только три поля, будет
+ошибкой схемы, а не тихой потерей данных.</p>
+<div class="note warn"><b>Частая ошибка:</b> назвать сущность во множественном числе или с глаголом
+(<code>documents</code>, <code>has_measure</code>). Тип отвечает на вопрос «что это», поэтому
+<code>regulatory_document</code>, а не <code>documents</code>.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u4"><details>
+<summary><span class="num">04</span>Урок: связь с ролями</summary>
+<div style="margin-top:12px">
+<p><b>Задача.</b> Документ выпущен регулятором. Регулятор и документ — разные сущности, между ними факт.</p>
+<p><b>Шаг 1. Связь с ролями.</b></p>
+<pre><code>relation document_issuance,
+  relates issuer @card(1..1),
+  relates regulated_item @card(1..1);</code></pre>
+<p><b>Шаг 2. Сущности объявляют, какие роли они могут играть.</b></p>
+<pre><code>entity regulator,
+  owns name,
+  plays document_issuance:issuer;
+
+entity regulatory_document,
+  owns title,
+  plays document_issuance:regulated_item;</code></pre>
+<p><b>Как это читается вслух:</b> «есть связь document_issuance; в ней роль issuer, её занимает
+regulator; роль regulated_item, её занимает regulatory_document».</p>
+<p><b>Зачем роли, если можно просто две ссылки.</b> Роли не дают перепутать стороны: записать
+регулятора в роли <code>regulated_item</code> TypeDB не позволит, потому что <code>regulator</code>
+не объявил, что играет эту роль. Это ловит зеркальные ошибки, которых не видно в тексте.</p>
+<div class="note bad"><b>Если забыть <code>plays</code></b>, связь создастся в схеме, но вставить её
+с конкретными объектами не получится: ошибка «type does not play role». Сначала <code>plays</code>
+у сущности, потом вставка.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u5"><details>
+<summary><span class="num">05</span>Урок: запись данных</summary>
+<div style="margin-top:12px">
+<p><b>Объект.</b> Создаём документ с тремя свойствами.</p>
+<pre><code>insert
+$d isa regulatory_document,
+  has number "57580.2-2018",
+  has title "ГОСТ Р 57580.2-2018",
+  has doc_type "ГОСТ";</code></pre>
+<p><b>Связь между существующими объектами.</b> Сначала находим объекты запросом, потом вставляем
+связь с ролями. Так это делает и наш код записи в онтологию:</p>
+<pre><code>match
+  $r isa regulator, has short_name "ФСТЭК";
+  $d isa regulatory_document, has number "57580.2-2018";
+insert
+  document_issuance (issuer: $r, regulated_item: $d);</code></pre>
+<p><b>Проверка, что записалось.</b></p>
+<pre><code>match
+  $d isa regulatory_document, has title $t;
+  document_issuance (issuer: $r, regulated_item: $d);</code></pre>
+<p>Если запрос вернул строку — связь есть. Если пусто — либо не нашлись объекты по условию
+(опечатка в номере), либо не выполнено <code>plays</code>.</p>
+<div class="note"><b>Правило нашего продукта:</b> ручная вставка в рабочую базу запрещена.
+Запись делает только конвейер обработки документа или принятие предложения из очереди —
+так у каждого факта есть источник.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u6"><details>
+<summary><span class="num">06</span>Урок: вопросы к базе</summary>
+<div style="margin-top:12px">
+<p>Запрос в TypeQL — это <code>match</code> с шаблоном. Переменные начинаются с <code>$</code>,
+условия перечисляются в одном блоке.</p>
+<p><b>Сколько мер защиты в базе.</b></p>
+<pre><code>match $m isa security_measure;
+reduce $count = count;</code></pre>
+<p><b>Меры с определённым кодом.</b> Условие по атрибуту: код начинается с «Б.» — меры по
+обеспечению безопасности.</p>
+<pre><code>match
+  $m isa security_measure, has code $c;
+  $c like "Б.%";</code></pre>
+<p><b>Вывести значения, а не объекты.</b></p>
+<pre><code>match
+  $m isa security_measure, has code $c;
+  $m has description $dsc;</code></pre>
+<div class="note warn"><b>В TypeDB 3 не работает</b> <code>get $x</code> в конце запроса (это синтаксис
+второй версии) и не работает <code>match $e isa entity</code> — слово <code>entity</code>
+зарезервировано. Считать объекты «вообще» нельзя: только по конкретному типу.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u7"><details>
+<summary><span class="num">07</span>Урок: правило, которое выводит нарушение</summary>
+<div style="margin-top:12px">
+<p>Правило в TypeDB 3 — функция, которая возвращает набор объектов. Она не хранит данные,
+а вычисляет вывод каждый раз по текущему состоянию базы.</p>
+<p><b>Наше правило «несертифицированное СЗИ у объекта КИИ 1 категории»:</b></p>
+<pre><code>fun violated_certification() -> { cii_object, security_requirement }:
+    match
+      $asset isa cii_object, has cii-category 1;
+      $szi isa security_software, has is-certified false;
+      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      $law isa security_requirement, has requirement-id "ФСТЭК-239-п11.1";
+    return { $asset, $law };</code></pre>
+<p><b>Как читать.</b> «Вернуть пары (объект КИИ, требование) такие, что: у объекта категория 1,
+на нём работает несертифицированное СЗИ, и есть требование с конкретным идентификатором».</p>
+<p><b>Проверка правила</b> — обычный вызов в запросе:</p>
+<pre><code>match let $asset, $law in violated_certification();</code></pre>
+<p><b>Почему это сильнее, чем проверка текстом.</b> Правило срабатывает на любых данных,
+удовлетворяющих условию, и его результат воспроизводим: те же объекты всегда дают тот же вывод.
+Но у него есть цена — <b>правило выдаёт ровно то, что описано</b>. Если условие записано как
+«категория 1», объекты категории 2 в вывод не попадут, и это не ошибка базы, а ошибка описания.</p>
+<div class="note bad"><b>Проверка обязательна на тестовых данных.</b> Правило, которое не возвращает
+ни одной строки, ничего не доказывает: оно может быть верным, а может быть написано мимо.
+Сначала вставляют три-четыре объекта, один из которых обязан попасть в вывод, и смотрят,
+что он попал.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u8"><details>
+<summary><span class="num">08</span>Кардинальность и уникальность</summary>
+<div style="margin-top:12px">
+<table>
+<tr><th>Запись</th><th>Что значит</th><th>Пример у нас</th></tr>
+<tr><td><code>owns ent-key @key</code></td><td>уникальный идентификатор: двух объектов с одним значением быть не может</td><td>у всех 10 типов</td></tr>
+<tr><td><code>owns source-chunk-ids @card(0..)</code></td><td>ноль или больше значений: объект встречается в нескольких фрагментах</td><td>провенанс</td></tr>
+<tr><td><code>relates issuer @card(1..1)</code></td><td>ровно один участник в роли</td><td>у документа один издатель</td></tr>
+<tr><td><code>relates protected_system @card(1..1)</code></td><td>ровно один объект в роли</td><td>СЗИ стоит на одном объекте</td></tr>
+</table>
+<p><b>Зачем @key.</b> Он превращает повторную вставку в безопасную: наш код записи сначала ищет
+объект по <code>ent-key</code>, и если нашёл — не создаёт второй, а добавляет провенанс.
+Без ключа один и тот же ГОСТ после повторной обработки появился бы дважды.</p>
+<p><b>Как строится ent-key.</b> Не случайно и не «как пришло из модели», а из устойчивых признаков
+типа, затем sha1 и первые 16 символов:</p>
+<table>
+<tr><th>Тип</th><th>Из чего ключ</th></tr>
+<tr><td><code>regulator</code></td><td>short_name + name</td></tr>
+<tr><td><code>regulatory_document</code></td><td>number + doc_type + title</td></tr>
+<tr><td><code>structural_element</code></td><td>документ + индекс пункта + первые 200 символов текста</td></tr>
+<tr><td><code>security_measure</code></td><td>код меры + первые 200 символов описания</td></tr>
+</table>
+<div class="note warn"><b>Цена ключа.</b> Если признак нестабилен (например, номер документа в тексте
+записан по-разному), один объект распадётся на два. Если признак слишком общий — два разных объекта
+склеятся в один. Поэтому ключ выбирают по тому, что в документах действительно постоянно.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u9"><details>
+<summary><span class="num">09</span>Провенанс: откуда взялся факт</summary>
+<div style="margin-top:12px">
+<p>Провенанс — это ответ на вопрос «на каком фрагменте текста основано утверждение». Без него
+онтология становится набором утверждений без доказательств, и проверить её нельзя.</p>
+<p>У нас у каждой сущности есть три поля:</p>
+<table>
+<tr><th>Поле</th><th>Что хранит</th></tr>
+<tr><td><code>source-chunk-id</code></td><td>идентификатор фрагмента, из которого извлечён объект. Один.</td></tr>
+<tr><td><code>source-chunk-ids</code></td><td>все фрагменты, где объект встретился повторно</td></tr>
+<tr><td><code>source-clause</code></td><td>номер пункта, если он есть в тексте</td></tr>
+</table>
+<p>Идентификатор фрагмента совпадает с тем, что лежит в поиске (Qdrant): <code>chunk_id</code>.
+Поэтому связка «факт в онтологии → текст в поиске» вычисляется, а не ищется заново.</p>
+<div class="note"><b>Следствие для доступа.</b> Если пользователь не видит фрагмент, он не должен
+видеть и факт, выведенный из этого фрагмента. Поэтому факты из онтологии проходят ту же проверку
+прав, что и текст: считается пересечение видимых фрагментов.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u10"><details>
+<summary><span class="num">10</span>Наша схема целиком</summary>
+<div style="margin-top:12px">
+<p>Два контура, они разделены по смыслу, а не по стилю названий.</p>
+<p><b>Контур корпуса</b> — то, что извлекается из нормативных документов:</p>
+<table>
+<tr><th>Тип</th><th>Что это</th><th>Ключевые связи</th></tr>
+<tr><td><code>regulator</code></td><td>регулятор: ФСТЭК, ФСБ, Банк России</td><td>выпускает документ</td></tr>
+<tr><td><code>regulatory_document</code></td><td>нормативный документ</td><td>выпущен регулятором; основание требования</td></tr>
+<tr><td><code>structural_element</code></td><td>пункт, подпункт, строка таблицы</td><td>входит в документ; определяет меру</td></tr>
+<tr><td><code>security_measure</code></td><td>мера защиты с кодом</td><td>определена пунктом; может быть компенсирующей</td></tr>
+<tr><td><code>cii_object</code></td><td>объект критической информационной инфраструктуры</td><td>к нему применяется требование</td></tr>
+<tr><td><code>threat_source</code></td><td>источник угрозы: класс нарушителя, потенциал</td><td>—</td></tr>
+</table>
+<p><b>Контур доказательств</b> — то, по чему проверяется соответствие:</p>
+<table>
+<tr><th>Тип</th><th>Что это</th><th>Ключевые связи</th></tr>
+<tr><td><code>company_document</code></td><td>внутренний документ организации</td><td>закреплён за объектом</td></tr>
+<tr><td><code>security_requirement</code></td><td>требование с идентификатором</td><td>основано на документе; подтверждается доказательством</td></tr>
+<tr><td><code>evidence</code></td><td>доказательство выполнения</td><td>подтверждает требование</td></tr>
+<tr><td><code>security_software</code></td><td>СЗИ и его сертификация</td><td>защищает объект</td></tr>
+</table>
+<p><b>Девять связей:</b> <code>document_issuance</code> (регулятор → документ),
+<code>document_hierarchy</code> (документ → пункт → подпункт),
+<code>measure_definition</code> (пункт → мера),
+<code>applicability_criteria</code> (требование → объект),
+<code>compensatory_relation</code> (мера → компенсирующая мера),
+<code>document_assignment</code> (внутренний документ → объект),
+<code>asset_protection</code> (СЗИ → объект),
+<code>requirement_basis</code> (требование → нормативный документ),
+<code>requirement_evidence</code> (доказательство → требование).</p>
+<div class="note"><b>Почему не одна большая схема на всё.</b> Контуры наполняются разными источниками
+и меняются с разной скоростью: корпус — обработкой нормативных документов, доказательства —
+загрузкой документов организации. Разделение позволяет видеть, где именно не хватает данных,
+и не смешивать «что требует закон» с «что сделала организация».</div>
+</div>
+</details></div>
+
+<div class="panel" id="u11"><details>
+<summary><span class="num">11</span>Восемь ошибок новичка</summary>
+<div style="margin-top:12px">
+<ol>
+<li><b>Хранить сущность как строку.</b> Регулятор записан текстом в поле документа. Тогда нельзя
+спросить «какие документы выпустил ФСТЭК» — придётся искать по подстроке и ошибаться на
+«ФСТЭК России». Сущность должна быть сущностью.</li>
+<li><b>Дублировать атрибуты по типам без нужды.</b> Отдельные <code>measure_code</code>,
+<code>measure_title</code>, <code>measure_desc</code> вместо одного типа с тремя атрибутами.
+Схема распухает, а запросы становятся одинаковыми в трёх вариантах.</li>
+<li><b>Связь без ролей.</b> Пара «источник — цель» без имён ролей не даёт отличить «документ
+ссылается на документ» от «документ отменяет документ». Через месяц никто не помнит порядок.</li>
+<li><b>Менять схему без новой версии.</b> Правка <code>define</code> поверх работающей базы без
+записи «что и зачем» — это потерянное решение. Любая правка схемы фиксируется в ADR с датой.</li>
+<li><b>Правило без тестовых данных.</b> Правило, возвращающее пусто, выглядит рабочим. Проверять
+только на объектах, которые обязаны попасть в вывод.</li>
+<li><b>Ключ из нестабильного признака.</b> Номер документа, который в разных ГОСТах записан
+по-разному, даёт два объекта вместо одного. Ключ строится из того, что в текстах постоянно.</li>
+<li><b>Смешение стилей в именах.</b> В одной схеме <code>cii-object</code> и
+<code>cii_object</code> — это два разных типа. Имена в схеме выбираются один раз и одинаково.
+<b>Честно про нашу схему:</b> в ней это смешение есть — технические атрибуты провенанса названы
+через дефис (<code>ent-key</code>, <code>source-chunk-id</code>), остальные через подчёркивание
+(<code>source_origin</code>, <code>struct_index</code>). Работает, но новые имена пишем через
+подчёркивание, а существующие не переименовываем без миграции: переименование атрибута — это
+изменение схемы, а не косметика.</li>
+<li><b>Вера в модель вместо схемы.</b> Модель извлечёт «меру» там, где её нет, и пропустит там,
+где есть. Схема задаёт рамку, а проверка качества — отдельный шаг: сколько объектов получилось,
+у скольких заполнен код, у скольких провенанс совпадает с текстом.</li>
+</ol>
+</div>
+</details></div>
+
+<div class="panel" id="u12"><details>
+<summary><span class="num">12</span>Как добавить новый тип: пошагово</summary>
+<div style="margin-top:12px">
+<p><b>Пример задачи.</b> Нужно хранить стандарты (ГОСТ) отдельно от нормативных документов
+регуляторов, потому что у них есть номер с годом и область применения.</p>
+<p><b>Шаг 1. Проверить, нужен ли новый тип.</b> Если свойства и связи те же — это объект
+существующего типа с другим <code>doc_type</code>. Новый тип нужен, когда появляются собственные
+свойства или собственные роли.</p>
+<p><b>Шаг 2. Записать в ADR.</b> Один абзац: зачем тип, чем отличается, какие связи. Решение
+фиксируется до кода, а не после.</p>
+<p><b>Шаг 3. Описать схему.</b></p>
+<pre><code>define
+
+attribute standard_year, value string;
+attribute scope, value string;
+
+entity standard,
+  owns ent-key @key,
+  owns number,
+  owns title,
+  owns standard_year,
+  owns scope,
+  owns source-chunk-id,
+  owns source-chunk-ids @card(0..),
+  owns source_origin,
+  plays requirement_basis:source_document;</code></pre>
+<p><b>Шаг 4. Проверить схему, не трогая рабочую базу.</b> Через редактор онтологии: сначала
+«Проверить», потом «Применить». Или на отдельной базе скриптом применения схемы.</p>
+<p><b>Шаг 5. Вставить тестовый объект и один запрос, который его находит.</b> Пока объект
+не находится запросом, тип не считается добавленным.</p>
+<p><b>Шаг 6. Обновить промпт извлечения.</b> Пока промпт не знает про новый тип, модель его
+не вернёт, и тип останется пустым. Промпт — авторский текст, правка согласуется с владельцем.</p>
+<p><b>Шаг 7. Записать в журнал архитектуры</b> — дата, что добавили, чем проверили.</p>
+<div class="note warn"><b>Порядок нарушать нельзя:</b> схема → проверка → тестовые данные → промпт →
+прогон. Если сначала запустить прогон, извлечённое просто некуда записать, и работа пройдёт зря.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u13"><details>
+<summary><span class="num">13</span>Чек-лист перед применением</summary>
+<div style="margin-top:12px">
+<p>Проверять по пунктам, каждый — с ответом «да» или «нет»:</p>
+<ol>
+<li>У каждой новой сущности есть <code>@key</code>, и ключ строится из стабильного признака.</li>
+<li>У каждой новой сущности, которая извлекается из документа, есть <code>source-chunk-id</code>.</li>
+<li>Для каждой связи объявлены роли, и у всех участников есть <code>plays</code> этой роли.</li>
+<li>Кардинальность ролей соответствует смыслу: где «ровно один» — <code>@card(1..1)</code>,
+где «может не быть» — <code>@card(0..1)</code>.</li>
+<li>Новые имена не дублируют существующие с другим регистром или стилем.</li>
+<li>Схема применена на отдельной базе и загрузилась без ошибок.</li>
+<li>Вставлен тестовый объект, и запрос его находит.</li>
+<li>Правило (если добавлено) возвращает объект, который обязан попасть в вывод.</li>
+<li>Тестовые объекты удалены из рабочей базы.</li>
+<li>Запись в ADR и в журнал архитектуры сделана.</li>
+</ol>
+<div class="note bad"><b>Нельзя применять схему, которая ломает существующие данные.</b> Удаление типа
+или атрибута, который уже используется, — это миграция, а не правка. Порядок: сначала перестать
+писать, потом перенести данные, потом удалять тип.</div>
+</div>
+</details></div>
+
+<div class="panel" id="u14"><details>
+<summary><span class="num">14</span>Словарь терминов</summary>
+<div style="margin-top:12px">
+<table>
+<tr><th>Термин</th><th>Значение простыми словами</th></tr>
+<tr><td>Онтология</td><td>схема типов + данные + правила вывода</td></tr>
+<tr><td>TBox</td><td>сама схема: какие бывают типы и связи</td></tr>
+<tr><td>ABox</td><td>данные: конкретные объекты и связи между ними</td></tr>
+<tr><td>Сущность (entity)</td><td>объект: документ, мера, объект КИИ</td></tr>
+<tr><td>Атрибут</td><td>свойство со значением: номер, код, дата</td></tr>
+<tr><td>Связь (relation)</td><td>отдельный объект, соединяющий участников через роли</td></tr>
+<tr><td>Роль</td><td>место в связи: «издатель», «определяемая мера»</td></tr>
+<tr><td><code>@key</code></td><td>уникальный идентификатор объекта</td></tr>
+<tr><td><code>@card</code></td><td>сколько значений или участников допустимо</td></tr>
+<tr><td>Правило (fun)</td><td>вычисление, которое выводит факты из данных</td></tr>
+<tr><td>Провенанс</td><td>ссылка от факта к фрагменту текста, из которого он извлечён</td></tr>
+<tr><td>Запрос (match)</td><td>шаблон: «найди объекты, у которых…»</td></tr>
+</table>
+</div>
+</details></div>
+
+<p class="muted" style="margin-top:20px">Страница только объясняет. Изменения схемы делаются в
+<a href="/ontology" style="color:var(--accent-h,#08a652)">редакторе онтологии</a>, изменения промпта —
+на <a href="/ontology/prompt" style="color:var(--accent-h,#08a652)">странице промпта</a>.</p>
+</main>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

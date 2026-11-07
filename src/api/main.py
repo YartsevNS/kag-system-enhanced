@@ -419,6 +419,19 @@ async def ontology_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology.html"))
 
 
+@app.get("/ontology/guide", summary="Уроки по онтологии TypeDB (только для admin)")
+async def ontology_guide_page(request: Request):
+    """Учебная страница рядом с редактором: как устроена схема и почему именно так.
+
+    Страница ничего не меняет в базе. Назначение — объяснить TBox/ABox, роли связей,
+    ключи, правила вывода и наши два контура на примерах из живой схемы, чтобы
+    правка онтологии не была работой наугад.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-guide.html"))
+
+
 @app.get("/ontology/proposals", summary="Очередь предложений онтологии (только для admin)")
 async def ontology_proposals_page(request: Request):
     """Проверка извлечённых требований до записи в TypeDB.
