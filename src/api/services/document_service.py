@@ -1256,6 +1256,7 @@ class DocumentService:
                                 document_id, record.filename, chunks, plog=plog,
                                 source_kind=(getattr(record, "source_kind", None) or ""),
                                 source_metadata=_sm,
+                                title=(getattr(record, "recognized_title", None) or record.filename or ""),
                             )
                     except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
                         logger.warning(f"[typedb] контур пропущен: {e}")
@@ -1934,7 +1935,8 @@ class DocumentService:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
     async def _build_typedb_only(self, document_id: str, filename: str, chunks: list, plog=None,
-                                 source_kind: str = "", source_metadata: Optional[dict] = None):
+                                 source_kind: str = "", source_metadata: Optional[dict] = None,
+                                 title: str = ""):
         """Наполнить онтологию TypeDB по чанкам документа (ADR-007).
 
         Отдельно от Neo4j-графа: у контура свой выключатель (system/typedb.write_enabled),
@@ -1948,6 +1950,25 @@ class DocumentService:
         _t = 90
 
         import time as _time
+
+        # Данные загрузки (метаданные, распознанное название) берём из БД, если в записи
+        # кэша их нет: воркер пересобирает DocumentRecord и теряет поля. Без этого
+        # версия пишется пустой, без связи с актом (проверено прогоном 07.11.2026).
+        if not source_metadata or not title:
+            try:
+                from src.api.services.document_repository import get_doc_repo
+
+                _row = get_doc_repo().get_dict(document_id) or {}
+                if not source_metadata:
+                    _raw = _row.get("source_metadata")
+                    source_metadata = json.loads(_raw) if isinstance(_raw, str) and _raw else (
+                        _raw if isinstance(_raw, dict) else {})
+                if not title:
+                    title = _row.get("recognized_title") or _row.get("filename") or filename or ""
+                if not source_kind:
+                    source_kind = _row.get("source_kind") or ""
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"[versions] данные загрузки не прочитаны: {str(exc)[:120]}")
 
         total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
         t0 = _time.monotonic()
@@ -1998,7 +2019,7 @@ class DocumentService:
         try:
             from src.indexing import typedb_versions
 
-            _title = (source_metadata or {}).get("title") or filename or ""
+            _title = title or (source_metadata or {}).get("title") or filename or ""
             vres = await asyncio.to_thread(
                 typedb_versions.upsert_from_metadata,
                 document_id, _title, source_kind or "", source_metadata or {},

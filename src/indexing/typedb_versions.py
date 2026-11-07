@@ -129,10 +129,24 @@ def upsert_from_metadata(
             # 2. Акт: ищем по ключу, затем по названию. Если не нашли — версию
             #    всё равно пишем: акт появится при извлечении и свяжется в другой раз.
             act_var = None
-            for q in (
+            _number = str(meta.get("number") or "").strip()
+            _cands = [
+                # Самый надёжный путь: акт, извлечённый из ЭТОГО документа, помечен
+                # его же source-chunk-id ("<document_id>_chunk_NNNNN").
+                f'match $d isa {doc_type}, has source-chunk-id $c; '
+                f'$c like "{_q(document_id)}.*";',
+            ]
+            if _number and doc_kind:
+                # Основной путь: акт опознаётся номером и типом — название у writer'а
+                # приходит из текста документа и с именем файла не совпадает.
+                _cands.append(
+                    f'match $d isa {doc_type}, has number "{_q(_number)}", '
+                    f'has doc_type "{_q(doc_kind)}";')
+            _cands += [
                 f'match $d isa {doc_type}, has document_key $k; $k == "{_q(doc_key)}";',
                 f'match $d isa {doc_type}, has title $t; $t == "{_q(title)}";',
-            ):
+            ]
+            for q in _cands:
                 try:
                     if list(tx.query(q).resolve()):
                         act_var = "$d"
