@@ -199,6 +199,13 @@ img, svg, video, canvas, iframe { max-width: 100%; }
              style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
     </div>
   </div>
+  <div style="margin-top:8px;max-width:420px">
+    <label for="upload-number" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+      Номер документа (для ключа акта; необязательно, если номер есть в названии)
+    </label>
+    <input id="upload-number" placeholder="239, 57580.1-2017"
+           style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+  </div>
   <div style="margin-top:8px">
     <label for="upload-supersedes" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
       Заменяет редакцию (id документа в базе, необязательно)
@@ -399,6 +406,8 @@ async function uploadFiles(files) {
     fd.append('source_kind', srcKind);
     fd.append('issuer', issuerVal);
     fd.append('doc_kind', docKindVal);
+    const _numEl = document.getElementById('upload-number');
+    fd.append('number', _numEl ? _numEl.value.trim() : '');
     fd.append('version_string', verVal);
     fd.append('effective_from', effVal);
     fd.append('supersedes_id', supVal);

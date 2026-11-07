@@ -109,7 +109,7 @@ def upsert_from_metadata(
     doc_kind = str(meta.get("doc_kind") or "").strip()[:120]
     supersedes_id = str(meta.get("supersedes_id") or "").strip()
     eff_from = _date_literal(str(meta.get("effective_from") or ""))
-    doc_key = normalize_document_key(issuer, doc_kind, "", title)
+    doc_key = normalize_document_key(issuer, doc_kind, str(meta.get("number") or ""), title)
     eff_to_new = eff_from
 
     c = _cfg()
@@ -181,6 +181,20 @@ def upsert_from_metadata(
                         f' insert $s isa supersedes (newer: $n, older: $o);'
                     ).resolve()
                     result["superseded"] = 1
+                    # Дата окончания действия прежней редакции. Ставим только если её
+                    # ещё нет (у версии effective_to 0..1) — удаление атрибута в TypeQL 3
+                    # в этой версии не парсится, поэтому переписывать не пытаемся.
+                    if eff_from:
+                        try:
+                            tx.query(
+                                f'match $o isa document_version, has kag_document_id '
+                                f'"{_q(supersedes_id)}"; not {{ $o has effective_to $e; }};'
+                                f' insert $o has effective_to {eff_from};'
+                            ).resolve()
+                            result["effective_to"] = 1
+                        except Exception as exc:  # noqa: BLE001
+                            logger.debug("versions: effective_to не выставлена: %s",
+                                         str(exc).splitlines()[0][:120])
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("versions: замена %s -> %s не применена: %s",
                                    supersedes_id, document_id, str(exc)[:800], exc_info=True)

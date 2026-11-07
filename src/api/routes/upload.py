@@ -544,6 +544,9 @@ async def upload_document(
     # Справочники подсказывают значения, но любое можно вписать своё.
     issuer: str = Form(""),
     doc_kind: str = Form(""),
+    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # при наличии номера название на ключ не влияет.
+    number: str = Form(""),
     # Версия и дата действия редакции (ADR-008). Для регулятора обязательны:
     # без них онтология не знает, какая редакция действует.
     version_string: str = Form(""),
@@ -676,6 +679,7 @@ async def upload_document(
                     "source_kind": source_kind,
                     "issuer": issuer,
                     "doc_kind": doc_kind,
+                    "number": (number or "").strip()[:80],
                     "version_string": version_string,
                     "effective_from": effective_from,
                     "supersedes_id": supersedes_id,
@@ -725,6 +729,9 @@ async def upload_documents_batch(
     source_kind: str = Form(""),
     issuer: str = Form(""),
     doc_kind: str = Form(""),
+    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # при наличии номера название на ключ не влияет.
+    number: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -824,6 +831,9 @@ async def upload_bulk(
     source_kind: str = Form(""),
     issuer: str = Form(""),
     doc_kind: str = Form(""),
+    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # при наличии номера название на ключ не влияет.
+    number: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):

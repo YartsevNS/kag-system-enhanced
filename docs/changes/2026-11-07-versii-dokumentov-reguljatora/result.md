@@ -93,3 +93,29 @@
     payload чанков: ('913ba708…_chunk_00010', 'current')
 
 49 = 48 фрагментов + карточка документа — совпадает с ожидаемым числом точек.
+
+## Итерация 2 (P0.3–P0.5) — 07.11.2026
+
+**Сделано:**
+
+    upload.py            поле number (Form) + source_metadata["number"]
+    typedb_versions.py   document_key = издатель|тип|номер (номер из metadata, а не из названия)
+                         effective_to прежней редакции = effective_from новой
+                         (вставка без delete: у версии effective_to 0..1, атрибута ещё нет)
+    documents.html       поле «Номер документа»
+
+**Проверено на стенде:**
+
+    diag двумя редакциями: {'superseded': 1, 'effective_to': 1}
+    действующих редакций: 1   (по отсутствию входящего supersedes)
+
+**Backfill document_key (`/tmp/backfill_dk.py`):**
+
+    regulatory_document: всего 48, проставлено 22 уникальных названия, с ключом 26
+    company_document:    всего 2, проставлено 2
+
+Причина неполноты: у старых актов нет `number`/`doc_type`/издателя — ключ строится только
+от названия, а 22 названия пустые или совпадают с уже обработанными. Ключ уточнится при
+переобработке документа (там есть issuer/doc_kind/number из формы).
+
+**Попутно:** у `company_document` не было `owns document_key` — добавлено (define).
