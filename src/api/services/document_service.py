@@ -2011,6 +2011,33 @@ class DocumentService:
                             f"({CHUNK_TIMEOUT}с) — пропуск чанка"
                         )
 
+                    # ── TypeDB: запись в онтологию (ADR-007) ─────────────────────
+                    # Отдельный контур: промпт из БД (/ontology/prompt), продуктовый
+                    # слой kebab-case. Сбой TypeDB не влияет на Neo4j-граф и на
+                    # обработку документа — модуль не бросает исключений наружу.
+                    try:
+                        from src.indexing import typedb_writer
+
+                        if typedb_writer.is_available() and typedb_writer.write_enabled():
+                            _clause = (chunk.get("metadata") or {}).get("clause") or ""
+                            _tdb = await asyncio.wait_for(
+                                typedb_writer.extract_and_store_typedb(
+                                    chunk_text, chunk_id, document_id,
+                                    clause=_clause, filename=filename,
+                                ),
+                                timeout=CHUNK_TIMEOUT,
+                            )
+                            if _tdb.get("status") == "ok":
+                                _w = _tdb.get("written") or {}
+                                logger.info(
+                                    f"[typedb] {chunk_id}: сущностей {_w.get('entities')}, "
+                                    f"связей {_w.get('relations')}"
+                                )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[typedb] запись таймаут для {chunk_id} — пропуск")
+                    except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
+                        logger.debug(f"[typedb] запись пропущена для {chunk_id}: {e}")
+
                 # Параллельно обрабатываем все чанки (не только первые 10)
                 tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
                 await asyncio.gather(*tasks)

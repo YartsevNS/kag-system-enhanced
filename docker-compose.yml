@@ -160,6 +160,13 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KAG_DB_URL=${KAG_DB_URL:?не задан KAG_DB_URL (.env)}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
+      # TypeDB-контур ЗАПИСИ (ADR-007): обработка документа наполняет онтологию.
+      # Без TYPEDB_PASS запись молча выключена (is_available()=False), поэтому
+      # переменные обязаны быть у worker — иначе api читает факты, а наполнять их некому.
+      - TYPEDB_ADDR=${TYPEDB_ADDR:-192.168.50.18:1729}
+      - TYPEDB_DB=${TYPEDB_DB:-cybersecurity_ontology}
+      - TYPEDB_USER=${TYPEDB_USER:-admin}
+      - TYPEDB_PASS=${TYPEDB_PASS:-}
       # HF_HOME НЕ задаём: веса OCR вшиты в kag-base (/app/.cache/huggingface).
       # Переопределение на bind-mount (/app/data/hf_cache) ломало ОФЛАЙН-работу —
       # веса из образа не находились (LocalEntryNotFoundError при HF_HUB_OFFLINE=1).
