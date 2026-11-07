@@ -6,6 +6,22 @@
 
 ## Отложено 07.11.2026 (решение владельца)
 
+### 17. Удаление документа не чистит TypeDB: остаются объекты и связи
+
+**Что:** `document_service.delete_document()` чистит БД, Qdrant, Neo4j, файлы и S3, но не онтологию.
+Объекты, записанные по `source-chunk-id`, остаются в `cybersecurity_ontology_v2` и попадают в статистику
+как «живые». Замер 07.11.2026: после удаления тестовой политики (`0f1d7cc6`) её объекты остались.
+
+**Почему не удаляется просто:** TypeDB запрещает удалять участника связи с обязательной ролью
+(`@card(1..1)`) — ошибки `CNT5` / `COW5` / `DCT3`. Нужно сначала снять связи, потом объекты.
+Запрос `$r isa relation; $r links $x;` на 3.x не снял связи — синтаксис требует уточнения по типам ролей.
+
+**Что нужно:** каскад в `delete_document`: по префиксу `document_id` собрать объекты, снять связи
+по каждому типу отношения (document_issuance, document_hierarchy, measure_definition,
+applicability_criteria, compensatory_relation, document_assignment, asset_protection,
+requirement_basis, requirement_evidence), затем удалить объекты. Проверка: после удаления документа
+`match $x isa $t, has source-chunk-id $c; $c like "<doc>.*";` возвращает 0.
+
 ### 16. Правила нарушений дают 0 фактов: нет входных данных (константа убрана 07.11.2026)
 
 **Что:** `violated_documents()` и `violated_certification()` в базе `cybersecurity_ontology_v2`

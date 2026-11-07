@@ -154,11 +154,32 @@ img, svg, video, canvas, iframe { max-width: 100%; }
     <strong>Источник документа</strong> <span style="color:var(--red)">*</span>
     <span style="color:var(--text4);font-weight:400;margin-left:6px">обязательно: от этого зависит тип объекта в онтологии</span>
   </label>
-  <select id="upload-source-kind" style="width:100%;max-width:420px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
+  <select id="upload-source-kind" onchange="syncSourceKindFields()" style="width:100%;max-width:420px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px">
     <option value="">— выберите —</option>
     <option value="company">Компания — политики, инструкции, приказы организации</option>
     <option value="regulator">Регулятор — нормативные акты, ГОСТы, стандарты</option>
   </select>
+  <!-- Уточнения к метаданным: кто издал документ и что это за вид. Списки подсказывают
+       типовые значения (ФСТЭК России, ГОСТ, политика…), но поле можно заполнить своим —
+       значения не ограничены справочником. -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+    <div id="upload-issuer-wrap" style="flex:1;min-width:220px;display:none">
+      <label for="upload-issuer" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+        Регулятор (издатель) <span style="color:var(--red)">*</span>
+      </label>
+      <input id="upload-issuer" list="upload-issuer-options" placeholder="ФСТЭК России"
+             style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+      <datalist id="upload-issuer-options"></datalist>
+    </div>
+    <div style="flex:1;min-width:220px">
+      <label for="upload-doc-kind" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+        Тип документа <span style="color:var(--red)">*</span>
+      </label>
+      <input id="upload-doc-kind" list="upload-doc-kind-options" placeholder="ГОСТ, стандарт, политика…"
+             style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+      <datalist id="upload-doc-kind-options"></datalist>
+    </div>
+  </div>
   <div id="upload-source-hint" style="font-size:11px;color:var(--text4);margin-top:6px">
     «Регулятор» обычно приходит парсером страницы мониторинга. Вручную выбирайте только если загружаете нормативный текст сами.
   </div>
@@ -256,6 +277,36 @@ function setupDragDrop() {
   });
 }
 
+// ── Метаданные документа: издатель и тип ───────────────────────────────
+// Значения в datalist — подсказки, не ограничение: можно вписать своё.
+// Для регулятора тип — ГОСТ, стандарт, приказ…; для документа компании —
+// политика, инструкция, регламент… Список подставляется по выбору источника.
+const _ISSUERS = ['ФСТЭК России', 'ФСБ России', 'Росстандарт', 'Банк России',
+                  'Минцифры России', 'Правительство РФ', 'Президент РФ',
+                  'Роскомнадзор', 'Минобороны России'];
+const _DOC_KINDS = {
+  regulator: ['ГОСТ', 'ГОСТ Р', 'стандарт', 'приказ', 'закон', 'постановление',
+              'указ', 'положение', 'методический документ', 'рекомендации', 'регламент'],
+  company:   ['политика', 'инструкция', 'приказ', 'положение', 'регламент',
+              'стандарт организации', 'модель угроз', 'акт', 'предписание'],
+};
+
+function _fillDatalist(id, values) {
+  const dl = document.getElementById(id);
+  if (!dl) return;
+  dl.innerHTML = (values || []).map(v => `<option value="${v}"></option>`).join('');
+}
+
+function syncSourceKindFields() {
+  const sel = document.getElementById('upload-source-kind');
+  const kind = sel ? sel.value : '';
+  const wrap = document.getElementById('upload-issuer-wrap');
+  if (wrap) wrap.style.display = (kind === 'regulator') ? '' : 'none';
+  _fillDatalist('upload-issuer-options', _ISSUERS);
+  _fillDatalist('upload-doc-kind-options', kind ? (_DOC_KINDS[kind] || []) : []);
+}
+syncSourceKindFields();
+
 async function uploadFiles(files) {
   if (!files.length) return;
   if (uploadsBlocked) {
@@ -272,6 +323,23 @@ async function uploadFiles(files) {
     return;
   }
   if (_srcSel) _srcSel.style.borderColor = '';
+  // Уточнения метаданных: тип обязателен всегда, издатель — для регулятора.
+  const _issuerEl = document.getElementById('upload-issuer');
+  const _kindEl = document.getElementById('upload-doc-kind');
+  const issuerVal = _issuerEl ? _issuerEl.value.trim() : '';
+  const docKindVal = _kindEl ? _kindEl.value.trim() : '';
+  if (!docKindVal) {
+    toast('Укажите тип документа (ГОСТ, стандарт, политика, инструкция…)', true);
+    if (_kindEl) { _kindEl.focus(); _kindEl.style.borderColor = 'var(--red)'; }
+    return;
+  }
+  if (_kindEl) _kindEl.style.borderColor = '';
+  if (srcKind === 'regulator' && !issuerVal) {
+    toast('Укажите регулятора (ФСТЭК России, Росстандарт, Банк России…)', true);
+    if (_issuerEl) { _issuerEl.focus(); _issuerEl.style.borderColor = 'var(--red)'; }
+    return;
+  }
+  if (_issuerEl) _issuerEl.style.borderColor = '';
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '… Загрузка...';
 
@@ -285,6 +353,8 @@ async function uploadFiles(files) {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('source_kind', srcKind);
+    fd.append('issuer', issuerVal);
+    fd.append('doc_kind', docKindVal);
     fd.append('visibility', vis);
     fd.append('allow_group_ids', JSON.stringify(acc.allow_group_ids));
     fd.append('allow_user_ids', JSON.stringify(acc.allow_user_ids));

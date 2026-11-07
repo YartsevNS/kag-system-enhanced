@@ -232,6 +232,8 @@ class DocumentService:
                         chunks_count=doc.chunks_count or 0,
                         file_size=doc.file_size or 0,
                         version=doc.version or 1,
+                        collection=getattr(doc, "collection", None),
+                        source_kind=getattr(doc, "source_kind", None),
                     )
                     self._documents[doc.id] = record
                 except Exception as e:
@@ -1431,6 +1433,8 @@ class DocumentService:
                     file_size=doc.file_size or 0,
                     version=doc.version or 1,
                     uploaded_by=getattr(doc, "uploaded_by", None) or None,
+                    collection=getattr(doc, "collection", None),
+                    source_kind=getattr(doc, "source_kind", None),
                 )
                 self._documents[document_id] = record  # синхронизируем кэш
                 return record

@@ -537,6 +537,12 @@ async def upload_document(
     # company_document и regulatory_document. Парсер web monitor передаёт "regulator"
     # напрямую в сервис, минуя эту форму.
     source_kind: str = Form(""),
+    # Кто издатель документа и что это за вид — уточняют тип объекта в онтологии.
+    # Регулятор: ФСТЭК России, Росстандарт, Банк России… Тип: ГОСТ, стандарт, приказ.
+    # У документа компании: политика, инструкция, приказ, регламент.
+    # Справочники подсказывают значения, но любое можно вписать своё.
+    issuer: str = Form(""),
+    doc_kind: str = Form(""),
 ):
     """
     Загрузить документ.
@@ -607,6 +613,27 @@ async def upload_document(
         })
     source_kind = _kind
 
+    # Тип документа обязателен для обоих источников: это уточнение объекта онтологии
+    # (regulatory_document.doc_type / company_document), а не свободная заметка.
+    # У регулятора дополнительно обязателен издатель (ФСТЭК, Росстандарт…).
+    _doc_kind = (doc_kind or "").strip()[:120]
+    _issuer = (issuer or "").strip()[:160]
+    if not _doc_kind:
+        raise HTTPException(status_code=400, detail={
+            "code": "DOC_KIND_REQUIRED",
+            "message": "Укажите тип документа (поле doc_kind: ГОСТ, стандарт, приказ, "
+                       "политика, инструкция…). Можно вписать своё значение.",
+            "upload_id": upload_id,
+        })
+    if source_kind == "regulator" and not _issuer:
+        raise HTTPException(status_code=400, detail={
+            "code": "ISSUER_REQUIRED",
+            "message": "Укажите регулятора (поле issuer: ФСТЭК России, Росстандарт, "
+                       "Банк России…). Можно вписать своё значение.",
+            "upload_id": upload_id,
+        })
+    doc_kind, issuer = _doc_kind, _issuer
+
     # Сохраняем через document_service
     try:
         uploaded_by = current_user.id if current_user else None
@@ -619,11 +646,18 @@ async def upload_document(
             uploaded_by=uploaded_by,
             group_ids=group_ids,
             upload_id=upload_id,
-            source_metadata=(
-                {"source_name": source_name, "source_url": source_url}
-                if source_name or source_url
-                else None
-            ),
+            source_metadata={
+                # Метаданные загрузки: имя/URL источника (для парсера) и уточнения
+                # от человека — кто издал и что это за вид документа. Пустые не пишем,
+                # чтобы JSON оставался читаемым.
+                k: v for k, v in {
+                    "source_name": source_name,
+                    "source_url": source_url,
+                    "source_kind": source_kind,
+                    "issuer": issuer,
+                    "doc_kind": doc_kind,
+                }.items() if v
+            } or None,
             access={
                 "visibility": visibility if visibility in ("public", "restricted") else "public",
                 "allow_group_ids": _parse_id_list(allow_group_ids),
@@ -663,6 +697,8 @@ async def upload_document(
 async def upload_documents_batch(
     files: list[UploadFile] = File(...),
     source_kind: str = Form(""),
+    issuer: str = Form(""),
+    doc_kind: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -717,6 +753,10 @@ async def upload_documents_batch(
                 group_ids=group_ids,
                 upload_id=upload_id,
                 source_kind=source_kind,
+                source_metadata={k: v for k, v in {
+                    "source_kind": source_kind, "issuer": (issuer or "").strip(),
+                    "doc_kind": (doc_kind or "").strip(),
+                }.items() if v} or None,
             )
 
             # Обработка НЕ запускается автоматически (кнопка «Обработать»)
@@ -756,6 +796,8 @@ async def upload_documents_batch(
 async def upload_bulk(
     file: UploadFile = File(...),
     source_kind: str = Form(""),
+    issuer: str = Form(""),
+    doc_kind: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -845,6 +887,10 @@ async def upload_bulk(
                     await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
                         upload_id, results, source_kind=source_kind,
+                        source_meta={k: v for k, v in {
+                            "source_kind": source_kind, "issuer": (issuer or "").strip(),
+                            "doc_kind": (doc_kind or "").strip(),
+                        }.items() if v} or None,
                     )
 
         elif ext in (".tar", ".gz", ".tgz"):
@@ -880,6 +926,10 @@ async def upload_bulk(
                     await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
                         upload_id, results, source_kind=source_kind,
+                        source_meta={k: v for k, v in {
+                            "source_kind": source_kind, "issuer": (issuer or "").strip(),
+                            "doc_kind": (doc_kind or "").strip(),
+                        }.items() if v} or None,
                     )
         else:
             raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат архива: {ext}")
@@ -909,7 +959,7 @@ async def _process_bulk_file(
     file_path: Path,
     file_ext: str,
     uploaded_by, group_ids, upload_id, results: list,
-    source_kind: str = "",
+    source_kind: str = "", source_meta: dict = None,
 ):
     """Загрузить один файл из архива в document_service."""
     try:
@@ -932,7 +982,7 @@ async def _process_bulk_file(
             filename=file_path.name, file_content=content,
             file_type=file_ext, uploaded_by=uploaded_by,
             group_ids=group_ids, upload_id=upload_id,
-            source_kind=source_kind,
+            source_kind=source_kind, source_metadata=source_meta,
         )
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать»)
@@ -957,6 +1007,8 @@ class ImportFolderRequest(BaseModel):
     source_kind: Literal["company", "regulator"] = Field(
         description="Чей документ: company (политики, инструкции организации) | regulator (нормативка)"
     )
+    issuer: str = Field(default="", description="Издатель: ФСТЭК России, Росстандарт… (для регулятора)")
+    doc_kind: str = Field(default="", description="Тип документа: ГОСТ, стандарт, политика, инструкция…")
     recursive: bool = Field(default=True, description="Обходить вложенные папки")
     limit: int = Field(default=0, description="Ограничить количество файлов (0 — все)")
     dry_run: bool = Field(default=False, description="Только показать, что будет импортировано")
@@ -1057,7 +1109,12 @@ async def import_folder(
             logger.debug(f"[import-folder] не удалось проверить дубль {path.name}: {e}")
 
         await _process_bulk_file(path, path.suffix.lower(), uploaded_by, group_ids,
-                                 upload_id, results, source_kind=req.source_kind)
+                                 upload_id, results, source_kind=req.source_kind,
+                                 source_meta={k: v for k, v in {
+                                     "source_kind": req.source_kind,
+                                     "issuer": (req.issuer or "").strip(),
+                                     "doc_kind": (req.doc_kind or "").strip(),
+                                 }.items() if v} or None)
 
     imported = [r for r in results if r.get("document_id")]
     errors = [r for r in results if r.get("status") == "error"]

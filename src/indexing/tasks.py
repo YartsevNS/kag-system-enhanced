@@ -134,6 +134,12 @@ def process_document(
                 uploaded_by=doc_data.get("uploaded_by"),
                 group_ids=doc_data.get("group_ids", []),
                 version=doc_data.get("version", 1),
+                # Признаки источника обязаны переживать пересборку записи в воркере:
+                # без них обработка теряет коллекцию и тип документа (компания/регулятор),
+                # и онтология получает regulatory_document вместо company_document.
+                collection=doc_data.get("collection"),
+                source_kind=doc_data.get("source_kind"),
+                source_metadata=doc_data.get("source_metadata"),
                 created_at=datetime.fromisoformat(doc_data["created_at"]) if doc_data.get("created_at") else datetime.utcnow(),
                 updated_at=datetime.fromisoformat(doc_data["updated_at"]) if doc_data.get("updated_at") else datetime.utcnow(),
             )

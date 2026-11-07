@@ -64,3 +64,21 @@ def test_writer_knows_company_document():
     assert "company_document" in WRITER_SRC.split("ENTITY_TYPES")[1][:600]
     assert 'source_kind or ""' in WRITER_SRC or "source_kind" in WRITER_SRC
     assert '"document_issuance"' in WRITER_SRC  # связь выдачи отфильтровывается для компании
+
+
+def test_issuer_and_doc_kind_are_required_and_stored():
+    """Тип документа обязателен всегда, издатель — для регулятора; оба идут в метаданные."""
+    node = _func("upload_document")
+    consts = [n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    assert "DOC_KIND_REQUIRED" in consts
+    assert "ISSUER_REQUIRED" in consts
+    seg = ast.get_source_segment(UPLOAD_SRC, node) or ""
+    assert '"issuer": issuer' in seg and '"doc_kind": doc_kind' in seg
+
+
+def test_worker_keeps_source_metadata():
+    """Воркер пересобирает запись из БД — признаки источника не должны теряться."""
+    tasks_src = (ROOT / "src/indexing/tasks.py").read_text(encoding="utf-8")
+    assert 'source_kind=doc_data.get("source_kind")' in tasks_src
+    assert 'source_metadata=doc_data.get("source_metadata")' in tasks_src
+    assert 'collection=doc_data.get("collection")' in tasks_src
