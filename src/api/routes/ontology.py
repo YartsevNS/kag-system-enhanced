@@ -16,6 +16,7 @@
   поэтому «Отменить» работает и после перезагрузки страницы.
 """
 import asyncio
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +30,8 @@ from src.api.services.ontology_prompts import DEFAULTS, prompt_store
 from src.api.services.proposal_service import ALLOWED_STATUSES, proposal_service
 from src.database.user_models import User
 from src.indexing import typedb_facts
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -356,8 +359,10 @@ async def proposals_review(
 ):
     """Проверяющий принимает, отклоняет или правит формулировку.
 
-    Принятие пока НЕ пишет в TypeDB автоматически: запись — отдельный шаг,
-    который показывает, что именно уйдёт в онтологию, и что вернулось.
+    Принятие пишет факт в TypeDB сразу: очередь и онтология — разные хранилища,
+    и без этого шага «принято» означало только смену статуса в Postgres
+    (у всех accepted typedb_fact_id оставался пустым). Ошибка записи не отменяет
+    решение человека — она сохраняется в write_error, чтобы её было видно.
     """
     _check_status(req.status)
     if req.text is not None and not req.text.strip():
@@ -368,7 +373,38 @@ async def proposals_review(
     )
     if not res:
         raise HTTPException(status_code=404, detail="предложение не найдено")
-    return {"ok": True, "item": res}
+
+    write_info: dict = {"status": "not_applicable"}
+    if req.status == "accepted":
+        try:
+            from src.indexing import typedb_writer
+
+            if typedb_writer.is_available() and typedb_writer.write_enabled():
+                item = await asyncio.to_thread(proposal_service.get, proposal_id)
+                if item:
+                    done = await asyncio.to_thread(typedb_writer.write_proposal, item)
+                    await asyncio.to_thread(
+                        proposal_service.set_write_result, proposal_id, done["fact_id"], None
+                    )
+                    write_info = {"status": "written", "fact_id": done["fact_id"],
+                                  "written": done.get("written")}
+                else:
+                    write_info = {"status": "skipped", "reason": "предложение не прочитано"}
+            else:
+                write_info = {"status": "skipped", "reason": "typedb выключен"}
+        except Exception as exc:  # noqa: BLE001 — решение человека важнее записи
+            msg = str(exc)[:300]
+            logger.warning("запись принятого предложения %s в TypeDB не удалась: %s",
+                           proposal_id, msg)
+            try:
+                await asyncio.to_thread(
+                    proposal_service.set_write_result, proposal_id, None, msg
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            write_info = {"status": "error", "error": msg}
+
+    return {"ok": True, "item": res, "typedb": write_info}
 
 
 # ── Промпт извлечения сущностей ───────────────────────────────────────────

@@ -433,7 +433,54 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
             "relations_existing": len(rels_to_write) - inserted_r + skipped_rel}
 
 
-# ── LLM ───────────────────────────────────────────────────────────────────────
+# ── запись ПРИНЯТОГО предложения (очередь онтологии → TypeDB) ──────────────
+def write_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
+    """Записать принятое человеком предложение в онтологию (snake_case).
+
+    Очередь предложений живёт в Postgres, онтология — в TypeDB, и пока между
+    ними не было звена, «принято» означало только смену статуса: у всех
+    accepted `typedb_fact_id` оставался пустым.
+
+    Маппинг предложения на целевую схему:
+      пункт документа → structural_element (struct_index = пункт, text_content = текст)
+      мера            → security_measure (code, description) — если в предложении есть код
+      связь           → measure_definition (source_requirement → core_measure)
+
+    Возвращает {"fact_id": ent-key пункта, "written": {...}}.
+    """
+    doc = str(proposal.get("document_id") or "")
+    chunk = str(proposal.get("chunk_id") or "")
+    clause = str(proposal.get("clause") or "")
+    text = str(proposal.get("text") or "").strip()
+    code = str(proposal.get("measure_code") or "").strip()
+    if not text:
+        raise ValueError("пустой текст предложения")
+
+    entities: Dict[str, Dict[str, Any]] = {}
+    relations: Dict[str, Dict[str, Any]] = {}
+    chunks = {chunk} if chunk else set()
+
+    e_attrs: Dict[str, Any] = {
+        "index": clause or str(proposal.get("requirement_id") or ""),
+        "text_content": text,
+    }
+    e_key = ent_key("structural_element", e_attrs, doc)
+    entities[e_key] = {"type": "structural_element", "attrs": e_attrs, "chunks": chunks}
+
+    if code:
+        m_attrs = {"code": code, "description": text}
+        m_key = ent_key("security_measure", m_attrs)
+        entities[m_key] = {"type": "security_measure", "attrs": m_attrs, "chunks": chunks}
+        sig = f"measure_definition|core_measure={m_key}|source_requirement={e_key}"
+        relations[sig] = {
+            "type": "measure_definition",
+            "parts": {"source_requirement": e_key, "core_measure": m_key},
+        }
+
+    written = write_facts(chunk, entities, relations, clause)
+    return {"fact_id": e_key, "written": written}
+
+
 def _llm_payload(messages: list, model: str, provider: str, api_key: str, temperature: float) -> dict:
     payload = {
         "model": model,

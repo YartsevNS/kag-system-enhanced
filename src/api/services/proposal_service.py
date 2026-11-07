@@ -245,6 +245,20 @@ class ProposalService:
             ).mappings().first()
         return dict(row) if row else None
 
+    def set_write_result(self, proposal_id: str, fact_id: str | None, error: str | None) -> None:
+        """Зафиксировать результат записи факта в TypeDB (успех или текст ошибки)."""
+        self.ensure_table()
+        with self._eng().begin() as conn:
+            conn.execute(
+                text(
+                    """UPDATE ontology_proposals SET
+                           typedb_fact_id = COALESCE(:fact_id, typedb_fact_id),
+                           write_error    = :error
+                       WHERE id = :id"""
+                ),
+                {"id": proposal_id, "fact_id": fact_id, "error": error},
+            )
+
     def bulk_review(
         self, ids: Iterable[str], status: str, reviewer: str, note: str | None = None
     ) -> int:
