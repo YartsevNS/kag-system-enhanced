@@ -264,4 +264,21 @@ def upsert_from_metadata(
         result["skipped"] = str(exc).splitlines()[0][:160]
     finally:
         drv.close()
+    # Контроль: отдельное соединение, уже после закрытия записи. Внутри той же
+    # транзакции чтение возвращало 0 при фактическом коммите — проверять оттуда нельзя.
+    if result.get("created") or result.get("skipped") == "":
+        try:
+            _chk = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
+                                 DriverOptions(DriverTlsConfig.disabled()))
+            try:
+                with _chk.transaction(c["db"], TransactionType.READ) as _ctx:
+                    result["after_commit"] = len(list(_ctx.query(
+                        f'match $v isa document_version, has kag_document_id "{_q(document_id)}";'
+                    ).resolve()))
+            finally:
+                _chk.close()
+            logger.info("versions: база=%s документ=%s после коммита объектов=%s",
+                        c["db"], document_id, result.get("after_commit"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("versions: контрольное чтение не удалось: %s", str(exc)[:160])
     return result
