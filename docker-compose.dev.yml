@@ -1,41 +1,35 @@
-# DEV-композ — запускать ЯВНО, он НЕ подхватывается автоматически
-# (имя не docker-compose.override.yml!).
+# Отладочный compose: контейнер постоянный, код монтируется с диска.
 #
-#   Локальная разработка (build + живой ./src):
-#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# DEV-режим — запускать ЯВНО, автоматически НЕ подхватывается
+# (имя намеренно не docker-compose.override.yml).
 #
-#   Прод (готовые образы с Docker Hub, код зашит):
-#     docker compose up -d          # только docker-compose.yml
+#   Прод (образ, код зашит):
+#     docker compose up -d
 #
-# Базовый docker-compose.yml использует ГОТОВЫЕ образы kre44et/kag-* (код
-# зашит). Этот файл возвращает dev-режим: сборка из локальных Dockerfile'ов
-# + монтирование живого ./src — правки кода видны без пересборки образа
-# (docker compose restart api).
+#   Отладка (образ остаётся постоянным, код монтируется с диска):
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api worker
 #
-# ВАЖНО: Dockerfile/Dockerfile.worker/Dockerfile.mcp наследуют образ
-# kre44et/kag-base:2026.09.07. Для dev-сборки он должен быть доступен
-# (собран локально или docker pull kre44et/kag-base:2026.09.07).
-# Пересобирать base нужно только при изменении requirements.txt/весов:
-#   docker build -t kre44et/kag-base:2026.09.07 -f docker/base/Dockerfile .
+#     правка HTML/JS/CSS  — видна сразу, ничего делать не нужно (страницы с no-store)
+#     правка Python-кода  — docker restart kag-api (2–3 секунды вместо сборки на 2–5 минут)
+#
+# Путь к коду задаётся KAG_SRC, потому что на сервере 192.168.50.18 каталог данных
+# и каталог кода разные:
+#     cd /home/yartsevn/kag-system
+#     KAG_SRC=/home/yartsevn/kag-live/src \
+#     docker-compose -f docker-compose.yml -f /home/yartsevn/kag-live/docker-compose.dev.yml \
+#       up -d api worker worker-maintenance
+#
+# Сборка нужна только при изменении requirements.txt / Dockerfile / весов моделей.
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
     volumes:
-      - ./src:/app/src
+      - ${KAG_SRC:-./src}:/app/src
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
     volumes:
-      - ./src:/app/src
+      - ${KAG_SRC:-./src}:/app/src
 
-  mcp-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
+  worker-maintenance:
     volumes:
-      - ./src:/app/src
+      - ${KAG_SRC:-./src}:/app/src
