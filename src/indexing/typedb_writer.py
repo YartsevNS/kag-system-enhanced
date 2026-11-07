@@ -41,33 +41,29 @@ except Exception:  # pragma: no cover - срабатывает только бе
     _TYPEDB_IMPORTED = False
 
 
-# ── схема: что вообще разрешено писать (ADR-001, продуктовый слой) ──────────
+# ── схема: что вообще разрешено писать (по промпту из БД) ───────────────────
+# Типы соответствуют TBox промпта извлечения сущностей (snake_case) — это тот
+# слой, который в БД уже объявлен с ent-key и провенансом.
 ENTITY_TYPES: Dict[str, tuple] = {
-    # тип: (обязательные атрибуты для ключа, допустимые атрибуты)
-    "security-requirement": ("requirement-id",),
-    "regulation-source": ("name",),
-    "compliance-document": ("title",),
-    "company-document": ("title",),
-    "evidence": ("name",),
-    "application-domain": ("name",),
-    "cii-object": ("name",),
-    "security-software": ("name",),
+    "regulator": ("name",),                     # или short_name
+    "regulatory_document": ("title",),          # или number
+    "structural_element": ("text_content",),    # или index
+    "security_measure": ("code",),              # или description
+    "cii_object": ("category",),                # или system_type
+    "threat_source": ("offender_class",),
 }
 
-# роль → допустимые типы участника
+# роль → допустимые типы участника (по схеме БД и промпту)
 RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
-    "requirement-generation": {"source": ("regulation-source",), "requirement": ("security-requirement",)},
-    "requirement-regulation": {"requirement": ("security-requirement",),
-                               "document": ("compliance-document", "company-document")},
-    "requirement-scope": {"requirement": ("security-requirement",), "domain": ("application-domain",)},
-    "requirement-evidence": {"requirement": ("security-requirement",), "evidence": ("evidence",)},
-    "requirement-relation": {
-        "stricter": ("security-requirement",), "weaker": ("security-requirement",),
-        "supplement": ("security-requirement",), "original": ("security-requirement",),
-        "conflicting": ("security-requirement",), "conflicted": ("security-requirement",),
-    },
-    "asset-protection": {"protected-system": ("cii-object",), "deployed-szi": ("security-software",)},
-    "document-assignment": {"regulated-subject": ("cii-object",), "regulated-doc": ("company-document",)},
+    "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document",)},
+    "document_hierarchy": {"structural_part": ("structural_element",),
+                           "sub_part": ("structural_element",)},
+    "measure_definition": {"source_requirement": ("structural_element",),
+                           "core_measure": ("security_measure",)},
+    "applicability_criteria": {"applied_requirement": ("security_measure", "structural_element"),
+                               "target_system": ("cii_object",)},
+    "compensatory_relation": {"core_measure": ("security_measure",),
+                              "alternative_measure": ("security_measure",)},
 }
 
 # Типы, которым нужен ключ дедупликации и провенанс (дополняется аддитивно)
@@ -123,72 +119,61 @@ def _value(x: Any) -> Any:
     return x.get("@value") if isinstance(x, dict) else x
 
 
-def ent_key(etype: str, attrs: Dict[str, Any]) -> str:
-    """Ключ дедупликации по типу и опознавательному атрибуту (ADR-007)."""
-    if etype == "security-requirement":
-        base = str(attrs.get("requirement-id") or "")
-    elif etype == "regulation-source":
-        base = f"{attrs.get('name', '')}|{attrs.get('version', '')}"
-    elif etype == "compliance-document":
-        base = f"{attrs.get('title', '')}|{attrs.get('doc-kind', '')}"
-    elif etype == "company-document":
-        base = str(attrs.get("title") or "")
-    elif etype == "evidence":
-        base = f"{attrs.get('name', '')}|{attrs.get('evidence-kind', '')}"
-    elif etype == "cii-object":
-        base = f"{attrs.get('name', '')}|{attrs.get('cii-category', '')}"
-    else:  # application-domain, security-software
-        base = str(attrs.get("name") or "")
+def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
+    """Ключ дедупликации по типу и опознавательному атрибуту (как в промпте).
+
+    Регулятор/документ/мера дедуплицируются между документами; структурный
+    элемент — внутри документа (номер пункта повторяется в разных ГОСТах).
+    """
+    if etype == "regulator":
+        base = str(attrs.get("short_name") or attrs.get("name") or "")
+    elif etype == "regulatory_document":
+        base = f"{attrs.get('number', '')}|{attrs.get('type') or attrs.get('doc_type') or attrs.get('title', '')}"
+    elif etype == "structural_element":
+        base = f"{doc}|{attrs.get('index', '')}|{str(attrs.get('text_content') or '')[:200]}"
+    elif etype == "security_measure":
+        base = str(attrs.get("code") or str(attrs.get("description") or "")[:200])
+    elif etype == "cii_object":
+        base = f"{attrs.get('category', '')}|{attrs.get('system_type', '')}"
+    else:  # threat_source
+        base = f"{attrs.get('offender_class', '')}|{attrs.get('potential', '')}"
     digest = hashlib.sha1(base.lower().strip().encode("utf-8")).hexdigest()[:16]
     return f"{etype}:{digest}"
 
 
-def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str]) -> str:
-    """has-выражения сущности. Порядок и объём ограничены, чтобы не раздувать запрос."""
+def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: str = "") -> str:
+    """has-выражения сущности по схеме промпта.
+    
+    source-chunk-id однозначный (@card 0..1): туда первый чанк, полный
+    провенанс — в многозначный source-chunk-ids (иначе CNT5 валит вставку).
+    """
     etype = key.split(":", 1)[0]
     has: List[str] = []
 
-    def add(attr: str, value, limit: int = 3000, as_int: bool = False):
+    def add(attr: str, value, limit: int = 3000):
         if value is None or value == "":
             return
-        if as_int:
-            try:
-                has.append(f"has {attr} {int(float(value))}")
-            except (TypeError, ValueError):
-                return
-        else:
-            has.append(f'has {attr} "{_esc(value, limit)}"')
+        has.append(f'has {attr} "{_esc(value, limit)}"')
 
-    if etype == "security-requirement":
-        add("requirement-id", attrs.get("requirement-id"), 200)
-        add("description", attrs.get("description"), 3000)
-        add("obligation-level", attrs.get("obligation-level"), 40)
-        add("source-clause", attrs.get("source-clause"), 80)
-        add("password-length", attrs.get("password-length"), as_int=True)
-        add("change-period", attrs.get("change-period"), as_int=True)
-        add("char-composition", attrs.get("char-composition"), 200)
-    elif etype == "regulation-source":
+    if etype == "regulator":
         add("name", attrs.get("name"), 300)
-        add("version", attrs.get("version"), 80)
-    elif etype == "compliance-document":
+        add("short_name", attrs.get("short_name"), 120)
+    elif etype == "regulatory_document":
+        add("number", attrs.get("number"), 120)
         add("title", attrs.get("title"), 600)
-        add("doc-kind", attrs.get("doc-kind"), 60)
-        add("version", attrs.get("version"), 80)
-    elif etype == "company-document":
-        add("title", attrs.get("title"), 600)
-        add("version", attrs.get("version"), 80)
-    elif etype == "evidence":
-        add("name", attrs.get("name"), 300)
-        add("evidence-kind", attrs.get("evidence-kind"), 60)
-    elif etype == "cii-object":
-        add("name", attrs.get("name"), 300)
-        add("cii-category", attrs.get("cii-category"), as_int=True)
-    elif etype == "security-software":
-        add("name", attrs.get("name"), 300)
-        if attrs.get("is-certified") is not None:
-            val = str(attrs.get("is-certified")).strip().lower()
-            if val in ("true", "false"):
-                has.append(f"has is-certified {val}")
+        add("doc_type", attrs.get("type") or attrs.get("doc_type"), 80)
+    elif etype == "structural_element":
+        add("struct_index", attrs.get("index") or attrs.get("struct_index"), 120)
+        add("text_content", attrs.get("text_content"), 3000)
+    elif etype == "security_measure":
+        add("code", attrs.get("code"), 80)
+        add("description", attrs.get("description"), 2000)
+    elif etype == "cii_object":
+        add("category", attrs.get("category"), 120)
+        add("system_type", attrs.get("system_type"), 120)
+    elif etype == "threat_source":
+        add("offender_class", attrs.get("offender_class"), 200)
+        add("potential", attrs.get("potential"), 80)
 
     has.append(f'has ent-key "{key}"')
     chunk_list = sorted({c for c in chunks if c})
@@ -196,6 +181,8 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str]) -> str:
         has.append(f'has source-chunk-id "{_esc(chunk_list[0], 200)}"')
         for ch in chunk_list[:40]:
             has.append(f'has source-chunk-ids "{_esc(ch, 200)}"')
+    if clause:
+        add("source-clause", clause, 80)
     return "".join(", " + h for h in has)
 
 
@@ -217,7 +204,7 @@ def _parse_json(text: str) -> Dict[str, Any]:
             return {}
 
 
-def _collect(payload: Dict[str, Any], chunk_id: str) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, int]]:
+def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, int]]:
     """Валидация и дедупликация одного ответа модели.
 
     Возвращает (entities, relations, stats). Всё, что вне схемы, отбрасывается.
@@ -237,11 +224,11 @@ def _collect(payload: Dict[str, Any], chunk_id: str) -> tuple[Dict[str, Any], Di
             stats["dropped_type"] += 1
             continue
         attrs = {k: v for k, v in (ent.get("attributes") or {}).items() if v not in (None, "")}
-        required = ENTITY_TYPES[etype]
-        if any(not str(attrs.get(a) or "").strip() for a in required):
+        # обязательные атрибуты: хотя бы один из пары (для регулятора/документа/меры)
+        if not attrs:
             stats["dropped_missing_attr"] += 1
             continue
-        key = ent_key(etype, attrs)
+        key = ent_key(etype, attrs, document_id)
         local.setdefault(str(ent.get("id") or ""), []).append((etype, key))
         slot = entities.setdefault(key, {"type": etype, "attrs": {}, "chunks": set()})
         for k, v in attrs.items():
@@ -287,26 +274,15 @@ def _collect(payload: Dict[str, Any], chunk_id: str) -> tuple[Dict[str, Any], Di
     return entities, relations, stats
 
 
-# ── схема: аддитивное дополнение (ent-key, многозначный провенанс) ───────────
-_PROVENANCE_SCHEMA = "\n".join(
-    [f"entity {t} owns ent-key;" for t in _PROVENANCE_TYPES]
-    + [f"entity {t} owns source-chunk-id;" for t in _PROVENANCE_TYPES]
-    + [f"entity {t} owns source-chunk-ids @card(0..);" for t in _PROVENANCE_TYPES]
-)
-
-# Схема дополняется один раз на процесс: повторные define стоят времени, а
-# результат от них не меняется. None = ещё не проверяли.
+# ── схема: провенанс (типы snake_case уже объявлены в БД) ───────────────────
+# В базе у всех шести типов уже есть ent-key, source-chunk-id и
+# source-chunk-ids @card(0..) — дополнительных определений не нужно. Функция
+# оставлена как быстрая проверка: если атрибута нет, добавляет только его.
 _PROVENANCE_OK: bool | None = None
 
 
 def ensure_provenance_schema() -> Dict[str, Any]:
-    """Добавить целевым типам ent-key и провенанс (однократно, аддитивно).
-
-    Зачем: в продуктовом слое (ADR-001) эти атрибуты объявлены не у всех типов
-    (у compliance-document/evidence/application-domain их нет вообще), а без них
-    запись провенанса падает на ошибке владения. Определения аддитивны —
-    существующие данные и владения не ломаются.
-    """
+    """Убедиться, что у целевых типов есть ключ и провенанс (идемпотентно)."""
     global _PROVENANCE_OK
     if _PROVENANCE_OK is True:
         return {"ok": True, "cached": True}
@@ -315,11 +291,25 @@ def ensure_provenance_schema() -> Dict[str, Any]:
     try:
         from src.api.services.ontology_service import ontology_service
 
-        ok, errors = 0, []
-        for line in _PROVENANCE_SCHEMA.splitlines():
-            line = line.strip()
-            if not line:
+        schema = ontology_service.get_schema()
+        missing: List[str] = []
+        for e in schema.get("entities", []):
+            label = e.get("label")
+            if label not in ENTITY_TYPES:
                 continue
+            owns = set(e.get("owns") or [])
+            for attr in ("ent-key", "source-chunk-id"):
+                if attr not in owns:
+                    missing.append(f"entity {label} owns {attr};")
+            if "source-chunk-ids" not in owns:
+                missing.append(f"entity {label} owns source-chunk-ids @card(0..);")
+
+        if not missing:
+            _PROVENANCE_OK = True
+            return {"ok": True, "applied": 0}
+
+        ok, errors = 0, []
+        for line in missing:
             try:
                 res = ontology_service.apply("define\n  " + line)
                 if res.get("ok"):
@@ -354,7 +344,8 @@ def _read(query: str) -> list:
             return list(tx.query(query).resolve())
 
 
-def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any]) -> Dict[str, int]:
+def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
+                clause: str = "") -> Dict[str, int]:
     """Записать собранные сущности/связи. Идемпотентно."""
     if not entities and not relations:
         return {"entities": 0, "relations": 0, "entities_existing": 0, "relations_existing": 0}
@@ -371,7 +362,7 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
 
     # ── сущности: новые — put, существующим — только провенанс ──────────────
     for key, e in entities.items():
-        has = _attr_line(key, e["attrs"], e["chunks"])
+        has = _attr_line(key, e["attrs"], e["chunks"], clause)
         if key in existing_keys:
             # уже есть: добавляем недостающий провенанс, атрибуты не трогаем
             try:
@@ -558,12 +549,12 @@ async def extract_and_store_typedb(
     if not payload:
         return {"status": "empty", "reason": "модель не вернула фактов"}
 
-    entities, relations, stats = _collect(payload, chunk_id)
-    if not entities:
+    entities, relations, stats = _collect(payload, chunk_id, document_id)
+    if not entities and not relations:
         return {"status": "empty", "stats": stats}
 
     try:
-        written = await asyncio.to_thread(write_facts, chunk_id, entities, relations)
+        written = await asyncio.to_thread(write_facts, chunk_id, entities, relations, clause)
     except Exception as exc:  # noqa: BLE001
         logger.warning("typedb_writer: запись не удалась для %s: %s", chunk_id, exc)
         return {"status": "error", "error": str(exc)[:200], "stats": stats}
