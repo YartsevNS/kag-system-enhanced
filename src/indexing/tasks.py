@@ -66,7 +66,11 @@ def process_document(
         logger.warning(f"[Celery] доменную схему применить не удалось: {e}")
 
     logger.info(f"[Celery] Начало обработки: {document_id}")
-    
+
+    # Объявлено заранее: в блоке ошибки документ может быть ещё не прочитан,
+    # а пометить failed нужно в любом случае (Pyright: possibly unbound).
+    doc_data = None
+
     try:
         # Принудительно загружаем документ из БД в память worker'а
         from src.api.services.document_service import document_service
@@ -167,11 +171,12 @@ def process_document(
             # Провайдер недоступен — не retry, а откладываем
             logger.warning(f"⏸ Провайдер недоступен для {document_id}, откладываю на 5 мин")
             try:
-                doc_data.setdefault("error", "")
-                doc_data["error"] += f" | {now.isoformat()}: провайдер недоступен"
-                doc_data["delayed_until"] = (now + timedelta(minutes=5)).isoformat()
+                payload = doc_data if isinstance(doc_data, dict) else {}
+                payload.setdefault("error", "")
+                payload["error"] += f" | {now.isoformat()}: провайдер недоступен"
+                payload["delayed_until"] = (now + timedelta(minutes=5)).isoformat()
                 from src.api.services.document_repository import get_doc_repo
-                get_doc_repo().upsert(document_id, doc_data)
+                get_doc_repo().upsert(document_id, payload)
             except Exception:
                 pass
             # Задача завершилась (delayed) — снимаем замок, чтобы recovery
@@ -180,14 +185,32 @@ def process_document(
             release_lock(document_id)
             return {"status": "delayed", "document_id": document_id}
         else:
-            # Внутренняя ошибка — retry как обычно.
-            # Перед retry: если это ПОСЛЕДНЯЯ попытка, снимаем замок — иначе
-            # после исчерпания retry документ останется заблокированным до TTL
-            # (6 часов) и recovery не сможет его перезапустить. При обычном
-            # retry замок держим (задача перепоставится Celery, дубль не нужен).
+            # Постоянные ошибки ретраить бессмысленно: повторный запуск не сделает
+            # файл читаемым. Их помечаем failed сразу, иначе recovery поднимает
+            # документ снова и снова, а он навсегда остаётся в processing
+            # (наблюдалось: 135 попыток за сутки, документ висел с 12.09.2026).
+            permanent = any(kw in error_str for kw in (
+                "неподдерживаемый формат",
+                "парсер вернул пустой",
+                "файл документа не найден",
+            ))
             from src.indexing.queue_guard import release_lock
-            if self.request.retries >= self.max_retries:
+            if permanent or self.request.retries >= self.max_retries:
+                try:
+                    payload = doc_data if isinstance(doc_data, dict) else {}
+                    payload["status"] = "failed"
+                    payload["error"] = f"{now.isoformat()}: {str(exc)[:500]}"
+                    payload["progress"] = 0
+                    get_doc_repo().upsert(document_id, payload)
+                except Exception:  # noqa: BLE001 — отметка не должна скрывать исходную ошибку
+                    pass
                 release_lock(document_id)
+                logger.error(
+                    f"[Celery] документ {document_id} помечен failed "
+                    f"({'постоянная ошибка' if permanent else 'ретраи исчерпаны'}): {str(exc)[:160]}"
+                )
+                return {"status": "failed", "document_id": document_id}
+
             countdown = 60 * (2 ** self.request.retries)
             raise self.retry(exc=exc, countdown=countdown)
 

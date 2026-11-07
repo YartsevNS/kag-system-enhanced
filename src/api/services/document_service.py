@@ -1858,12 +1858,28 @@ class DocumentService:
         return img
 
     def _find_file(self, document_id: str, filename: str) -> Optional[Path]:
-        """Найти файл документа в директории uploads"""
-        # Ищем по шаблону: {doc_id}_{filename}
-        for f in self._upload_dir.iterdir():
-            if f.name.startswith(document_id):
+        """Найти файл документа в директории uploads.
+
+        Раньше брался ПЕРВЫЙ файл, имя которого начинается с document_id. Рядом
+        с рабочим файлом лежат версии (`*.v1.bak`), и обработка попадала именно
+        в бэкап: парсер видел расширение `.bak`, падал с «Неподдерживаемый формат»,
+        Celery повторял задачу, документ навсегда оставался в processing.
+        Теперь бэкапы не рассматриваются, точное имя `{id}_{filename}` в приоритете,
+        иначе — самый свежий файл с поддерживаемым расширением.
+        """
+        target = f"{document_id}_{filename}"
+        candidates = [
+            f for f in self._upload_dir.iterdir()
+            if f.is_file() and f.name.startswith(document_id) and ".bak" not in f.name
+        ]
+        for f in candidates:
+            if f.name == target:
                 return f
-        return None
+        supported = tuple(getattr(self, "_supported_formats", {}) or (".pdf", ".txt", ".md", ".docx", ".csv"))
+        good = [f for f in candidates if f.suffix.lower() in supported]
+        if good:
+            return max(good, key=lambda p: p.stat().st_mtime)
+        return candidates[0] if candidates else None
 
     async def _analyze_document_async(self, document_id: str, first_chunk_text: str, filename: str):
         """Фоновый анализ документа через LLM."""
