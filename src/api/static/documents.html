@@ -180,6 +180,32 @@ img, svg, video, canvas, iframe { max-width: 100%; }
       <datalist id="upload-doc-kind-options"></datalist>
     </div>
   </div>
+  <!-- Версия редакции (ADR-008): у регулятора обязательны версия и дата вступления
+       в силу — без них онтология не знает, какая редакция действует. supersedes_id —
+       id прежней редакции в базе: новая заменит её (статус superseded, дата окончания). -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+    <div style="flex:1;min-width:180px">
+      <label for="upload-version" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+        Редакция <span id="upload-version-req" style="color:var(--red);display:none">*</span>
+      </label>
+      <input id="upload-version" placeholder="2015, ред. от 05.05.2024"
+             style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+    </div>
+    <div style="flex:1;min-width:180px">
+      <label for="upload-effective-from" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+        Дата вступления в силу <span id="upload-effective-req" style="color:var(--red);display:none">*</span>
+      </label>
+      <input id="upload-effective-from" type="date"
+             style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+    </div>
+  </div>
+  <div style="margin-top:8px">
+    <label for="upload-supersedes" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+      Заменяет редакцию (id документа в базе, необязательно)
+    </label>
+    <input id="upload-supersedes" placeholder="0f1d7cc6-…"
+           style="width:100%;max-width:420px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+  </div>
   <div id="upload-source-hint" style="font-size:11px;color:var(--text4);margin-top:6px">
     «Регулятор» обычно приходит парсером страницы мониторинга. Вручную выбирайте только если загружаете нормативный текст сами.
   </div>
@@ -302,6 +328,10 @@ function syncSourceKindFields() {
   const kind = sel ? sel.value : '';
   const wrap = document.getElementById('upload-issuer-wrap');
   if (wrap) wrap.style.display = (kind === 'regulator') ? '' : 'none';
+  const vreq = document.getElementById('upload-version-req');
+  const ereq = document.getElementById('upload-effective-req');
+  if (vreq) vreq.style.display = (kind === 'regulator') ? '' : 'none';
+  if (ereq) ereq.style.display = (kind === 'regulator') ? '' : 'none';
   _fillDatalist('upload-issuer-options', _ISSUERS);
   _fillDatalist('upload-doc-kind-options', kind ? (_DOC_KINDS[kind] || []) : []);
 }
@@ -340,6 +370,20 @@ async function uploadFiles(files) {
     return;
   }
   if (_issuerEl) _issuerEl.style.borderColor = '';
+  const _verEl = document.getElementById('upload-version');
+  const _effEl = document.getElementById('upload-effective-from');
+  const _supEl = document.getElementById('upload-supersedes');
+  const verVal = _verEl ? _verEl.value.trim() : '';
+  const effVal = _effEl ? _effEl.value.trim() : '';
+  const supVal = _supEl ? _supEl.value.trim() : '';
+  if (srcKind === 'regulator' && (!verVal || !effVal)) {
+    toast('Для регулятора укажите редакцию и дату вступления в силу', true);
+    if (!verVal && _verEl) { _verEl.focus(); _verEl.style.borderColor = 'var(--red)'; }
+    else if (_effEl) { _effEl.focus(); _effEl.style.borderColor = 'var(--red)'; }
+    return;
+  }
+  if (_verEl) _verEl.style.borderColor = '';
+  if (_effEl) _effEl.style.borderColor = '';
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '… Загрузка...';
 
@@ -355,6 +399,9 @@ async function uploadFiles(files) {
     fd.append('source_kind', srcKind);
     fd.append('issuer', issuerVal);
     fd.append('doc_kind', docKindVal);
+    fd.append('version_string', verVal);
+    fd.append('effective_from', effVal);
+    fd.append('supersedes_id', supVal);
     fd.append('visibility', vis);
     fd.append('allow_group_ids', JSON.stringify(acc.allow_group_ids));
     fd.append('allow_user_ids', JSON.stringify(acc.allow_user_ids));

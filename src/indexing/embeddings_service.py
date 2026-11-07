@@ -512,7 +512,8 @@ class EmbeddingsService:
             # прошедших конвейер (получалось «фильтр спрятал документ»). Пустое значение НЕ пишем:
             # отсутствие поля — это законный случай, и его ловит мягкая ветка условия (`IsEmpty`).
             if metadata:
-                for _k in ("issuer", "topics", "rubrics", "facets", "schema_version"):
+                for _k in ("issuer", "topics", "rubrics", "facets", "schema_version",
+                       "version_string", "version_status", "effective_from", "document_key"):
                     _v = metadata.get(_k)
                     if _v not in (None, "", [], {}):
                         payload[_k] = _v
@@ -744,6 +745,7 @@ class EmbeddingsService:
         theme_include_empty: bool = False,
         *,
         scope: Optional[str] = None,
+        include_superseded: bool = False,
     ) -> List[Dict[str, Any]]:
         """Поиск с выбором коллекции через `scope`: 'news' — коллекция новостей,
         'documents' (или None) — основная. Параметр опциональный: старые вызовы не меняются.
@@ -865,6 +867,10 @@ class EmbeddingsService:
             # иначе карточка попадает в выдачу чата как «фрагмент документа».
             from qdrant_client.models import FieldCondition as _FCL, MatchValue as _MAL
             level_must_not = [_FCL(key="level", match=_MAL(value="document"))]
+            # Утратившие силу редакции (ADR-008) по умолчанию не отдаём: ответ не должен
+            # цитировать отменённое требование. Переключатель include_superseded возвращает их.
+            if not include_superseded:
+                level_must_not.append(_FCL(key="version_status", match=_MAL(value="superseded")))
             deny_must_not = list(level_must_not) + list(acl_must_not)
 
             query_filter = QFilter(must_not=deny_must_not)

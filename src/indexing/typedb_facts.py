@@ -130,3 +130,73 @@ def format_facts_block(facts: List[Dict[str, Any]]) -> str:
             f"[чанк {f.get('chunk_id', '?')}, {f.get('source_origin', '?')}]"
         )
     return "\n".join(lines)
+
+def outdated_versions() -> List[Dict[str, str]]:
+    """Редакции со статусом superseded: документ, версия, дата окончания действия.
+
+    Версии живут в той же базе, что и факты (ADR-008). Возвращает пустой список,
+    если контур выключен или версий нет — вызывающий код не должен падать.
+    """
+    if not is_available():
+        return []
+    c = _cfg()
+    out: List[Dict[str, str]] = []
+    try:
+        drv = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
+                            DriverOptions(DriverTlsConfig.disabled()))
+        try:
+            with drv.transaction(c["db"], TransactionType.READ) as tx:
+                rows = list(tx.query(
+                    'match $v isa document_version, has kag_document_id $d, '
+                    'has version_status "superseded"; fetch {"d": $d};'
+                ).resolve())
+                for r in rows:
+                    v = r.get("d")
+                    out.append({"document_id": v.get("@value") if isinstance(v, dict) else v})
+        finally:
+            drv.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("typedb_versions: список устаревших редакций не получен: %s",
+                       str(exc).splitlines()[0][:160])
+    return out
+
+
+def outdated_references(visible_chunk_ids: Set[str]) -> List[Dict[str, str]]:
+    """Требования, чей фрагмент принадлежит утратившей силу редакции.
+
+    Провенанс требования — source-chunk-id вида "<document_id>_chunk_NNNNN", поэтому
+    редакция определяется по префиксу. ACL соблюдается: чанк не в visible — не отдаём.
+    """
+    versions = outdated_versions()
+    if not versions:
+        return []
+    prefixes = [v["document_id"] for v in versions if v.get("document_id")]
+    if not prefixes or not visible_chunk_ids:
+        return []
+    c = _cfg()
+    out: List[Dict[str, str]] = []
+    try:
+        drv = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
+                            DriverOptions(DriverTlsConfig.disabled()))
+        try:
+            with drv.transaction(c["db"], TransactionType.READ) as tx:
+                rows = list(tx.query(
+                    'match $x isa security_requirement, has source-chunk-id $c; '
+                    'fetch {"c": $c};'
+                ).resolve())
+        finally:
+            drv.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("outdated_references: запрос не выполнен: %s",
+                       str(exc).splitlines()[0][:160])
+        return []
+    for r in rows:
+        v = r.get("c")
+        chunk = v.get("@value") if isinstance(v, dict) else v
+        if not chunk or chunk not in visible_chunk_ids:
+            continue
+        for p in prefixes:
+            if chunk.startswith(p):
+                out.append({"chunk_id": chunk, "document_id": p})
+                break
+    return out

@@ -145,3 +145,21 @@ cii_object, threat_source); **контур доказательств** — тр
 - Массовое наполнение онтологии корпуса не выполнено — см. `docs/tech-debt.md`, п. 11
   (95 уникальных файлов, 6830 чанков; в таблице `documents` 170 записей, из них 33 — новости,
   и есть дубли: `r-1323565.1.pdf` загружен 34 раза).
+
+## 2026-11-07 — Версии документов регулятора (ADR-008, change `2026-11-07-versii-dokumentov-reguljatora`)
+
+Схема `cybersecurity_ontology_v2` пополнилась: entity `document_version` (ent-key = id файла Postgres),
+relations `document_version_of` и `supersedes`, атрибуты `effective_from`, `effective_to`,
+`version_status`, `version_hash`, `kag_document_id`, `document_key`, `current_version_string`.
+Акт (`regulatory_document` / `company_document`) теперь опознаётся `document_key`, редакция — отдельный объект.
+
+Загрузка через сайт получила `version_string`, `effective_from`, `supersedes_id`; для регулятора версия
+и дата обязательны (`VERSION_REQUIRED`). Поиск в Qdrant получает `version_status` и по умолчанию
+не отдаёт `superseded` (флаг `include_superseded`). `typedb_facts.outdated_references()` находит
+требования из утративших силу редакций с соблюдением ACL по чанку.
+
+Проверено: две редакции тестового акта — 2 `document_version`, 1 `supersedes`, повторная обработка
+не плодит версии (`skipped: version exists`), тестовые объекты удалены. Тесты: 7 passed.
+Открыто: `current_versions()` не подтверждена, статус старой редакции не переписывается атрибутом
+(TypeQL delete-синтаксис), файлы схемы в `project_typedb/adr/` не обновлены. Подробности —
+`docs/changes/2026-11-07-versii-dokumentov-reguljatora/result.md`.

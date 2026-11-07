@@ -1145,6 +1145,12 @@ class DocumentService:
                     "deny_group_ids": getattr(record, 'deny_group_ids', None) or [],
                     "allow_user_ids": getattr(record, 'allow_user_ids', None) or [],
                     "deny_user_ids": getattr(record, 'deny_user_ids', None) or [],
+                    # Версия редакции (ADR-008) — верхним уровнем payload, чтобы
+                    # поиск мог отсечь утратившие силу редакции фильтром.
+                    "version_string": _as_payload_json(getattr(record, "source_metadata", None), {}).get("version_string", ""),
+                    "version_status": _as_payload_json(getattr(record, "source_metadata", None), {}).get("version_status", "current"),
+                    "effective_from": _as_payload_json(getattr(record, "source_metadata", None), {}).get("effective_from", ""),
+                    "document_key": _as_payload_json(getattr(record, "source_metadata", None), {}).get("document_key", ""),
                     **parsed_metadata,
                     "source_metadata": record.source_metadata or {},
                 },
@@ -1239,9 +1245,17 @@ class DocumentService:
                         from src.indexing import typedb_writer
 
                         if typedb_writer.is_available() and typedb_writer.write_enabled():
+                            try:
+                                import json as _json
+                                _sm = _json.loads(getattr(record, "source_metadata", None) or "{}")
+                                if not isinstance(_sm, dict):
+                                    _sm = {}
+                            except Exception:  # noqa: BLE001
+                                _sm = {}
                             await self._build_typedb_only(
                                 document_id, record.filename, chunks, plog=plog,
                                 source_kind=(getattr(record, "source_kind", None) or ""),
+                                source_metadata=_sm,
                             )
                     except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
                         logger.warning(f"[typedb] контур пропущен: {e}")
@@ -1920,7 +1934,7 @@ class DocumentService:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
     async def _build_typedb_only(self, document_id: str, filename: str, chunks: list, plog=None,
-                                 source_kind: str = ""):
+                                 source_kind: str = "", source_metadata: Optional[dict] = None):
         """Наполнить онтологию TypeDB по чанкам документа (ADR-007).
 
         Отдельно от Neo4j-графа: у контура свой выключатель (system/typedb.write_enabled),
@@ -1978,6 +1992,24 @@ class DocumentService:
             plog.log("typedb_write", total) if plog else None
         except Exception:  # noqa: BLE001
             pass
+
+        # Версия документа (ADR-008): одна редакция = один файл, привязка к акту,
+        # замена прежней редакции по supersedes_id. Идемпотентно по ent-key=document_id.
+        try:
+            from src.indexing import typedb_versions
+
+            _title = (source_metadata or {}).get("title") or filename or ""
+            vres = await asyncio.to_thread(
+                typedb_versions.upsert_from_metadata,
+                document_id, _title, source_kind or "", source_metadata or {},
+                (chunks[0].get("chunk_id") if chunks else ""),
+            )
+            if vres.get("created") or vres.get("superseded"):
+                logger.info(f"[versions] документ {document_id}: {vres}")
+            elif vres.get("skipped"):
+                logger.debug(f"[versions] документ {document_id}: пропущено ({vres['skipped']})")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[versions] документ {document_id}: {str(exc).splitlines()[0][:160]}")
         return total
 
     async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list,

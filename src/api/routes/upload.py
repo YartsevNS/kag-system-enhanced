@@ -70,6 +70,7 @@ def _json_parse_source(raw) -> str:
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Optional, List, Union, Literal
 from pydantic import BaseModel, Field
@@ -543,6 +544,11 @@ async def upload_document(
     # Справочники подсказывают значения, но любое можно вписать своё.
     issuer: str = Form(""),
     doc_kind: str = Form(""),
+    # Версия и дата действия редакции (ADR-008). Для регулятора обязательны:
+    # без них онтология не знает, какая редакция действует.
+    version_string: str = Form(""),
+    effective_from: str = Form(""),
+    supersedes_id: str = Form(""),
 ):
     """
     Загрузить документ.
@@ -634,6 +640,20 @@ async def upload_document(
         })
     doc_kind, issuer = _doc_kind, _issuer
 
+    # Версия редакции: у регулятора обязательна. Формат даты — YYYY-MM-DD.
+    _ver = (version_string or "").strip()[:120]
+    _eff = (effective_from or "").strip()[:10]
+    _sup = (supersedes_id or "").strip()[:64]
+    if source_kind == "regulator":
+        if not _ver or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _eff or ""):
+            raise HTTPException(status_code=400, detail={
+                "code": "VERSION_REQUIRED",
+                "message": "Для документа регулятора укажите редакцию (version_string) и дату "
+                           "вступления в силу (effective_from, ГГГГ-ММ-ДД).",
+                "upload_id": upload_id,
+            })
+    version_string, effective_from, supersedes_id = _ver, _eff, _sup
+
     # Сохраняем через document_service
     try:
         uploaded_by = current_user.id if current_user else None
@@ -656,6 +676,9 @@ async def upload_document(
                     "source_kind": source_kind,
                     "issuer": issuer,
                     "doc_kind": doc_kind,
+                    "version_string": version_string,
+                    "effective_from": effective_from,
+                    "supersedes_id": supersedes_id,
                 }.items() if v
             } or None,
             access={
