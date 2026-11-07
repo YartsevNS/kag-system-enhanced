@@ -67,7 +67,7 @@ class DocumentRecord(BaseModel):
     original_text: Optional[str] = Field(default=None, description="Извлечённый текст оригинала для сравнения версий")
     # Коллекция векторов: '' — основная, 'news' — новости монитора. Ставится по метаданным
     # источника при загрузке; вид документа на маршрут не влияет.
-    collection: Optional[str] = Field(default=None, description="Коллекция векторов: '' | 'news'")
+    collection: Optional[str] = Field(default=None, description="Коллекция векторов: '' | 'documents' | 'news'")
     source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
     # Права доступа (ACL)
     visibility: str = Field(default="public", description="public | restricted")
@@ -391,7 +391,10 @@ class DocumentService:
         if _route == "news":
             route = "news"
         elif _route == "documents":
-            route = ""
+            # Явная основная коллекция пишется словом, а не пустой строкой:
+            # пустое значение is_news_document трактует как «не задано» и снова
+            # смотрит на источник — документ возвращался бы в новости.
+            route = "documents"
         else:
             route = collection_for_source(source_metadata)
 
