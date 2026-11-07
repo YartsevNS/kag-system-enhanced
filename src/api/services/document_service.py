@@ -275,6 +275,7 @@ class DocumentService:
         upload_id: Optional[str] = None,
         source_metadata: Optional[dict] = None,
         access: Optional[dict] = None,
+        collection: Optional[str] = None,
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
@@ -381,6 +382,19 @@ class DocumentService:
             f"[{upload_id}] 💾 Файл сохранён: {target_path.name} ({file_size} байт)"
         )
 
+        # Маршрут коллекции: явный выбор загрузчика главнее источника.
+        # source_url/source_name сами по себе делают документ новостью (так устроен
+        # web_monitor), поэтому ручная загрузка нормативного документа со ссылкой на
+        # источник обязана уметь сказать «это основная коллекция» — иначе фрагменты
+        # уходят в kag_news и выпадают из поиска по корпусу.
+        _route = (collection or "").strip().lower()
+        if _route == "news":
+            route = "news"
+        elif _route == "documents":
+            route = ""
+        else:
+            route = collection_for_source(source_metadata)
+
         # ========== Этап 5b: дублируем оригинал в S3 (ADR-006) ==========
         # Место хранения меняется на S3 (silo/OpenMaxIO): пользовательские загрузки ->
         # company-docs, собранные с сайтов -> regulator-docs. В метаданных S3-объекта
@@ -393,7 +407,7 @@ class DocumentService:
                 await asyncio.to_thread(
                     s3_storage.put_original,
                     doc_id, filename, file_content,
-                    bucket=bucket_for(source_metadata, collection_for_source(source_metadata)),
+                    bucket=bucket_for(source_metadata, route),
                     owner=uploaded_by or None,
                     metadata={
                         "document_id": doc_id,
@@ -401,7 +415,7 @@ class DocumentService:
                         "uploaded_by": uploaded_by or "",
                         "source_name": (source_metadata or {}).get("source_name", "") if isinstance(source_metadata, dict) else "",
                         "source_url": (source_metadata or {}).get("source_url", "") if isinstance(source_metadata, dict) else "",
-                        "collection": collection_for_source(source_metadata),
+                        "collection": route,
                         "file_hash": file_hash,
                     },
                 )
@@ -424,7 +438,7 @@ class DocumentService:
             group_ids=group_ids or [],
             # Маршрут коллекции ставится ЗДЕСЬ и один раз: по источнику (метаданные web_monitor),
             # а не по виду документа. Дальше его читает service_for_document при записи и удалении.
-            collection=collection_for_source(source_metadata),
+            collection=route,
             source_metadata=source_metadata,
             visibility=(access or {}).get("visibility", "public") or "public",
             allow_group_ids=(access or {}).get("allow_group_ids") or [],

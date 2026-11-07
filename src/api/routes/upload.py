@@ -525,6 +525,12 @@ async def upload_document(
     # ── Источник (внешние поставщики: web_collector и т.п.) ────────────
     source_name: str = Form(""),
     source_url: str = Form(""),
+    # ── Маршрут коллекции ───────────────────────────────────────────────
+    # "documents" — основная коллекция (корпус), "news" — новости, "" — решает
+    # источник. Нужен потому, что ссылка на источник сама по себе отправляла
+    # документ в новости: нормативный акт со страницы мониторинга выпадал из
+    # поиска по корпусу.
+    collection: str = Form(""),
 ):
     """
     Загрузить документ.
@@ -604,7 +610,8 @@ async def upload_document(
                 "deny_group_ids": _parse_id_list(deny_group_ids),
                 "allow_user_ids": _parse_id_list(allow_user_ids),
                 "deny_user_ids": _parse_id_list(deny_user_ids),
-            }
+            },
+            collection=collection or None,
         )
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать» на
