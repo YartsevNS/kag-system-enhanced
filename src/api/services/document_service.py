@@ -2025,6 +2025,21 @@ class DocumentService:
                 document_id, _title, source_kind or "", source_metadata or {},
                 (chunks[0].get("chunk_id") if chunks else ""),
             )
+            if not vres.get("superseded"):
+                # Переобработка уже заменённой редакции: вернуть метку в Qdrant,
+                # иначе выбывшая редакция снова попадёт в поиск.
+                try:
+                    from src.indexing.typedb_versions import is_superseded as _is_sup
+
+                    if await asyncio.to_thread(_is_sup, document_id):
+                        from src.indexing.embeddings_service import embeddings_service as _es_mod
+
+                        n_old = await _es_mod.update_document_payload(
+                            document_id, {"version_status": "superseded"})
+                        logger.info(f"[versions] документ {document_id} уже заменён: "
+                                    f"помечено чанков {n_old}")
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(f"[versions] проверка замены: {str(exc)[:120]}")
             _sup = (source_metadata or {}).get("supersedes_id")
             if _sup and vres.get("superseded"):
                 # Прежняя редакция должна исчезнуть из поиска: помечаем её чанки в Qdrant.

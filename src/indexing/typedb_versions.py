@@ -73,6 +73,28 @@ def _q(value: str) -> str:
     return (value or "").replace("\\", "\\\\").replace('"', '\\"')
 
 
+def is_superseded(document_id: str) -> bool:
+    """Заменена ли эта редакция более новой (есть входящий supersedes в older).
+
+    Нужна при переобработке старой редакции: Qdrant-чанки перезаписываются
+    со статусом current, и без этой проверки выбывшая редакция возвращается в поиск.
+    """
+    c = _cfg()
+    try:
+        drv = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
+                            DriverOptions(DriverTlsConfig.disabled()))
+        try:
+            with drv.transaction(c["db"], TransactionType.READ) as tx:
+                return bool(list(tx.query(
+                    f'match $o isa document_version, has kag_document_id "{_q(document_id)}";'
+                    f' $s isa supersedes (older: $o);').resolve()))
+        finally:
+            drv.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("versions: проверка замены не удалась: %s", str(exc)[:120])
+        return False
+
+
 def _date_literal(value: str) -> Optional[str]:
     """Дата в формате YYYY-MM-DD; иначе None (атрибут не ставим)."""
     if not value:
@@ -113,172 +135,169 @@ def upsert_from_metadata(
     eff_to_new = eff_from
 
     c = _cfg()
-    drv = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
-                        DriverOptions(DriverTlsConfig.disabled()))
-    try:
-        with drv.transaction(c["db"], TransactionType.WRITE) as tx:
-            # 1. Версия уже есть — ничего не переписываем (идемпотентность).
-            exists = list(tx.query(
-                f'match $v isa document_version, has ent-key "{_q(document_id)}";'
-            ).resolve())
-            if exists:
-                result["skipped"] = "version exists"
-                tx.commit()
-                return result
 
-            # 2. Акт: ищем по ключу, затем по названию. Если не нашли — версию
-            #    всё равно пишем: акт появится при извлечении и свяжется в другой раз.
-            act_var = None
-            _number = str(meta.get("number") or "").strip()
-            _cands = [
-                # Самый надёжный путь: акт, извлечённый из ЭТОГО документа, помечен
-                # его же source-chunk-id ("<document_id>_chunk_NNNNN").
-                f'match $d isa {doc_type}, has source-chunk-id $c; '
-                f'$c like "{_q(document_id)}.*";',
-            ]
-            if _number and doc_kind:
-                # Основной путь: акт опознаётся номером и типом — название у writer'а
-                # приходит из текста документа и с именем файла не совпадает.
-                _cands.append(
-                    f'match $d isa {doc_type}, has number "{_q(_number)}", '
-                    f'has doc_type "{_q(doc_kind)}";')
-            _cands += [
-                f'match $d isa {doc_type}, has document_key $k; $k == "{_q(doc_key)}";',
-                f'match $d isa {doc_type}, has title $t; $t == "{_q(title)}";',
-            ]
+    def _conn():
+        return TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
+                             DriverOptions(DriverTlsConfig.disabled()))
+
+    # ------------------------------------------------------------------
+    # ЭТАП 1 (чтение): найти акт. Название акта берём ЕГО, а не из метаданных:
+    # writer извлекает акт из текста, и название там своё.
+    # ------------------------------------------------------------------
+    _number = str(meta.get("number") or "").strip()
+    _cands = [
+        f'match $d isa {doc_type}, has source-chunk-id $c, has title $t, has ent-key $k; '
+        f'$c like "{_q(document_id)}.*"; fetch {{"t": $t, "k": $k}};',
+    ]
+    if _number and doc_kind:
+        _cands.append(f'match $d isa {doc_type}, has number "{_q(_number)}", '
+                      f'has doc_type "{_q(doc_kind)}", has title $t, has ent-key $k; '
+                      f'fetch {{"t": $t, "k": $k}};')
+    _cands += [
+        f'match $d isa {doc_type}, has document_key "{_q(doc_key)}", has title $t, '
+        f'has ent-key $k; fetch {{"t": $t, "k": $k}};',
+        f'match $d isa {doc_type}, has title $t, has ent-key $k; '
+        f'$t == "{_q(title)}"; fetch {{"t": $t, "k": $k}};',
+    ]
+    act_title = None
+    act_key = None
+    drv = _conn()
+    try:
+        with drv.transaction(c["db"], TransactionType.READ) as tx:
             for q in _cands:
                 try:
-                    if list(tx.query(q).resolve()):
-                        act_var = "$d"
-                        break
-                except Exception:  # noqa: BLE001 — нет атрибута/нет совпадений
+                    rows = list(tx.query(q).resolve())
+                except Exception:  # noqa: BLE001 — нет атрибута у типа/нет совпадений
                     continue
+                for row in rows:
+                    v = row.get("t")
+                    act_title = v.get("@value") if isinstance(v, dict) else v
+                    kk = row.get("k")
+                    act_key = kk.get("@value") if isinstance(kk, dict) else kk
+                    if act_title:
+                        break
+                if act_title:
+                    break
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("versions: поиск акта не удался: %s", str(exc).splitlines()[0][:160])
+    finally:
+        drv.close()
 
-            # 3. Версия.
-            attrs = [
-                f'has ent-key "{_q(document_id)}"',
-                f'has kag_document_id "{_q(document_id)}"',
-                'has version_status "current"',
-            ]
-            if version_string:
-                attrs.append(f'has version_string "{_q(version_string)}"')
-            if eff_from:
-                attrs.append(f"has effective_from {eff_from}")
-            if first_chunk_id:
-                attrs.append(f'has source-chunk-id "{_q(first_chunk_id)}"')
-            attrs_sql = ",\n    ".join(attrs)
+    # ------------------------------------------------------------------
+    # ЭТАП 2 (запись A): сама версия и её связи. Никаких проглоченных ошибок
+    # в этой транзакции: одна неудачная операция откатывает весь коммит.
+    # ------------------------------------------------------------------
+    attrs = [
+        f'has ent-key "{_q(document_id)}"',
+        f'has kag_document_id "{_q(document_id)}"',
+        'has version_status "current"',
+    ]
+    if version_string:
+        attrs.append(f'has version_string "{_q(version_string)}"')
+    if eff_from:
+        attrs.append(f"has effective_from {eff_from}")
+    if first_chunk_id:
+        attrs.append(f'has source-chunk-id "{_q(first_chunk_id)}"')
+    attrs_sql = ",\n    ".join(attrs)
 
-            if act_var:
-                tx.query(
-                    f'match $d isa {doc_type}, has title $t; $t == "{_q(title)}";'
-                    f' insert\n  $v isa document_version,\n    {attrs_sql};\n'
-                    f'  $r isa document_version_of (version: $v, document: $d);'
-                ).resolve()
-                result["linked"] = 1
+    drv = _conn()
+    try:
+        with drv.transaction(c["db"], TransactionType.WRITE) as tx:
+            if list(tx.query(
+                    f'match $v isa document_version, has ent-key "{_q(document_id)}";').resolve()):
+                result["skipped"] = "version exists"
+                tx.commit()
             else:
-                tx.query(
-                    f'insert\n  $v isa document_version,\n    {attrs_sql};'
-                ).resolve()
-            result["created"] = 1
+                if act_key:
+                    tx.query(
+                        f'match $d isa {doc_type}, has ent-key "{_q(act_key)}";'
+                        f' insert\n  $v isa document_version,\n    {attrs_sql};\n'
+                        f'  $r isa document_version_of (version: $v, document: $d);'
+                    ).resolve()
+                    result["linked"] = 1
+                else:
+                    tx.query(f'insert\n  $v isa document_version,\n    {attrs_sql};').resolve()
+                result["created"] = 1
 
-            # 3b. Издатель и тип — в онтологию (P1.6). В метаданных они есть, но в графе
-            # их не было: regulator не создавался, doc_type у акта оставался пустым.
-            if act_var and source_kind == "regulator":
-                try:
-                    if doc_kind and not list(tx.query(
-                            f'match $d isa regulatory_document, has title "{_q(title)}", '
-                            f'has doc_type $dt;').resolve()):
-                        tx.query(
-                            f'match $d isa regulatory_document, has title "{_q(title)}";'
-                            f' insert $d has doc_type "{_q(doc_kind)}";'
-                        ).resolve()
-                    # Ключ акта проставляем и существующему объекту: без него он
-                    # не найдётся при следующей редакции.
-                    if not list(tx.query(
-                            f'match $d isa regulatory_document, has title "{_q(title)}", '
-                            f'has document_key $k2;').resolve()):
-                        tx.query(
-                            f'match $d isa regulatory_document, has title "{_q(title)}";'
-                            f' insert $d has document_key "{_q(doc_key)}";'
-                        ).resolve()
-                    if issuer:
-                        reg_key = _q(normalize_document_key("", "", "", issuer))
-                        if not list(tx.query(
-                                f'match $r isa regulator, has name "{_q(issuer)}";').resolve()):
-                            tx.query(
-                                f'insert $r isa regulator, has ent-key "{reg_key}", '
-                                f'has name "{_q(issuer)}";'
-                            ).resolve()
-                        has_link = list(tx.query(
-                            f'match $r isa regulator, has name "{_q(issuer)}";'
-                            f' $i isa document_issuance (issuer: $r);'
-                            f' $d isa regulatory_document, has title "{_q(title)}";'
-                            f' $j isa document_issuance (regulated_item: $d);').resolve())
-                        if not has_link:
-                            tx.query(
-                                f'match $r isa regulator, has name "{_q(issuer)}";'
-                                f' $d isa regulatory_document, has title "{_q(title)}";'
-                                f' insert $i isa document_issuance (issuer: $r, regulated_item: $d);'
-                            ).resolve()
-                            result["issuer_linked"] = 1
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("versions: издатель/тип не записаны: %s",
-                                 str(exc).splitlines()[0][:140])
-
-            # 4. Замена прежней редакции — связью supersedes, а не правкой статусов.
-            #    TypeQL 3 не даёт надёжно переписать владение атрибутом в той же
-            #    транзакции (синтаксис delete/insert различается между версиями),
-            #    поэтому «действующая редакция» вычисляется: версия без входящего
-            #    supersedes (older). Атрибут version_status остаётся для случаев
-            #    «отменён без замены» (repealed).
-            if supersedes_id:
-                try:
+                if supersedes_id:
                     tx.query(
                         f'match $n isa document_version, has kag_document_id "{_q(document_id)}";'
                         f' $o isa document_version, has kag_document_id "{_q(supersedes_id)}";'
                         f' insert $s isa supersedes (newer: $n, older: $o);'
                     ).resolve()
                     result["superseded"] = 1
-                    # Дата окончания действия прежней редакции. Ставим только если её
-                    # ещё нет (у версии effective_to 0..1) — удаление атрибута в TypeQL 3
-                    # в этой версии не парсится, поэтому переписывать не пытаемся.
                     if eff_from:
-                        try:
-                            tx.query(
-                                f'match $o isa document_version, has kag_document_id '
-                                f'"{_q(supersedes_id)}"; not {{ $o has effective_to $e; }};'
-                                f' insert $o has effective_to {eff_from};'
-                            ).resolve()
-                            result["effective_to"] = 1
-                        except Exception as exc:  # noqa: BLE001
-                            logger.debug("versions: effective_to не выставлена: %s",
-                                         str(exc).splitlines()[0][:120])
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("versions: замена %s -> %s не применена: %s",
-                                   supersedes_id, document_id, str(exc)[:800], exc_info=True)
-
-            tx.commit()
+                        tx.query(
+                            f'match $o isa document_version, has kag_document_id '
+                            f'"{_q(supersedes_id)}"; not {{ $o has effective_to $e; }};'
+                            f' insert $o has effective_to {eff_from};'
+                        ).resolve()
+                        result["effective_to"] = 1
+                tx.commit()
     except Exception as exc:  # noqa: BLE001
         logger.warning("versions: запись версии %s не удалась: %s",
                        document_id, str(exc)[:600], exc_info=True)
         result["skipped"] = str(exc).splitlines()[0][:160]
+        result["created"] = 0
     finally:
         drv.close()
-    # Контроль: отдельное соединение, уже после закрытия записи. Внутри той же
-    # транзакции чтение возвращало 0 при фактическом коммите — проверять оттуда нельзя.
-    if result.get("created") or result.get("skipped") == "":
+
+    # ------------------------------------------------------------------
+    # ЭТАП 3 (запись B): издатель, тип, ключ акта. Отдельная транзакция —
+    # её сбой не откатывает версию (прежняя ошибка была именно в этом).
+    # ------------------------------------------------------------------
+    _kind = source_kind or str(meta.get("source_kind") or "")
+    logger.info("versions этап3: документ=%s kind=%r act_key=%r issuer=%r doc_kind=%r",
+                document_id, _kind, act_key, issuer, doc_kind)
+    if act_key and (issuer or doc_kind):
+        if _kind != "regulator":
+            doc_type = DOC_TYPES.get(_kind, doc_type)
+        drv = _conn()
         try:
-            _chk = TypeDB.driver(c["addr"], Credentials(c["user"], c["pass"]),
-                                 DriverOptions(DriverTlsConfig.disabled()))
-            try:
-                with _chk.transaction(c["db"], TransactionType.READ) as _ctx:
-                    result["after_commit"] = len(list(_ctx.query(
-                        f'match $v isa document_version, has kag_document_id "{_q(document_id)}";'
-                    ).resolve()))
-            finally:
-                _chk.close()
-            logger.info("versions: база=%s документ=%s после коммита объектов=%s",
-                        c["db"], document_id, result.get("after_commit"))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("versions: контрольное чтение не удалось: %s", str(exc)[:160])
+            with drv.transaction(c["db"], TransactionType.WRITE) as tx:
+                if doc_kind and not list(tx.query(
+                        f'match $d isa {doc_type}, has ent-key "{_q(act_key)}", '
+                        f'has doc_type $dt;').resolve()):
+                    tx.query(f'match $d isa {doc_type}, has ent-key "{_q(act_key)}";'
+                             f' insert $d has doc_type "{_q(doc_kind)}";').resolve()
+                if not list(tx.query(
+                        f'match $d isa {doc_type}, has ent-key "{_q(act_key)}", '
+                        f'has document_key $k2;').resolve()):
+                    tx.query(f'match $d isa {doc_type}, has ent-key "{_q(act_key)}";'
+                             f' insert $d has document_key "{_q(doc_key)}";').resolve()
+                if issuer:
+                    reg_key = _q(normalize_document_key("", "", "", issuer))
+                    if not list(tx.query(
+                            f'match $r isa regulator, has name "{_q(issuer)}";').resolve()):
+                        tx.query(f'insert $r isa regulator, has ent-key "{reg_key}", '
+                                 f'has name "{_q(issuer)}";').resolve()
+                    tx.query(f'match $r isa regulator, has name "{_q(issuer)}";'
+                             f' $d isa {doc_type}, has ent-key "{_q(act_key)}";'
+                             f' not {{ $i isa document_issuance (issuer: $r, regulated_item: $d); }};'
+                             f' insert $i isa document_issuance (issuer: $r, regulated_item: $d);'
+                             ).resolve()
+                    result["issuer_linked"] = 1
+                tx.commit()
+        except Exception as exc:  # noqa: BLE001 — не влияет на версию
+            logger.warning("versions: издатель/тип для %s не записаны: %s",
+                           document_id, str(exc).splitlines()[0][:200])
+        finally:
+            drv.close()
+
+    # ------------------------------------------------------------------
+    # ЭТАП 4 (контроль): отдельное соединение, после закрытия записи.
+    # ------------------------------------------------------------------
+    try:
+        _chk = _conn()
+        try:
+            with _chk.transaction(c["db"], TransactionType.READ) as _ctx:
+                result["after_commit"] = len(list(_ctx.query(
+                    f'match $v isa document_version, has kag_document_id "{_q(document_id)}";'
+                ).resolve()))
+        finally:
+            _chk.close()
+        logger.info("versions: база=%s документ=%s после коммита объектов=%s", c["db"], document_id,
+                    result.get("after_commit"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("versions: контрольное чтение не удалось: %s", str(exc)[:160])
     return result
