@@ -1541,6 +1541,15 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Neo4j: не удалось удалить {document_id}: {e}")
 
+        # Удаляем из онтологии TypeDB (техдолг 17): иначе факты по удалённому документу
+        # продолжают участвовать в выводе правил нарушений.
+        try:
+            from src.indexing.typedb_cleanup import delete_document_ontology
+            _ont = delete_document_ontology(document_id)
+            logger.info(f"TypeDB: документ {document_id} очищен: {_ont}")
+        except Exception as e:
+            logger.warning(f"TypeDB: не удалось очистить {document_id}: {e}")
+
         # Убираем из кэша
         self._documents.pop(document_id, None)
 

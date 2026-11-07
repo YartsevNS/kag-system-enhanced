@@ -23,21 +23,23 @@ national_standard…) про принадлежность документу о�
 Пока признак пуст, `typedb_writer` не переклассифицирует объект и документ попадает в онтологию
 как `regulatory_document` (поведение по умолчанию).
 
-### 17. Удаление документа не чистит TypeDB: остаются объекты и связи
+### 17. Удаление документа не чистит TypeDB: остаются объекты и связи — ЗАКРЫТО 07.11.2026
 
-**Что:** `document_service.delete_document()` чистит БД, Qdrant, Neo4j, файлы и S3, но не онтологию.
-Объекты, записанные по `source-chunk-id`, остаются в `cybersecurity_ontology_v2` и попадают в статистику
-как «живые». Замер 07.11.2026: после удаления тестовой политики (`0f1d7cc6`) её объекты остались.
+**Было:** `document_service.delete_document()` чистил БД, Qdrant, Neo4j, файлы и S3, но не
+онтологию. Объекты по `source-chunk-id` удалённого документа оставались и участвовали в
+правилах вывода: факт нарушения по удалённому документу продолжал выводиться.
 
-**Почему не удаляется просто:** TypeDB запрещает удалять участника связи с обязательной ролью
-(`@card(1..1)`) — ошибки `CNT5` / `COW5` / `DCT3`. Нужно сначала снять связи, потом объекты.
-Запрос `$r isa relation; $r links $x;` на 3.x не снял связи — синтаксис требует уточнения по типам ролей.
+**Сделано:** `src/indexing/typedb_cleanup.py` → `delete_document_ontology()`:
+снимаются связи (`document_version_of`, `supersedes`, `document_issuance`,
+`document_assignment`, `applicability_criteria`, `document_hierarchy`, `measure_definition`,
+`compensatory_relation`, `requirement_basis`, `requirement_evidence`), затем удаляются
+`document_version`, акты и элементы документа. Объекты реестра (`cii_object`,
+`security_software`) не трогаются — они не принадлежат документу.
+Каждый шаг — своя транзакция.
 
-**Что нужно:** каскад в `delete_document`: по префиксу `document_id` собрать объекты, снять связи
-по каждому типу отношения (document_issuance, document_hierarchy, measure_definition,
-applicability_criteria, compensatory_relation, document_assignment, asset_protection,
-requirement_basis, requirement_evidence), затем удалить объекты. Проверка: после удаления документа
-`match $x isa $t, has source-chunk-id $c; $c like "<doc>.*";` возвращает 0.
+**Проверено (стенд 192.168.50.18):** документ d9982ffb… и 798bf879… —
+до удаления 4 объекта (2 `structural_element`, 1 `company_document`, 1 `document_version`),
+после DELETE /api/v1/upload/{id} — 0. Тесты: `tests/test_typedb_cleanup.py`.
 
 ### 16. Правила нарушений дают 0 фактов: нет входных данных (константа убрана 07.11.2026)
 
