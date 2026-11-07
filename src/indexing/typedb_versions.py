@@ -153,6 +153,11 @@ def upsert_from_metadata(
         _cands.append(f'match $d isa {doc_type}, has number "{_q(_number)}", '
                       f'has doc_type "{_q(doc_kind)}", has title $t, has ent-key $k; '
                       f'fetch {{"t": $t, "k": $k}};')
+    if doc_key and doc_key not in ("", "||"):
+        # Документ компании может не дать «акта» при извлечении (политика, инструкция).
+        # Тогда объект создаётся отдельно — по ключу из метаданных загрузки.
+        _cands.append(f'match $d isa company_document, has document_key "{_q(doc_key)}", '
+                      f'has title $t, has ent-key $k; fetch {{"t": $t, "k": $k}};')
     _cands += [
         f'match $d isa {doc_type}, has document_key "{_q(doc_key)}", has title $t, '
         f'has ent-key $k; fetch {{"t": $t, "k": $k}};',
@@ -208,6 +213,22 @@ def upsert_from_metadata(
                 result["skipped"] = "version exists"
                 tx.commit()
             else:
+                _kind2 = source_kind or str(meta.get("source_kind") or "")
+                logger.info("versions этап2: документ=%s act_key=%r kind=%r doc_key=%r title=%r",
+                            document_id, act_key, _kind2, doc_key, (title or "")[:60])
+                if not act_key and _kind2 == "company" and doc_key:
+                    # Документ компании обязан существовать как объект онтологии,
+                    # даже если извлечение не нашло в нём документа-акта: иначе
+                    # политику нельзя привязать к объекту КИИ и правило не сработает.
+                    _ent_txt = _ent_company = f"company_document:{doc_key}"
+                    _attrs = [f'has ent-key "{_q(_ent_txt)}"',
+                              f'has document_key "{_q(doc_key)}"',
+                              f'has title "{_q(title)}"']
+                    if first_chunk_id:
+                        _attrs.append(f'has source-chunk-id "{_q(first_chunk_id)}"')
+                    tx.query(f'insert $d isa company_document, {", ".join(_attrs)};').resolve()
+                    act_key = _ent_txt
+                    result["company_document"] = 1
                 if act_key:
                     tx.query(
                         f'match $d isa {doc_type}, has ent-key "{_q(act_key)}";'

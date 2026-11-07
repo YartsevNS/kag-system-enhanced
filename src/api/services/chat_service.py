@@ -1219,12 +1219,22 @@ class ChatService:
                         format_facts_block,
                     )
                     if typedb_available():
-                        visible_chunk_ids = {
-                            r.get("chunk_id") for r in (search_results or []) if r.get("chunk_id")
-                        }
+                        from src.indexing.typedb_facts import all_facts as _td_all_facts
+
                         _t_typedb = time.monotonic()
-                        typedb_facts = await asyncio.to_thread(
-                            typedb_query_facts, visible_chunk_ids)
+                        raw_facts = await asyncio.to_thread(_td_all_facts, 20)
+                        # Права на факт = права на чанк-источник, проверяются по ACL Qdrant.
+                        # Привязка к выдаче поиска отбрасывала факты по документам компании:
+                        # их чанки не попадают в выдачу нормативных вопросов (P1.8).
+                        if raw_facts:
+                            _ok_chunks = await embeddings_service.visible_chunk_ids(
+                                [f.get("chunk_id") for f in raw_facts],
+                                user_id=user_id, group_ids=group_ids, is_admin=is_admin,
+                            )
+                            typedb_facts = [f for f in raw_facts
+                                            if str(f.get("chunk_id")) in _ok_chunks]
+                        else:
+                            typedb_facts = []
                         _typedb_ms = (time.monotonic() - _t_typedb) * 1000
                         if typedb_facts:
                             facts_block = format_facts_block(typedb_facts)

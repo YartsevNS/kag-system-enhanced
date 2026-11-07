@@ -78,7 +78,18 @@ def _value(x: Any) -> Any:
     return x.get("@value") if isinstance(x, dict) else x
 
 
-def query_facts(visible_chunk_ids: Set[str], limit: int = 8) -> List[Dict[str, Any]]:
+def all_facts(limit: int = 50) -> List[Dict[str, Any]]:
+    """Все факты нарушений без фильтра видимости.
+
+    Фильтр должен применяться по ACL чанка (права), а не по попаданию в выдачу поиска:
+    иначе нарушения по документам компании теряются (см. P1.8). Видимость проверяет
+    вызывающий код через `embeddings_service.visible_chunk_ids`.
+    """
+    return query_facts(set(), limit=limit, acl_by_caller=True)
+
+
+def query_facts(visible_chunk_ids: Set[str], limit: int = 8,
+                acl_by_caller: bool = False) -> List[Dict[str, Any]]:
     """Факты нарушений из TypeDB, ОТФИЛЬТРОВАННЫЕ по видимым chunk_id (ADR-002).
 
     Вызывает дедуктивную функцию онтологии violated_documents() и собирает
@@ -94,19 +105,22 @@ def query_facts(visible_chunk_ids: Set[str], limit: int = 8) -> List[Dict[str, A
             with driver.transaction(cfg["db"], TransactionType.READ) as tx:
                 q = (
                     'match let $doc, $law in violated_documents(); '
-                    '$doc has title $dt, has source-chunk-id $ch, has source_origin $so; '
-                    'fetch {"документ": $dt, "чанк": $ch, "источник": $so, '
+                    # source_origin НЕ обязателен: у документов, созданных из метаданных
+                    # загрузки, его нет — прежний запрос терял такие факты молча.
+                    '$doc has title $dt, has source-chunk-id $ch; '
+                    'fetch {"документ": $dt, "чанк": $ch, '
                     '"требование": $law.requirement-id, "треб_desc": $law.description};'
                 )
                 for a in tx.query(q).resolve():
                     chunk_id = _value(a.get("чанк"))
-                    # ── ADR-002: фильтр по видимости, ВСЕГДА ─────────────
-                    if chunk_id not in visible_chunk_ids:
+                    # ── ADR-002: фильтр по видимости ─────────────────────
+                    # acl_by_caller=True — вызывающий уже проверил права по ACL чанка.
+                    if not acl_by_caller and chunk_id not in visible_chunk_ids:
                         continue
                     facts.append({
                         "document": _value(a.get("документ")),
                         "chunk_id": chunk_id,
-                        "source_origin": _value(a.get("источник")),
+                        "source_origin": _value(a.get("источник")) or "",
                         "requirement": _value(a.get("требование")),
                         "requirement_desc": _value(a.get("треб_desc")),
                     })

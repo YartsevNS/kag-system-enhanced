@@ -739,6 +739,71 @@ class EmbeddingsService:
         except Exception as e:
             logger.warning(f"ACL: не удалось обновить payload {document_id[:12]}: {e}")
 
+    async def visible_chunk_ids(
+        self,
+        chunk_ids: List[str],
+        *,
+        user_id: Optional[str] = None,
+        group_ids: Optional[List[str]] = None,
+        is_admin: bool = False,
+    ) -> set:
+        """Какие из перечисленных чанков пользователь имеет право видеть.
+
+        Зачем: факт онтологии исходит из конкретного чанка. Видимость определяется
+        правами доступа (visibility/allow/deny), а НЕ попаданием чанка в топ поиска.
+        Прежняя связка «факт × выдача поиска» теряла нарушения по документам компании:
+        их чанки редко попадают в выдачу нормативных вопросов.
+        """
+        wanted = {str(c) for c in (chunk_ids or []) if c}
+        if not wanted:
+            return set()
+        await self.initialize()
+        from qdrant_client.models import (
+            FieldCondition, Filter, MatchAny, MatchValue,
+        )
+
+        must = [FieldCondition(key="chunk_id", match=MatchAny(any=sorted(wanted)))]
+        must_not = []
+        if not is_admin:
+            allow = [FieldCondition(key="visibility", match=MatchValue(value="public"))]
+            if group_ids:
+                allow.append(FieldCondition(key="allow_group_ids", match=MatchAny(any=list(group_ids))))
+            if user_id:
+                allow.append(FieldCondition(key="allow_user_ids", match=MatchAny(any=[user_id])))
+            must.append(Filter(should=allow))
+            if group_ids:
+                must_not.append(FieldCondition(key="deny_group_ids", match=MatchAny(any=list(group_ids))))
+            if user_id:
+                must_not.append(FieldCondition(key="deny_user_ids", match=MatchAny(any=[user_id])))
+
+        allowed = set()
+        for collection in self._collections():
+            try:
+                pts, _ = await asyncio.to_thread(
+                    self._qdrant_client.scroll,
+                    collection_name=collection,
+                    scroll_filter=Filter(must=must, must_not=must_not or None),
+                    limit=len(wanted) * 2,
+                    with_payload=["chunk_id"],
+                    with_vectors=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"[acl] коллекция {collection} не проверена: {exc}")
+                continue
+            for p in pts:
+                cid = (p.payload or {}).get("chunk_id")
+                if cid:
+                    allowed.add(str(cid))
+        return allowed
+
+    def _collections(self) -> List[str]:
+        """Коллекции, в которых могут лежать чанки (основная и новости)."""
+        names = [self.collection_name]
+        news = getattr(self, "news_collection_name", None) or "kag_news"
+        if news and news != self.collection_name:
+            names.append(news)
+        return names
+
     async def search(
         self,
         query: str,
