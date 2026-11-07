@@ -1,52 +1,70 @@
 # Результат: версии документов регулятора
 
-Дата: 2026-11-07. Статус: частично выполнено — ядро работает, два пункта открыты.
+Дата: 2026-11-07. Статус: ядро выполнено и проверено на стенде; поиск проверен кодом и тестом,
+прогон на живых двух документах не выполнялся.
 
 ## Что сделано
 
-| Что | Файл | Состояние |
+| Что | Файл / объект | Состояние |
 |---|---|---|
-| схема онтологии | `cybersecurity_ontology_v2` | применено: entity `document_version`, relations `document_version_of`, `supersedes`, атрибуты `effective_from`, `effective_to`, `version_status`, `version_hash`, `kag_document_id`, `document_key`, `current_version_string`; `plays` у актов |
-| модуль версий | `src/indexing/typedb_versions.py` | новый: ключ акта, дата, запись версии, связь с актом, `supersedes` |
-| writer-путь | `src/api/services/document_service.py` | после записи онтологии вызывается `upsert_from_metadata` (идемпотентно) |
-| загрузка | `src/api/routes/upload.py` | поля `version_string`, `effective_from`, `supersedes_id`; для регулятора `VERSION_REQUIRED`; всё в `source_metadata` |
-| UI | `src/api/static/documents.html` | поля редакции и даты, обязательные для регулятора, плюс id заменяемой редакции |
-| поиск | `src/indexing/embeddings_service.py` | payload: `version_string`/`version_status`/`effective_from`/`document_key`; `include_superseded` (по умолчанию False → `version_status=superseded` отсекается) |
+| схема | `cybersecurity_ontology_v2` | entity `document_version`, relations `document_version_of`, `supersedes`, атрибуты `effective_from`, `effective_to`, `version_status`, `version_hash`, `kag_document_id`, `document_key`, `current_version_string`; `plays` у актов и версии |
+| файлы схемы | `project_typedb/adr/schema-v2.tql`, `functions-v2.tql` | блок версий и `current_versions()` добавлены (аддитивно) |
+| модуль версий | `src/indexing/typedb_versions.py` | `normalize_document_key`, `_date_literal`, `upsert_from_metadata` (идемпотентно) |
+| конвейер | `src/api/services/document_service.py` | вызов после записи онтологии, `source_metadata` пробрасывается |
+| загрузка | `src/api/routes/upload.py` | `version_string`, `effective_from`, `supersedes_id`; `VERSION_REQUIRED` для регулятора |
+| UI | `src/api/static/documents.html` | поля редакции и даты (обязательны для регулятора), id заменяемой редакции |
+| поиск | `src/indexing/embeddings_service.py` | payload: `version_string`, `version_status`, `effective_from`, `document_key`; `include_superseded` (по умолчанию False) |
 | устаревшие ссылки | `src/indexing/typedb_facts.py` | `outdated_versions()`, `outdated_references(visible_chunk_ids)` с ACL по чанку |
 | тесты | `tests/test_document_versions.py` | 7 passed |
 
-## Проверка на стенде (192.168.50.18)
+## Проверка на стенде 192.168.50.18
 
-Скрипт `/tmp/verify_versions.py` создаёт акт `regulatory_document` (ent-key `test-gost-99999`,
-title «ГОСТ Р 99999 Тестовый стандарт») и две редакции через `upsert_from_metadata`:
+`/tmp/diag_versions.py` — акт `regulatory_document` (ent-key `diag-gost-99999`) + две редакции:
 
-    2015: {'created': 1, 'linked': 1, 'superseded': 0}
-    2021: {'created': 1, 'linked': 1, 'superseded': 1}
-    повтор 2021: {'created': 0, 'skipped': 'version exists'}
-    версий всего: 2; supersedes: 1; effective_from 2021-09-01: 1
+    запись 2015: {'created': 1, 'linked': 1, 'superseded': 0}
+    запись 2021: {'created': 1, 'linked': 1, 'superseded': 1}
+    версий: 2
+    связей с актом: 2
+    supersedes: 1
+    действующих (без входящего supersedes): 1
+    повторная запись: {'created': 0, 'skipped': 'version exists'}
     после чистки тестовых объектов: версий 0
 
-То есть запись версии, привязка и цепочка замены работают; повторная обработка версий не плодит.
-Тестовые объекты удалены, база в исходном состоянии по `document_version`.
+Загрузка через API:
 
-## Отклонения от design (и почему)
+    POST /api/v1/upload/ (source_kind=regulator, без version_string/effective_from)
+    -> 400 {"detail": {"code": "VERSION_REQUIRED", ...}}
 
-1. **Статус старой редакции не переписывается атрибутом.** TypeQL 3 в этой версии не принимает
-   ни `delete $o has $s`, ни `delete $o has version_status $s` (ошибка `expected OF`).
-   Поэтому «действующая редакция» вычисляется по модели: версия без входящего `supersedes (older: …)`;
-   `version_status` остаётся для случаев «отменён без замены» (`repealed`).
-   Следствие: `effective_to` у прежней редакции не проставляется автоматически.
-2. **Функция `current_versions()` не подтверждена.** Определение через
-   `not { $s isa supersedes (older: $v); }` требует `plays supersedes:older` (добавлено),
-   но финальная проверка функции не выполнена — открытый пункт.
-3. **Проверочный запрос связи с актом вернул 1 строку при двух версиях** — либо ошибка запроса
-   в скрипте (не группирует), либо вторая связь не создалась. Требует точечной проверки.
+## Закрытые пункты прошлой итерации
+
+1. «Связь с актом: 1 при двух версиях» — **была ошибка проверочного запроса**, не вставки.
+   Корректный запрос через роль `document` даёт 2 связи на 2 версии.
+2. `current_versions()` — функция объявлена и компилируется; вызов
+   `match $v isa document_version; let $c = current_versions();` выполняется без ошибки.
+   Итерация по результату функции (`$v in $c`) в TypeQL 3 этой версии не парсится —
+   в продукте не используется, эквивалент проверен запросом «версия без входящего supersedes» (даёт 1).
+3. Файлы `project_typedb/adr/` обновлены (schema-v2.tql, functions-v2.tql).
+
+## Отклонения от design
+
+1. **Статус прежней редакции не переписывается атрибутом.** TypeQL 3 отвергает
+   `delete $o has $s` и `delete $o has version_status $s` (ошибка `expected OF`).
+   Действующая редакция вычисляется моделью: версия без входящего `supersedes (older)`.
+   `effective_to` у прежней автоматически не проставляется; `version_status` остаётся для
+   «отменён без замены» (`repealed`).
+2. **`document_key` по умолчанию строится от названия**, если номер не передан:
+   отдельного поля «номер» в форме нет. Ключ: издатель + тип + (номер | название).
+3. **`published_at` не введён** — в модели достаточно `effective_from`.
 
 ## Открыто
 
-- [ ] Подтвердить `current_versions()` на двух редакциях (ожидание: 1).
-- [ ] Разобрать «связь с актом: 1 при двух версиях».
-- [ ] Проверить путь загрузки через API: регулятор без версии → 400 `VERSION_REQUIRED`.
-- [ ] Проверить поиск: `superseded` не попадает в выдачу, `include_superseded=true` — попадает.
-- [ ] Обновить `project_typedb/adr/schema-v2.tql` и `functions-v2.tql` новыми определениями
-      (на стенде применено скриптами, в файлах схемы ещё нет).
+- [ ] Прогон поиска на двух живых документах (в Qdrant пока нет чанков с `version_status`
+      `superseded`, поэтому фильтр нечем проверить). Проверено тестом
+      `test_search_excludes_superseded_by_default` и кодом.
+- [ ] Поле «номер документа» в форме загрузки: сейчас ключ акта строится от названия,
+      из-за чего «ГОСТ Р 57580.1-2017» и та же редакция с другим пробелом в названии
+      могут дать разные ключи.
+- [ ] Автоопределение замены по web monitor (сверка `document_key` + `version_string`,
+      предложение владельцу в админке) — не реализовано, вне рамок этого изменения.
+- [ ] `document_key` у существующих актов не проставлен (в базе 47 `regulatory_document`
+      без ключа) — заполнится при переобработке документов или отдельным скриптом.

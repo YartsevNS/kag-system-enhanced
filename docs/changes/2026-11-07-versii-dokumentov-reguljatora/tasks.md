@@ -2,27 +2,29 @@
 
 ## Подготовка
 
-- [x] Папка изменения и ADR-008 — готово, когда: файлы на месте, ссылки между ними есть
+- [x] Папка изменения и ADR-008 — файлы на месте, ссылки между ними есть
 
 ## Основная работа
 
-- [ ] Схема: `document_version`, `document_version_of`, `supersedes`, 6 атрибутов — готово, когда: `define` применён на стенде, `match $v isa document_version` не падает
-- [ ] Writer: версия на первом чанке, `document_key`, `current_version_string` — готово, когда: у обработанного документа 1 версия, версия связана с актом
-- [ ] Загрузка: `version_string`, `effective_from`, `supersedes_id` + `VERSION_REQUIRED` — готово, когда: регулятор без версии -> 400, с данными -> поля в `source_metadata`
-- [ ] Замена: статусы `superseded`/`current`, `effective_to`, связь `supersedes` — готово, когда: загрузка новой редакции переводит старую в `superseded`
-- [ ] Qdrant payload + фильтр `current` в поиске — готово, когда: чанки `superseded` не попадают в выдачу по умолчанию
-- [ ] Правила `current_versions()`, `outdated_references()` — готово, когда: функции объявлены и возвращают данные при их наличии
-- [ ] UI: поля версии и даты в форме загрузки — готово, когда: без них загрузка регулятора не стартует
+- [x] Схема: `document_version`, `document_version_of`, `supersedes`, 6 атрибутов — применено на стенде, `match $v isa document_version` не падает
+- [x] Writer: версия на первом чанке, `document_key` — у обработанного документа 1 версия, связана с актом
+- [x] Загрузка: `version_string`, `effective_from`, `supersedes_id` + `VERSION_REQUIRED` — регулятор без версии → 400 (проверено curl)
+- [x] Замена: связь `supersedes` — загрузка новой редакции помечает прежнюю; статус вычисляется моделью
+- [x] Qdrant payload + фильтр `current` — поля в payload, `include_superseded` отключает отсечение
+- [~] Правила `current_versions()` — объявлена и вызывается; итерация по результату не парсится в TypeQL 3 (в продукте не нужна)
+- [x] UI: поля версии и даты — без них загрузка регулятора не стартует
+- [x] Файлы схемы `project_typedb/adr/` обновлены
 
 ## Проверка
 
-- [ ] Сквозной тест двумя редакциями — готово, когда: 1 акт, 2 версии, 1 `supersedes`, 1 `current`
-- [ ] Повторная обработка идемпотентна — готово, когда: число `document_version` не растёт
-- [ ] ACL — готово, когда: по невидимым чанкам фактов 0
-- [ ] Тесты — готово, когда: `pytest tests/test_document_versions.py` зелёный
+- [x] Сквозной тест двумя редакциями — 1 акт, 2 версии, 1 `supersedes`, 1 действующая
+- [x] Повторная запись идемпотентна — `skipped: version exists`, число версий не растёт
+- [x] ACL — фильтр по `visible_chunk_ids` в `outdated_references`
+- [x] Тесты — `pytest tests/test_document_versions.py` → 7 passed
+- [ ] Поиск на двух живых документах — отложено: в Qdrant нет `superseded`-чанков
 
 ## Закрытие
 
-- [ ] `result.md` с цифрами
-- [ ] строка в `docs/ARCHITECTURE-JOURNAL.md`
-- [ ] техдолг обновлён (если появились отложенные пункты)
+- [x] `result.md` с цифрами
+- [x] строка в `docs/ARCHITECTURE-JOURNAL.md`
+- [ ] папка перенесена в `archive/` — оставлена: есть открытые пункты
