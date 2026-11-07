@@ -167,6 +167,50 @@ def upsert_from_metadata(
                 ).resolve()
             result["created"] = 1
 
+            # 3b. Издатель и тип — в онтологию (P1.6). В метаданных они есть, но в графе
+            # их не было: regulator не создавался, doc_type у акта оставался пустым.
+            if act_var and source_kind == "regulator":
+                try:
+                    if doc_kind and not list(tx.query(
+                            f'match $d isa regulatory_document, has title "{_q(title)}", '
+                            f'has doc_type $dt;').resolve()):
+                        tx.query(
+                            f'match $d isa regulatory_document, has title "{_q(title)}";'
+                            f' insert $d has doc_type "{_q(doc_kind)}";'
+                        ).resolve()
+                    # Ключ акта проставляем и существующему объекту: без него он
+                    # не найдётся при следующей редакции.
+                    if not list(tx.query(
+                            f'match $d isa regulatory_document, has title "{_q(title)}", '
+                            f'has document_key $k2;').resolve()):
+                        tx.query(
+                            f'match $d isa regulatory_document, has title "{_q(title)}";'
+                            f' insert $d has document_key "{_q(doc_key)}";'
+                        ).resolve()
+                    if issuer:
+                        reg_key = _q(normalize_document_key("", "", "", issuer))
+                        if not list(tx.query(
+                                f'match $r isa regulator, has name "{_q(issuer)}";').resolve()):
+                            tx.query(
+                                f'insert $r isa regulator, has ent-key "{reg_key}", '
+                                f'has name "{_q(issuer)}";'
+                            ).resolve()
+                        has_link = list(tx.query(
+                            f'match $r isa regulator, has name "{_q(issuer)}";'
+                            f' $i isa document_issuance (issuer: $r);'
+                            f' $d isa regulatory_document, has title "{_q(title)}";'
+                            f' $j isa document_issuance (regulated_item: $d);').resolve())
+                        if not has_link:
+                            tx.query(
+                                f'match $r isa regulator, has name "{_q(issuer)}";'
+                                f' $d isa regulatory_document, has title "{_q(title)}";'
+                                f' insert $i isa document_issuance (issuer: $r, regulated_item: $d);'
+                            ).resolve()
+                            result["issuer_linked"] = 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("versions: издатель/тип не записаны: %s",
+                                 str(exc).splitlines()[0][:140])
+
             # 4. Замена прежней редакции — связью supersedes, а не правкой статусов.
             #    TypeQL 3 не даёт надёжно переписать владение атрибутом в той же
             #    транзакции (синтаксис delete/insert различается между версиями),
