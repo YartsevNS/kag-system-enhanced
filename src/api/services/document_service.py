@@ -1206,6 +1206,17 @@ class DocumentService:
                     # «Перестроить граф» на странице /kg.
                     plog.log("graph_skipped", {"reason": _skip_msg or "отключено в админке"})
                     logger.info(f"[graph] пропущен по настройке админки: {document_id}")
+                    # TypeDB — ОТДЕЛЬНЫЙ контур со своим флагом (system/typedb.write_enabled).
+                    # graph.skip отключает дорогой Neo4j-граф, но онтологию наполнять не мешает:
+                    # это разные хранилища и разные выключатели. Раньше TypeDB молча не
+                    # наполнялась именно потому, что шла под общим шагом графа.
+                    try:
+                        from src.indexing import typedb_writer
+
+                        if typedb_writer.is_available() and typedb_writer.write_enabled():
+                            await self._build_typedb_only(document_id, record.filename, chunks, plog=plog)
+                    except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
+                        logger.warning(f"[typedb] контур пропущен: {e}")
                     # «Построить позже» — это НЕ «не строить никогда». При force-переиндексации
                     # конвейер УЖЕ удалил граф документа (clear_document), поэтому без постановки
                     # задачи граф терялся молча: замер 2026-09-13 — reindex-all с этой галочкой
@@ -1861,6 +1872,65 @@ class DocumentService:
             await document_analyzer.analyze_and_save(document_id, first_chunk_text, filename)
         except Exception as e:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
+
+    async def _build_typedb_only(self, document_id: str, filename: str, chunks: list, plog=None):
+        """Наполнить онтологию TypeDB по чанкам документа (ADR-007).
+
+        Отдельно от Neo4j-графа: у контура свой выключатель (system/typedb.write_enabled),
+        поэтому graph.skip в админке его не глушит. Ошибки не пробрасываются — обработка
+        документа не зависит от онтологии.
+        """
+        from src.indexing import typedb_writer
+
+        if not (typedb_writer.is_available() and typedb_writer.write_enabled()):
+            return {"status": "skipped"}
+        _t = 90
+
+        import time as _time
+
+        total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
+        t0 = _time.monotonic()
+        sem = asyncio.Semaphore(3)
+
+        async def _one(chunk: dict, i: int):
+            chunk_id = chunk.get("chunk_id") or f"{document_id}_chunk_{i}"
+            text = chunk.get("content") or ""
+            clause = (chunk.get("metadata") or {}).get("clause") or ""
+            async with sem:
+                try:
+                    res = await asyncio.wait_for(
+                        typedb_writer.extract_and_store_typedb(
+                            text, chunk_id, document_id, clause=clause, filename=filename
+                        ),
+                        timeout=_t,
+                    )
+                except asyncio.TimeoutError:
+                    total["error"] += 1
+                    logger.warning(f"[typedb] таймаут для {chunk_id}")
+                    return
+                st = res.get("status")
+                if st == "ok":
+                    w = res.get("written") or {}
+                    total["ok"] += 1
+                    total["entities"] += int(w.get("entities") or 0)
+                    total["relations"] += int(w.get("relations") or 0)
+                elif st == "empty":
+                    total["empty"] += 1
+                else:
+                    total["error"] += 1
+
+        await asyncio.gather(*[_one(c, i) for i, c in enumerate(chunks)])
+        ms = round((_time.monotonic() - t0) * 1000, 1)
+        logger.info(
+            f"[typedb] документ {document_id}: чанков {len(chunks)}, записано {total['ok']}, "
+            f"пусто {total['empty']}, ошибок {total['error']}; "
+            f"сущностей {total['entities']}, связей {total['relations']} ({ms} ms)"
+        )
+        try:
+            plog.log("typedb_write", total) if plog else None
+        except Exception:  # noqa: BLE001
+            pass
+        return total
 
     async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list,
                                            plog=None):
