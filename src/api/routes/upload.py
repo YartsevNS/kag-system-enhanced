@@ -679,6 +679,9 @@ async def upload_document(
                     "version_string": version_string,
                     "effective_from": effective_from,
                     "supersedes_id": supersedes_id,
+                    # Статус явно: поиск фильтрует по нему. Новая загрузка всегда current,
+                    # прежняя редакция переводится в superseded при замене.
+                    "version_status": "current" if source_kind in ("company", "regulator") else "",
                 }.items() if v
             } or None,
             access={

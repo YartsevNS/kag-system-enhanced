@@ -392,6 +392,7 @@ async def search_chunks(
             query, limit=limit, filters=filters or None,
             group_ids=group_ids, is_admin=is_admin, user_id=user_id,
             scope=request.get("scope"),
+            include_superseded=bool(request.get("include_superseded")),
         )
         return {"chunks": chunks, "total": len(chunks), "filters": filters or None,
                 "scope": request.get("scope") or "documents"}

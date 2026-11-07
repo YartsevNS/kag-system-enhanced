@@ -563,11 +563,17 @@ class EmbeddingsService:
             FieldCondition as _FC, MatchValue as _MA, Filter as _QF,
         )
         flt = _QF(must=[_FC(key="document_id", match=_MA(value=document_id))])
-        res = await asyncio.to_thread(
+        await asyncio.to_thread(
             self._qdrant_client.set_payload,
             collection_name=self.collection_name, payload=dict(payload), points=flt,
         )
-        return int(getattr(res, "operation_id", 0) or 0)
+        # Возвращаем ЧИСЛО обновлённых точек (operation_id вводил в заблуждение:
+        # в логах «помечено чанков 1955» при 49 чанках).
+        cnt = await asyncio.to_thread(
+            self._qdrant_client.count,
+            collection_name=self.collection_name, count_filter=flt, exact=True,
+        )
+        return int(getattr(cnt, "count", 0) or 0)
 
     async def update_document_type_payload(self, document_id: str, document_type: str):
         """Обновить document_type в payload всех чанков документа в Qdrant."""

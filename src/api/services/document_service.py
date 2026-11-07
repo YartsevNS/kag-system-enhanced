@@ -2004,6 +2004,19 @@ class DocumentService:
                 document_id, _title, source_kind or "", source_metadata or {},
                 (chunks[0].get("chunk_id") if chunks else ""),
             )
+            _sup = (source_metadata or {}).get("supersedes_id")
+            if _sup and vres.get("superseded"):
+                # Прежняя редакция должна исчезнуть из поиска: помечаем её чанки в Qdrant.
+                # Без этого фильтр version_status=superseded нечего отсекать.
+                try:
+                    from src.indexing.embeddings_service import embeddings_service
+
+                    n = await embeddings_service.update_document_payload(
+                        str(_sup), {"version_status": "superseded"})
+                    logger.info(f"[versions] прежняя редакция {_sup}: помечено чанков {n}")
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"[versions] разметка прежней редакции {_sup} не удалась: "
+                                   f"{str(exc).splitlines()[0][:160]}")
             if vres.get("created") or vres.get("superseded"):
                 logger.info(f"[versions] документ {document_id}: {vres}")
             elif vres.get("skipped"):

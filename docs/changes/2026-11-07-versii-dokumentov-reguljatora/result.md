@@ -68,3 +68,28 @@
       предложение владельцу в админке) — не реализовано, вне рамок этого изменения.
 - [ ] `document_key` у существующих актов не проставлен (в базе 47 `regulatory_document`
       без ключа) — заполнится при переобработке документов или отдельным скриптом.
+
+## Итерация 1 (P0.1–P0.2) — 07.11.2026
+
+**Проблема:** фильтр `version_status=superseded` нечего было отсекать: в payload статус всегда
+`current` (загрузка его не писала), а прежняя редакция в Qdrant не переразмечалась.
+
+**Сделано:**
+
+    src/api/routes/upload.py             source_metadata получает version_status="current"
+    src/api/services/document_service.py при supersedes_id и успешной замене — переразметка
+                                         прежней редакции: update_document_payload(sup_id,
+                                         {"version_status": "superseded"})
+    src/api/routes/chat.py               /chat/search принимает include_superseded
+    src/indexing/embeddings_service.py   update_document_payload возвращает ЧИСЛО точек,
+                                         а не operation_id (в логах было «1955» при 49 чанках)
+
+**Проверено на стенде 192.168.50.18:**
+
+    health 200
+    POST /chat/search без флага          -> total 2
+    POST /chat/search include_superseded -> total 2   (superseded-чанков в базе пока нет)
+    update_document_payload(913ba708, {version_status: current}) -> обновлено точек: 49
+    payload чанков: ('913ba708…_chunk_00010', 'current')
+
+49 = 48 фрагментов + карточка документа — совпадает с ожидаемым числом точек.
