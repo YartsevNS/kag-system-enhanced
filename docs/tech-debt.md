@@ -6,12 +6,21 @@
 
 ## Отложено 07.11.2026 (решение владельца)
 
-### 16. Правила нарушений дают 0 фактов: нет входных данных и жёсткий requirement-id
+### 16. Правила нарушений дают 0 фактов: нет входных данных (константа убрана 07.11.2026)
 
 **Что:** `violated_documents()` и `violated_certification()` в базе `cybersecurity_ontology_v2`
 требуют объекты типов, которых в базе нет: `company_document` (0), `security_software` (0),
-`security_requirement` (0). Плюс правило жёстко привязано к `requirement-id = "ФСТЭК-239-п11.1"`.
-Итог: контур TypeDB в чате формально работает (доступен, 80 мс), но фактов не отдаёт.
+`security_requirement` (0). Итог: контур TypeDB в чате формально работает (доступен, ~80 мс),
+но фактов не отдаёт.
+
+**Исправлено 07.11.2026:** жёсткая привязка к `requirement-id = "ФСТЭК-239-п11.1"` убрана.
+Правила ищут требование по `requirement_kind = "certification"` — вид требования стал свойством
+самого требования, а основание (документ, пункт, чанк) остаётся в данных: `requirement-id`,
+`source-clause`, `source-chunk-id`. Константа была демонстрационной заглушкой из
+`prototype/schema.tql` (04.11.2026), перенесённой в v2 без обобщения.
+
+Файлы: `project_typedb/adr/schema-v2.tql` (атрибут `requirement_kind`),
+`project_typedb/adr/functions-v2.tql`; в базе применено через `define`/`undefine fun`.
 
 Замер 07.11.2026: `query_facts()` по чанкам документа 187-ФЗ → 0; после подстановки демо-набора
 (company_document + cii_object с cii-category 1 + security_software is-certified false + связи
