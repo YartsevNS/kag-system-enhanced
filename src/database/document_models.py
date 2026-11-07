@@ -44,6 +44,11 @@ class Document(Base):
     # а вид — это разметка: при смене словаря маршрут молча менялся, и новости уезжали в общую
     # коллекцию к ГОСТам. Маршрут — свойство ИСТОЧНИКА, а не вида (утверждено 10.10.2026).
     collection = Column(String, default="")
+    # Чей это документ: 'regulator' — нормативка (парсинг web monitor), 'company' — документы
+    # организации (политики, инструкции, приказы). При загрузке через сайт выбор ОБЯЗАТЕЛЕН.
+    # В онтологии регуляторный документ и документ компании — РАЗНЫЕ типы (regulatory_document
+    # и company_document), поэтому признак хранится в базе, а не выводится из вида документа.
+    source_kind = Column(String, default="")
     recognized_title = Column(String, default="")
     summary = Column(Text, default="")
     topics = Column(Text, default="[]")  # JSON list

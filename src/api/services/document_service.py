@@ -68,6 +68,8 @@ class DocumentRecord(BaseModel):
     # Коллекция векторов: '' — основная, 'news' — новости монитора. Ставится по метаданным
     # источника при загрузке; вид документа на маршрут не влияет.
     collection: Optional[str] = Field(default=None, description="Коллекция векторов: '' | 'documents' | 'news'")
+    # Чей документ: 'company' (политики, инструкции организации) | 'regulator' (нормативка).
+    source_kind: Optional[str] = Field(default=None, description="company | regulator")
     source_metadata: Optional[dict] = Field(default=None, description="Метаданные источника (doc_type, doc_number, doc_title, download_url)")
     # Права доступа (ACL)
     visibility: str = Field(default="public", description="public | restricted")
@@ -257,7 +259,7 @@ class DocumentService:
             # (то же сбивало типизацию: document_type откатывался на "unknown").
             _fresh = repo.get_dict(document_id) or {}
             for _k in ("recognized_title", "summary", "topics", "rubrics", "document_type",
-                       "source_metadata", "collection"):
+                       "source_metadata", "collection", "source_kind"):
                 if not data.get(_k) and _fresh.get(_k):
                     data[_k] = _fresh[_k]
             repo.upsert(document_id, data)
@@ -276,6 +278,7 @@ class DocumentService:
         source_metadata: Optional[dict] = None,
         access: Optional[dict] = None,
         collection: Optional[str] = None,
+        source_kind: Optional[str] = None,
     ) -> DocumentRecord:
         """
         Загрузить документ с контролем дубликатов и версионностью.
@@ -442,6 +445,9 @@ class DocumentService:
             # Маршрут коллекции ставится ЗДЕСЬ и один раз: по источнику (метаданные web_monitor),
             # а не по виду документа. Дальше его читает service_for_document при записи и удалении.
             collection=route,
+            # Чей документ: компания или регулятор. Пишется при загрузке;
+            # из вида документа не выводится — вид это разметка.
+            source_kind=(source_kind or "").strip().lower(),
             source_metadata=source_metadata,
             visibility=(access or {}).get("visibility", "public") or "public",
             allow_group_ids=(access or {}).get("allow_group_ids") or [],
@@ -1231,7 +1237,10 @@ class DocumentService:
                         from src.indexing import typedb_writer
 
                         if typedb_writer.is_available() and typedb_writer.write_enabled():
-                            await self._build_typedb_only(document_id, record.filename, chunks, plog=plog)
+                            await self._build_typedb_only(
+                                document_id, record.filename, chunks, plog=plog,
+                                source_kind=(getattr(record, "source_kind", None) or ""),
+                            )
                     except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
                         logger.warning(f"[typedb] контур пропущен: {e}")
                     # «Построить позже» — это НЕ «не строить никогда». При force-переиндексации
@@ -1906,7 +1915,8 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Фоновый анализ не удался для {document_id}: {e}")
 
-    async def _build_typedb_only(self, document_id: str, filename: str, chunks: list, plog=None):
+    async def _build_typedb_only(self, document_id: str, filename: str, chunks: list, plog=None,
+                                 source_kind: str = ""):
         """Наполнить онтологию TypeDB по чанкам документа (ADR-007).
 
         Отдельно от Neo4j-графа: у контура свой выключатель (system/typedb.write_enabled),
@@ -1933,7 +1943,8 @@ class DocumentService:
                 try:
                     res = await asyncio.wait_for(
                         typedb_writer.extract_and_store_typedb(
-                            text, chunk_id, document_id, clause=clause, filename=filename
+                            text, chunk_id, document_id, clause=clause, filename=filename,
+                            source_kind=source_kind,
                         ),
                         timeout=_t,
                     )

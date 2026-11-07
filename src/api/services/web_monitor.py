@@ -1274,7 +1274,8 @@ class WebMonitorService:
                             filename=filename,
                             file_content=html.encode('utf-8'),
                             file_type="text/html",
-                            source_metadata={'source_url': source.url, 'source_name': source.name}
+                            source_metadata={'source_url': source.url, 'source_name': source.name},
+                            source_kind='regulator',
                         )
                         # Запускаем обработку
                         from src.api.routes.upload import _process_document_async
@@ -1514,7 +1515,8 @@ class WebMonitorService:
                                 file_content=content,
                                 file_type='text/plain',
                                 source_metadata={** (item.get('metadata') or {}),
-                                                 'source_name': source.name, 'source_url': source.url}
+                                                 'source_name': source.name, 'source_url': source.url},
+                                source_kind='regulator',
                             )
                             from src.api.routes.upload import _process_document_async
                             await _process_document_async(record.document_id)
@@ -1602,7 +1604,8 @@ class WebMonitorService:
                                 file_content=content,
                                 file_type="text/plain",
                                 source_metadata={** (item.get("metadata") or {}),
-                                                 "source_name": source.name, "source_url": source.url}
+                                                 "source_name": source.name, "source_url": source.url},
+                                source_kind='regulator',
                             )
                             from src.api.routes.upload import _process_document_async
                             await _process_document_async(record.document_id)
@@ -1782,7 +1785,8 @@ class WebMonitorService:
                             file_content=content,
                             file_type=None,
                             source_metadata={** (item.get('metadata') or {}),
-                                             'source_name': source.name, 'source_url': source.url}
+                                             'source_name': source.name, 'source_url': source.url},
+                            source_kind='regulator',
                         )
                         # Запускаем фоновую обработку
                         from src.api.routes.upload import _process_document_async

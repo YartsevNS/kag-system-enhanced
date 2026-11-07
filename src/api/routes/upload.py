@@ -71,7 +71,7 @@ def _json_parse_source(raw) -> str:
 import asyncio
 import json
 from pathlib import Path
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -531,6 +531,12 @@ async def upload_document(
     # документ в новости: нормативный акт со страницы мониторинга выпадал из
     # поиска по корпусу.
     collection: str = Form(""),
+    # ── Чей документ ─────────────────────────────────────────────────────
+    # Обязателен при загрузке через сайт: "company" (политики, инструкции, приказы
+    # организации) или "regulator" (нормативка). В онтологии это разные типы —
+    # company_document и regulatory_document. Парсер web monitor передаёт "regulator"
+    # напрямую в сервис, минуя эту форму.
+    source_kind: str = Form(""),
 ):
     """
     Загрузить документ.
@@ -587,6 +593,20 @@ async def upload_document(
             "upload_id": upload_id
         })
 
+    # Чей документ — обязательный выбор при загрузке через сайт.
+    # Пустое значение недопустимо: от него зависит тип объекта в онтологии
+    # (company_document против regulatory_document), а угадывать по виду документа
+    # нельзя — вид это разметка модели, она меняется.
+    _kind = (source_kind or "").strip().lower()
+    if _kind not in ("company", "regulator"):
+        raise HTTPException(status_code=400, detail={
+            "code": "SOURCE_KIND_REQUIRED",
+            "message": "Укажите источник документа: «Компания» или «Регулятор» "
+                       "(поле source_kind: company | regulator)",
+            "upload_id": upload_id,
+        })
+    source_kind = _kind
+
     # Сохраняем через document_service
     try:
         uploaded_by = current_user.id if current_user else None
@@ -612,6 +632,7 @@ async def upload_document(
                 "deny_user_ids": _parse_id_list(deny_user_ids),
             },
             collection=collection or None,
+            source_kind=source_kind,
         )
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать» на
@@ -641,6 +662,7 @@ async def upload_document(
 @router.post("/batch", summary="Пакетная загрузка документов")
 async def upload_documents_batch(
     files: list[UploadFile] = File(...),
+    source_kind: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -650,6 +672,13 @@ async def upload_documents_batch(
     Каждый файл: прочитать → проверить → сохранить → в очередь.
     Если один файл упал — остальные продолжают.
     """
+    _kind = (source_kind or "").strip().lower()
+    if _kind not in ("company", "regulator"):
+        raise HTTPException(status_code=400, detail={
+            "code": "SOURCE_KIND_REQUIRED",
+            "message": "Укажите источник документов: source_kind = company | regulator",
+        })
+    source_kind = _kind
     # Rate limit (batch считается как 1 запрос)
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
@@ -686,7 +715,8 @@ async def upload_documents_batch(
                 file_type=file.content_type,
                 uploaded_by=uploaded_by,
                 group_ids=group_ids,
-                upload_id=upload_id
+                upload_id=upload_id,
+                source_kind=source_kind,
             )
 
             # Обработка НЕ запускается автоматически (кнопка «Обработать»)
@@ -725,6 +755,7 @@ async def upload_documents_batch(
 @router.post("/bulk", summary="Пакетная загрузка архива (zip/tar)")
 async def upload_bulk(
     file: UploadFile = File(...),
+    source_kind: str = Form(""),
     request: Request = None,
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -763,6 +794,13 @@ async def upload_bulk(
 
     # Создаём временную папку для распаковки
     # Каталог распаковки — из настроек (раньше литерал /tmp).
+    _kind = (source_kind or "").strip().lower()
+    if _kind not in ("company", "regulator"):
+        raise HTTPException(status_code=400, detail={
+            "code": "SOURCE_KIND_REQUIRED",
+            "message": "Укажите источник документов архива: source_kind = company | regulator",
+        })
+    source_kind = _kind
     extract_dir = Path(_settings.UPLOAD_TEMP_DIR) / f"bulk_{upload_id}"
     extract_dir.mkdir(parents=True, exist_ok=True)
 
@@ -806,7 +844,7 @@ async def upload_bulk(
                     # Загружаем каждый файл
                     await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
-                        upload_id, results
+                        upload_id, results, source_kind=source_kind,
                     )
 
         elif ext in (".tar", ".gz", ".tgz"):
@@ -841,7 +879,7 @@ async def upload_bulk(
 
                     await _process_bulk_file(
                         extracted_path, entry_ext, uploaded_by, group_ids,
-                        upload_id, results
+                        upload_id, results, source_kind=source_kind,
                     )
         else:
             raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат архива: {ext}")
@@ -870,7 +908,8 @@ async def upload_bulk(
 async def _process_bulk_file(
     file_path: Path,
     file_ext: str,
-    uploaded_by, group_ids, upload_id, results: list
+    uploaded_by, group_ids, upload_id, results: list,
+    source_kind: str = "",
 ):
     """Загрузить один файл из архива в document_service."""
     try:
@@ -893,6 +932,7 @@ async def _process_bulk_file(
             filename=file_path.name, file_content=content,
             file_type=file_ext, uploaded_by=uploaded_by,
             group_ids=group_ids, upload_id=upload_id,
+            source_kind=source_kind,
         )
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать»)
@@ -913,6 +953,10 @@ async def _process_bulk_file(
 class ImportFolderRequest(BaseModel):
     """Импорт всех файлов из папки внутри каталога импорта (админ кладёт файлы заранее)."""
     folder: str = Field(default="", description="Подпапка внутри каталога импорта (по умолчанию — корень)")
+    # Обязательно: в онтологии документ компании и документ регулятора — разные типы.
+    source_kind: Literal["company", "regulator"] = Field(
+        description="Чей документ: company (политики, инструкции организации) | regulator (нормативка)"
+    )
     recursive: bool = Field(default=True, description="Обходить вложенные папки")
     limit: int = Field(default=0, description="Ограничить количество файлов (0 — все)")
     dry_run: bool = Field(default=False, description="Только показать, что будет импортировано")
@@ -1012,7 +1056,8 @@ async def import_folder(
         except Exception as e:
             logger.debug(f"[import-folder] не удалось проверить дубль {path.name}: {e}")
 
-        await _process_bulk_file(path, path.suffix.lower(), uploaded_by, group_ids, upload_id, results)
+        await _process_bulk_file(path, path.suffix.lower(), uploaded_by, group_ids,
+                                 upload_id, results, source_kind=req.source_kind)
 
     imported = [r for r in results if r.get("document_id")]
     errors = [r for r in results if r.get("status") == "error"]

@@ -50,6 +50,7 @@ except Exception:  # pragma: no cover - срабатывает только бе
 ENTITY_TYPES: Dict[str, tuple] = {
     "regulator": ("name",),                     # или short_name
     "regulatory_document": ("title",),          # или number
+    "company_document": ("title",),             # документ организации (политика, инструкция, приказ)
     "structural_element": ("text_content",),    # или index
     "security_measure": ("code",),              # или description
     "cii_object": ("category",),                # или system_type
@@ -151,6 +152,8 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
         base = str(attrs.get("short_name") or attrs.get("name") or "")
     elif etype == "regulatory_document":
         base = f"{attrs.get('number', '')}|{attrs.get('type') or attrs.get('doc_type') or attrs.get('title', '')}"
+    elif etype == "company_document":
+        base = f"{attrs.get('title', '')}|{attrs.get('version_string', '')}"
     elif etype == "structural_element":
         base = f"{doc}|{attrs.get('index', '')}|{str(attrs.get('text_content') or '')[:200]}"
     elif etype == "security_measure":
@@ -184,6 +187,15 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
         add("number", attrs.get("number"), 120)
         add("title", attrs.get("title"), 600)
         add("doc_type", attrs.get("type") or attrs.get("doc_type"), 80)
+    elif etype == "company_document":
+        # У документа компании нет номера и вида регуляторного акта: только название
+        # и версия. Номер, если модель его вернула, уходит в начало названия.
+        title = str(attrs.get("title") or "").strip()
+        number = str(attrs.get("number") or "").strip()
+        if number and number not in title:
+            title = f"{number} {title}".strip()
+        add("title", title, 600)
+        add("version_string", attrs.get("version_string"), 80)
     elif etype == "structural_element":
         add("struct_index", attrs.get("index") or attrs.get("struct_index"), 120)
         add("text_content", attrs.get("text_content"), 3000)
@@ -596,6 +608,7 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "") -> str
 async def extract_and_store_typedb(
     chunk_text: str, chunk_id: str, document_id: str = "",
     clause: str = "", filename: str = "", auto_schema: bool = True,
+    source_kind: str = "",
 ) -> Dict[str, Any]:
     """Извлечь сущности/связи из чанка и записать в TypeDB (ADR-007).
 
@@ -617,6 +630,20 @@ async def extract_and_store_typedb(
     payload = await _call_llm(prompt, chunk_id)
     if not payload:
         return {"status": "empty", "reason": "модель не вернула фактов"}
+
+    # Документ организации: модель по форме текста всё равно называет его «нормативным
+    # документом», поэтому тип переопределяем ДО валидации. Связь выдачи
+    # (document_issuance: regulator → regulatory_document) для документа компании
+    # не ставится — организацию никто не наделяет полномочиями регулятора.
+    if (source_kind or "").strip().lower() == "company":
+        for ent in payload.get("entities") or []:
+            if isinstance(ent, dict) and ent.get("type") == "regulatory_document":
+                ent["type"] = "company_document"
+        if payload.get("relations"):
+            payload["relations"] = [
+                r for r in payload["relations"]
+                if not (isinstance(r, dict) and r.get("type") == "document_issuance")
+            ]
 
     entities, relations, stats = _collect(payload, chunk_id, document_id)
     if not entities and not relations:
