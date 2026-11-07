@@ -1148,7 +1148,19 @@ class ChatService:
                                     f"источников с таблицами")
                     logger.info(f"Qdrant + Rerank: найдено {len(sources)} чанков")
 
-                # 2b. Поиск в графе Neo4j
+                # 2b. Поиск в графе Neo4j — ВЫВЕДЕН из контура ответа.
+                # Решение владельца (04.11.2026): граф знаний Neo4j снимается, источник
+                # верифицированных фактов — TypeDB (блок 2b2 ниже). Neo4j-блок оставлен
+                # только под выключателем system/graph.read_enabled (по умолчанию выкл.):
+                # старые инсталляции могут его включить, новая связка от него не зависит.
+                def _neo4j_read_enabled() -> bool:
+                    try:
+                        from src.api.services.config_store import config_store
+                        cfg = config_store.get("system", "graph") or {}
+                        return bool(cfg.get("read_enabled")) if isinstance(cfg, dict) else False
+                    except Exception:  # noqa: BLE001
+                        return False
+
                 # ВАЖНО: kg_service.hybrid_search — СИНХРОННЫЙ (драйвер Neo4j синхронный).
                 # Раньше он вызывался прямо в асинхронном обработчике и блокировал цикл событий:
                 # пока Neo4j отвечает (или висит), api не может отдать даже /health, и контейнер
@@ -1162,13 +1174,13 @@ class ChatService:
                     ))[:5]
                     entities_for_search = list(set(words))[:5]
 
-                    if entities_for_search:
+                    if entities_for_search and _neo4j_read_enabled():
                         _t_graph = time.monotonic()
                         graph_results = await asyncio.to_thread(
                             kg_service.hybrid_search, entities_for_search, doc_ids_from_qdrant)
                     else:
                         graph_results = []
-                    if not graph_results:
+                    if not graph_results and _neo4j_read_enabled():
                         _t_graph = time.monotonic()
                         graph_results = await asyncio.to_thread(
                             kg_service.hybrid_search, [user_message], doc_ids_from_qdrant)
