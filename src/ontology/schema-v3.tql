@@ -47,6 +47,8 @@ attribute effective_to, value date;
 attribute struct_index, value string;
 attribute text_content, value string;
 attribute requirement-id, value string;
+attribute requirement_key, value string;
+attribute measure_key, value string;
 attribute description, value string;
 attribute requirement_kind, value string;
 attribute obligation-level, value string;
@@ -73,6 +75,7 @@ attribute evidence_date, value date;
 # Наследование в TypeDB одиночное, поэтому цепочка:
 #   identified_entity -> sourced_entity -> (document -> regulatory/company, ...)
 entity identified_entity @abstract, owns ent-key @key;
+entity sourced_entity @abstract;
 entity sourced_entity sub identified_entity,
   owns source_origin,
   owns source-chunk-id,
@@ -82,6 +85,7 @@ entity sourced_entity sub identified_entity,
 entity regulator sub sourced_entity,
   owns name @card(1..1),
   owns short_name;
+entity document @abstract;
 entity document sub sourced_entity,
   owns title @card(1..1),
   owns doc_type,
@@ -99,19 +103,21 @@ entity document_version sub sourced_entity,
 # ---- структура и требования -----------------------------------------
 entity structural_element sub sourced_entity,
   owns struct_index,
-  owns text_content;
+  owns text_content @card(1..1);
 entity security_requirement sub sourced_entity,
+  owns requirement_key @key,
   owns requirement-id @card(1..1),
   owns requirement_kind @card(1..1),
   owns description,
   owns obligation-level;
 entity security_measure sub sourced_entity,
+  owns measure_key @key,
   owns code,
   owns description;
 
 # ---- доказательства, объекты, ПО, угрозы ----------------------------
 entity evidence sub sourced_entity,
-  owns name,
+  owns name @card(1..1),
   owns evidence_kind,
   owns evidence_date;
 entity cii_object sub sourced_entity,
@@ -125,17 +131,20 @@ entity security_software sub sourced_entity,
   owns software_version,
   owns is-certified;
 entity certificate sub sourced_entity,
-  owns cert_number @card(1..1),
+  owns cert_number @key,
   owns cert_authority,
   owns cert_until;
 entity threat_source sub sourced_entity,
-  owns offender_class,
+  owns offender_class @card(1..1),
   owns potential;
 
 # ---- связи: документы и версии --------------------------------------
 relation document_issuance,
   relates issuer @card(1..1),
   relates regulated_item @card(1..1);
+relation document_has_version,
+  relates document @card(1..1),
+  relates version @card(1..1);
 relation current_version_of,
   relates document @card(1..1),
   relates version @card(1..1);
@@ -190,7 +199,7 @@ relation asset_protection,
 relation certification,
   relates certified_software @card(1..1),
   relates certificate @card(1..1),
-  relates basis_requirement;
+  relates basis_requirement @card(0..1);
 relation threat_applicability,
   relates threat @card(1..1),
   relates target_system @card(1..1);
@@ -201,6 +210,8 @@ relation threat_measure,
 # ---- роли: кто в чём участвует --------------------------------------
 entity regulator plays document_issuance:issuer;
 entity document plays document_issuance:regulated_item;
+entity document plays document_has_version:document;
+entity document_version plays document_has_version:version;
 entity document plays current_version_of:document;
 entity document_version plays current_version_of:version;
 entity document_version plays supersedes:newer;

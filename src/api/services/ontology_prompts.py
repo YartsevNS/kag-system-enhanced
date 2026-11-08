@@ -35,10 +35,11 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
 2. Сущности: извлекай только типы, перечисленные в схеме. Новые типы не придумывай.
 3. Атрибуты: заполняй строго по схеме. Если атрибута нет в тексте — не выдумывай, опусти поле.
 4. Связи: в TypeDB связи N-арные. Связь — это факт или контекст, объединяющий участников. Для каждой связи укажи тип (relation_type) и массив участников (participants), где каждый имеет роль (role) и ссылку на ID сущности (target_id).
-5. ОБЯЗАТЕЛЬНЫЕ АТРИБУТЫ (без них база отвергнет запись — это жёсткое ограничение схемы, а не пожелание):
+5. ОБЯЗАТЕЛЬНЫЕ АТРИБУТЫ (без них база отвергнет запись — это жёсткое ограничение схемы, а не пожелание. ent-key должен быть глобально уникальным: используй префикс типа ("law:", "doc:", "asset:")):
    - ent-key — у КАЖДОЙ сущности;
    - title и document_key — у любого документа (акт и редакция различаются, см. п. 6);
-   - requirement-id и requirement_kind — у требования;
+   - requirement_key и requirement_kind — у требования; requirement_key = document_key + "|" + номер пункта (например "фстэк|приказ|239|п.11.1"), глобально уникален;
+   - measure_key — у меры: document_key + "|" + код меры (например "фстэк|приказ|239|ИА.1");
    - version_string — у версии документа;
    - name — у объекта КИИ и у средства защиты;
    - cert_number — у сертификата.
@@ -46,7 +47,9 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
 6. АКТ И РЕДАКЦИЯ — РАЗНЫЕ СУЩНОСТИ:
    - regulatory_document / company_document — сам акт, его идентичность. Атрибуты: title, doc_type, document_key (стабильный ключ вида "издатель|тип|номер"), number.
    - document_version — конкретная редакция/файл: version_string, effective_from, effective_to, version_status (current/superseded), kag_document_id.
-   - действующая редакция связывается связью current_version_of (document -> version); замена редакции — supersedes (newer -> older).
+   - ВСЕ редакции документа связываются связью document_has_version (document -> version);
+   - действующая редакция дополнительно связывается current_version_of (document -> version);
+   - замена редакции — supersedes (newer -> older). У документа может быть только одна текущая редакция: не создавай вторую.
    В тексте одного документа обычно одна редакция: создавай акт и одну версию, не дублируй акт на каждый чанк.
 7. ТРАССИРОВКА — ТОЛЬКО СВЯЗЯМИ, строки source-* не заменяют связи:
    - каждый structural_element (пункт, подпункт, приложение) привязывай к версии: document_structure(version, element);
@@ -59,9 +62,9 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
    - основание требования в документе — requirement_basis(requirement, source_document);
    - соответствие документа компании нормативному — document_compliance(company_doc, regulated_doc);
    - закрепление документа за объектом — document_assignment(regulated_doc, regulated_subject).
-8. СЕРТИФИКАЦИЯ: если упомянут сертификат СЗИ — создавай certificate (cert_number, cert_authority, cert_until) и связывай certification(certified_software, certificate, basis_requirement). Не ограничивайся boolean is-certified, если есть номер/орган/срок.
+8. СЕРТИФИКАЦИЯ: если упомянут сертификат СЗИ — создавай certificate (cert_number, cert_authority, cert_until) и связывай certification(certified_software, certificate) и, если в тексте названо требование-основание, добавь basis_requirement (он необязателен). Не ограничивайся boolean is-certified, если есть номер/орган/срок.
 9. УГРОЗЫ: threat_source связывай с объектами (threat_applicability) и с мерами (threat_measure), если текст это утверждает.
-10. УСТАРЕВШЕЕ НЕ ИСПОЛЬЗУЙ: связи measure_definition, applicability_criteria с ролью applied_requirement, атрибуты current_version_string и category как замена cii-category — исключены из схемы v3. Если встретишь такие понятия в тексте, переводи их в новые связи по п. 7.
+10. УСТАРЕВШЕЕ НЕ ИСПОЛЬЗУЙ: связи measure_definition, applicability_criteria с ролью applied_requirement, атрибуты current_version_string и current_version — исключены из схемы v3; у объекта КИИ категория хранится в cii-category (целое 1-3), поле category не заполняй. Если встретишь такие понятия в тексте, переводи их в новые связи по п. 7.
 11. Не создавай объект «на будущее»: если в чанке неттипа, но есть только упоминание — не извлекай. Лучше меньше сущностей, но каждая с ключом и связями.
 
 ### ДОСТУПНАЯ СХЕМА (TBox v3):
@@ -70,9 +73,9 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
   * regulatory_document (title, doc_type, document_key, number) -> роли regulated_item, source_document, regulated_doc, company_doc. Пример: {"title": "Об утверждении Требований по обеспечению безопасности ЗОКИИ", "doc_type": "приказ", "document_key": "фстэк|приказ|239", "number": "239"}
   * company_document (title, doc_type, document_key) -> роли regulated_doc, company_doc, regulated_item. Пример: {"title": "Политика информационной безопасности", "doc_type": "политика", "document_key": "компания|политика|1"}
   * document_version (version_string, version_status, version_hash, effective_from, effective_to, kag_document_id) -> роли version, newer, older
-  * structural_element (struct_index, text_content) -> роли element, parent, child, clause, source_requirement
-  * security_requirement (requirement-id, requirement_kind, description, obligation-level) -> роли requirement
-  * security_measure (code, description) -> роли measure, core_measure, alternative_measure
+  * structural_element (struct_index, text_content обязательно) -> роли element, parent, child, clause
+  * security_requirement (requirement_key, requirement-id, requirement_kind, description, obligation-level) -> роли requirement
+  * security_measure (measure_key, code, description) -> роли measure, core_measure, alternative_measure
   * evidence (name, evidence_kind, evidence_date) -> роль evidence
   * cii_object (name, cii-category, category, system_type) -> роли target_system, protected_system, regulated_subject
   * security_software (name, vendor, software_version, is-certified) -> роли deployed_szi, certified_software
@@ -111,6 +114,13 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
     {"type": "тип_связи", "participants": [{"role": "роль", "target_id": "id_сущности"}]}
   ]
 }
+
+### ПЕРЕД ВЫВОДОМ ПРОВЕРЬ СЕБЯ:
+- у каждой сущности есть ent-key;
+- у документа — title и document_key; у требования — requirement_key, requirement-id, requirement_kind; у версии — version_string; у объекта КИИ и СЗИ — name; у сертификата — cert_number;
+- каждый structural_element связан с версией через document_structure;
+- каждое требование связано с пунктом через requirement_derived_from;
+- ни один тип и ни одна роль не выдуманы: сверься со списком выше.
 
 ### ТЕКСТ ФРАГМЕНТА ДЛЯ АНАЛИЗА:
 {text_chunk}

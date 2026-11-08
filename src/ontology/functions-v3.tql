@@ -1,32 +1,82 @@
 define
 # =====================================================================
-#  ФУНКЦИИ ВЫВОДА v3. Проверяются на данных, а не «на глаз».
+#  ФУНКЦИИ ВЫВОДА v3 (правка по внешнему ревью 08.11.2026)
 #
-#  violated_certification: объект КИИ 1-й категории защищён СЗИ, у которого
-#  НЕТ связи certification (нет записанного сертификата), при наличии
-#  требования вида certification. В v2 признаком была строка is-certified=false;
-#  теперь основание — отсутствие сертификата как объекта.
+#  Исправлено против первой редакции:
+#   1) violated_certification учитывает requirement_applicability:
+#      без этого требование приписывалось любому объекту 1-й категории;
+#   2) срок сертификата проверяется датой: просроченный сертификат
+#      больше не считается выполнением требования;
+#   3) current_versions считается по current_version_of, а не по
+#      отсутствию supersedes (иначе «сирота» без цепочки считалась текущей).
 # =====================================================================
-fun violated_certification() -> { cii_object, security_requirement }:
+fun violated_certification($today: date) -> { cii_object, security_requirement }:
     match
       $asset isa cii_object, has cii-category 1;
-      asset_protection(protected_system: $asset, deployed_szi: $szi);
       $law isa security_requirement, has requirement_kind "certification";
-      not { certification(certified_software: $szi, certificate: $c); };
+      requirement_applicability(requirement: $law, target_system: $asset);
+      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      not {
+        certification(certified_software: $szi, certificate: $c);
+        $c has cert_until $until;
+        $until > $today;
+      };
     return { $asset, $law };
 
-fun violated_documents() -> { company_document, security_requirement }:
+fun violated_documents($today: date) -> { company_document, security_requirement }:
     match
       $doc isa company_document;
       document_assignment(regulated_subject: $asset, regulated_doc: $doc);
-      $asset has cii-category 1;
-      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      $asset isa cii_object, has cii-category 1;
       $law isa security_requirement, has requirement_kind "certification";
-      not { certification(certified_software: $szi, certificate: $c); };
+      requirement_applicability(requirement: $law, target_system: $asset);
+      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      not {
+        certification(certified_software: $szi, certificate: $c);
+        $c has cert_until $until;
+        $until > $today;
+      };
     return { $doc, $law };
 
 fun current_versions() -> { document_version }:
     match
-      $v isa document_version;
-      not { supersedes(older: $v); };
+      $doc isa document;
+      current_version_of(document: $doc, version: $v);
     return { $v };
+
+fun expired_certificates($today: date) -> { security_software, certificate }:
+    match
+      certification(certified_software: $szi, certificate: $c);
+      $c has cert_until $until;
+      $until <= $today;
+    return { $szi, $c };
+
+# ---- проверки целостности (в TypeDB 3.14 нет @unique на ролях) --------
+# Эти функции возвращают нарушения структуры, а не данных: их надо вызывать
+# после загрузки корпуса и показывать в админке.
+fun documents_with_multiple_current() -> { document }:
+    match
+      $doc isa document;
+      current_version_of(document: $doc, version: $v);
+      current_version_of(document: $doc, version: $w);
+      not { $v is $w; };
+    return { $doc };
+
+fun elements_without_version() -> { structural_element }:
+    match
+      $e isa structural_element;
+      not { document_structure(element: $e, version: $dv); };
+    return { $e };
+
+fun versions_without_document() -> { document_version }:
+    match
+      $v isa document_version;
+      not { document_has_version(version: $v, document: $d); };
+    return { $v };
+
+fun child_elements_with_multiple_parents() -> { structural_element }:
+    match
+      document_hierarchy(child: $e, parent: $p1);
+      document_hierarchy(child: $e, parent: $p2);
+      not { $p1 is $p2; };
+    return { $e };
