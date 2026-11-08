@@ -130,6 +130,17 @@ class OntologyVersionService:
                 logger.warning("версия схемы: снапшот не прочитан: %s", str(exc).splitlines()[-1][:120])
                 snapshot = {"entities": [], "relations": [], "attributes": [], "ntypes": 0}
 
+        # В журнал кладём ПОЛНЫЙ текст схемы после изменения, а не текст правки:
+        # иначе скачивание версии отдаёт «define attribute x…» из 40 символов без
+        # аннотаций, и понять по такому файлу схему нельзя. Текст самой правки
+        # остаётся в comment (и в define_text только для неудачных попыток).
+        if ok:
+            try:
+                define_text = ontology_service.live_schema_text()
+            except Exception as exc:  # noqa: BLE001 — журнал не должен валить операцию
+                logger.warning("версия схемы: полный текст не прочитан: %s",
+                               str(exc).splitlines()[-1][:120])
+
         row = OntologySchemaVersion(
             id=uuid.uuid4().hex,
             created_at=datetime.now(timezone.utc),
