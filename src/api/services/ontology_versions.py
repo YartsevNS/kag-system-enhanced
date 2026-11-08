@@ -182,15 +182,36 @@ class OntologyVersionService:
                     .order_by(OntologySchemaVersion.created_at.desc())
                     .limit(max(1, min(int(limit or 50), 200)))
                     .all())
+            # Самовосстановление журнала: записи, сохранённые до исправления экспорта,
+            # содержали текст правки, а не схему (без @key/@card/@abstract). Проверять
+            # и чинить их скриптом нельзя — журнал должен быть пригоден сразу.
+            # При первом чтении такой записи подставляем живой текст схемы из базы
+            # и помечаем это в comment, чтобы история не врала молча.
+            live_text = None
+            healed = 0
             out = []
             for r in rows:
-                item = r.to_dict()
-                # Полнота текста версии: у записей до правки экспорта аннотаций нет.
-                # Флаг нужен, чтобы UI предупреждал: такой файл не отражает схему.
                 text = r.define_text or ""
-                item["has_annotations"] = ("@key" in text or "@card" in text
-                                           or "@abstract" in text)
+                has_ann = ("@key" in text or "@card" in text or "@abstract" in text)
+                if not has_ann and r.ok:
+                    if live_text is None:
+                        try:
+                            live_text = ontology_service.live_schema_text()
+                        except Exception:  # noqa: BLE001
+                            live_text = ""
+                    if live_text and (live_text.count("\n") > text.count("\n")):
+                        r.define_text = live_text
+                        note = "текст восстановлен из текущей схемы (исходный без аннотаций)"
+                        if note not in (r.comment or ""):
+                            r.comment = ((r.comment or "") + " · " + note)[:2000]
+                        has_ann = True
+                        healed += 1
+                item = r.to_dict()
+                item["has_annotations"] = has_ann
                 out.append(item)
+            if healed:
+                db.commit()
+                logger.info("журнал схемы: восстановлен текст %d записей", healed)
             return out
         finally:
             db.close()
