@@ -162,7 +162,10 @@ img, svg, video, canvas, iframe { max-width: 100%; }
   <!-- Уточнения к метаданным: кто издал документ и что это за вид. Списки подсказывают
        типовые значения (ФСТЭК России, ГОСТ, политика…), но поле можно заполнить своим —
        значения не ограничены справочником. -->
-  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+  <details id="manual-meta" style="margin-top:12px;border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px">
+  <summary style="cursor:pointer;font-size:12px;color:var(--text3)">Уточнить вручную — если парсер не распознал вид, номер, издателя или дату</summary>
+  <div style="margin-top:8px">
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
     <div id="upload-issuer-wrap" style="flex:1;min-width:220px;display:none">
       <label for="upload-issuer" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
         Регулятор (издатель) <span style="color:var(--red)">*</span>
@@ -223,8 +226,10 @@ img, svg, video, canvas, iframe { max-width: 100%; }
     <input id="upload-supersedes" placeholder="0f1d7cc6-…"
            style="width:100%;max-width:420px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
   </div>
+  </div>
+</details>
   <div id="upload-source-hint" style="font-size:11px;color:var(--text4);margin-top:6px">
-    «Регулятор» обычно приходит парсером страницы мониторинга. Вручную выбирайте только если загружаете нормативный текст сами.
+    Вид, номер, издатель и дата вступления в силу определяются по шапке документа автоматически. Если что-то не распозналось — документ загрузится с видом «иное» и меткой «требует проверки», а исправить контекст можно на странице «Ошибки онтологии».
   </div>
 </div>
 
@@ -414,16 +419,8 @@ async function uploadFiles(files) {
   const issuerVal = _issuerEl ? _issuerEl.value.trim() : '';
   const groupVal = _groupEl ? _groupEl.value : '';
   const docKindVal = _kindEl ? _kindEl.value : '';
-  if (!groupVal) {
-    toast('Выберите тип документа — от него зависит список видов', true);
-    if (_groupEl) { _groupEl.focus(); _groupEl.style.borderColor = 'var(--red)'; }
-    return;
-  }
-  if (!docKindVal) {
-    toast('Выберите вид документа из списка (он уходит в онтологию кодом словаря)', true);
-    if (_kindEl) { _kindEl.focus(); _kindEl.style.borderColor = 'var(--red)'; }
-    return;
-  }
+  // Тип и вид больше не обязательны: их определяет парсер шапки документа.
+  // Ручные значения используются, только если человек раскрыл «Уточнить вручную».
   if (_kindEl) _kindEl.style.borderColor = '';
   if (_groupEl) _groupEl.style.borderColor = '';
   if (srcKind === 'regulator' && !issuerVal) {
@@ -909,6 +906,7 @@ function renderCards(docs) {
              onerror="this.onerror=null;this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22396%22 viewBox=%220 0 280 396%22><rect width=%22280%22 height=%22396%22 fill=%22%230f1011%22 rx=%2212%22/><text x=%22140%22 y=%22190%22 text-anchor=%22middle%22 fill=%22%2362666d%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2248%22>'+fileIcon(d.file_type||d.filename)+'</text><text x=%22140%22 y=%22230%22 text-anchor=%22middle%22 fill=%22%238a8f98%22 font-family=%22system-ui,-apple-system,sans-serif%22 font-size=%2213%22>'+typeLabel(type)+'</text></svg>')}'"
              style="object-fit:contain">
         <span class="type-badge tag ${typeBadgeClass(type)}">${typeLabel(type)}</span>
+        ${d.needs_review?`<span class="type-badge tag" title="Шапка разобрана не полностью: ${d.parsed_missing||''}. Исправляется на странице «Ошибки онтологии»" style="right:auto;left:8px;background:rgba(240,180,41,.18);color:#f0b429;border:1px solid #5a4a20">требует проверки</span>`:''}
       </div>
       <div class="card-body">
         <div class="card-title" title="${d.recognized_title||d.filename}">${d.recognized_title||d.filename}</div>

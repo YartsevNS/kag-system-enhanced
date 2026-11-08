@@ -53,6 +53,22 @@ def _parse_id_list(raw) -> list:
     return parse_id_list(raw)
 
 
+def _meta_dict(raw) -> dict:
+    """source_metadata из строки JSON; пустой dict, если поля нет или оно битое."""
+    try:
+        return json.loads(raw) if isinstance(raw, str) and raw.strip() else (raw if isinstance(raw, dict) else {})
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _meta_flag(raw, key: str) -> bool:
+    return str(_meta_dict(raw).get(key) or "").lower() in ("true", "1", "yes")
+
+
+def _meta_field(raw, key: str) -> str:
+    return str(_meta_dict(raw).get(key) or "")
+
+
 def _json_parse_source(raw) -> str:
     """Из source_metadata (JSON-строка) достать source_name (источник web_monitor)."""
     if not raw:
@@ -609,10 +625,9 @@ async def upload_document(
             "upload_id": upload_id
         })
 
-    # Чей документ — обязательный выбор при загрузке через сайт.
-    # Пустое значение недопустимо: от него зависит тип объекта в онтологии
-    # (company_document против regulatory_document), а угадывать по виду документа
-    # нельзя — вид это разметка модели, она меняется.
+    # Чей документ — единственный выбор, который остаётся у человека: это разные
+    # системы записи (Palantir-модель), и по тексту документа их не различить
+    # достоверно (политика компании и приказ регулятора выглядят одинаково).
     _kind = (source_kind or "").strip().lower()
     if _kind not in ("company", "regulator"):
         raise HTTPException(status_code=400, detail={
@@ -623,40 +638,45 @@ async def upload_document(
         })
     source_kind = _kind
 
-    # Тип документа обязателен для обоих источников: это уточнение объекта онтологии
-    # (regulatory_document.doc_type / company_document), а не свободная заметка.
-    # У регулятора дополнительно обязателен издатель (ФСТЭК, Росстандарт…).
-    _doc_kind = (doc_kind or "").strip()[:120]
-    _issuer = (issuer or "").strip()[:160]
-    if not _doc_kind:
-        raise HTTPException(status_code=400, detail={
-            "code": "DOC_KIND_REQUIRED",
-            "message": "Укажите тип документа (поле doc_kind: ГОСТ, стандарт, приказ, "
-                       "политика, инструкция…). Можно вписать своё значение.",
-            "upload_id": upload_id,
-        })
-    if source_kind == "regulator" and not _issuer:
-        raise HTTPException(status_code=400, detail={
-            "code": "ISSUER_REQUIRED",
-            "message": "Укажите регулятора (поле issuer: ФСТЭК России, Росстандарт, "
-                       "Банк России…). Можно вписать своё значение.",
-            "upload_id": upload_id,
-        })
-    doc_kind, issuer = _doc_kind, _issuer
+    # Остальные поля формы — необязательные. Их заполняет парсер шапки документа:
+    # вид (код словаря), номер, издатель, дата вступления в силу. Ручной ввод остаётся
+    # только как «уточнить» — он и был причиной вида «гост» вместо national_standard.
+    try:
+        from src.indexing.doc_meta_parser import parse_document_meta
 
-    # Версия редакции: у регулятора обязательна. Формат даты — YYYY-MM-DD.
-    _ver = (version_string or "").strip()[:120]
-    _eff = (effective_from or "").strip()[:10]
+        parsed = await asyncio.to_thread(
+            parse_document_meta, filename, content, (source_url or "").strip(), source_kind
+        )
+    except Exception as exc:  # noqa: BLE001 — парсер не должен валить загрузку
+        logger.warning(f"[{upload_id}] парсер шапки не сработал: {str(exc)[:160]}")
+        parsed = {"missing": ["doc_kind", "number", "issuer", "effective_from"]}
+
+    from src.indexing import document_kinds as _dk
+
+    _doc_kind = (doc_kind or "").strip()[:120] or str(parsed.get("doc_kind") or "")
+    _issuer = (issuer or "").strip()[:160] or str(parsed.get("issuer") or "")
+    _number = (number or "").strip()[:80] or str(parsed.get("number") or "")
+    _eff_parsed = str(parsed.get("effective_from") or "")
+    _parsed_title = str(parsed.get("title") or "")
+
+    # Вид не распознан — документ НЕ теряем: кладём other и помечаем на проверку.
+    _missing = list(parsed.get("missing") or [])
+    if not _doc_kind or not _dk.is_valid(_doc_kind):
+        if _doc_kind and not _dk.is_valid(_doc_kind):
+            _missing.append("doc_kind_not_code")
+        _doc_kind = "other"
+        if "doc_kind" not in _missing:
+            _missing.append("doc_kind")
+    doc_kind, issuer, number = _doc_kind, _issuer, _number
+
+    # Редакция: первая загрузка — «1»; замену редакции определяет supersedes, а не человек.
+    _ver = (version_string or "").strip()[:120] or "1"
+    _eff = (effective_from or "").strip()[:10] or _eff_parsed
     _sup = (supersedes_id or "").strip()[:64]
-    if source_kind == "regulator":
-        if not _ver or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _eff or ""):
-            raise HTTPException(status_code=400, detail={
-                "code": "VERSION_REQUIRED",
-                "message": "Для документа регулятора укажите редакцию (version_string) и дату "
-                           "вступления в силу (effective_from, ГГГГ-ММ-ДД).",
-                "upload_id": upload_id,
-            })
+    if _eff and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _eff or ""):
+        _eff = ""
     version_string, effective_from, supersedes_id = _ver, _eff, _sup
+    needs_review = bool([m for m in _missing if m in ("doc_kind", "doc_kind_not_code", "number")])
 
     # Сохраняем через document_service
     try:
@@ -679,7 +699,7 @@ async def upload_document(
                     "source_url": source_url,
                     "source_kind": source_kind,
                     "issuer": issuer,
-                    "doc_title": (doc_title or "").strip()[:300],
+                    "doc_title": (doc_title or _parsed_title or "").strip()[:300],
                     "doc_kind": doc_kind,
                     "number": (number or "").strip()[:80],
                     "version_string": version_string,
@@ -688,6 +708,10 @@ async def upload_document(
                     # Статус явно: поиск фильтрует по нему. Новая загрузка всегда current,
                     # прежняя редакция переводится в superseded при замене.
                     "version_status": "current" if source_kind in ("company", "regulator") else "",
+                    # Что не распознал парсер шапки: страница документов покажет метку,
+                    # а /errors — запись extraction_failed для исправления вручную.
+                    "needs_review": "true" if needs_review else "",
+                    "parsed_missing": ",".join(sorted(set(_missing))) if _missing else "",
                 }.items() if v
             } or None,
             access={
@@ -700,6 +724,28 @@ async def upload_document(
             collection=collection or None,
             source_kind=source_kind,
         )
+
+        # Что не распознал парсер шапки — в отдельный журнал онтологии. Документ при этом
+        # загружен (терять файл из-за нераспознанной шапки нельзя), но помечен на проверку.
+        if _missing:
+            try:
+                from src.api.services.ontology_errors import log_error
+
+                log_error(
+                    "шапка документа разобрана не полностью: "
+                    + ", ".join(sorted(set(_missing)))
+                    + ". Вид документа записан как other — исправьте контекст на странице /errors.",
+                    error_type="extraction_failed",
+                    source="parser",
+                    document_id=record.document_id,
+                    entity_type=("regulatory_document" if source_kind == "regulator"
+                                 else "company_document"),
+                    details={"missing": sorted(set(_missing)),
+                             "raw_title": (doc_title or _parsed_title or "")[:200],
+                             "source_url": source_url, "filename": filename},
+                )
+            except Exception as exc:  # noqa: BLE001 — журнал не должен валить загрузку
+                logger.warning(f"[{upload_id}] запись в журнал ошибок не удалась: {str(exc)[:160]}")
 
         # Обработка НЕ запускается автоматически (кнопка «Обработать» на
         # странице Документы; может быть заблокирована администратором).
@@ -1300,6 +1346,10 @@ async def list_documents(
             "tags": [],
             # Источник (web_monitor): из source_metadata JSON
             "source_name": _json_parse_source(meta.get("source_metadata")),
+            # Шапка документа разобрана не полностью — страница показывает метку,
+            # исправление идёт через «Ошибки онтологии», а не через форму загрузки.
+            "needs_review": _meta_flag(meta.get("source_metadata"), "needs_review"),
+            "parsed_missing": _meta_field(meta.get("source_metadata"), "parsed_missing"),
             # ACL (для фильтрации списка у не-admin)
             "visibility": meta.get("visibility") or "public",
             "allow_user_ids": _parse_id_list(meta.get("allow_user_ids")),

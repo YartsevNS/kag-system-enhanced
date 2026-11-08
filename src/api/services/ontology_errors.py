@@ -36,7 +36,7 @@ ERROR_TYPES = (
     "cardinality_violation",
     "key_mismatch",
 )
-SOURCES = ("extraction", "validator", "writer", "typedb")
+SOURCES = ("parser", "extraction", "validator", "writer", "typedb")
 
 _LOCK = threading.Lock()
 
