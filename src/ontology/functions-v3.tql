@@ -24,19 +24,15 @@ fun violated_certification($today: date) -> { cii_object, security_requirement, 
       };
     return { $asset, $law, $szi };
 
-fun uncovered_documents($today: date) -> { company_document, security_requirement }:
+fun uncovered_documents() -> { company_document, security_requirement }:
     match
       $doc isa company_document;
       document_assignment(regulated_subject: $asset, regulated_doc: $doc);
       $asset isa cii_object, has cii-category 1;
       $law isa security_requirement, has requirement_kind "certification";
       requirement_applicability(requirement: $law, target_system: $asset);
-      asset_protection(protected_system: $asset, deployed_szi: $szi);
-      not {
-        certification(certified_software: $szi, certificate: $c);
-        $c has cert_until $until;
-        $until > $today;
-      };
+      # Покрытие проверяется независимо от состояния СЗИ: документ обязан
+      # покрывать применимое требование, даже если все СЗИ сертифицированы.
       not { requirement_coverage(covering_document: $doc, covered_requirement: $law); };
     return { $doc, $law };
 
@@ -93,3 +89,19 @@ fun versions_without_document() -> { document_version }:
       $v isa document_version;
       not { document_has_version(version: $v, document: $d); };
     return { $v };
+
+# Текущая редакция обязана быть и в истории документа: иначе граф допускает
+# current_version_of без document_has_version, и «текущая» выпадает из перечня версий.
+fun current_not_in_history() -> { document, document_version }:
+    match
+      current_version_of(document: $doc, version: $v);
+      not { document_has_version(document: $doc, version: $v); };
+    return { $doc, $v };
+
+# У нормативного акта должен быть издатель. multiple_issuers убрана (совместные
+# приказы — норма), но совсем без издателя акт существовать не должен.
+fun documents_without_issuer() -> { regulatory_document }:
+    match
+      $d isa regulatory_document;
+      not { document_issuance(regulated_item: $d, issuer: $r); };
+    return { $d };

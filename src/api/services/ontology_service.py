@@ -287,27 +287,23 @@ class OntologyService:
 
     # ---- шаблон: структура -> TypeQL -----------------------------------
     @staticmethod
-    def fingerprint(schema: Dict[str, Any]) -> str:
-        """Отпечаток структуры схемы (16 hex).
+    def fingerprint(schema: Dict[str, Any] | None = None, *, text: str | None = None) -> str:
+        """Отпечаток схемы = SHA-256 её живого текста из TypeDB.
 
-        Нужен, чтобы UI мог отличить «ничего не изменилось» от «база изменилась снаружи»
-        без повторной отрисовки графа и без сравнения всего JSON по строкам.
+        Считается по тексту, а не по структуре из API: структура не содержит
+        аннотаций (@key/@card/@abstract/@unique), поэтому изменение кардинальности
+        или уникальности не меняло отпечаток — страница выглядела «не изменившейся»,
+        хотя схема другая. Текст базы содержит всё.
         """
         import hashlib
-        import json as _json
 
-        payload = {
-            "e": sorted((x["label"], tuple(sorted(x.get("owns") or [])),
-                         tuple(sorted(x.get("plays") or [])))
-                        for x in schema.get("entities", [])),
-            "r": sorted((x["label"], tuple(sorted(x.get("owns") or [])),
-                         tuple(sorted(x.get("roles") or [])))
-                        for x in schema.get("relations", [])),
-            "a": sorted((x["label"], (x.get("value") or "string"))
-                        for x in schema.get("attributes", [])),
-        }
-        blob = _json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+        if text is None:
+            try:
+                text = ontology_service.live_schema_text()
+            except Exception:  # noqa: BLE001 — схема недоступна: отпечаток пустой
+                return ""
+        norm = " ".join(line.strip() for line in (text or "").splitlines() if line.strip())
+        return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
 
     @staticmethod
     def to_tql(snapshot: Dict[str, Any], comment: str = "") -> str:

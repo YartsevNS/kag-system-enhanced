@@ -35,6 +35,13 @@ _CHECKS = (
      'match let $e, $v1, $v2 in element_in_multiple_structures(); '
      'fetch {"пункт": $e.struct_index};',
      "пункт принадлежит нескольким редакциям"),
+    ("current_not_in_history",
+     'match let $d, $v in current_not_in_history(); '
+     'fetch {"документ": $d.title, "редакция": $v.version_string};',
+     "текущая редакция отсутствует в истории документа"),
+    ("documents_without_issuer",
+     'match let $d in documents_without_issuer(); fetch {"документ": $d.title};',
+     "у нормативного акта нет издателя"),
     ("elements_without_version",
      'match let $e in elements_without_version(); '
      'fetch {"пункт": $e.struct_index};',

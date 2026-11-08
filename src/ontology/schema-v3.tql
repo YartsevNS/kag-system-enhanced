@@ -107,7 +107,7 @@ entity document_version sub sourced_entity,
 
 # ---- структура и требования -----------------------------------------
 entity structural_element sub sourced_entity,
-  owns struct_index,
+  owns struct_index @card(1..1),
   owns text_content;
 entity security_requirement sub sourced_entity,
   owns requirement_key @key,
