@@ -29,10 +29,10 @@ fun uncovered_documents() -> { company_document, security_requirement }:
       $doc isa company_document;
       document_assignment(regulated_subject: $asset, regulated_doc: $doc);
       $asset isa cii_object, has cii-category 1;
-      $law isa security_requirement, has requirement_kind "certification";
+      # Любое применимое требование, а не только certification: функция
+      # называется uncovered_documents, значит проверяет покрытие в целом.
+      $law isa security_requirement;
       requirement_applicability(requirement: $law, target_system: $asset);
-      # Покрытие проверяется независимо от состояния СЗИ: документ обязан
-      # покрывать применимое требование, даже если все СЗИ сертифицированы.
       not { requirement_coverage(covering_document: $doc, covered_requirement: $law); };
     return { $doc, $law };
 
@@ -52,6 +52,9 @@ fun invalid_certificates($today: date) -> { security_software, certificate }:
     return { $szi, $c };
 
 # ---- проверки целостности (в TypeDB 3.14 нет @unique/@key на ролях) --
+# ВАЖНО: функции, сравнивающие пары через not { $a is $b; }, возвращают
+# пару в ОБОИХ порядках (TypeDB не упорядочивает участников). При подсчёте
+# нарушений дедуплицировать по множеству участников, иначе чисел будет вдвое больше.
 # ТипDB гарантирует только атрибутную уникальность (@key/@unique на owns).
 # Всё, что касается ролей, проверяется функциями: они возвращают САМИ нарушения
 # (с участниками), а не «есть/нет», чтобы было видно, что именно чинить.
@@ -105,3 +108,45 @@ fun documents_without_issuer() -> { regulatory_document }:
       $d isa regulatory_document;
       not { document_issuance(regulated_item: $d, issuer: $r); };
     return { $d };
+
+# ---- контроль значений и структуры (P1/P2 ревью) ---------------------
+# Допустимые значения версии; иначе функция/правила молча не сработают.
+fun invalid_version_status() -> { document_version }:
+    match
+      $v isa document_version, has version_status $s;
+      not { $s == "current"; };
+      not { $s == "superseded"; };
+      not { $s == "repealed"; };
+      not { $s == "draft"; };
+    return { $v };
+
+# Вид требования; violated_certification ищет "certification" — опечатка ломает вывод.
+fun invalid_requirement_kind() -> { security_requirement }:
+    match
+      $r isa security_requirement, has requirement_kind $k;
+      not { $k == "certification"; };
+      not { $k == "organizational"; };
+      not { $k == "technical"; };
+      not { $k == "process"; };
+    return { $r };
+
+# Цикл в иерархии пунктов: A родитель B и B родитель A.
+fun hierarchy_cycle() -> { structural_element }:
+    match
+      document_hierarchy(parent: $a, child: $b);
+      document_hierarchy(parent: $b, child: $a);
+    return { $a };
+
+# Цикл в цепочке замен редакций.
+fun supersedes_cycle() -> { document_version }:
+    match
+      supersedes(newer: $a, older: $b);
+      supersedes(newer: $b, older: $a);
+    return { $a };
+
+# Дата окончания раньше даты начала.
+fun invalid_date_range() -> { document_version }:
+    match
+      $v isa document_version, has effective_from $f, has effective_to $t;
+      $t < $f;
+    return { $v };

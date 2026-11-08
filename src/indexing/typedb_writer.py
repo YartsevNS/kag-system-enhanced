@@ -92,7 +92,7 @@ REQUIRED_ATTRS: Dict[str, tuple] = {
     "regulatory_document": ("title", "document_key"),
     "company_document": ("title", "document_key"),
     "document_version": ("version_string",),
-    "structural_element": ("text_content",),
+    "structural_element": ("struct_index", "text_content"),
     "security_requirement": ("requirement_key", "requirement-id", "requirement_kind"),
     "security_measure": ("measure_key",),
     "evidence": ("name",),
@@ -365,9 +365,8 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
         add("name", attrs.get("name"), 300)
         add("vendor", attrs.get("vendor"), 120)
         add("software_version", attrs.get("software_version"), 80)
-        cert = attrs.get("is-certified")
-        if isinstance(cert, bool):
-            has.append(f"has is-certified {'true' if cert else 'false'}")  # boolean
+        # is-certified удалён из схемы: источник правды — объект certificate
+        # и связь certification. Boolean расходился с реальными сертификатами.
     elif etype == "certificate":
         add("cert_number", attrs.get("cert_number"), 120)
         add("cert_authority", attrs.get("cert_authority"), 200)

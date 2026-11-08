@@ -37,6 +37,7 @@ attribute document_key, value string;
 
 # ---- атрибуты: версии -----------------------------------------------
 attribute version_string, value string;
+# Допустимо: current | superseded | repealed | draft (проверяется invalid_version_status).
 attribute version_status, value string;
 attribute version_hash, value string;
 attribute kag_document_id, value string;
@@ -53,6 +54,7 @@ attribute requirement_key, value string;
 # Синтетический уникальный ключ меры: document_key|код меры.
 attribute measure_key, value string;
 attribute description, value string;
+# Допустимо: certification | organizational | technical | process (проверяется invalid_requirement_kind).
 attribute requirement_kind, value string;
 attribute obligation-level, value string;
 
@@ -64,9 +66,6 @@ attribute offender_class, value string;
 attribute potential, value string;
 attribute vendor, value string;
 attribute software_version, value string;
-# КЭШ. Источник правды — сущность certificate и связь certification.
-# Не использовать в запросах, где важна точность; может расходиться.
-attribute is-certified, value boolean;
 
 # ---- атрибуты: сертификаты и доказательства -------------------------
 attribute cert_number, value string;
@@ -127,13 +126,13 @@ entity evidence sub sourced_entity,
   owns evidence_date;
 entity cii_object sub sourced_entity,
   owns name @card(1..1),
-  owns cii-category,
+  owns cii-category @card(1..1),
   owns system_type;
 entity security_software sub sourced_entity,
   owns name @card(1..1),
   owns vendor,
-  owns software_version,
-  owns is-certified;
+  owns software_version;
+
 entity certificate sub sourced_entity,
   owns cert_number @key,
   owns cert_authority,
