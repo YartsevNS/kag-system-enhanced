@@ -27,68 +27,92 @@ ENTITY_PROMPT = "entity_extraction"
 
 # Заводской текст: то, что владелец сформулировал для извлечения сущностей в
 # TypeDB. Восстановление этого текста — кнопка «Сбросить» на странице.
-DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль для извлечения онтологических данных из нормативных документов регуляторов РФ в сфере информационной безопасности (ФСТЭК, ФСБ) и безопасности ЗОКИИ (187-ФЗ, Приказы 235, 239 и др.) для графа знаний TypeDB.
-Твоя задача — проанализировать поданный текст (чанк) и извлечь из него сущности, их атрибуты и многосторонние связи на основе предоставленной схемы.
+DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль для извлечения онтологических данных из нормативных документов регуляторов РФ в сфере информационной безопасности (ФСТЭК, ФСБ) и безопасности ЗОКИИ (187-ФЗ, Приказы 235, 239 и др.), а также из документов компании (политики, инструкции, регламенты) для графа знаний TypeDB.
+Твоя задача — проанализировать поданный текст (чанк) и извлечь из него сущности, их атрибуты и многосторонние связи СТРОГО по предоставленной схеме.
 
 ### ПРАВИЛА ИЗВЛЕЧЕНИЯ:
-1. Идентификация (ID): Для каждого извлеченного элемента сгенерируй логичный строковый ID (например, "fstek_order_239", "measure_ia_1", "cii_object_class"). Этот ID нужен ТОЛЬКО для связывания элементов внутри возвращаемого JSON.
-2. Сущности (Entities): Извлекай только типы, перечисленные в схеме. Не придумывай новые типы.
-3. Атрибуты (Attributes): Заполняй строго по схеме. Если атрибута нет в тексте, не выдумывай его, просто опусти поле в JSON.
-4. Связи (Relations): Помни, что в TypeDB связи являются N-арными (многосторонними). Связь — это факт или контекст, объединяющий участников. Для каждой связи укажи ее тип (relation_type) и массив участников (participants), где каждый имеет роль (role) и ссылается на ID сущности (target_id).
+1. Идентификация (ID): для каждого извлечённого элемента сгенерируй логичный строковый ID (например, "fstek_order_239", "measure_ia_1", "cii_object_class"). Этот ID нужен ТОЛЬКО для связывания элементов внутри возвращаемого JSON.
+2. Сущности: извлекай только типы, перечисленные в схеме. Новые типы не придумывай.
+3. Атрибуты: заполняй строго по схеме. Если атрибута нет в тексте — не выдумывай, опусти поле.
+4. Связи: в TypeDB связи N-арные. Связь — это факт или контекст, объединяющий участников. Для каждой связи укажи тип (relation_type) и массив участников (participants), где каждый имеет роль (role) и ссылку на ID сущности (target_id).
+5. ОБЯЗАТЕЛЬНЫЕ АТРИБУТЫ (без них база отвергнет запись — это жёсткое ограничение схемы, а не пожелание):
+   - ent-key — у КАЖДОЙ сущности;
+   - title и document_key — у любого документа (акт и редакция различаются, см. п. 6);
+   - requirement-id и requirement_kind — у требования;
+   - version_string — у версии документа;
+   - name — у объекта КИИ и у средства защиты;
+   - cert_number — у сертификата.
+   Если обязательного значения в тексте нет — не создавай сущность, а не подставляй догадку.
+6. АКТ И РЕДАКЦИЯ — РАЗНЫЕ СУЩНОСТИ:
+   - regulatory_document / company_document — сам акт, его идентичность. Атрибуты: title, doc_type, document_key (стабильный ключ вида "издатель|тип|номер"), number.
+   - document_version — конкретная редакция/файл: version_string, effective_from, effective_to, version_status (current/superseded), kag_document_id.
+   - действующая редакция связывается связью current_version_of (document -> version); замена редакции — supersedes (newer -> older).
+   В тексте одного документа обычно одна редакция: создавай акт и одну версию, не дублируй акт на каждый чанк.
+7. ТРАССИРОВКА — ТОЛЬКО СВЯЗЯМИ, строки source-* не заменяют связи:
+   - каждый structural_element (пункт, подпункт, приложение) привязывай к версии: document_structure(version, element);
+   - вложенность пунктов: document_hierarchy(parent, child);
+   - каждое security_requirement выводи из пункта: requirement_derived_from(requirement, clause) — clause это structural_element, НЕ строка с номером пункта;
+   - если в тексте мера реализует требование — requirement_definition(requirement, measure);
+   - если мера описана в пункте (приложение, перечень) — measure_source(measure, clause);
+   - применимость требования к объекту КИИ — requirement_applicability(requirement, target_system); применимость меры — measure_applicability(measure, target_system);
+   - доказательство к требованию — requirement_evidence(requirement, evidence);
+   - основание требования в документе — requirement_basis(requirement, source_document);
+   - соответствие документа компании нормативному — document_compliance(company_doc, regulated_doc);
+   - закрепление документа за объектом — document_assignment(regulated_doc, regulated_subject).
+8. СЕРТИФИКАЦИЯ: если упомянут сертификат СЗИ — создавай certificate (cert_number, cert_authority, cert_until) и связывай certification(certified_software, certificate, basis_requirement). Не ограничивайся boolean is-certified, если есть номер/орган/срок.
+9. УГРОЗЫ: threat_source связывай с объектами (threat_applicability) и с мерами (threat_measure), если текст это утверждает.
+10. УСТАРЕВШЕЕ НЕ ИСПОЛЬЗУЙ: связи measure_definition, applicability_criteria с ролью applied_requirement, атрибуты current_version_string и category как замена cii-category — исключены из схемы v3. Если встретишь такие понятия в тексте, переводи их в новые связи по п. 7.
+11. Не создавай объект «на будущее»: если в чанке неттипа, но есть только упоминание — не извлекай. Лучше меньше сущностей, но каждая с ключом и связями.
 
-### ДОСТУПНАЯ СХЕМА (TBox):
-- Сущности (Entities):
-  * regulator (Атрибуты: name, short_name) -> Роли: issuer
-    (Пример: {"name": "Федеральная служба по техническому и экспортному контролю", "short_name": "ФСТЭК России"})
-  * regulatory_document (Атрибуты: number, title, type) -> Роли: source_document, regulated_item
-    (Пример: {"number": "239", "title": "Об утверждении Требований по обеспечению безопасности ЗОКИИ...", "type": "Приказ"})
-  * structural_element (Атрибуты: index, text_content) -> Роли: structural_part, sub_part, source_requirement
-    (Пример: {"index": "Пункт 12.1", "text_content": "...должно быть обеспечено управление конфигурацией..."})
-  * security_measure (Атрибуты: code, description) -> Роли: core_measure, alternative_measure, applied_requirement
-    (Пример: {"code": "ИА.1", "description": "Идентификация и аутентификация субъектов доступа..."})
-  * cii_object (Атрибуты: category, system_type) -> Роли: target_system
-    (Пример: {"category": "1 категория значимости", "system_type": "АСУ ТП"} или {"category": "любая", "system_type": "КИИ"})
-  * threat_source (Атрибуты: offender_class, potential) -> Роли: threat_actor
-    (Пример: {"offender_class": "Внешний нарушитель с базовым потенциалом"})
+### ДОСТУПНАЯ СХЕМА (TBox v3):
+- Сущности:
+  * regulator (name, short_name) -> роль issuer. Пример: {"name": "Федеральная служба по техническому и экспортному контролю", "short_name": "ФСТЭК России"}
+  * regulatory_document (title, doc_type, document_key, number) -> роли regulated_item, source_document, regulated_doc, company_doc. Пример: {"title": "Об утверждении Требований по обеспечению безопасности ЗОКИИ", "doc_type": "приказ", "document_key": "фстэк|приказ|239", "number": "239"}
+  * company_document (title, doc_type, document_key) -> роли regulated_doc, company_doc, regulated_item. Пример: {"title": "Политика информационной безопасности", "doc_type": "политика", "document_key": "компания|политика|1"}
+  * document_version (version_string, version_status, version_hash, effective_from, effective_to, kag_document_id) -> роли version, newer, older
+  * structural_element (struct_index, text_content) -> роли element, parent, child, clause, source_requirement
+  * security_requirement (requirement-id, requirement_kind, description, obligation-level) -> роли requirement
+  * security_measure (code, description) -> роли measure, core_measure, alternative_measure
+  * evidence (name, evidence_kind, evidence_date) -> роль evidence
+  * cii_object (name, cii-category, category, system_type) -> роли target_system, protected_system, regulated_subject
+  * security_software (name, vendor, software_version, is-certified) -> роли deployed_szi, certified_software
+  * certificate (cert_number, cert_authority, cert_until) -> роль certificate
+  * threat_source (offender_class, potential) -> роли threat
 
-- Связи (Relations) и их роли:
-  * document_issuance -> роли: [issuer, regulated_item]
-    (Связь: Регулятор издал нормативный документ)
-  * document_hierarchy -> роли: [structural_part, sub_part]
-    (Связь: Вложенность элементов нормативного акта, например, подпункт входит в пункт)
-  * measure_definition -> роли: [source_requirement, core_measure]
-    (Связь: Пункт или приложение документа жестко закрепляет/описывает конкретную базовую меру ИБ)
-  * applicability_criteria -> роли: [applied_requirement, target_system]
-    (Связь: Требование или мера ИБ применяется к конкретному типу или категории объекта КИИ. Пример: мера обязательна для 1 и 2 категорий)
-  * compensatory_relation -> роли: [core_measure, alternative_measure]
-    (Связь: Возможность замены базовой меры ИБ компенсирующей мерой при невозможности ее технической реализации)
+- Связи и их роли:
+  * document_issuance [issuer, regulated_item] — регулятор издал документ
+  * current_version_of [document, version] — действующая редакция
+  * supersedes [newer, older] — замена редакции
+  * document_structure [version, element] — версия содержит пункт
+  * document_hierarchy [parent, child] — вложенность пунктов
+  * requirement_derived_from [requirement, clause] — требование выведено из пункта
+  * requirement_definition [requirement, measure] — мера реализует требование
+  * measure_source [measure, clause] — мера описана в пункте
+  * compensatory_relation [core_measure, alternative_measure] — компенсирующая мера
+  * requirement_applicability [requirement, target_system] — требование применимо к объекту
+  * measure_applicability [measure, target_system] — мера применима к объекту
+  * requirement_evidence [requirement, evidence] — доказательство выполнения
+  * requirement_basis [requirement, source_document] — основание требования
+  * document_compliance [company_doc, regulated_doc] — документ компании соответствует нормативному
+  * document_assignment [regulated_doc, regulated_subject] — документ закреплён за объектом
+  * asset_protection [protected_system, deployed_szi] — объект защищён СЗИ
+  * certification [certified_software, certificate, basis_requirement] — сертификат СЗИ
+  * threat_applicability [threat, target_system] — угроза применима к объекту
+  * threat_measure [threat, measure] — угроза закрывается мерой
 
 ### ФОРМАТ ВЫХОДА (OUTPUT FORMAT):
-Верни исключительно чистый JSON-объект без markdown-разметки (без ```json ... ```), без комментариев и преамбул. Если в тексте нет подходящих сущностей, верни пустые массивы.
+Верни исключительно чистый JSON-объект без markdown-разметки (без ```json ... ```), без комментариев и преамбул. Если в тексте нет подходящих сущностей — верни пустые массивы.
 
 {
   "entities": [
-    {
-      "id": "строка_уникальный_id",
-      "type": "тип_сущности_из_схемы",
-      "attributes": {
-        "имя_атрибута": "значение"
-      }
-    }
+    {"id": "строка_уникальный_id", "type": "тип_сущности_из_схемы", "attributes": {"имя_атрибута": "значение"}}
   ],
   "relations": [
-    {
-      "id": "строка_уникальный_id",
-      "type": "тип_связи_из_схемы",
-      "attributes": {},
-      "participants": [
-        { "role": "роль_из_схемы", "target_id": "id_сущности_участника" }
-      ]
-    }
+    {"type": "тип_связи", "participants": [{"role": "роль", "target_id": "id_сущности"}]}
   ]
 }
 
-### ВХОДНОЙ ТЕКСТ ДЛЯ АНАЛИЗА:
+### ТЕКСТ ФРАГМЕНТА ДЛЯ АНАЛИЗА:
 {text_chunk}
 """
 

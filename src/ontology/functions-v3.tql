@@ -1,0 +1,32 @@
+define
+# =====================================================================
+#  ФУНКЦИИ ВЫВОДА v3. Проверяются на данных, а не «на глаз».
+#
+#  violated_certification: объект КИИ 1-й категории защищён СЗИ, у которого
+#  НЕТ связи certification (нет записанного сертификата), при наличии
+#  требования вида certification. В v2 признаком была строка is-certified=false;
+#  теперь основание — отсутствие сертификата как объекта.
+# =====================================================================
+fun violated_certification() -> { cii_object, security_requirement }:
+    match
+      $asset isa cii_object, has cii-category 1;
+      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      $law isa security_requirement, has requirement_kind "certification";
+      not { certification(certified_software: $szi, certificate: $c); };
+    return { $asset, $law };
+
+fun violated_documents() -> { company_document, security_requirement }:
+    match
+      $doc isa company_document;
+      document_assignment(regulated_subject: $asset, regulated_doc: $doc);
+      $asset has cii-category 1;
+      asset_protection(protected_system: $asset, deployed_szi: $szi);
+      $law isa security_requirement, has requirement_kind "certification";
+      not { certification(certified_software: $szi, certificate: $c); };
+    return { $doc, $law };
+
+fun current_versions() -> { document_version }:
+    match
+      $v isa document_version;
+      not { supersedes(older: $v); };
+    return { $v };

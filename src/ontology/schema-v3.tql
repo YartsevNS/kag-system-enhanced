@@ -1,0 +1,240 @@
+define
+# =====================================================================
+#  ОНТОЛОГИЯ KAG v3 — документы ИБ РФ (ФСТЭК, ФСБ, ГОСТ, Банк России)
+#
+#  Отличия от v2 (по внешней оценке 08.11.2026):
+#   1) абстрактные супертипы: identified_entity -> sourced_entity -> ...
+#      больше не копируем ent-key и provenance в каждом типе;
+#   2) @key не только на ent-key, но и на естественных ключах
+#      (document_key, requirement-id, cert_number);
+#   3) обязательность задана через @card(1..1) на owns и ролях:
+#      документ без title, требование без requirement-id в базу не попадут;
+#   4) трассировка — СВЯЗЯМИ, а не строками:
+#      document_structure (версия -> пункт), requirement_derived_from (требование -> пункт);
+#   5) «мера реализует требование» — requirement_definition,
+#      «где мера описана» — measure_source (роль source_requirement больше не врёт);
+#   6) требование применимо к объекту КИИ напрямую — requirement_applicability;
+#   7) сертификация — сущность certificate + связь certification, а не boolean;
+#   8) угроза связана с объектом и с мерами — threat_applicability, threat_measure;
+#   9) документ компании связан с нормативным — document_compliance;
+#  10) текущая редакция — связь current_version_of, а не строка current_version_string.
+# =====================================================================
+
+# ---- атрибуты: идентичность и происхождение -------------------------
+attribute ent-key, value string;
+attribute source_origin, value string;
+attribute source-chunk-id, value string;
+attribute source-chunk-ids, value string;
+attribute source-clause, value string;
+
+# ---- атрибуты: документы --------------------------------------------
+attribute name, value string;
+attribute short_name, value string;
+attribute title, value string;
+attribute number, value string;
+attribute doc_type, value string;
+attribute document_key, value string;
+
+# ---- атрибуты: версии -----------------------------------------------
+attribute version_string, value string;
+attribute version_status, value string;
+attribute version_hash, value string;
+attribute kag_document_id, value string;
+attribute effective_from, value date;
+attribute effective_to, value date;
+
+# ---- атрибуты: пункты и требования ----------------------------------
+attribute struct_index, value string;
+attribute text_content, value string;
+attribute requirement-id, value string;
+attribute description, value string;
+attribute requirement_kind, value string;
+attribute obligation-level, value string;
+
+# ---- атрибуты: меры, объекты, ПО, угрозы ----------------------------
+attribute code, value string;
+attribute cii-category, value integer;
+attribute category, value string;
+attribute system_type, value string;
+attribute offender_class, value string;
+attribute potential, value string;
+attribute vendor, value string;
+attribute software_version, value string;
+attribute is-certified, value boolean;
+
+# ---- атрибуты: сертификаты и доказательства -------------------------
+attribute cert_number, value string;
+attribute cert_authority, value string;
+attribute cert_until, value date;
+attribute evidence_kind, value string;
+attribute evidence_date, value date;
+
+# ---- супертипы -------------------------------------------------------
+# Наследование в TypeDB одиночное, поэтому цепочка:
+#   identified_entity -> sourced_entity -> (document -> regulatory/company, ...)
+entity identified_entity @abstract, owns ent-key @key;
+entity sourced_entity sub identified_entity,
+  owns source_origin,
+  owns source-chunk-id,
+  owns source-chunk-ids;
+
+# ---- документы -------------------------------------------------------
+entity regulator sub sourced_entity,
+  owns name @card(1..1),
+  owns short_name;
+entity document sub sourced_entity,
+  owns title @card(1..1),
+  owns doc_type,
+  owns document_key @key;
+entity regulatory_document sub document, owns number;
+entity company_document sub document;
+entity document_version sub sourced_entity,
+  owns version_string @card(1..1),
+  owns version_status,
+  owns version_hash,
+  owns effective_from,
+  owns effective_to,
+  owns kag_document_id;
+
+# ---- структура и требования -----------------------------------------
+entity structural_element sub sourced_entity,
+  owns struct_index,
+  owns text_content;
+entity security_requirement sub sourced_entity,
+  owns requirement-id @card(1..1),
+  owns requirement_kind @card(1..1),
+  owns description,
+  owns obligation-level;
+entity security_measure sub sourced_entity,
+  owns code,
+  owns description;
+
+# ---- доказательства, объекты, ПО, угрозы ----------------------------
+entity evidence sub sourced_entity,
+  owns name,
+  owns evidence_kind,
+  owns evidence_date;
+entity cii_object sub sourced_entity,
+  owns name @card(1..1),
+  owns cii-category,
+  owns category,
+  owns system_type;
+entity security_software sub sourced_entity,
+  owns name @card(1..1),
+  owns vendor,
+  owns software_version,
+  owns is-certified;
+entity certificate sub sourced_entity,
+  owns cert_number @card(1..1),
+  owns cert_authority,
+  owns cert_until;
+entity threat_source sub sourced_entity,
+  owns offender_class,
+  owns potential;
+
+# ---- связи: документы и версии --------------------------------------
+relation document_issuance,
+  relates issuer @card(1..1),
+  relates regulated_item @card(1..1);
+relation current_version_of,
+  relates document @card(1..1),
+  relates version @card(1..1);
+relation supersedes,
+  relates newer @card(1..1),
+  relates older @card(1..1);
+relation document_structure,
+  relates version @card(1..1),
+  relates element @card(1..1);
+relation document_hierarchy,
+  relates parent @card(1..1),
+  relates child @card(1..1);
+
+# ---- связи: требования и меры ---------------------------------------
+relation requirement_derived_from,
+  relates requirement @card(1..1),
+  relates clause @card(1..1);
+relation requirement_definition,
+  relates requirement @card(1..1),
+  relates measure @card(1..1);
+relation measure_source,
+  relates measure @card(1..1),
+  relates clause @card(1..1);
+relation compensatory_relation,
+  relates core_measure @card(1..1),
+  relates alternative_measure @card(1..1);
+relation requirement_applicability,
+  relates requirement @card(1..1),
+  relates target_system @card(1..1);
+relation measure_applicability,
+  relates measure @card(1..1),
+  relates target_system @card(1..1);
+
+# ---- связи: доказательства и привязка документов --------------------
+relation requirement_evidence,
+  relates requirement @card(1..1),
+  relates evidence @card(1..1);
+relation requirement_basis,
+  relates requirement @card(1..1),
+  relates source_document @card(1..1);
+relation document_compliance,
+  relates company_doc @card(1..1),
+  relates regulated_doc @card(1..1);
+relation document_assignment,
+  relates regulated_doc @card(1..1),
+  relates regulated_subject @card(1..1);
+
+# ---- связи: защита, сертификация, угрозы ----------------------------
+relation asset_protection,
+  relates protected_system @card(1..1),
+  relates deployed_szi @card(1..1);
+relation certification,
+  relates certified_software @card(1..1),
+  relates certificate @card(1..1),
+  relates basis_requirement;
+relation threat_applicability,
+  relates threat @card(1..1),
+  relates target_system @card(1..1);
+relation threat_measure,
+  relates threat @card(1..1),
+  relates measure @card(1..1);
+
+# ---- роли: кто в чём участвует --------------------------------------
+entity regulator plays document_issuance:issuer;
+entity document plays document_issuance:regulated_item;
+entity document plays current_version_of:document;
+entity document_version plays current_version_of:version;
+entity document_version plays supersedes:newer;
+entity document_version plays supersedes:older;
+entity document_version plays document_structure:version;
+entity structural_element plays document_structure:element;
+entity structural_element plays document_hierarchy:parent;
+entity structural_element plays document_hierarchy:child;
+entity security_requirement plays requirement_derived_from:requirement;
+entity structural_element plays requirement_derived_from:clause;
+entity security_requirement plays requirement_definition:requirement;
+entity security_measure plays requirement_definition:measure;
+entity security_measure plays measure_source:measure;
+entity structural_element plays measure_source:clause;
+entity security_measure plays compensatory_relation:core_measure;
+entity security_measure plays compensatory_relation:alternative_measure;
+entity security_requirement plays requirement_applicability:requirement;
+entity cii_object plays requirement_applicability:target_system;
+entity security_measure plays measure_applicability:measure;
+entity cii_object plays measure_applicability:target_system;
+entity security_requirement plays requirement_evidence:requirement;
+entity evidence plays requirement_evidence:evidence;
+entity security_requirement plays requirement_basis:requirement;
+entity document plays requirement_basis:source_document;
+entity company_document plays document_compliance:company_doc;
+entity regulatory_document plays document_compliance:regulated_doc;
+entity document plays document_assignment:regulated_doc;
+entity cii_object plays document_assignment:regulated_subject;
+entity cii_object plays asset_protection:protected_system;
+entity security_software plays asset_protection:deployed_szi;
+entity security_software plays certification:certified_software;
+entity certificate plays certification:certificate;
+entity security_requirement plays certification:basis_requirement;
+entity threat_source plays threat_applicability:threat;
+entity cii_object plays threat_applicability:target_system;
+entity threat_source plays threat_measure:threat;
+entity security_measure plays threat_measure:measure;
