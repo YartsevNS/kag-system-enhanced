@@ -98,7 +98,7 @@ entity regulatory_document sub document, owns number;
 entity company_document sub document;
 entity document_version sub sourced_entity,
   owns version_string @card(1..1),
-  owns version_status,
+  owns version_status @card(1..1),
   owns version_hash @unique,
   owns effective_from,
   owns effective_to,

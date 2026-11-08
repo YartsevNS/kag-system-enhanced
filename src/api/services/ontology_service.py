@@ -35,6 +35,9 @@ VALUE_TYPES = (
 )
 
 
+_SCHEMA_HEADER_LINES = ['# Схема онтологии KAG (TypeDB), выгружена из живой базы.', '#', '# Правила заполнения составных ключей (без них insert упадёт по @key):', '#   requirement_key = document_key + "|" + requirement-id', '#                     (requirement-id уникален только внутри документа)', '#   measure_key     = document_key + "|" + code', '#   document_key    = "издатель|тип|номер"', '#', '# Допустимые значения (функции вывода ищут точные строки):', '#   version_status   : current | superseded | repealed | draft', '#   requirement_kind : certification | organizational | technical | process', '#   requirement_kind — КАТЕГОРИЯ требования, а не степень обязательности;', '#   степень обязательности хранится в obligation-level.', '#', '# Источник правды по сертификации — объект certificate и связь certification;', '# атрибута is-certified в схеме нет намеренно.']
+
+
 class OntologyUnavailable(RuntimeError):
     """TypeDB не настроен или недоступен — UI показывает это, а не пустую схему."""
 
@@ -211,15 +214,15 @@ class OntologyService:
         return self.apply(f"undefine {label};")
 
     def live_schema_text(self) -> str:
-        """Текст схемы ровно в том виде, в каком её хранит TypeDB — с аннотациями.
+        """Текст схемы из TypeDB с шапкой правил, без которых она нечитаема.
 
-        Зачем отдельно от to_tql(): to_tql собирает текст из структуры, которую
-        get_schema() отдаёт без @key/@card/@abstract. Из-за этого кнопка
-        «Скачать схему» и define_text в журнале версий НЕ содержали ограничений,
-        и любой внешний разбор (в том числе ревью) видел схему без уникальности
-        и обязательности, хотя в базе они есть.
+        TypeDB не хранит комментарии define, поэтому формулы ключей и допустимые
+        значения добавляются здесь: схема должна быть самодостаточной в файле,
+        а не только в промпте.
         """
-        return self._driver().databases.get(self._db()).schema()
+        text = self._driver().databases.get(self._db()).schema()
+        return chr(10).join(_SCHEMA_HEADER_LINES) + chr(10) + chr(10) + text
+
 
     def tbox_summary(self, max_chars: int = 4000) -> str:
         """Компактный TBox для промпта извлечения, собранный из ЖИВОЙ схемы.

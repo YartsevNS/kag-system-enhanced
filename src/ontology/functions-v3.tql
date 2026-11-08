@@ -130,21 +130,62 @@ fun invalid_requirement_kind() -> { security_requirement }:
       not { $k == "process"; };
     return { $r };
 
-# Цикл в иерархии пунктов: A родитель B и B родитель A.
-fun hierarchy_cycle() -> { structural_element }:
+# Цикл в иерархии пунктов: A → B → A, а также петля A → A.
+# ОГРАНИЧЕНИЕ: ловятся только 2-циклы и петли; цикл из 3+ пунктов этой
+# функцией НЕ находится (в TypeDB 3.14 нет транзитивного замыкания в функции) —
+# для длинных цепочек нужна внешняя проверка.
+fun hierarchy_cycle() -> { structural_element, structural_element }:
     match
       document_hierarchy(parent: $a, child: $b);
       document_hierarchy(parent: $b, child: $a);
-    return { $a };
+    return { $a, $b };
 
-# Цикл в цепочке замен редакций.
-fun supersedes_cycle() -> { document_version }:
+# Цикл в цепочке замен редакций: V1 → V2 → V1 и петля V → V.
+# ОГРАНИЧЕНИЕ: только 2-циклы и петли; 3+ редакций — внешняя проверка.
+fun supersedes_cycle() -> { document_version, document_version }:
     match
       supersedes(newer: $a, older: $b);
       supersedes(newer: $b, older: $a);
+    return { $a, $b };
+
+# Петля в иерархии: пункт сам себе родитель.
+fun hierarchy_self_loop() -> { structural_element }:
+    match
+      document_hierarchy(parent: $a, child: $a);
     return { $a };
 
+# Петля в замене редакций: версия заменяет сама себя.
+fun supersedes_self_loop() -> { document_version }:
+    match
+      supersedes(newer: $a, older: $a);
+    return { $a };
+
+# Версия без статуса: current_versions() и invalid_version_status() её не видят,
+# а статус обязателен по схеме — значит запись пришла в обход схемы.
+fun missing_version_status() -> { document_version }:
+    match
+      $v isa document_version;
+      not { $v has version_status $s; };
+    return { $v };
+
+# Расхождение двух источников правды: version_status="current" обязан совпадать
+# с current_version_of. Если статус current, а связи нет (или наоборот) — это ошибка.
+fun status_vs_current_mismatch() -> { document_version }:
+    match
+      $v isa document_version, has version_status "current";
+      not { current_version_of(version: $v, document: $d); };
+    return { $v };
+
+fun current_with_noncurrent_status() -> { document_version }:
+    match
+      current_version_of(version: $v, document: $d);
+      $v has version_status $s;
+      not { $s == "current"; };
+    return { $v };
+
 # Дата окончания раньше даты начала.
+# ОГРАНИЧЕНИЕ: проверяются только версии, у которых есть ОБЕ даты; версия без
+# одной из дат сюда не попадает (бессрочный документ — нормальное состояние).
 fun invalid_date_range() -> { document_version }:
     match
       $v isa document_version, has effective_from $f, has effective_to $t;
