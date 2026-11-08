@@ -345,6 +345,34 @@ class DocumentService:
                     f"(хеш {file_hash[:12]}...) уже есть как "
                     f"{existing.document_id[:12]} v{existing.version}"
                 )
+                # Повторная загрузка того же файла не должна молча терять уточнения:
+                # пользователь мог указать источник (regulator/company), редакцию, номер.
+                # Раньше запись возвращалась как есть, и на странице документа оставался
+                # пустой source_kind — при том что загрузка его передавала.
+                updates: Dict[str, Any] = {}
+                if source_kind:
+                    updates["source_kind"] = source_kind
+                if collection:
+                    updates["collection"] = collection
+                if source_metadata:
+                    merged = dict(existing.source_metadata or {})
+                    merged.update({k: v for k, v in source_metadata.items() if v})
+                    updates["source_metadata"] = merged
+                if updates:
+                    try:
+                        from src.api.services.document_repository import get_doc_repo
+
+                        get_doc_repo().upsert(existing.document_id, updates)
+                        for k, v in updates.items():
+                            if hasattr(existing, k):
+                                setattr(existing, k, v)
+                        logger.info(
+                            f"[{upload_id or '-'}] дубликат {existing.document_id[:12]}: "
+                            f"метаданные обновлены {sorted(updates)}")
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            f"[{upload_id or '-'}] дубликат: метаданные не обновлены: "
+                            f"{str(exc)[:120]}")
                 return existing
 
         # ========== Этап 3: создаём запись о документе ==========
