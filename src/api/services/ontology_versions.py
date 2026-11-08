@@ -370,7 +370,7 @@ class OntologyVersionService:
                 rec = OntologySchemaVersion(
                     id=uuid.uuid4().hex, author=author, action="external",
                     comment=("схема изменена вне UI; " + "; ".join(parts))[:900] + f" [fp={fp}]",
-                    define_text=ontology_service.to_tql(cur),
+                    define_text=ontology_service.live_schema_text(),
                     snapshot_json=json.dumps(cur, ensure_ascii=False),
                     ntypes=cur.get("ntypes", 0), ok=True,
                 )

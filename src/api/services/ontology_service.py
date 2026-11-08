@@ -210,6 +210,17 @@ class OntologyService:
             return {"ok": False, "error": f"неизвестная категория: {kind}"}
         return self.apply(f"undefine {label};")
 
+    def live_schema_text(self) -> str:
+        """Текст схемы ровно в том виде, в каком её хранит TypeDB — с аннотациями.
+
+        Зачем отдельно от to_tql(): to_tql собирает текст из структуры, которую
+        get_schema() отдаёт без @key/@card/@abstract. Из-за этого кнопка
+        «Скачать схему» и define_text в журнале версий НЕ содержали ограничений,
+        и любой внешний разбор (в том числе ревью) видел схему без уникальности
+        и обязательности, хотя в базе они есть.
+        """
+        return self._driver().databases.get(self._db()).schema()
+
     def tbox_summary(self, max_chars: int = 4000) -> str:
         """Компактный TBox для промпта извлечения, собранный из ЖИВОЙ схемы.
 

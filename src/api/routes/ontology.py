@@ -236,18 +236,13 @@ async def ontology_redo(req: PositionRequest, user: User = Depends(get_current_a
 # ---- шаблон и экспорт -------------------------------------------------
 @router.get("/export", summary="Скачать текущую схему как .tql")
 async def ontology_export(_: User = Depends(get_current_admin)):
+    # Отдаём текст самой базы: только он содержит аннотации (@key/@card/@abstract/@unique).
+    # Сборка через to_tql() их теряла — скачанный файл выглядел как схема без ограничений,
+    # хотя в базе они есть (любой внешний разбор видел искажённую картину).
     try:
-        schema = await asyncio.to_thread(ontology_service.get_schema)
+        text = await asyncio.to_thread(ontology_service.live_schema_text)
     except OntologyUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    text = ontology_service.to_tql(
-        snapshot_of(schema),
-        comment=(
-            "Схема онтологии KAG (TypeDB), сгенерирована из живого состояния.\n"
-            "Формат TypeQL 3.x: каждый owns/relates/plays — отдельным определением,\n"
-            "несколько инструкций define в одном тексте недопустимы."
-        ),
-    )
     return PlainTextResponse(
         text,
         media_type="text/plain; charset=utf-8",
