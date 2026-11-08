@@ -104,7 +104,8 @@ REQUIRED_ATTRS: Dict[str, tuple] = {
 
 # роль → допустимые типы участника (схема v3)
 RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
-    "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document", "company_document")},
+    # «издан регулятором» — только нормативный акт: политику компании регулятор не издаёт
+    "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document",)},
     "document_has_version": {"document": ("regulatory_document", "company_document"),
                              "version": ("document_version",)},
     "current_version_of": {"document": ("regulatory_document", "company_document"),
@@ -123,8 +124,10 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
                                   "target_system": ("cii_object",)},
     "measure_applicability": {"measure": ("security_measure",), "target_system": ("cii_object",)},
     "requirement_evidence": {"requirement": ("security_requirement",), "evidence": ("evidence",)},
+    # требование регулятора опирается на нормативный акт; внутренние основания
+    # требований компании — отдельная задача, здесь их не смешиваем
     "requirement_basis": {"requirement": ("security_requirement",),
-                          "source_document": ("regulatory_document", "company_document")},
+                          "source_document": ("regulatory_document",)},
     "document_compliance": {"company_doc": ("company_document",),
                             "regulated_doc": ("regulatory_document",)},
     "document_assignment": {"regulated_doc": ("regulatory_document", "company_document"),

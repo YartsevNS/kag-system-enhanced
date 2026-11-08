@@ -208,7 +208,6 @@ relation threat_measure,
 
 # ---- роли: кто в чём участвует --------------------------------------
 entity regulator plays document_issuance:issuer;
-entity document plays document_issuance:regulated_item;
 entity document plays document_has_version:document;
 entity document_version plays document_has_version:version;
 entity document plays current_version_of:document;
@@ -234,9 +233,10 @@ entity cii_object plays measure_applicability:target_system;
 entity security_requirement plays requirement_evidence:requirement;
 entity evidence plays requirement_evidence:evidence;
 entity security_requirement plays requirement_basis:requirement;
-entity document plays requirement_basis:source_document;
 entity company_document plays document_compliance:company_doc;
 entity regulatory_document plays document_compliance:regulated_doc;
+entity regulatory_document plays document_issuance:regulated_item;
+entity regulatory_document plays requirement_basis:source_document;
 entity document plays document_assignment:regulated_doc;
 entity cii_object plays document_assignment:regulated_subject;
 entity cii_object plays asset_protection:protected_system;
