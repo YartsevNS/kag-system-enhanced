@@ -49,11 +49,11 @@ DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль дл�
    - document_version — конкретная редакция/файл: version_string, effective_from, effective_to, version_status (current/superseded), kag_document_id.
    - ВСЕ редакции документа связываются связью document_has_version (document -> version);
    - действующая редакция дополнительно связывается current_version_of (document -> version);
-   - замена редакции — supersedes (newer -> older). У документа может быть только одна текущая редакция: не создавай вторую.
+   - замена редакции — supersedes (newer -> older). У документа может быть только ОДНА текущая редакция: не создавай вторую current_version_of для того же документа.
    В тексте одного документа обычно одна редакция: создавай акт и одну версию, не дублируй акт на каждый чанк.
 7. ТРАССИРОВКА — ТОЛЬКО СВЯЗЯМИ, строки source-* не заменяют связи:
    - каждый structural_element (пункт, подпункт, приложение) привязывай к версии: document_structure(version, element);
-   - вложенность пунктов: document_hierarchy(parent, child);
+   - вложенность пунктов: document_hierarchy(parent, child); у пункта ОДИН родитель — не создавай вторую связь для того же пункта, если родитель уже известен;
    - каждое security_requirement выводи из пункта: requirement_derived_from(requirement, clause) — clause это structural_element, НЕ строка с номером пункта;
    - если в тексте мера реализует требование — requirement_definition(requirement, measure);
    - если мера описана в пункте (приложение, перечень) — measure_source(measure, clause);

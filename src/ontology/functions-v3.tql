@@ -51,16 +51,39 @@ fun expired_certificates($today: date) -> { security_software, certificate }:
       $until <= $today;
     return { $szi, $c };
 
-# ---- проверки целостности (в TypeDB 3.14 нет @unique на ролях) --------
-# Эти функции возвращают нарушения структуры, а не данных: их надо вызывать
-# после загрузки корпуса и показывать в админке.
-fun documents_with_multiple_current() -> { document }:
+# ---- проверки целостности (в TypeDB 3.14 нет @unique/@key на ролях) --
+# ТипDB гарантирует только атрибутную уникальность (@key/@unique на owns).
+# Всё, что касается ролей, проверяется функциями: они возвращают САМИ нарушения
+# (с участниками), а не «есть/нет», чтобы было видно, что именно чинить.
+# Вызывать перед коммитом загрузки документа; непустой результат — не коммитить.
+
+fun multiple_current_versions() -> { document, document_version }:
     match
-      $doc isa document;
-      current_version_of(document: $doc, version: $v);
-      current_version_of(document: $doc, version: $w);
-      not { $v is $w; };
-    return { $doc };
+      current_version_of(document: $doc, version: $v1);
+      current_version_of(document: $doc, version: $v2);
+      not { $v1 is $v2; };
+    return { $doc, $v1 };
+
+fun multiple_parents() -> { structural_element, structural_element, structural_element }:
+    match
+      document_hierarchy(parent: $p1, child: $c);
+      document_hierarchy(parent: $p2, child: $c);
+      not { $p1 is $p2; };
+    return { $c, $p1, $p2 };
+
+fun element_in_multiple_structures() -> { structural_element, document_version, document_version }:
+    match
+      document_structure(version: $v1, element: $e);
+      document_structure(version: $v2, element: $e);
+      not { $v1 is $v2; };
+    return { $e, $v1, $v2 };
+
+fun multiple_issuers() -> { document, regulator, regulator }:
+    match
+      document_issuance(issuer: $r1, regulated_item: $doc);
+      document_issuance(issuer: $r2, regulated_item: $doc);
+      not { $r1 is $r2; };
+    return { $doc, $r1, $r2 };
 
 fun elements_without_version() -> { structural_element }:
     match
@@ -73,10 +96,3 @@ fun versions_without_document() -> { document_version }:
       $v isa document_version;
       not { document_has_version(version: $v, document: $d); };
     return { $v };
-
-fun child_elements_with_multiple_parents() -> { structural_element }:
-    match
-      document_hierarchy(child: $e, parent: $p1);
-      document_hierarchy(child: $e, parent: $p2);
-      not { $p1 is $p2; };
-    return { $e };

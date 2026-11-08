@@ -2068,6 +2068,24 @@ class DocumentService:
                 logger.debug(f"[versions] документ {document_id}: пропущено ({vres['skipped']})")
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[versions] документ {document_id}: {str(exc).splitlines()[0][:160]}")
+
+        # После записи — проверка ролевой целостности. В TypeDB 3.14 @key/@unique
+        # на ролях не поддерживаются, поэтому «одна текущая редакция», «один родитель»,
+        # «пункт в одной редакции» проверяются функциями, а не схемой.
+        try:
+            from src.indexing.typedb_integrity import check_integrity
+
+            _problems = await asyncio.to_thread(check_integrity)
+            if _problems:
+                _brief = "; ".join(
+                    f"{p['check']}: {p['subject']}" for p in _problems[:3])
+                logger.warning(f"[integrity] документ {document_id}: нарушений {len(_problems)}: {_brief}")
+                if plog is not None:
+                    plog.log("integrity", {"violations": len(_problems), "sample": _brief})
+            else:
+                logger.debug(f"[integrity] документ {document_id}: нарушений нет")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[integrity] проверка не выполнена: {str(exc)[:120]}")
         return total
 
     async def _build_knowledge_graph_async(self, document_id: str, filename: str, chunks: list,
