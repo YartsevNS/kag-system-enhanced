@@ -27,102 +27,33 @@ ENTITY_PROMPT = "entity_extraction"
 
 # Заводской текст: то, что владелец сформулировал для извлечения сущностей в
 # TypeDB. Восстановление этого текста — кнопка «Сбросить» на странице.
-DEFAULT_ENTITY_PROMPT = """Ты — экспертный ИИ-модуль для извлечения онтологических данных из нормативных документов регуляторов РФ в сфере информационной безопасности (ФСТЭК, ФСБ) и безопасности ЗОКИИ (187-ФЗ, Приказы 235, 239 и др.), а также из документов компании (политики, инструкции, регламенты) для графа знаний TypeDB.
-Твоя задача — проанализировать поданный текст (чанк) и извлечь из него сущности, их атрибуты и многосторонние связи СТРОГО по предоставленной схеме.
+DEFAULT_ENTITY_PROMPT = """Ты — модуль извлечения онтологических фактов из документов по информационной безопасности РФ (ФСТЭК, ФСБ, ГОСТ, Банк России) и документов компании. Возвращай только JSON.
 
-### ПРАВИЛА ИЗВЛЕЧЕНИЯ:
-1. Идентификация (ID): для каждого извлечённого элемента сгенерируй логичный строковый ID (например, "fstek_order_239", "measure_ia_1", "cii_object_class"). Этот ID нужен ТОЛЬКО для связывания элементов внутри возвращаемого JSON.
-2. Сущности: извлекай только типы, перечисленные в схеме. Новые типы не придумывай.
-3. Атрибуты: заполняй строго по схеме. Если атрибута нет в тексте — не выдумывай, опусти поле.
-4. Связи: в TypeDB связи N-арные. Связь — это факт или контекст, объединяющий участников. Для каждой связи укажи тип (relation_type) и массив участников (participants), где каждый имеет роль (role) и ссылку на ID сущности (target_id).
-5. ОБЯЗАТЕЛЬНЫЕ АТРИБУТЫ (без них база отвергнет запись — это жёсткое ограничение схемы, а не пожелание. ent-key должен быть глобально уникальным: используй префикс типа ("law:", "doc:", "asset:")):
-   - ent-key — у КАЖДОЙ сущности;
-   - title и document_key — у любого документа (акт и редакция различаются, см. п. 6);
-   - requirement_key и requirement_kind — у требования; requirement_key = document_key + "|" + номер пункта (например "фстэк|приказ|239|п.11.1"), глобально уникален;
-   - measure_key — у меры: document_key + "|" + код меры (например "фстэк|приказ|239|ИА.1");
-   - version_string — у версии документа;
-   - name — у объекта КИИ и у средства защиты;
-   - cert_number — у сертификата.
-   Если обязательного значения в тексте нет — не создавай сущность, а не подставляй догадку.
-6. АКТ И РЕДАКЦИЯ — РАЗНЫЕ СУЩНОСТИ:
-   - regulatory_document / company_document — сам акт, его идентичность. Атрибуты: title, doc_type, document_key (стабильный ключ вида "издатель|тип|номер"), number.
-   - document_version — конкретная редакция/файл: version_string, effective_from, effective_to, version_status (current/superseded), kag_document_id.
-   - ВСЕ редакции документа связываются связью document_has_version (document -> version);
-   - действующая редакция дополнительно связывается current_version_of (document -> version);
-   - замена редакции — supersedes (newer -> older). У документа может быть только ОДНА текущая редакция: не создавай вторую current_version_of для того же документа.
-   В тексте одного документа обычно одна редакция: создавай акт и одну версию, не дублируй акт на каждый чанк.
-7. ТРАССИРОВКА — ТОЛЬКО СВЯЗЯМИ, строки source-* не заменяют связи:
-   - каждый structural_element (пункт, подпункт, приложение) привязывай к версии: document_structure(version, element);
-   - вложенность пунктов: document_hierarchy(parent, child); у пункта ОДИН родитель — не создавай вторую связь для того же пункта, если родитель уже известен;
-   - каждое security_requirement выводи из пункта: requirement_derived_from(requirement, clause) — clause это structural_element, НЕ строка с номером пункта;
-   - если в тексте мера реализует требование — requirement_definition(requirement, measure);
-   - если мера описана в пункте (приложение, перечень) — measure_source(measure, clause);
-   - применимость требования к объекту КИИ — requirement_applicability(requirement, target_system); применимость меры — measure_applicability(measure, target_system);
-   - доказательство к требованию — requirement_evidence(requirement, evidence);
-   - основание требования в документе — requirement_basis(requirement, source_document);
-   - соответствие документа компании нормативному — document_compliance(company_doc, regulated_doc);
-   - закрепление документа за объектом — document_assignment(regulated_doc, regulated_subject).
-8. СЕРТИФИКАЦИЯ: если упомянут сертификат СЗИ — создавай certificate (cert_number, cert_authority, cert_until) и связывай certification(certified_software, certificate) и, если в тексте названо требование-основание, добавь basis_requirement (он необязателен). Не ограничивайся boolean is-certified, если есть номер/орган/срок.
-9. УГРОЗЫ: threat_source связывай с объектами (threat_applicability) и с мерами (threat_measure), если текст это утверждает.
-10. УСТАРЕВШЕЕ НЕ ИСПОЛЬЗУЙ: связи measure_definition, applicability_criteria с ролью applied_requirement, атрибуты current_version_string и current_version — исключены из схемы v3; у объекта КИИ категория хранится в cii-category (целое 1-3), поле category не заполняй. Если встретишь такие понятия в тексте, переводи их в новые связи по п. 7.
-11. Не создавай объект «на будущее»: если в чанке неттипа, но есть только упоминание — не извлекай. Лучше меньше сущностей, но каждая с ключом и связями.
+### СХЕМА (единственный источник типов, атрибутов и ролей; звёздочка — обязательное поле):
+{schema_tbox}
 
-### ДОСТУПНАЯ СХЕМА (TBox v3):
-- Сущности:
-  * regulator (name, short_name) -> роль issuer. Пример: {"name": "Федеральная служба по техническому и экспортному контролю", "short_name": "ФСТЭК России"}
-  * regulatory_document (title, doc_type, document_key, number) -> роли regulated_item, source_document, regulated_doc, company_doc. Пример: {"title": "Об утверждении Требований по обеспечению безопасности ЗОКИИ", "doc_type": "приказ", "document_key": "фстэк|приказ|239", "number": "239"}
-  * company_document (title, doc_type, document_key) -> роли regulated_doc, company_doc, regulated_item. Пример: {"title": "Политика информационной безопасности", "doc_type": "политика", "document_key": "компания|политика|1"}
-  * document_version (version_string, version_status, version_hash, effective_from, effective_to, kag_document_id) -> роли version, newer, older
-  * structural_element (struct_index, text_content обязательно) -> роли element, parent, child, clause
-  * security_requirement (requirement_key, requirement-id, requirement_kind, description, obligation-level) -> роли requirement
-  * security_measure (measure_key, code, description) -> роли measure, core_measure, alternative_measure
-  * evidence (name, evidence_kind, evidence_date) -> роль evidence
-  * cii_object (name, cii-category, category, system_type) -> роли target_system, protected_system, regulated_subject
-  * security_software (name, vendor, software_version, is-certified) -> роли deployed_szi, certified_software
-  * certificate (cert_number, cert_authority, cert_until) -> роль certificate
-  * threat_source (offender_class, potential) -> роли threat
+### ПРАВИЛА:
+1. id в JSON = ent-key. Формат "тип:ключ", глобально уникальный: regulator:fstek, doc:fstek|приказ|239, measure:fstek|239|ia-1. Один идентификатор на сущность; второй не генерируй.
+2. Бери только типы, атрибуты и роли из схемы. Новые не придумывай.
+3. Обязательное (@key, @card(1..1)) отсутствует в тексте — сущность не создавай. Опциональное отсутствует — опусти поле. Это правило сильнее правила 2.
+4. Даты — строка ISO 8601 ("2026-11-08"). cii-category — целое 1..3. Числа — числами.
+5. Акт и редакция — разные сущности: документ (title, document_key) и document_version (version_string). Все редакции связывай document_has_version; действующую — дополнительно current_version_of, и она у документа одна.
+6. Трассировка — связями: document_structure (версия → пункт), requirement_derived_from (требование → пункт), requirement_definition (требование → мера), measure_source (мера → пункт). Строки source-* — денормализация, они не заменяют связи.
+7. Связи бинарные, кроме certification (три участника: certified_software, certificate, basis_requirement). basis_requirement указывай только при явном основании в тексте.
+8. Сертификат: есть номер — создавай certificate (cert_number обязателен, орган и срок — если есть) и связывай certification. Без номера certificate не создавай.
+9. requirement_applicability — только к конкретному объекту КИИ. Если сказано «для объектов 1 категории», объект не выдумывай: оставь категорию в description требования.
+10. Если в контексте уже передан document_key, акт повторно не создавай — добавляй только новые связи и редакции.
+11. Не извлекай по простому упоминанию: нужна утверждающая формулировка. Нет данных — пустые массивы.
 
-- Связи и их роли:
-  * document_issuance [issuer, regulated_item] — регулятор издал документ
-  * current_version_of [document, version] — действующая редакция
-  * supersedes [newer, older] — замена редакции
-  * document_structure [version, element] — версия содержит пункт
-  * document_hierarchy [parent, child] — вложенность пунктов
-  * requirement_derived_from [requirement, clause] — требование выведено из пункта
-  * requirement_definition [requirement, measure] — мера реализует требование
-  * measure_source [measure, clause] — мера описана в пункте
-  * compensatory_relation [core_measure, alternative_measure] — компенсирующая мера
-  * requirement_applicability [requirement, target_system] — требование применимо к объекту
-  * measure_applicability [measure, target_system] — мера применима к объекту
-  * requirement_evidence [requirement, evidence] — доказательство выполнения
-  * requirement_basis [requirement, source_document] — основание требования
-  * document_compliance [company_doc, regulated_doc] — документ компании соответствует нормативному
-  * document_assignment [regulated_doc, regulated_subject] — документ закреплён за объектом
-  * asset_protection [protected_system, deployed_szi] — объект защищён СЗИ
-  * certification [certified_software, certificate, basis_requirement] — сертификат СЗИ
-  * threat_applicability [threat, target_system] — угроза применима к объекту
-  * threat_measure [threat, measure] — угроза закрывается мерой
+### ПРИМЕР (фрагмент → JSON):
+Текст: «3.1. Средства защиты информации, применяемые на значимых объектах критической информационной инфраструктуры, должны иметь сертификат соответствия.»
+Выход:
+{"entities":[{"id":"doc:fstek|приказ|239","type":"regulatory_document","attributes":{"title":"Требования по обеспечению безопасности значимых объектов КИИ","doc_type":"приказ","document_key":"фстэк|приказ|239","number":"239"}},{"id":"version:fstek|239|ред-1","type":"document_version","attributes":{"version_string":"1","kag_document_id":"kag-239"}},{"id":"element:fstek|239|3.1","type":"structural_element","attributes":{"struct_index":"3.1","text_content":"Средства защиты информации, применяемые на значимых объектах КИИ, должны иметь сертификат соответствия."}},{"id":"law:fstek|239|3.1","type":"security_requirement","attributes":{"requirement_key":"фстэк|приказ|239|3.1","requirement-id":"3.1","requirement_kind":"certification","description":"применять сертифицированные СЗИ"}}],"relations":[{"type":"document_has_version","participants":[{"role":"document","target_id":"doc:fstek|приказ|239"},{"role":"version","target_id":"version:fstek|239|ред-1"}]},{"type":"document_structure","participants":[{"role":"version","target_id":"version:fstek|239|ред-1"},{"role":"element","target_id":"element:fstek|239|3.1"}]},{"type":"requirement_derived_from","participants":[{"role":"requirement","target_id":"law:fstek|239|3.1"},{"role":"clause","target_id":"element:fstek|239|3.1"}]}]}
 
-### ФОРМАТ ВЫХОДА (OUTPUT FORMAT):
-Верни исключительно чистый JSON-объект без markdown-разметки (без ```json ... ```), без комментариев и преамбул. Если в тексте нет подходящих сущностей — верни пустые массивы.
+### ФОРМАТ ВЫХОДА:
+Только JSON без markdown и комментариев: {"entities":[{"id","type","attributes"}],"relations":[{"type","participants":[{"role","target_id"}]}]}
 
-{
-  "entities": [
-    {"id": "строка_уникальный_id", "type": "тип_сущности_из_схемы", "attributes": {"имя_атрибута": "значение"}}
-  ],
-  "relations": [
-    {"type": "тип_связи", "participants": [{"role": "роль", "target_id": "id_сущности"}]}
-  ]
-}
-
-### ПЕРЕД ВЫВОДОМ ПРОВЕРЬ СЕБЯ:
-- у каждой сущности есть ent-key;
-- у документа — title и document_key; у требования — requirement_key, requirement-id, requirement_kind; у версии — version_string; у объекта КИИ и СЗИ — name; у сертификата — cert_number;
-- каждый structural_element связан с версией через document_structure;
-- каждое требование связано с пунктом через requirement_derived_from;
-- ни один тип и ни одна роль не выдуманы: сверься со списком выше.
-
-### ТЕКСТ ФРАГМЕНТА ДЛЯ АНАЛИЗА:
+### ТЕКСТ ФРАГМЕНТА:
 {text_chunk}
 """
 
@@ -173,6 +104,11 @@ def validate_prompt(content: str) -> list[str]:
         problems.append(
             "Нет плейсхолдера {text_chunk} — модель не увидит текст фрагмента "
             "и будет извлекать сущности из воздуха."
+        )
+    if "{schema_tbox}" not in content:
+        problems.append(
+            "Нет плейсхолдера {schema_tbox} — схема не подставляется из базы, "
+            "промпт и онтология разойдутся."
         )
     if len(content) < 400:
         problems.append("Текст короче 400 знаков: схема и правила почти наверняка потеряны.")
@@ -322,8 +258,23 @@ class PromptStore:
         return row[0] if row else None
 
     def render(self, name: str, text_chunk: str) -> str:
-        """Подставить фрагмент в текущий промпт — то, что реально увидит модель."""
-        return self.get(name)["content"].replace("{text_chunk}", text_chunk)
+        """Подставить фрагмент и живой TBox в текущий промпт — то, что увидит модель.
+
+        {schema_tbox} берётся из фактической схемы TypeDB, а не из текста промпта:
+        иначе промпт и схема расходятся (именно так в промпте осталась роль
+        source_requirement, которой в схеме v3 нет).
+        """
+        template = self.get(name)["content"]
+        if "{schema_tbox}" in template:
+            tbox = ""
+            try:
+                from src.api.services.ontology_service import ontology_service
+
+                tbox = ontology_service.tbox_summary()
+            except Exception as exc:  # noqa: BLE001 — без TBox промпт бесполезен, но не роняем извлечение
+                logger.warning("TBox для промпта не собран: %s", str(exc)[:160])
+            template = template.replace("{schema_tbox}", tbox or "(схема недоступна)")
+        return template.replace("{text_chunk}", text_chunk)
 
 
 prompt_store = PromptStore()

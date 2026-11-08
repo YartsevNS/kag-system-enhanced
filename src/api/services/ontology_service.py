@@ -210,6 +210,70 @@ class OntologyService:
             return {"ok": False, "error": f"неизвестная категория: {kind}"}
         return self.apply(f"undefine {label};")
 
+    def tbox_summary(self, max_chars: int = 4000) -> str:
+        """Компактный TBox для промпта извлечения, собранный из ЖИВОЙ схемы.
+
+        Зачем из живой, а не из текста промпта: прозаический TBox в промпте уже
+        один раз разошёлся со схемой (роль source_requirement, которой в v3 нет).
+        Здесь типы, owns и роли берутся из схемы базы, поэтому дрейф невозможен.
+        Звёздочкой помечены обязательные атрибуты (@key / @card(1..1)).
+        """
+        import re as _re
+
+        driver = self._driver()
+        try:
+            text = driver.databases.get(self._db()).schema()
+        finally:
+            try:
+                driver.close()
+            except Exception:
+                pass
+
+        entities, relations = [], []
+        cur = None
+        for raw in text.splitlines():
+            line = raw.strip().rstrip(",")
+            if not line or line.startswith("#") or line.startswith("define"):
+                continue
+            m = _re.match(r"^entity\s+([\w-]+)\s*(.*)$", line)
+            if m:
+                cur = {"kind": "entity", "name": m.group(1), "owns": []}
+                tail = m.group(2)
+                if "@abstract" in tail:
+                    cur["abstract"] = True
+                entities.append(cur)
+                continue
+            m = _re.match(r"^relation\s+([\w-]+)\s*(.*)$", line)
+            if m:
+                cur = {"kind": "relation", "name": m.group(1), "relates": [], "owns": []}
+                relations.append(cur)
+                continue
+            if cur is None:
+                continue
+            m = _re.match(r"^owns\s+([\w-]+)(.*)$", line)
+            if m:
+                attr, ann = m.group(1), m.group(2)
+                req = "@key" in ann or "@card(1..1)" in ann
+                cur["owns"].append(attr + ("*" if req else ""))
+                continue
+            m = _re.match(r"^relates\s+([\w-]+)(.*)$", line)
+            if m and cur["kind"] == "relation":
+                cur["relates"].append(m.group(1))
+                continue
+            if line.endswith(";"):
+                cur = None
+
+        out = []
+        for e in entities:
+            if e.get("abstract"):
+                continue
+            owns = ", ".join(e["owns"])
+            out.append(f"entity {e['name']}: {owns}" if owns else f"entity {e['name']}")
+        for r in relations:
+            out.append(f"relation {r['name']}({', '.join(r['relates'])})")
+        result = "\n".join(out)
+        return result[:max_chars]
+
     # ---- шаблон: структура -> TypeQL -----------------------------------
     @staticmethod
     def fingerprint(schema: Dict[str, Any]) -> str:

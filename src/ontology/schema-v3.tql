@@ -56,7 +56,6 @@ attribute obligation-level, value string;
 # ---- атрибуты: меры, объекты, ПО, угрозы ----------------------------
 attribute code, value string;
 attribute cii-category, value integer;
-attribute category, value string;
 attribute system_type, value string;
 attribute offender_class, value string;
 attribute potential, value string;
@@ -123,7 +122,6 @@ entity evidence sub sourced_entity,
 entity cii_object sub sourced_entity,
   owns name @card(1..1),
   owns cii-category,
-  owns category,
   owns system_type;
 entity security_software sub sourced_entity,
   owns name @card(1..1),
