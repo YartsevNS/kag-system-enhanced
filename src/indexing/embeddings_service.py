@@ -23,7 +23,8 @@ from qdrant_client.models import (
     MatchValue,
     MatchAny,
     Range,
-    PayloadSchemaType
+    PayloadSchemaType,
+    FilterSelector,
 )
 
 from src.llm.embeddings import EmbeddingClient
@@ -461,6 +462,24 @@ class EmbeddingsService:
             logger.info(f"Hybrid Search: sparse BM25 включён ({len(texts)} векторов)")
         else:
             sparse_embeddings = [None] * len(texts)
+
+        # Удаляем прежние точки документа ДО вставки, синхронно (wait=True).
+        # Зачем: upsert поверх существующей точки заставляет Qdrant обновлять
+        # разреженный индекс (update_vector → InvertedIndexRam::remove), а в 1.12.1
+        # там есть паника index out of bounds — она роняет update-воркер, после чего
+        # коллекция отвечает 500 «Can't reach one of the workers: channel closed».
+        # Явное удаление убирает путь update и делает переиндексацию идемпотентной.
+        try:
+            await asyncio.to_thread(
+                self._qdrant_client.delete,
+                collection_name=self.collection_name,
+                points_selector=FilterSelector(filter=Filter(must=[
+                    FieldCondition(key="document_id", match=MatchValue(value=document_id))
+                ])),
+                wait=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — удалять нечего или коллекции ещё нет
+            logger.debug(f"Embed & Store: прежние точки {document_id} не удалены: {str(exc)[:120]}")
 
         # Создаем точки для Qdrant
         points = []

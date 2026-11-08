@@ -78,7 +78,8 @@ entity sourced_entity @abstract;
 entity sourced_entity sub identified_entity,
   owns source_origin,
   owns source-chunk-id,
-  owns source-chunk-ids;
+  owns source-chunk-ids,
+  owns source-clause;
 
 # ---- документы -------------------------------------------------------
 entity regulator sub sourced_entity,

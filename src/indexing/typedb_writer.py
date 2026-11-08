@@ -48,26 +48,70 @@ except Exception:  # pragma: no cover - срабатывает только бе
 # Второй контур — ДОКАЗАТЕЛЬНЫЙ (требования, документы компании, СЗИ, доказательства) —
 # наполняется внутренними документами заказчика, см. write_proposal().
 ENTITY_TYPES: Dict[str, tuple] = {
-    "regulator": ("name",),                     # или short_name
-    "regulatory_document": ("title",),          # или number
-    "company_document": ("title",),             # документ организации (политика, инструкция, приказ)
-    "structural_element": ("text_content",),    # или index
-    "security_measure": ("code",),              # или description
-    "cii_object": ("category",),                # или system_type
+    # тип: (атрибуты-кандидаты для опознавания, в порядке приоритета)
+    "regulator": ("name", "short_name"),
+    "regulatory_document": ("document_key", "title"),
+    "company_document": ("document_key", "title"),
+    "document_version": ("kag_document_id", "version_string"),
+    "structural_element": ("struct_index", "text_content"),
+    "security_requirement": ("requirement_key", "requirement-id"),
+    "security_measure": ("measure_key", "code"),
+    "evidence": ("name",),
+    "cii_object": ("name",),
+    "security_software": ("name",),
+    "certificate": ("cert_number",),
     "threat_source": ("offender_class",),
 }
 
-# роль → допустимые типы участника (по схеме БД и промпту)
+# Обязательные атрибуты схемы v3 (@key / @card(1..1)). Без них TypeDB отвергнет запись,
+# поэтому writer их дозаполняет, а если не может — сущность пропускается с логом.
+REQUIRED_ATTRS: Dict[str, tuple] = {
+    "regulator": ("name",),
+    "regulatory_document": ("title", "document_key"),
+    "company_document": ("title", "document_key"),
+    "document_version": ("version_string",),
+    "structural_element": ("text_content",),
+    "security_requirement": ("requirement_key", "requirement-id", "requirement_kind"),
+    "security_measure": ("measure_key",),
+    "evidence": ("name",),
+    "cii_object": ("name",),
+    "security_software": ("name",),
+    "certificate": ("cert_number",),
+    "threat_source": ("offender_class",),
+}
+
+# роль → допустимые типы участника (схема v3)
 RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
-    "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document",)},
-    "document_hierarchy": {"structural_part": ("structural_element",),
-                           "sub_part": ("structural_element",)},
-    "measure_definition": {"source_requirement": ("structural_element",),
-                           "core_measure": ("security_measure",)},
-    "applicability_criteria": {"applied_requirement": ("security_measure", "structural_element"),
-                               "target_system": ("cii_object",)},
+    "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document", "company_document")},
+    "document_has_version": {"document": ("regulatory_document", "company_document"),
+                             "version": ("document_version",)},
+    "current_version_of": {"document": ("regulatory_document", "company_document"),
+                           "version": ("document_version",)},
+    "supersedes": {"newer": ("document_version",), "older": ("document_version",)},
+    "document_structure": {"version": ("document_version",), "element": ("structural_element",)},
+    "document_hierarchy": {"parent": ("structural_element",), "child": ("structural_element",)},
+    "requirement_derived_from": {"requirement": ("security_requirement",),
+                                 "clause": ("structural_element",)},
+    "requirement_definition": {"requirement": ("security_requirement",),
+                               "measure": ("security_measure",)},
+    "measure_source": {"measure": ("security_measure",), "clause": ("structural_element",)},
     "compensatory_relation": {"core_measure": ("security_measure",),
                               "alternative_measure": ("security_measure",)},
+    "requirement_applicability": {"requirement": ("security_requirement",),
+                                  "target_system": ("cii_object",)},
+    "measure_applicability": {"measure": ("security_measure",), "target_system": ("cii_object",)},
+    "requirement_evidence": {"requirement": ("security_requirement",), "evidence": ("evidence",)},
+    "requirement_basis": {"requirement": ("security_requirement",),
+                          "source_document": ("regulatory_document", "company_document")},
+    "document_compliance": {"company_doc": ("company_document",),
+                            "regulated_doc": ("regulatory_document",)},
+    "document_assignment": {"regulated_doc": ("regulatory_document", "company_document"),
+                            "regulated_subject": ("cii_object",)},
+    "asset_protection": {"protected_system": ("cii_object",), "deployed_szi": ("security_software",)},
+    "certification": {"certified_software": ("security_software",), "certificate": ("certificate",),
+                      "basis_requirement": ("security_requirement",)},
+    "threat_applicability": {"threat": ("threat_source",), "target_system": ("cii_object",)},
+    "threat_measure": {"threat": ("threat_source",), "measure": ("security_measure",)},
 }
 
 # Типы, которым нужен ключ дедупликации и провенанс (дополняется аддитивно)
@@ -143,27 +187,87 @@ def _value(x: Any) -> Any:
 
 
 def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
-    """Ключ дедупликации по типу и опознавательному атрибуту (как в промпте).
+    """Ключ дедупликации сущности (ent-key) по типу и опознавательному атрибуту.
 
-    Регулятор/документ/мера дедуплицируются между документами; структурный
-    элемент — внутри документа (номер пункта повторяется в разных ГОСТах).
+    В v3 у большинства типов есть естественный ключ (@key) — берём его первым,
+    чтобы один и тот же документ не создавался заново из каждого чанка.
     """
     if etype == "regulator":
         base = str(attrs.get("short_name") or attrs.get("name") or "")
-    elif etype == "regulatory_document":
-        base = f"{attrs.get('number', '')}|{attrs.get('type') or attrs.get('doc_type') or attrs.get('title', '')}"
-    elif etype == "company_document":
-        base = f"{attrs.get('title', '')}|{attrs.get('version_string', '')}"
+    elif etype in ("regulatory_document", "company_document"):
+        base = str(attrs.get("document_key") or attrs.get("title") or "")
+    elif etype == "document_version":
+        # ключ не должен зависеть от того, подставлен ли kag_document_id: иначе
+        # повторная обработка того же файла создала бы вторую редакцию
+        base = f"{attrs.get('kag_document_id') or doc}|{attrs.get('version_string') or ''}"
     elif etype == "structural_element":
-        base = f"{doc}|{attrs.get('index', '')}|{str(attrs.get('text_content') or '')[:200]}"
+        base = f"{doc}|{attrs.get('struct_index') or attrs.get('index') or ''}|" \
+               f"{str(attrs.get('text_content') or '')[:200]}"
+    elif etype == "security_requirement":
+        base = str(attrs.get("requirement_key") or attrs.get("requirement-id") or "")
     elif etype == "security_measure":
-        base = str(attrs.get("code") or str(attrs.get("description") or "")[:200])
-    elif etype == "cii_object":
-        base = f"{attrs.get('category', '')}|{attrs.get('system_type', '')}"
+        base = str(attrs.get("measure_key") or attrs.get("code")
+                   or str(attrs.get("description") or "")[:200])
+    elif etype == "certificate":
+        base = str(attrs.get("cert_number") or "")
+    elif etype in ("cii_object", "security_software", "evidence"):
+        base = str(attrs.get("name") or "")
     else:  # threat_source
         base = f"{attrs.get('offender_class', '')}|{attrs.get('potential', '')}"
     digest = hashlib.sha1(base.lower().strip().encode("utf-8")).hexdigest()[:16]
     return f"{etype}:{digest}"
+
+
+def _norm_key(value: Any) -> str:
+    """Нормализация естественного ключа: нижний регистр, один разделитель."""
+    s = str(value or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    return s[:200]
+
+
+def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
+                    doc_id: str = "") -> tuple:
+    """Дозаполнить обязательные атрибуты v3 и отбросить то, что дозаполнить нельзя.
+
+    Зачем в writer, а не в промпте: модель не видит граф и не знает document_key
+    соседнего фрагмента. Ключи, которые выводятся из данных, надёжнее построить здесь:
+    requirement_key = document_key|пункт, measure_key = document_key|код.
+    Возвращает (готовые сущности, число отброшенных, причины).
+    """
+    ready: Dict[str, Dict[str, Any]] = {}
+    dropped: List[str] = []
+
+    # Сначала находим ключ документа в этой пачке — он нужен производным ключам.
+    for e in entities.values():
+        if e["type"] in ("regulatory_document", "company_document"):
+            dk = e["attrs"].get("document_key")
+            if not dk:
+                dk = f"{_norm_key(e['attrs'].get('number')) or _norm_key(e['attrs'].get('title'))}"
+                e["attrs"]["document_key"] = dk
+            if not doc_key:
+                doc_key = dk
+
+    for key, e in entities.items():
+        etype, attrs = e["type"], e["attrs"]
+        if etype == "document_version" and doc_id and not attrs.get("kag_document_id"):
+            # ссылка на файл-источник: связывает редакцию с документом в Postgres/Qdrant
+            attrs["kag_document_id"] = doc_id
+        if etype == "security_requirement" and not attrs.get("requirement_key"):
+            rid = attrs.get("requirement-id") or attrs.get("requirement_id")
+            if rid:
+                attrs["requirement_key"] = f"{doc_key}|{_norm_key(rid)}" if doc_key else _norm_key(rid)
+        if etype == "security_measure" and not attrs.get("measure_key"):
+            code = attrs.get("code")
+            base = code or str(attrs.get("description") or "")[:60]
+            if base:
+                attrs["measure_key"] = f"{doc_key}|{_norm_key(base)}" if doc_key else _norm_key(base)
+
+        missing = [a for a in REQUIRED_ATTRS.get(etype, ()) if not attrs.get(a)]
+        if missing:
+            dropped.append(f"{etype}: нет {', '.join(missing)}")
+            continue
+        ready[key] = e
+    return ready, len(dropped), dropped
 
 
 def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: str = "") -> str:
@@ -183,28 +287,57 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
     if etype == "regulator":
         add("name", attrs.get("name"), 300)
         add("short_name", attrs.get("short_name"), 120)
-    elif etype == "regulatory_document":
-        add("number", attrs.get("number"), 120)
+    elif etype in ("regulatory_document", "company_document"):
         add("title", attrs.get("title"), 600)
         add("doc_type", attrs.get("type") or attrs.get("doc_type"), 80)
-    elif etype == "company_document":
-        # У документа компании нет номера и вида регуляторного акта: только название
-        # и версия. Номер, если модель его вернула, уходит в начало названия.
-        title = str(attrs.get("title") or "").strip()
-        number = str(attrs.get("number") or "").strip()
-        if number and number not in title:
-            title = f"{number} {title}".strip()
-        add("title", title, 600)
+        add("document_key", attrs.get("document_key"), 300)
+        if etype == "regulatory_document":
+            add("number", attrs.get("number"), 120)
+    elif etype == "document_version":
         add("version_string", attrs.get("version_string"), 80)
+        add("version_status", attrs.get("version_status") or "current", 40)
+        add("version_hash", attrs.get("version_hash"), 80)
+        add("kag_document_id", attrs.get("kag_document_id"), 120)
+        add("effective_from", attrs.get("effective_from"), 40)
+        add("effective_to", attrs.get("effective_to"), 40)
     elif etype == "structural_element":
         add("struct_index", attrs.get("index") or attrs.get("struct_index"), 120)
         add("text_content", attrs.get("text_content"), 3000)
+    elif etype == "security_requirement":
+        add("requirement_key", attrs.get("requirement_key"), 300)
+        add("requirement-id", attrs.get("requirement-id") or attrs.get("requirement_id"), 120)
+        add("requirement_kind", attrs.get("requirement_kind"), 80)
+        add("description", attrs.get("description"), 2000)
+        add("obligation-level", attrs.get("obligation-level") or attrs.get("obligation_level"), 60)
     elif etype == "security_measure":
+        add("measure_key", attrs.get("measure_key"), 300)
         add("code", attrs.get("code"), 80)
         add("description", attrs.get("description"), 2000)
+    elif etype == "evidence":
+        add("name", attrs.get("name"), 300)
+        add("evidence_kind", attrs.get("evidence_kind"), 80)
+        add("evidence_date", attrs.get("evidence_date"), 40)
     elif etype == "cii_object":
-        add("category", attrs.get("category"), 120)
+        add("name", attrs.get("name"), 300)
         add("system_type", attrs.get("system_type"), 120)
+        cat = attrs.get("cii-category") or attrs.get("cii_category")
+        try:
+            cat_int = int(cat) if cat not in (None, "") else None
+        except (TypeError, ValueError):
+            cat_int = None
+        if cat_int is not None:
+            has.append(f"has cii-category {cat_int}")   # integer, без кавычек
+    elif etype == "security_software":
+        add("name", attrs.get("name"), 300)
+        add("vendor", attrs.get("vendor"), 120)
+        add("software_version", attrs.get("software_version"), 80)
+        cert = attrs.get("is-certified")
+        if isinstance(cert, bool):
+            has.append(f"has is-certified {'true' if cert else 'false'}")  # boolean
+    elif etype == "certificate":
+        add("cert_number", attrs.get("cert_number"), 120)
+        add("cert_authority", attrs.get("cert_authority"), 200)
+        add("cert_until", attrs.get("cert_until"), 40)
     elif etype == "threat_source":
         add("offender_class", attrs.get("offender_class"), 200)
         add("potential", attrs.get("potential"), 80)
@@ -379,12 +512,26 @@ def _read(query: str) -> list:
 
 
 def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
-                clause: str = "") -> Dict[str, int]:
-    """Записать собранные сущности/связи. Идемпотентно."""
+                clause: str = "") -> Dict[str, Any]:
+    """Записать сущности и связи документа ОДНОЙ транзакцией и проверить целостность.
+
+    Почему одной транзакцией: раньше на каждую сущность и связь открывалась своя
+    транзакция. Это медленно и, главное, не позволяло откатить документ, если правила
+    целостности нарушены: половина уже записана. Теперь при нарушении — rollback.
+
+    Ролевые ограничения (одна текущая редакция, один родитель, пункт в одной редакции)
+    проверяются функциями схемы v3 ДО commit: в TypeDB 3.14 @key/@unique на ролях
+    не поддерживаются, поэтому иначе это не проверить.
+    """
     if not entities and not relations:
         return {"entities": 0, "relations": 0, "entities_existing": 0, "relations_existing": 0}
 
-    # какие ключи уже есть в базе
+    doc_id = str(chunk_id).split("_chunk_")[0] if chunk_id else ""
+    entities, dropped, reasons = ensure_required(entities, doc_id=doc_id)
+    if dropped:
+        logger.warning("typedb_writer: пропущено %d сущностей без обязательных полей: %s",
+                       dropped, "; ".join(reasons[:5]))
+
     existing_keys: Set[str] = set()
     try:
         existing_keys = {_value(r.get("k")) for r in
@@ -392,79 +539,121 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
     except Exception as exc:  # noqa: BLE001
         logger.debug("typedb_writer: существующие ключи не прочитаны: %s", exc)
 
-    inserted_e = inserted_r = 0
+    entity_queries: List[str] = []
+    inserted_e = 0
+    entity_keys_now = set(existing_keys)
 
-    # ── сущности: новые — put, существующим — только провенанс ──────────────
     for key, e in entities.items():
-        has = _attr_line(key, e["attrs"], e["chunks"], clause)
         if key in existing_keys:
-            # уже есть: добавляем недостающий провенанс, атрибуты не трогаем
-            try:
-                ch_lines = ", ".join(
-                    f'source-chunk-ids "{_esc(ch, 200)}"' for ch in sorted(e["chunks"])[:40]
-                )
-                if ch_lines:
-                    _write(f'match $x isa {e["type"]}, has ent-key "{key}"; insert $x has {ch_lines};')
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("typedb_writer: провенанс не добавлен для %s: %s", key, exc)
+            # существующей сущности добавляем только провенанс
+            ch_lines = ", ".join(
+                f'source-chunk-ids "{_esc(ch, 200)}"' for ch in sorted(e["chunks"])[:40])
+            if ch_lines:
+                entity_queries.append(
+                    f'match $x isa {e["type"]}, has ent-key "{key}"; insert $x has {ch_lines};')
             continue
-        try:
-            _write(f'put $x isa {e["type"]}{has};')
-            inserted_e += 1
-        except Exception as exc:  # noqa: BLE001 - один сбойный текст не должен рвать прогон
-            logger.warning("typedb_writer: сущность не записана (%s): %s", key, str(exc)[:160])
+        has = _attr_line(key, e["attrs"], e["chunks"], clause)
+        entity_queries.append(f'put $x isa {e["type"]}{has};')
+        inserted_e += 1
+        entity_keys_now.add(key)
 
-    # ── связи: только те, у кого все участники уже в базе ───────────────────
+    # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой
+    rel_queries: List[str] = []
+    written_sigs: Set[str] = set()
+    skipped_rel = 0
+    for sig, rel in relations.items():
+        parts = rel["parts"]
+        missing = [k for k in parts.values() if k not in entity_keys_now]
+        if missing:
+            skipped_rel += 1
+            continue
+        if sig in written_sigs:
+            continue
+        match_lines, roles_str = [], []
+        for i, (role, key) in enumerate(parts.items()):
+            etype = key.split(":", 1)[0]
+            match_lines.append(f'$v{i} isa {etype}, has ent-key "{key}";')
+            roles_str.append(f"{role}: $v{i}")
+        rel_queries.append(
+            "match\n  " + "\n  ".join(match_lines)
+            + f"\ninsert\n  {rel['type']} ({', '.join(roles_str)});")
+        written_sigs.add(sig)
+
+    if not entity_queries and not rel_queries:
+        return {"entities": 0, "relations": 0,
+                "entities_existing": len(entities), "relations_existing": skipped_rel,
+                "dropped": dropped}
+
+    from typedb.driver import TransactionType as _TT
+
+    cfg = _cfg()
+    drv = _driver()
+    problems: List[Dict[str, Any]] = []
     try:
-        keys_now = {_value(r.get("k")) for r in
-                    _read('match $x has ent-key $k; fetch { "k": $k };')}
-    except Exception:  # noqa: BLE001
-        keys_now = set()
+        with drv.transaction(cfg["db"], _TT.WRITE) as tx:
+            for q in entity_queries + rel_queries:
+                tx.query(q).resolve()
+            problems = _integrity_in_tx(tx, set(entities.keys()))
+            if problems:
+                # Не коммитим: документ не должен оставить граф в противоречивом состоянии.
+                logger.warning("typedb_writer: документ не записан, нарушений целостности %d: %s",
+                               len(problems), problems[:3])
+                return {"entities": 0, "relations": 0, "entities_existing": 0,
+                        "relations_existing": 0, "dropped": dropped, "integrity": problems}
+            tx.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("typedb_writer: транзакция документа не выполнена: %s", str(exc)[:300])
+        return {"entities": 0, "relations": 0, "entities_existing": 0,
+                "relations_existing": 0, "dropped": dropped,
+                "error": str(exc).splitlines()[0][:200]}
+    finally:
+        try:
+            drv.close()
+        except Exception:
+            pass
 
-    rels_to_write = {
-        sig: rel for sig, rel in relations.items()
-        if all(k in keys_now for k in rel["parts"].values())
-    }
-    skipped_rel = len(relations) - len(rels_to_write)
-
-    if rels_to_write:
-        # существующие сигнатуры — чтобы не плодить дубли связей
-        existing_sigs: Set[str] = set()
-        for rtype, roles in RELATION_ROLES.items():
-            role_items = list(roles.keys())
-            if len(role_items) < 2:
-                continue
-            r1, r2 = role_items[0], role_items[1]
-            try:
-                for row in _read(
-                    f'match ({r1}: $a, {r2}: $b) isa {rtype}; '
-                    f'$a has ent-key $ka; $b has ent-key $kb; '
-                    f'fetch {{ "a": $ka, "b": $kb }};'
-                ):
-                    parts = {r1: _value(row.get("a")), r2: _value(row.get("b"))}
-                    existing_sigs.add(f"{rtype}|" + "|".join(f"{r}={parts[r]}" for r in sorted(parts)))
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("typedb_writer: существующие связи %s не прочитаны: %s", rtype, exc)
-
-        for sig, rel in rels_to_write.items():
-            if sig in existing_sigs:
-                continue
-            match_lines, roles_str = [], []
-            for i, (role, key) in enumerate(rel["parts"].items()):
-                etype = key.split(":", 1)[0]
-                match_lines.append(f'$v{i} isa {etype}, has ent-key "{key}";')
-                roles_str.append(f"{role}: $v{i}")
-            q = (f"match\n  " + "\n  ".join(match_lines)
-                 + f"\ninsert\n  {rel['type']} ({', '.join(roles_str)});")
-            try:
-                _write(q)
-                inserted_r += 1
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("typedb_writer: связь не записана (%s): %s", sig[:80], str(exc)[:160])
-
-    return {"entities": inserted_e, "relations": inserted_r,
+    return {"entities": inserted_e, "relations": len(rel_queries),
             "entities_existing": len(entities) - inserted_e,
-            "relations_existing": len(rels_to_write) - inserted_r + skipped_rel}
+            "relations_existing": skipped_rel, "dropped": dropped}
+
+
+# Проверки читают ent-key участников: по ним нарушение привязывается к текущей пачке.
+# Иначе одно старое нарушение в базе блокировало бы загрузку любого документа.
+_INTEGRITY_QUERIES = (
+    ('match let $d, $v in multiple_current_versions(); fetch {"d": $d.ent-key, "v": $v.ent-key};',
+     "у документа больше одной действующей редакции"),
+    ('match let $c, $p1, $p2 in multiple_parents(); fetch {"c": $c.ent-key, "p1": $p1.ent-key};',
+     "у пункта несколько родителей"),
+    ('match let $e, $v1, $v2 in element_in_multiple_structures(); fetch {"e": $e.ent-key, "v1": $v1.ent-key};',
+     "пункт принадлежит нескольким редакциям"),
+)
+
+
+def _integrity_in_tx(tx, keys: Set[str] | None = None) -> List[Dict[str, Any]]:
+    """Прогнать проверки целостности внутри текущей транзакции записи.
+
+    Функции читаются в той же транзакции, поэтому видят ещё не закоммиченные данные —
+    именно это позволяет откатить документ до commit. Если функции в схеме нет
+    (база v2), проверка пропускается, а не роняет запись.
+    """
+    out: List[Dict[str, Any]] = []
+    for query, title in _INTEGRITY_QUERIES:
+        try:
+            rows = list(tx.query(query).resolve())
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc).splitlines()[0][:120]
+            if "QEX" in msg or "TSV" in msg:
+                continue
+            logger.debug("typedb_writer: проверка целостности недоступна: %s", msg)
+            continue
+        for row in rows:
+            subject = {k: _value(v) for k, v in row.items()}
+            if keys is not None:
+                # нарушение относится к этому документу, только если его участник — из пачки
+                if not any(str(v) in keys for v in subject.values()):
+                    continue
+            out.append({"problem": title, "subject": subject})
+    return out
 
 
 # ── запись ПРИНЯТОГО предложения (очередь онтологии → TypeDB) ──────────────
@@ -495,7 +684,7 @@ def write_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
     chunks = {chunk} if chunk else set()
 
     e_attrs: Dict[str, Any] = {
-        "index": clause or str(proposal.get("requirement_id") or ""),
+        "struct_index": clause or str(proposal.get("requirement_id") or ""),
         "text_content": text,
     }
     e_key = ent_key("structural_element", e_attrs, doc)
@@ -505,10 +694,12 @@ def write_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
         m_attrs = {"code": code, "description": text}
         m_key = ent_key("security_measure", m_attrs)
         entities[m_key] = {"type": "security_measure", "attrs": m_attrs, "chunks": chunks}
-        sig = f"measure_definition|core_measure={m_key}|source_requirement={e_key}"
+        # v3: «мера описана в пункте» — measure_source (раньше роль называлась
+        # source_requirement и играл её пункт, что было семантической ошибкой).
+        sig = f"measure_source|measure={m_key}|clause={e_key}"
         relations[sig] = {
-            "type": "measure_definition",
-            "parts": {"source_requirement": e_key, "core_measure": m_key},
+            "type": "measure_source",
+            "parts": {"measure": m_key, "clause": e_key},
         }
 
     written = write_facts(chunk, entities, relations, clause)
