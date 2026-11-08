@@ -171,7 +171,16 @@ class OntologyVersionService:
                     .order_by(OntologySchemaVersion.created_at.desc())
                     .limit(max(1, min(int(limit or 50), 200)))
                     .all())
-            return [r.to_dict() for r in rows]
+            out = []
+            for r in rows:
+                item = r.to_dict()
+                # Полнота текста версии: у записей до правки экспорта аннотаций нет.
+                # Флаг нужен, чтобы UI предупреждал: такой файл не отражает схему.
+                text = r.define_text or ""
+                item["has_annotations"] = ("@key" in text or "@card" in text
+                                           or "@abstract" in text)
+                out.append(item)
+            return out
         finally:
             db.close()
 

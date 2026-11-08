@@ -49,6 +49,9 @@ button.btn[disabled]{opacity:.45;cursor:default}
 .ver .when{color:var(--text3,#6b7280);font-size:11px;white-space:nowrap}
 .ver .what{flex:1;min-width:0}
 .ver.failed .what{color:var(--red,#c62828)}
+.ver{cursor:pointer;border-radius:6px;padding-left:6px;padding-right:6px}
+.ver:hover{background:var(--bg2,#f5f6f8)}
+.ver.selected{background:var(--bg2,#eef1f6);outline:2px solid var(--acc,#2563eb);outline-offset:-2px}
 .plan{font-size:12px;line-height:1.6;background:var(--bg,#fff);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius-sm,6px);padding:8px 10px;margin-top:8px;max-height:180px;overflow:auto}
 .note{background:var(--surface,#f8f9fb);border:1px solid var(--border-s,#e3e5e9);border-radius:var(--radius,8px);padding:12px 14px;margin-top:16px}
 .note summary{font-size:14px;font-weight:600;cursor:pointer;user-select:none}
@@ -143,7 +146,11 @@ button.btn[disabled]{opacity:.45;cursor:default}
           <div class="muted" style="margin-bottom:6px">Кто, когда и что менял. Откат возвращает структуру схемы к выбранной версии: типы, появившиеся позже, удаляются, недостающие — создаются.</div>
           <div class="row">
             <button class="btn" onclick="loadVersions()">Обновить список</button>
-            <button class="btn" onclick="exportTql()">Скачать схему (.tql)</button>
+            <button class="btn" id="btn-export" onclick="exportTql()" title="Кликните версию в журнале, чтобы скачать именно её">Скачать схему (.tql)</button>
+          </div>
+          <div class="muted" id="export-hint" style="margin:6px 0 0;font-size:11px">
+            Клик по версии ниже выбирает её: кнопка «Скачать» отдаст текст выбранной версии,
+            без выбора — текущую схему из базы. Повторный клик снимает выбор.
           </div>
           <div class="list" id="versionlist" style="margin-top:8px"><div class="muted">загрузка…</div></div>
           <div class="plan" id="plan" style="display:none"></div>
@@ -219,6 +226,8 @@ button.btn[disabled]{opacity:.45;cursor:default}
 <script>
 let cy = null, schema = null, selected = null;
 let lastFingerprint = '';
+let selectedVersionId = '';      // выбранная в журнале версия: её и скачиваем
+let selectedVersionLabel = '';
 let watchTimer = null;
 let position = '';   // где пользователь стоит в журнале версий (id текущей версии)
 let redoTarget = ''; // состояние, от которого отменили — цель для «Повторить»
@@ -491,13 +500,31 @@ async function loadVersions() {
       const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон', external: 'изменено вне UI', snapshot: 'исходное состояние' }[v.action] || v.action;
       const label = v.comment || '';
       const head = esc(action) + (v.ok ? '' : ' — не удалось') + (label ? ': ' + esc(label) : '');
+      const incomplete = (v.has_annotations === false)
+        ? '<div class="muted" style="color:var(--amber,#b45309)">текст версии без аннотаций (@key/@card/@abstract) — скачивать не стоит</div>'
+        : '';
       div.innerHTML =
-        '<div class="what"><div>' + head + '</div>' +
+        '<div class="what"><div>' + head + '</div>' + incomplete +
         '<div class="when">' + esc(when) + ' · ' + esc(v.author || '—') + ' · типов: ' + esc(v.ntypes) + '</div>' +
         (v.error ? '<div class="muted" style="color:var(--red,#c62828)">' + esc(v.error) + '</div>' : '') + '</div>' +
         '<button class="btn" ' + (v.ok ? '' : 'disabled') + '>Откатить</button>';
       const btn = div.querySelector('button');
-      btn.onclick = () => restoreVersion(v.id);
+      btn.onclick = (ev) => { ev.stopPropagation(); restoreVersion(v.id); };
+      // Клик по строке выбирает версию: скачиваться будет именно она.
+      div.title = 'Кликните, чтобы выбрать эту версию для скачивания';
+      div.onclick = () => {
+        const same = selectedVersionId === v.id;
+        selectedVersionId = same ? '' : v.id;
+        selectedVersionLabel = same ? '' : (when + ' · ' + (v.comment || v.action || ''));
+        if (!same && v.has_annotations === false) {
+          say('Внимание: в этой версии текст схемы без аннотаций — файл не отражает ' +
+              'ограничения схемы. Для актуальной схемы снимите выбор.', false);
+        }
+        el.querySelectorAll('.ver').forEach(n => n.classList.remove('selected'));
+        if (!same) div.classList.add('selected');
+        updateExportButton();
+      };
+      if (selectedVersionId === v.id) div.classList.add('selected');
       el.appendChild(div);
     });
   } catch (e) {
@@ -601,7 +628,24 @@ async function applyTemplate() {
 }
 
 function exportTql() {
+  // Если в журнале выбрана версия — качаем её текст; иначе — текущую схему из базы.
+  if (selectedVersionId) {
+    window.location.href = '/api/v1/ontology/versions/' + encodeURIComponent(selectedVersionId) + '/tql';
+    return;
+  }
   window.location.href = '/api/v1/ontology/export';
+}
+
+function updateExportButton() {
+  const b = document.getElementById('btn-export');
+  if (!b) return;
+  if (selectedVersionId) {
+    b.textContent = 'Скачать выбранную версию (.tql)';
+    b.title = 'Будет скачана выбранная версия: ' + selectedVersionLabel;
+  } else {
+    b.textContent = 'Скачать схему (.tql)';
+    b.title = 'Кликните версию в журнале, чтобы скачать именно её';
+  }
 }
 
 function logout() {

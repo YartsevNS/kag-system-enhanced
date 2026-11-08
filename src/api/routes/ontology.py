@@ -172,6 +172,28 @@ async def ontology_version_get(version_id: str, _: User = Depends(get_current_ad
     return row
 
 
+@router.get("/versions/{version_id}/tql", summary="Скачать текст конкретной версии схемы")
+async def ontology_version_tql(version_id: str, _: User = Depends(get_current_admin)):
+    """Текст схемы ровно той версии, которую выбрал человек в журнале.
+
+    Отдельный маршрут, а не общий /export: общий отдаёт ТЕКУЩУЮ схему из базы,
+    и когда нужна историческая версия, скачивалось не то, что выбрано.
+    """
+    row = await asyncio.to_thread(ontology_versions.get_version, version_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="версия не найдена")
+    text = (row.get("define_text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=409,
+                            detail="у этой версии нет сохранённого текста схемы")
+    stamp = (row.get("created_at") or "")[:19].replace(":", "-").replace(" ", "_")
+    return PlainTextResponse(
+        text,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="ontology-{stamp}.tql"'},
+    )
+
+
 @router.get("/diff", summary="Что изменится при откате к версии (без применения)")
 async def ontology_diff(version_id: str, _: User = Depends(get_current_admin)):
     import json as _json
