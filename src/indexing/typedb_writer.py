@@ -371,6 +371,36 @@ def _parse_json(text: str) -> Dict[str, Any]:
             return {}
 
 
+def _inject_doc_context(payload: Dict[str, Any], doc_ctx: Dict[str, str] | None) -> None:
+    """Заменить у документов и версий ключевые поля значениями из метаданных загрузки.
+
+    Модель не видит граф и не может знать, что документ уже создан другим чанком.
+    Поэтому document_key/version_string/kag_document_id берутся из метаданных, а не из ответа
+    модели: тогда все чанки одного файла сходятся в один акт и одну редакцию.
+    """
+    if not doc_ctx:
+        return
+    for ent in payload.get("entities") or []:
+        if not isinstance(ent, dict):
+            continue
+        etype = str(ent.get("type") or "")
+        attrs = ent.setdefault("attributes", {})
+        if etype in ("regulatory_document", "company_document"):
+            if doc_ctx.get("document_key"):
+                attrs["document_key"] = doc_ctx["document_key"]
+            if doc_ctx.get("title") and not attrs.get("title"):
+                attrs["title"] = doc_ctx["title"]
+            if doc_ctx.get("doc_type") and not attrs.get("doc_type") and not attrs.get("type"):
+                attrs["doc_type"] = doc_ctx["doc_type"]
+            if doc_ctx.get("number") and not attrs.get("number"):
+                attrs["number"] = doc_ctx["number"]
+        elif etype == "document_version":
+            if doc_ctx.get("version_string"):
+                attrs["version_string"] = doc_ctx["version_string"]
+            if doc_ctx.get("kag_document_id"):
+                attrs["kag_document_id"] = doc_ctx["kag_document_id"]
+
+
 def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, int]]:
     """Валидация и дедупликация одного ответа модели.
 
@@ -557,27 +587,69 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
         inserted_e += 1
         entity_keys_now.add(key)
 
-    # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой
-    rel_queries: List[str] = []
-    written_sigs: Set[str] = set()
-    skipped_rel = 0
-    for sig, rel in relations.items():
-        parts = rel["parts"]
-        missing = [k for k in parts.values() if k not in entity_keys_now]
-        if missing:
-            skipped_rel += 1
-            continue
-        if sig in written_sigs:
-            continue
-        match_lines, roles_str = [], []
-        for i, (role, key) in enumerate(parts.items()):
-            etype = key.split(":", 1)[0]
-            match_lines.append(f'$v{i} isa {etype}, has ent-key "{key}";')
-            roles_str.append(f"{role}: $v{i}")
-        rel_queries.append(
-            "match\n  " + "\n  ".join(match_lines)
-            + f"\ninsert\n  {rel['type']} ({', '.join(roles_str)});")
-        written_sigs.add(sig)
+    # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой.
+    # Существующие связи читаем заранее: без этого повторная обработка плодит дубли
+    # (на ГОСТ 57580.2 вышло 48 document_has_version при одном акте и одной версии).
+    existing_sigs: Set[str] = set()
+    try:
+        for rtype, roles in RELATION_ROLES.items():
+            role_items = list(roles.keys())
+            if len(role_items) < 2:
+                continue
+            r1, r2 = role_items[0], role_items[1]
+            for row in _read(
+                f'match ({r1}: $a, {r2}: $b) isa {rtype}; '
+                f'$a has ent-key $ka; $b has ent-key $kb; '
+                f'fetch {{ "a": $ka, "b": $kb }};'
+            ):
+                existing_sigs.add(
+                    f"{rtype}|{r1}={_value(row.get('a'))}|{r2}={_value(row.get('b'))}")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("typedb_writer: существующие связи не прочитаны: %s", str(exc)[:120])
+
+    def build_relations() -> tuple:
+        """Собрать запросы связей с учётом уже существующих и уже собранных."""
+        _existing: Set[str] = set()
+        try:
+            for rtype, roles in RELATION_ROLES.items():
+                role_items = list(roles.keys())
+                if len(role_items) < 2:
+                    continue
+                r1, r2 = role_items[0], role_items[1]
+                for row in _read(
+                    f'match ({r1}: $a, {r2}: $b) isa {rtype}; '
+                    f'$a has ent-key $ka; $b has ent-key $kb; '
+                    f'fetch {{ "a": $ka, "b": $kb }};'
+                ):
+                    _existing.add(
+                        f"{rtype}|{r1}={_value(row.get('a'))}|{r2}={_value(row.get('b'))}")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("typedb_writer: существующие связи не прочитаны: %s", str(exc)[:120])
+
+        _queries: List[str] = []
+        _written: Set[str] = set()
+        _skipped = 0
+        for sig, rel in relations.items():
+            parts = rel["parts"]
+            if any(k not in entity_keys_now for k in parts.values()):
+                _skipped += 1
+                continue
+            roles_sorted = "|".join(f"{k}={v}" for k, v in sorted(parts.items()))
+            if sig in _written or f"{rel['type']}|{roles_sorted}" in _existing:
+                _skipped += 1
+                continue
+            match_lines, roles_str = [], []
+            for i, (role, key) in enumerate(parts.items()):
+                etype = key.split(":", 1)[0]
+                match_lines.append(f'$v{i} isa {etype}, has ent-key "{key}";')
+                roles_str.append(f"{role}: $v{i}")
+            _queries.append("match\n  " + "\n  ".join(match_lines)
+                            + "\ninsert\n  " + rel["type"]
+                            + " (" + ", ".join(roles_str) + ");")
+            _written.add(sig)
+        return _queries, _skipped
+
+    rel_queries, skipped_rel = build_relations()
 
     if not entity_queries and not rel_queries:
         return {"entities": 0, "relations": 0,
@@ -587,30 +659,61 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
     from typedb.driver import TransactionType as _TT
 
     cfg = _cfg()
-    drv = _driver()
     problems: List[Dict[str, Any]] = []
-    try:
-        with drv.transaction(cfg["db"], _TT.WRITE) as tx:
-            for q in entity_queries + rel_queries:
-                tx.query(q).resolve()
-            problems = _integrity_in_tx(tx, set(entities.keys()))
-            if problems:
-                # Не коммитим: документ не должен оставить граф в противоречивом состоянии.
-                logger.warning("typedb_writer: документ не записан, нарушений целостности %d: %s",
-                               len(problems), problems[:3])
-                return {"entities": 0, "relations": 0, "entities_existing": 0,
-                        "relations_existing": 0, "dropped": dropped, "integrity": problems}
-            tx.commit()
-    except Exception as exc:  # noqa: BLE001
-        logger.error("typedb_writer: транзакция документа не выполнена: %s", str(exc)[:300])
+    last_error = ""
+    # Чанки документа обрабатываются параллельно (semaphore 3) и могут одновременно
+    # вставить один и тот же акт: второй получает конфликт @unique по document_key.
+    # Это не ошибка данных, а гонка — поэтому повторяем с перечитыванием существующих ключей.
+    for attempt in range(3):
+        drv = _driver()
+        try:
+            with drv.transaction(cfg["db"], _TT.WRITE) as tx:
+                for q in entity_queries + rel_queries:
+                    tx.query(q).resolve()
+                problems = _integrity_in_tx(tx, set(entities.keys()))
+                if problems:
+                    logger.warning("typedb_writer: документ не записан, нарушений целостности %d: %s",
+                                   len(problems), problems[:3])
+                    return {"entities": 0, "relations": 0, "entities_existing": 0,
+                            "relations_existing": 0, "dropped": dropped, "integrity": problems}
+                tx.commit()
+            last_error = ""
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            low = last_error.lower()
+            race = ("cnt9" in low or "@unique" in low or "@key" in low or "unique" in low)
+            if race and attempt < 2:
+                logger.info("typedb_writer: гонка по ключу, повтор %d/3", attempt + 1)
+                # перечитать существующие ключи и пересобрать пачку «только новое»
+                try:
+                    existing_keys = {_value(r.get("k")) for r in
+                                     _read('match $x has ent-key $k; fetch { "k": $k };')}
+                except Exception:  # noqa: BLE001
+                    existing_keys = set()
+                entity_queries = []
+                entity_keys_now = set(existing_keys)
+                for key, e in entities.items():
+                    if key in existing_keys:
+                        continue
+                    has = _attr_line(key, e["attrs"], e["chunks"], clause)
+                    entity_queries.append(f'put $x isa {e["type"]}{has};')
+                    entity_keys_now.add(key)
+                rel_queries, skipped_rel = build_relations()
+                continue
+            logger.error("typedb_writer: транзакция документа не выполнена: %s", last_error[:300])
+            return {"entities": 0, "relations": 0, "entities_existing": 0,
+                    "relations_existing": 0, "dropped": dropped,
+                    "error": last_error.splitlines()[0][:200]}
+        finally:
+            try:
+                drv.close()
+            except Exception:
+                pass
+    if last_error:
         return {"entities": 0, "relations": 0, "entities_existing": 0,
                 "relations_existing": 0, "dropped": dropped,
-                "error": str(exc).splitlines()[0][:200]}
-    finally:
-        try:
-            drv.close()
-        except Exception:
-            pass
+                "error": last_error.splitlines()[0][:200]}
 
     return {"entities": inserted_e, "relations": len(rel_queries),
             "entities_existing": len(entities) - inserted_e,
@@ -777,8 +880,14 @@ async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
     return _parse_json(content)
 
 
-def _render_prompt(chunk_text: str, clause: str = "", document: str = "") -> str:
-    """Промпт из БД + метаданные фрагмента (пункт нужен для requirement-id)."""
+def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
+                   doc_ctx: Dict[str, str] | None = None) -> str:
+    """Промпт из БД + метаданные фрагмента и документа.
+
+    doc_ctx (document_key, version_string, kag_document_id, title, doc_type) подставляется
+    буквально: без него модель на каждом чанке придумывает новый document_key и создаёт
+    ещё один «документ» — на ГОСТ 57580.2 так появилось 5 актов и 2 версии из одного файла.
+    """
     try:
         from src.api.services.ontology_prompts import prompt_store
 
@@ -788,6 +897,11 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "") -> str
 
         template = DEFAULT_ENTITY_PROMPT
     header = []
+    if doc_ctx:
+        parts = [f"{k}={v}" for k, v in doc_ctx.items() if v]
+        if parts:
+            header.append("КОНТЕКСТ ДОКУМЕНТА (используй эти значения буквально, "
+                          "не придумывай свои): " + "; ".join(parts))
     if document:
         header.append(f"Документ: {document}")
     if clause:
@@ -799,7 +913,7 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "") -> str
 async def extract_and_store_typedb(
     chunk_text: str, chunk_id: str, document_id: str = "",
     clause: str = "", filename: str = "", auto_schema: bool = True,
-    source_kind: str = "",
+    source_kind: str = "", doc_ctx: Dict[str, str] | None = None,
 ) -> Dict[str, Any]:
     """Извлечь сущности/связи из чанка и записать в TypeDB (ADR-007).
 
@@ -817,10 +931,12 @@ async def extract_and_store_typedb(
         except Exception as exc:  # noqa: BLE001
             logger.debug("typedb_writer: схема не дополнена: %s", exc)
 
-    prompt = _render_prompt(chunk_text, clause=clause, document=filename or document_id)
+    prompt = _render_prompt(chunk_text, clause=clause,
+                            document=filename or document_id, doc_ctx=doc_ctx)
     payload = await _call_llm(prompt, chunk_id)
     if not payload:
         return {"status": "empty", "reason": "модель не вернула фактов"}
+    _inject_doc_context(payload, doc_ctx)
 
     # Документ организации: модель по форме текста всё равно называет его «нормативным
     # документом», поэтому тип переопределяем ДО валидации. Связь выдачи

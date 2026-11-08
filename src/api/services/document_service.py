@@ -1979,6 +1979,32 @@ class DocumentService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"[versions] данные загрузки не прочитаны: {str(exc)[:120]}")
 
+        # Контекст документа для извлечения: без него модель на каждом чанке придумывает
+        # новый document_key и создаёт ещё один «акт» + «редакцию» из того же файла
+        # (на ГОСТ 57580.2 это дало 5 документов и 2 версии).
+        _meta = {}
+        try:
+            _meta = _row or {}
+        except Exception:  # noqa: BLE001
+            _meta = {}
+        _doc_ctx: dict = {}
+        try:
+            from src.indexing.typedb_versions import normalize_document_key
+
+            _dk = (_meta.get("document_key") or "").strip() or normalize_document_key(
+                str(_meta.get("issuer") or ""), str(_meta.get("doc_kind") or ""),
+                str(_meta.get("number") or ""), title or filename or "")
+            _doc_ctx = {
+                "document_key": _dk,
+                "title": title or filename or "",
+                "doc_type": str(_meta.get("doc_kind") or ""),
+                "number": str(_meta.get("number") or ""),
+                "version_string": str(_meta.get("version_string") or "") or "1",
+                "kag_document_id": document_id,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[typedb] контекст документа не собран: {str(exc)[:120]}")
+
         total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
         t0 = _time.monotonic()
         sem = asyncio.Semaphore(3)
@@ -1992,7 +2018,7 @@ class DocumentService:
                     res = await asyncio.wait_for(
                         typedb_writer.extract_and_store_typedb(
                             text, chunk_id, document_id, clause=clause, filename=filename,
-                            source_kind=source_kind,
+                            source_kind=source_kind, doc_ctx=_doc_ctx,
                         ),
                         timeout=_t,
                     )
