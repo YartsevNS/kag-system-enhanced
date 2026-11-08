@@ -126,6 +126,9 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
     "requirement_evidence": {"requirement": ("security_requirement",), "evidence": ("evidence",)},
     # требование регулятора опирается на нормативный акт; внутренние основания
     # требований компании — отдельная задача, здесь их не смешиваем
+    # документ компании покрывает требование (для uncovered_documents)
+    "requirement_coverage": {"covering_document": ("company_document",),
+                             "covered_requirement": ("security_requirement",)},
     "requirement_basis": {"requirement": ("security_requirement",),
                           "source_document": ("regulatory_document",)},
     "document_compliance": {"company_doc": ("company_document",),

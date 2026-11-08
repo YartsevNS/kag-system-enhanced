@@ -1,6 +1,6 @@
 """TypeDB-контур фактов для chat-пайплайна KAG (ADR-005, переход на TypeDB).
 
-Модуль вызывает дедуктивные функции онтологии TypeDB (violated_documents и др.)
+Модуль вызывает дедуктивные функции онтологии TypeDB (uncovered_documents и др.)
 и возвращает ВЕРИФИЦИРОВАННЫЕ факты о нарушениях. Интеграция в chat_service.py
 (шаг 2b, рядом с Neo4j-графом): секция «ФАКТЫ (TypeDB)» попадает в контекст ответа.
 
@@ -92,7 +92,7 @@ def query_facts(visible_chunk_ids: Set[str], limit: int = 8,
                 acl_by_caller: bool = False) -> List[Dict[str, Any]]:
     """Факты нарушений из TypeDB, ОТФИЛЬТРОВАННЫЕ по видимым chunk_id (ADR-002).
 
-    Вызывает дедуктивную функцию онтологии violated_documents() и собирает
+    Вызывает дедуктивную функцию онтологии uncovered_documents() и собирает
     факты «документ → нарушенное требование» с провенансом source-chunk-id.
     """
     if not is_available():
@@ -104,7 +104,7 @@ def query_facts(visible_chunk_ids: Set[str], limit: int = 8,
         with _driver() as driver:
             with driver.transaction(cfg["db"], TransactionType.READ) as tx:
                 q = (
-                    'match let $doc, $law in violated_documents(); '
+                    'match let $doc, $law in uncovered_documents(); '
                     # source_origin НЕ обязателен: у документов, созданных из метаданных
                     # загрузки, его нет — прежний запрос терял такие факты молча.
                     '$doc has title $dt, has source-chunk-id $ch; '

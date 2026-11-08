@@ -47,7 +47,10 @@ attribute effective_to, value date;
 attribute struct_index, value string;
 attribute text_content, value string;
 attribute requirement-id, value string;
+# Синтетический уникальный ключ требования: document_key|requirement-id.
+# Нужен, потому что requirement-id («1.1») повторяется в разных документах.
 attribute requirement_key, value string;
+# Синтетический уникальный ключ меры: document_key|код меры.
 attribute measure_key, value string;
 attribute description, value string;
 attribute requirement_kind, value string;
@@ -61,6 +64,8 @@ attribute offender_class, value string;
 attribute potential, value string;
 attribute vendor, value string;
 attribute software_version, value string;
+# КЭШ. Источник правды — сущность certificate и связь certification.
+# Не использовать в запросах, где важна точность; может расходиться.
 attribute is-certified, value boolean;
 
 # ---- атрибуты: сертификаты и доказательства -------------------------
@@ -95,7 +100,7 @@ entity company_document sub document;
 entity document_version sub sourced_entity,
   owns version_string @card(1..1),
   owns version_status,
-  owns version_hash,
+  owns version_hash @unique,
   owns effective_from,
   owns effective_to,
   owns kag_document_id;
@@ -103,7 +108,7 @@ entity document_version sub sourced_entity,
 # ---- структура и требования -----------------------------------------
 entity structural_element sub sourced_entity,
   owns struct_index,
-  owns text_content @card(1..1);
+  owns text_content;
 entity security_requirement sub sourced_entity,
   owns requirement_key @key,
   owns requirement-id @card(1..1),
@@ -181,6 +186,11 @@ relation measure_applicability,
 relation requirement_evidence,
   relates requirement @card(1..1),
   relates evidence @card(1..1);
+# Документ компании покрывает требование (его положения реализуют требование).
+# Без этой связи нельзя отличить «документ рядом с объектом» от «документ закрывает требование».
+relation requirement_coverage,
+  relates covered_requirement @card(1..1),
+  relates covering_document @card(1..1);
 relation requirement_basis,
   relates requirement @card(1..1),
   relates source_document @card(1..1);
@@ -234,6 +244,8 @@ entity security_requirement plays requirement_evidence:requirement;
 entity evidence plays requirement_evidence:evidence;
 entity security_requirement plays requirement_basis:requirement;
 entity company_document plays document_compliance:company_doc;
+entity company_document plays requirement_coverage:covering_document;
+entity security_requirement plays requirement_coverage:covered_requirement;
 entity regulatory_document plays document_compliance:regulated_doc;
 entity regulatory_document plays document_issuance:regulated_item;
 entity regulatory_document plays requirement_basis:source_document;

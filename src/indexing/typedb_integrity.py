@@ -35,10 +35,6 @@ _CHECKS = (
      'match let $e, $v1, $v2 in element_in_multiple_structures(); '
      'fetch {"пункт": $e.struct_index};',
      "пункт принадлежит нескольким редакциям"),
-    ("multiple_issuers",
-     'match let $doc, $r1, $r2 in multiple_issuers(); '
-     'fetch {"документ": $doc.title};',
-     "у документа несколько издателей (если это не совместный приказ)"),
     ("elements_without_version",
      'match let $e in elements_without_version(); '
      'fetch {"пункт": $e.struct_index};',

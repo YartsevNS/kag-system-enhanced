@@ -1,6 +1,7 @@
 define
 # =====================================================================
-#  ФУНКЦИИ ВЫВОДА v3 (правка по внешнему ревью 08.11.2026)
+#  ФУНКЦИИ ВЫВОДА v3.2 (ревью 08.11.2026: убрана multiple_issuers,
+#  violated_documents → uncovered_documents, expired → invalid_certificates)
 #
 #  Исправлено против первой редакции:
 #   1) violated_certification учитывает requirement_applicability:
@@ -10,7 +11,7 @@ define
 #   3) current_versions считается по current_version_of, а не по
 #      отсутствию supersedes (иначе «сирота» без цепочки считалась текущей).
 # =====================================================================
-fun violated_certification($today: date) -> { cii_object, security_requirement }:
+fun violated_certification($today: date) -> { cii_object, security_requirement, security_software }:
     match
       $asset isa cii_object, has cii-category 1;
       $law isa security_requirement, has requirement_kind "certification";
@@ -21,9 +22,9 @@ fun violated_certification($today: date) -> { cii_object, security_requirement }
         $c has cert_until $until;
         $until > $today;
       };
-    return { $asset, $law };
+    return { $asset, $law, $szi };
 
-fun violated_documents($today: date) -> { company_document, security_requirement }:
+fun uncovered_documents($today: date) -> { company_document, security_requirement }:
     match
       $doc isa company_document;
       document_assignment(regulated_subject: $asset, regulated_doc: $doc);
@@ -36,6 +37,7 @@ fun violated_documents($today: date) -> { company_document, security_requirement
         $c has cert_until $until;
         $until > $today;
       };
+      not { requirement_coverage(covering_document: $doc, covered_requirement: $law); };
     return { $doc, $law };
 
 fun current_versions() -> { document_version }:
@@ -44,11 +46,13 @@ fun current_versions() -> { document_version }:
       current_version_of(document: $doc, version: $v);
     return { $v };
 
-fun expired_certificates($today: date) -> { security_software, certificate }:
+fun invalid_certificates($today: date) -> { security_software, certificate }:
     match
       certification(certified_software: $szi, certificate: $c);
-      $c has cert_until $until;
-      $until <= $today;
+      not {
+        $c has cert_until $until;
+        $until > $today;
+      };
     return { $szi, $c };
 
 # ---- проверки целостности (в TypeDB 3.14 нет @unique/@key на ролях) --
@@ -57,12 +61,12 @@ fun expired_certificates($today: date) -> { security_software, certificate }:
 # (с участниками), а не «есть/нет», чтобы было видно, что именно чинить.
 # Вызывать перед коммитом загрузки документа; непустой результат — не коммитить.
 
-fun multiple_current_versions() -> { document, document_version }:
+fun multiple_current_versions() -> { document, document_version, document_version }:
     match
       current_version_of(document: $doc, version: $v1);
       current_version_of(document: $doc, version: $v2);
       not { $v1 is $v2; };
-    return { $doc, $v1 };
+    return { $doc, $v1, $v2 };
 
 fun multiple_parents() -> { structural_element, structural_element, structural_element }:
     match
@@ -77,13 +81,6 @@ fun element_in_multiple_structures() -> { structural_element, document_version, 
       document_structure(version: $v2, element: $e);
       not { $v1 is $v2; };
     return { $e, $v1, $v2 };
-
-fun multiple_issuers() -> { document, regulator, regulator }:
-    match
-      document_issuance(issuer: $r1, regulated_item: $doc);
-      document_issuance(issuer: $r2, regulated_item: $doc);
-      not { $r1 is $r2; };
-    return { $doc, $r1, $r2 };
 
 fun elements_without_version() -> { structural_element }:
     match
