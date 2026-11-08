@@ -20,7 +20,7 @@ import json
 import hashlib
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -77,8 +77,8 @@ class DocumentRecord(BaseModel):
     deny_group_ids: Optional[List[str]] = Field(default=None, description="Запрещённые группы")
     allow_user_ids: Optional[List[str]] = Field(default=None, description="Разрешённые пользователи")
     deny_user_ids: Optional[List[str]] = Field(default=None, description="Запрещённые пользователи")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 
@@ -697,7 +697,7 @@ class DocumentService:
             # Обновляем статус
             record.status = "processing"
             record.progress = 10
-            record.updated_at = datetime.utcnow()
+            record.updated_at = datetime.now(timezone.utc)
             self._save_document_to_db(document_id)
 
             # Находим файл
@@ -1366,7 +1366,7 @@ class DocumentService:
             record.status = "completed"
             record.progress = 100
             record.chunks_count = len(chunks)
-            record.updated_at = datetime.utcnow()
+            record.updated_at = datetime.now(timezone.utc)
             self._save_document_to_db(document_id)
             plog.log("completed", {
                 "chunks_count": len(chunks),
@@ -1409,7 +1409,7 @@ class DocumentService:
             record.status = "failed"
             record.error = str(e)
             record.progress = 0
-            record.updated_at = datetime.utcnow()
+            record.updated_at = datetime.now(timezone.utc)
             
             raise
 
@@ -1990,7 +1990,7 @@ class DocumentService:
 
         # Данные загрузки (метаданные, распознанное название) берём из БД, если в записи
         # кэша их нет: воркер пересобирает DocumentRecord и теряет поля. Без этого
-        # версия пишется пустой, без связи с актом (проверено прогоном 07.11.2026).
+        # версия пишется пустой, без связи с документом (проверено прогоном 07.11.2026).
         if not source_metadata or not title:
             try:
                 from src.api.services.document_repository import get_doc_repo
@@ -2010,7 +2010,7 @@ class DocumentService:
                 logger.warning(f"[versions] данные загрузки не прочитаны: {str(exc)[:120]}")
 
         # Контекст документа для извлечения: без него модель на каждом чанке придумывает
-        # новый document_key и создаёт ещё один «акт» + «редакцию» из того же файла
+        # новый document_key и создаёт ещё один «документ» + «редакцию» из того же файла
         # (на ГОСТ 57580.2 это дало 5 документов и 2 версии).
         _meta = {}
         try:
@@ -2023,21 +2023,22 @@ class DocumentService:
             title = _sm_title
         _doc_ctx: dict = {}
         try:
-            from src.indexing.typedb_versions import normalize_document_key
+            # Единственный производитель контекста: src/indexing/doc_context.py.
+            # Приоритет — source_metadata (что указал человек при загрузке), потом строка
+            # documents, потом название. Раньше читалась только строка documents, где
+            # issuer пуст, а doc_kind/number отсутствуют, поэтому ключ падал на название,
+            # а вид уходил словом модели («гост») вместо кода словаря.
+            from src.indexing import doc_context as _dc
 
-            _dk = (_meta.get("document_key") or "").strip() or normalize_document_key(
-                str(_meta.get("issuer") or ""), str(_meta.get("doc_kind") or ""),
-                str(_meta.get("number") or ""), title or filename or "")
-            _doc_ctx = {
-                "document_key": _dk,
-                "title": title or filename or "",
-                "doc_type": str(_meta.get("doc_kind") or ""),
-                "number": str(_meta.get("number") or ""),
-                "version_string": str(_meta.get("version_string") or "") or "1",
-                "kag_document_id": document_id,
-            }
+            _doc_ctx = _dc.build_context(
+                source_metadata, _meta, title=title or filename or "", document_id=document_id,
+            )
+            logger.info(
+                f"[typedb] контекст документа {document_id}: вид={_doc_ctx.get('doc_type') or '—'}, "
+                f"ключ={_doc_ctx.get('document_key') or '—'}"
+            )
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"[typedb] контекст документа не собран: {str(exc)[:120]}")
+            logger.warning(f"[typedb] контекст документа не собран: {str(exc)[:160]}")
 
         total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
         t0 = _time.monotonic()
@@ -2093,6 +2094,7 @@ class DocumentService:
                     total["error"] += 1
 
         await asyncio.gather(*[_one(c, i) for i, c in enumerate(chunks)])
+
         ms = round((_time.monotonic() - t0) * 1000, 1)
         logger.info(
             f"[typedb] документ {document_id}: чанков {len(chunks)}, записано {total['ok']}, "
@@ -2104,7 +2106,7 @@ class DocumentService:
         except Exception:  # noqa: BLE001
             pass
 
-        # Версия документа (ADR-008): одна редакция = один файл, привязка к акту,
+        # Версия документа (ADR-008): одна редакция = один файл, привязка к документу,
         # замена прежней редакции по supersedes_id. Идемпотентно по ent-key=document_id.
         try:
             from src.indexing import typedb_versions
@@ -2149,6 +2151,22 @@ class DocumentService:
                 logger.debug(f"[versions] документ {document_id}: пропущено ({vres['skipped']})")
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[versions] документ {document_id}: {str(exc).splitlines()[0][:160]}")
+
+        # Контроль записанного: ключ документа против метаданных загрузки, дата действия версии,
+        # дубли издателя. Находки уходят в журнал ошибок онтологии (/errors); обработку
+        # документа они не валят и ничего не меняют в графе.
+        try:
+            from src.indexing import ontology_checks
+
+            _found = await asyncio.to_thread(
+                ontology_checks.check_document,
+                document_id, _doc_ctx, source_metadata,
+                str((source_metadata or {}).get("doc_title") or filename or ""),
+            )
+            if _found:
+                logger.info(f"[typedb] документ {document_id}: находки контроля онтологии {_found}")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[typedb] контроль онтологии не выполнен: {str(exc)[:160]}")
 
         # Проверка ролевой целостности выполняется в typedb_writer ДО commit — по пачке
         # этого документа, с откатом при нарушении. Глобальная проверка здесь показывала

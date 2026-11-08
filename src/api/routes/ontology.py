@@ -255,6 +255,85 @@ async def ontology_redo(req: PositionRequest, user: User = Depends(get_current_a
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+# ---- журнал ошибок онтологии -----------------------------------------
+# Отдельный журнал: файл /var/log/kag/ontology/errors.log (bind с хоста, читается
+# без api) + таблица ontology_errors (её показывает страница /errors).
+class ErrorNote(BaseModel):
+    message: str = Field(..., description="текст записи")
+    level: str = Field("warn", description="error | warning")
+    error_type: str = Field("validation_failed", description="тип из закрытого списка")
+    source: str = Field("validator", description="extraction | validator | writer | typedb")
+    document_key: str = ""
+    document_id: str = ""
+    entity_id: str = ""
+    entity_type: str = ""
+    details: dict | None = Field(None, description="произвольные поля разбора")
+
+
+class ResolveBody(BaseModel):
+    resolved_by: str = ""
+
+
+@router.get("/errors", summary="Журнал ошибок онтологии: список")
+async def ontology_errors_list(
+    limit: int = 200,
+    offset: int = 0,
+    level: str = "",
+    error_type: str = "",
+    document_key: str = "",
+    resolved: str = "",
+    source: str = "",
+    _: User = Depends(get_current_admin),
+):
+    from src.api.services.ontology_errors import list_errors
+
+    # resolved приходит строкой из query: пусто = без фильтра, иначе true/false.
+    flag = None
+    if resolved.strip().lower() in ("true", "false"):
+        flag = resolved.strip().lower() == "true"
+    data = await asyncio.to_thread(
+        list_errors, limit, offset, level, error_type, document_key, flag, source
+    )
+    return data
+
+
+@router.get("/errors/{error_id}", summary="Журнал ошибок онтологии: одна запись")
+async def ontology_error_get(error_id: str, _: User = Depends(get_current_admin)):
+    from src.api.services.ontology_errors import get_error
+
+    item = await asyncio.to_thread(get_error, error_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="запись не найдена")
+    return {"ok": True, "item": item}
+
+
+@router.patch("/errors/{error_id}/resolve", summary="Пометить ошибку решённой")
+async def ontology_error_resolve(error_id: str, req: ResolveBody, user: User = Depends(get_current_admin)):
+    from src.api.services.ontology_errors import resolve_error
+
+    ok = await asyncio.to_thread(resolve_error, error_id, req.resolved_by or _who(user))
+    if not ok:
+        raise HTTPException(status_code=404, detail="запись не найдена или уже решена")
+    return {"ok": True, "resolved": True}
+
+
+@router.post("/errors", summary="Дописать запись в журнал ошибок онтологии")
+async def ontology_errors_add(req: ErrorNote, user: User = Depends(get_current_admin)):
+    from src.api.services.ontology_errors import log_error
+
+    text = (req.message or "").strip()
+    if not text:
+        return {"ok": False, "error": "пустая запись"}
+    await asyncio.to_thread(
+        log_error, text,
+        error_type=req.error_type, source=req.source, level=req.level,
+        document_key=req.document_key, document_id=req.document_id,
+        entity_id=req.entity_id, entity_type=req.entity_type,
+        details={**(req.details or {}), "by": _who(user)},
+    )
+    return {"ok": True}
+
+
 # ---- шаблон и экспорт -------------------------------------------------
 @router.get("/export", summary="Скачать текущую схему как .tql")
 async def ontology_export(_: User = Depends(get_current_admin)):

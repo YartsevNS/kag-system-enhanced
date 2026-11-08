@@ -161,6 +161,20 @@ class OntologyVersionService:
         ntypes_val = int(snapshot.get("ntypes") or 0)
         ok_val = bool(ok)
 
+        if not ok:
+            # Неудачная правка схемы — событие журнала онтологии (источник "versions"),
+            # чтобы на странице «Ошибки загрузки» было видно, что именно отклонено.
+            from src.api.services.ontology_errors import log_error
+
+            log_error(
+                (error or comment or "изменение схемы отклонено")[:2000],
+                error_type="validation_failed",
+                source="validator",
+                level="warn",
+                details={"action": action, "author": author or "",
+                         "define": (define_text or "")[:400]},
+            )
+
         try:
             Session = get_session_local()
             db = Session()

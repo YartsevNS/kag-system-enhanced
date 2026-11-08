@@ -74,7 +74,7 @@ import re
 from pathlib import Path
 from typing import Optional, List, Union, Literal
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Response, Form
 from loguru import logger
@@ -353,7 +353,7 @@ async def tus_create(
         "content_type": content_type,
         "total_size": total_size,
         "offset": 0,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "uploaded_by": str(current_user.id) if current_user else None,
     }
     await _write_meta(_tus_meta_path(upload_id), meta)
@@ -529,7 +529,7 @@ async def upload_document(
     # ── Маршрут коллекции ───────────────────────────────────────────────
     # "documents" — основная коллекция (корпус), "news" — новости, "" — решает
     # источник. Нужен потому, что ссылка на источник сама по себе отправляла
-    # документ в новости: нормативный акт со страницы мониторинга выпадал из
+    # документ в новости: нормативный документ со страницы мониторинга выпадал из
     # поиска по корпусу.
     collection: str = Form(""),
     # ── Чей документ ─────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ async def upload_document(
     # Справочники подсказывают значения, но любое можно вписать своё.
     issuer: str = Form(""),
     doc_kind: str = Form(""),
-    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # Номер документа («239», «57580.1-2017»): из него строится ключ документа, поэтому
     # при наличии номера название на ключ не влияет.
     number: str = Form(""),
     # Версия и дата действия редакции (ADR-008). Для регулятора обязательны:
@@ -731,7 +731,7 @@ async def upload_documents_batch(
     source_kind: str = Form(""),
     issuer: str = Form(""),
     doc_kind: str = Form(""),
-    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # Номер документа («239», «57580.1-2017»): из него строится ключ документа, поэтому
     # при наличии номера название на ключ не влияет.
     number: str = Form(""),
     request: Request = None,
@@ -833,7 +833,7 @@ async def upload_bulk(
     source_kind: str = Form(""),
     issuer: str = Form(""),
     doc_kind: str = Form(""),
-    # Номер акта («239», «57580.1-2017»): из него строится ключ акта, поэтому
+    # Номер документа («239», «57580.1-2017»): из него строится ключ документа, поэтому
     # при наличии номера название на ключ не влияет.
     number: str = Form(""),
     request: Request = None,

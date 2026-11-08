@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ошибки онтологии — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,input,button,textarea{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px}
+  button{cursor:pointer}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  tr.item{cursor:pointer}
+  tr.item:hover{background:var(--elevated,#1c2230)}
+  tr.item.resolved td{opacity:.55}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border,#2c3442)}
+  .tag.error{color:#ff6b6b;border-color:#5a2a2a}
+  .tag.warning{color:#f0b429;border-color:#5a4a20}
+  pre{white-space:pre-wrap;word-break:break-word;background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:6px;padding:10px;font-size:12px;margin:10px 0 0}
+  /* Панель ошибки — поверх страницы у правого края: при длинной таблице блок под ней
+     уходил за экран, и клик по строке выглядел как «ничего не открылось». */
+  .details{display:none}
+  .details.open{display:block;position:fixed;right:24px;top:24px;width:min(760px,52vw);max-height:82vh;
+    overflow:auto;background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;
+    padding:16px;box-shadow:0 18px 48px rgba(0,0,0,.55);z-index:60}
+  .empty{padding:24px;color:var(--text3,#8b93a1)}
+  .stat{font-size:12px;color:var(--text3,#8b93a1)}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · ошибки</div><div data-site-nav></div></nav>
+<main>
+  <h1>Ошибки онтологии</h1>
+  <div class="muted">Только онтология: применение схемы, версии схемы, извлечение и запись фактов в TypeDB.
+    Файл журнала вне контейнера: <code id="jfile">/var/log/kag/ontology/errors.log</code> — читается с хоста,
+    когда api и БД недоступны. Прочие ошибки — в общем журнале приложения.</div>
+
+  <div class="row">
+    <select id="f-type" onchange="load()">
+      <option value="">Все типы</option>
+      <option>insert_failed</option>
+      <option>validation_failed</option>
+      <option>schema_drift</option>
+      <option>extraction_failed</option>
+      <option>enum_violation</option>
+      <option>cardinality_violation</option>
+      <option>key_mismatch</option>
+    </select>
+    <select id="f-resolved" onchange="load()">
+      <option value="">Все записи</option>
+      <option value="false">Только нерешённые</option>
+      <option value="true">Только решённые</option>
+    </select>
+    <select id="f-source" onchange="load()">
+      <option value="">Все источники</option>
+      <option>extraction</option>
+      <option>validator</option>
+      <option>writer</option>
+      <option>typedb</option>
+    </select>
+    <input id="f-doc" placeholder="document_key содержит…" style="min-width:240px" onkeydown="if(event.key==='Enter')load()">
+    <button onclick="load()">Обновить</button>
+    <span class="stat" id="stat"></span>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:150px">Время</th><th style="width:70px">Уровень</th><th style="width:170px">Тип</th><th style="width:150px">Источник</th><th>Сообщение</th><th style="width:190px">Документ</th><th style="width:90px">Статус</th><th style="width:40px" title="Копировать запись в буфер"></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="8" class="empty">Загрузка…</td></tr></tbody>
+  </table>
+
+  <div class="details" id="det">
+    <div class="row" style="margin-top:0">
+      <strong id="det-title"></strong>
+      <button class="primary" id="btn-resolve" onclick="resolveCurrent()" style="margin-left:auto">Пометить решённым</button>
+      <button onclick="copyCurrent()">Копировать</button>
+      <button onclick="document.getElementById('det').classList.remove('open')">Закрыть</button>
+    </div>
+    <div class="muted" id="det-meta"></div>
+    <pre id="det-json"></pre>
+  </div>
+
+  <div class="row" style="margin-top:26px">
+    <textarea id="note" placeholder="Добавить запись в журнал (например, дефект, найденный на прогоне)…" style="flex:1;min-height:64px"></textarea>
+  </div>
+  <div class="row" style="margin-top:0">
+    <select id="note-type"><option>key_mismatch</option><option>cardinality_violation</option><option>enum_violation</option><option>schema_drift</option><option>extraction_failed</option><option>validation_failed</option><option>insert_failed</option></select>
+    <select id="note-source"><option>extraction</option><option>validator</option><option>writer</option><option>typedb</option></select>
+    <button class="primary" onclick="addNote()">Записать</button>
+    <span class="stat" id="note-stat"></span>
+  </div>
+</main>
+
+<script>
+const API = '/api/v1/ontology/errors';
+let current = null;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Время в журнале хранится с зоной; показываем московское, как на сервере 18.
+function fmt(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  if(isNaN(d)) return String(ts);
+  return d.toLocaleString('ru-RU',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+async function load(){
+  const q = new URLSearchParams();
+  q.set('limit','500');
+  const t=document.getElementById('f-type').value; if(t) q.set('error_type',t);
+  const r=document.getElementById('f-resolved').value; if(r) q.set('resolved',r);
+  const s=document.getElementById('f-source').value; if(s) q.set('source',s);
+  const d=document.getElementById('f-doc').value.trim(); if(d) q.set('document_key',d);
+  try{
+    const res = await fetch(`${API}?${q}`, {credentials:'same-origin'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    if(data.file) document.getElementById('jfile').textContent = data.file;
+    const items = data.items || [];
+    document.getElementById('stat').textContent = `всего: ${data.total ?? items.length}` + (data.source==='file' ? ' (из файла, БД недоступна)' : '');
+    const tb = document.getElementById('rows');
+    if(!items.length){ tb.innerHTML = '<tr><td colspan="8" class="empty">Ошибок онтологии нет</td></tr>'; return; }
+    tb.innerHTML = items.map((it,i)=>`
+      <tr class="item ${it.resolved?'resolved':''}" onclick="openItem(${i})">
+        <td>${esc(fmt(it.ts))}</td>
+        <td><span class="tag ${it.level==='error'?'error':'warning'}">${esc(it.level)}</span></td>
+        <td>${esc(it.error_type)}</td>
+        <td>${esc(it.source)}</td>
+        <td>${esc((it.message||'').slice(0,220))}</td>
+        <td class="muted">${esc(it.document_key||it.document_id||'')}</td>
+        <td>${it.resolved?'решено':'открыта'}</td>
+        <td><button title="Копировать запись (тип, документ, сообщение, details)" onclick="copyRow(${i}, event)" style="padding:2px 6px;font-size:12px">⧉</button></td>
+      </tr>`).join('');
+    window.__items = items;
+  }catch(e){
+    document.getElementById('rows').innerHTML = `<tr><td colspan="8" class="empty">Не удалось прочитать журнал: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function openItem(i){
+  const it = (window.__items||[])[i]; if(!it) return;
+  current = it;
+  document.getElementById('det-title').textContent = it.error_type + ' · ' + (it.source||'');
+  document.getElementById('det-meta').textContent = [fmt(it.ts), it.document_key, [it.entity_type, it.entity_id].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+  document.getElementById('det-json').textContent = JSON.stringify({message:it.message, details:it.details, resolved:it.resolved, resolved_by:it.resolved_by, resolved_at:it.resolved_at}, null, 2);
+  document.getElementById('btn-resolve').style.display = (it.resolved || !it.id) ? 'none' : '';
+  const det = document.getElementById('det');
+  det.classList.add('open');
+  det.scrollTop = 0;
+}
+
+// Копирование в буфер. navigator.clipboard работает только на https/localhost, а сайт
+// открывают по http://192.168.50.18 — поэтому запасной путь через textarea+execCommand.
+function copyText(text){
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand copy вернул false'));
+    } catch (e) { reject(e); }
+  });
+}
+
+// Текст записи для передачи наружу: тип, название документа, сущность, сообщение, details.
+function errorToText(it){
+  if (!it) return '';
+  const lines = [];
+  lines.push((it.error_type || '') + ' · ' + (it.source || '') + ' · ' + fmt(it.ts));
+  if (it.document_key) lines.push('документ: ' + it.document_key);
+  if (it.document_id) lines.push('document_id: ' + it.document_id);
+  if (it.entity_type || it.entity_id) lines.push('сущность: ' + [it.entity_type, it.entity_id].filter(Boolean).join(' '));
+  lines.push('');
+  lines.push(it.message || '');
+  if (it.details && Object.keys(it.details).length) {
+    lines.push('');
+    lines.push('details: ' + JSON.stringify(it.details, null, 2));
+  }
+  if (it.resolved) lines.push('', 'решено: ' + (it.resolved_by || '') + ' ' + fmt(it.resolved_at));
+  return lines.join('\n');
+}
+
+function flash(btn, text){
+  if (!btn) return;
+  const old = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = old; }, 1200);
+}
+
+function copyCurrent(ev){
+  const btn = ev && ev.target ? ev.target : document.querySelector('#det button[onclick="copyCurrent()"]');
+  if (!current) return;
+  copyText(errorToText(current))
+    .then(() => flash(btn, 'Скопировано'))
+    .catch(() => alert('Не удалось скопировать — выделите текст в блоке ниже и Ctrl+C'));
+}
+
+// Копирование прямо из строки таблицы: не открывая карточку, не теряя название документа.
+function copyRow(i, ev){
+  if (ev) ev.stopPropagation();
+  const it = (window.__items || [])[i];
+  if (!it) return;
+  copyText(errorToText(it))
+    .then(() => flash(ev && ev.target, '✓'))
+    .catch(() => alert('Не удалось скопировать'));
+}
+
+async function resolveCurrent(){
+  if(!current || !current.id) return;
+  const res = await fetch(`${API}/${encodeURIComponent(current.id)}/resolve`, {
+    method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:'{}'
+  });
+  if(res.ok){ document.getElementById('det').classList.remove('open'); load(); }
+  else { alert('Не удалось пометить: HTTP '+res.status); }
+}
+
+async function addNote(){
+  const text = document.getElementById('note').value.trim();
+  const st = document.getElementById('note-stat');
+  if(!text){ st.textContent = 'пусто'; return; }
+  const res = await fetch(API, {
+    method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message:text, error_type:document.getElementById('note-type').value,
+                          source:document.getElementById('note-source').value, level:'warning'})
+  });
+  if(res.ok){ document.getElementById('note').value=''; st.textContent='записано'; load(); }
+  else { st.textContent = 'ошибка HTTP '+res.status; }
+}
+
+load();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

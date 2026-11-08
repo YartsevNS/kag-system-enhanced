@@ -35,7 +35,7 @@ VALUE_TYPES = (
 )
 
 
-_SCHEMA_HEADER_LINES = ['# Схема онтологии KAG (TypeDB), выгружена из живой базы.', '#', '# Правила заполнения составных ключей (без них insert упадёт по @key):', '#   requirement_key = document_key + "|" + requirement-id', '#                     (requirement-id уникален только внутри документа)', '#   measure_key     = document_key + "|" + code', '#   document_key    = "издатель|тип|номер"', '#', '# Допустимые значения (функции вывода ищут точные строки):', '#   version_status   : current | superseded | repealed | draft', '#   requirement_kind : certification | organizational | technical | process', '#   requirement_kind — КАТЕГОРИЯ требования, а не степень обязательности;', '#   степень обязательности хранится в obligation-level.', '#', '# Источник правды по сертификации — объект certificate и связь certification;', '# атрибута is-certified в схеме нет намеренно.''#', '# Ограничения функций вывода (TypeDB не хранит комментарии, поэтому здесь):', '#   hierarchy_cycle / supersedes_cycle  ловят только 2-циклы и петли;', '#                                       цикл из 3+ участников этими функциями НЕ находится', '#   invalid_date_range                  проверяет только версии с обеими датами', '#   missing_version_status              страховка от записи в обход схемы;', '#                                       при обычном insert не срабатывает', '#   current_status_without_link         аудит неполноты, а НЕ нарушение: связь', '#                                       current_version_of может появиться позже', '#   violated_certification / uncovered_documents', '#                                       не учитывают актуальность версии требования:', '#                                       требование из заменённой редакции считается действующим', '#', '# Необязательные атрибуты (могут отсутствовать в тексте, это норма):', '#   cert_authority  — орган сертификации;', '#   offender_class  — класс нарушителя у источника угроз.']
+_SCHEMA_HEADER_LINES = ['# Схема онтологии KAG (TypeDB), выгружена из живой базы.', '#', '# Правила заполнения составных ключей (без них insert упадёт по @key):', '#   requirement_key = document_key + "|" + requirement-id', '#                     (requirement-id уникален только внутри документа)', '#   measure_key     = document_key + "|" + code', '#   document_key    = "издатель|тип|номер"', '#', '# Допустимые значения (функции вывода ищут точные строки):', '#   version_status   : current | superseded | repealed | draft', '#   requirement_kind : certification | organizational | technical | process', '#   requirement_kind — КАТЕГОРИЯ требования, а не степень обязательности;', '#   степень обязательности хранится в obligation-level.', '#', '# Источник правды по сертификации — объект certificate и связь certification;', '# атрибута is-certified в схеме нет намеренно.', '# Ограничения функций вывода (TypeDB не хранит комментарии, поэтому здесь):', '#   hierarchy_cycle / supersedes_cycle  ловят только 2-циклы; петли ищут', '#                                       отдельные hierarchy_self_loop и supersedes_self_loop,', '#                                       цикл из 3+ участников не находит НИ ОДНА из них', '#   invalid_date_range                  проверяет только версии с обеими датами', '#   missing_version_status              страховка от записи в обход схемы;', '#                                       при обычном insert не срабатывает', '#   current_status_without_link         аудит неполноты, а НЕ нарушение: связь', '#                                       current_version_of может появиться позже', '#   violated_certification / uncovered_documents', '#                                       не учитывают актуальность версии требования:', '#                                       требование из заменённой редакции считается действующим', '#', '# Необязательные атрибуты (могут отсутствовать в тексте, это норма):', '#   cert_authority  — орган сертификации;', '#   offender_class  — класс нарушителя у источника угроз.']
 
 
 class OntologyUnavailable(RuntimeError):
@@ -157,6 +157,17 @@ class OntologyService:
             raise
         except Exception as exc:  # noqa: BLE001 — текст ошибки уходит в UI
             msg = str(exc).splitlines()[-1] if str(exc) else "ошибка синтаксиса"
+            # В отдельный журнал онтологии (/app/data/ontology/errors.jsonl, виден с хоста):
+            # общий лог api для разбора схемы не годится — там всё подряд.
+            from src.api.services.ontology_errors import log_error
+
+            log_error(
+                msg,
+                error_type="validation_failed" if not commit else "insert_failed",
+                source="typedb",
+                details={"stage": "apply" if commit else "validate",
+                         "define_len": len(text), "define": text[:600]},
+            )
             return {"ok": False, "error": msg[:400], "commit": commit}
 
     # ---- создание/удаление типа ---------------------------------------

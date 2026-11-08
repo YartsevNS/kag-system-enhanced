@@ -146,10 +146,10 @@ button.btn[disabled]{opacity:.45;cursor:default}
           <div class="muted" style="margin-bottom:6px">Кто, когда и что менял. Откат возвращает структуру схемы к выбранной версии: типы, появившиеся позже, удаляются, недостающие — создаются.</div>
           <div class="row">
             <button class="btn" onclick="loadVersions()">Обновить список</button>
-            <button class="btn" id="btn-export" onclick="exportTql()" title="Кликните версию в журнале, чтобы скачать именно её">Скачать схему (.tql)</button>
+            <button class="btn" id="btn-export" onclick="exportTql()" title="Кликните версию в журнале, чтобы выгрузить именно её">Export</button>
           </div>
           <div class="muted" id="export-hint" style="margin:6px 0 0;font-size:11px">
-            Клик по версии ниже выбирает её: кнопка «Скачать» отдаст текст выбранной версии,
+            Клик по версии ниже выбирает её: кнопка «Export» отдаст текст выбранной версии,
             без выбора — текущую схему из базы. Повторный клик снимает выбор.
           </div>
           <div class="list" id="versionlist" style="margin-top:8px"><div class="muted">загрузка…</div></div>
@@ -250,6 +250,13 @@ function palette() {
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// Время приходит с зоной (UTC): показываем в часовом поясе браузера, а не строкой как есть.
+function fmtWhen(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return String(ts);
+  return d.toLocaleString('ru-RU', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 }
 function say(text, ok) {
   const el = $('msg');
@@ -496,7 +503,7 @@ async function loadVersions() {
     rows.forEach(v => {
       const div = document.createElement('div');
       div.className = 'ver' + (v.ok ? '' : ' failed');
-      const when = (v.created_at || '').replace('T', ' ').slice(0, 16);
+      const when = fmtWhen(v.created_at);
       const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон', external: 'изменено вне UI', snapshot: 'исходное состояние' }[v.action] || v.action;
       const label = v.comment || '';
       const head = esc(action) + (v.ok ? '' : ' — не удалось') + (label ? ': ' + esc(label) : '');
@@ -640,11 +647,11 @@ function updateExportButton() {
   const b = document.getElementById('btn-export');
   if (!b) return;
   if (selectedVersionId) {
-    b.textContent = 'Скачать выбранную версию (.tql)';
-    b.title = 'Будет скачана выбранная версия: ' + selectedVersionLabel;
+    b.textContent = 'Export версии';
+    b.title = 'Будет выгружена выбранная версия: ' + selectedVersionLabel;
   } else {
-    b.textContent = 'Скачать схему (.tql)';
-    b.title = 'Кликните версию в журнале, чтобы скачать именно её';
+    b.textContent = 'Export';
+    b.title = 'Кликните версию в журнале, чтобы выгрузить именно её';
   }
 }
 

@@ -445,6 +445,19 @@ async def ontology_proposals_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology_proposals.html"))
 
 
+@app.get("/errors", summary="Ошибки онтологии: журнал (только для admin)")
+async def ontology_errors_page(request: Request):
+    """Отдельный журнал ошибок онтологии.
+
+    Показывает то, что пишется в /var/log/kag/ontology/errors.log (bind с хоста:
+    файл читается и тогда, когда контейнер не поднимается). Только онтология:
+    схема, версии схемы, извлечение и запись фактов в TypeDB.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-errors.html"))
+
+
 @app.get("/ontology/prompt", summary="Промпт извлечения сущностей (только для admin)")
 async def ontology_prompt_page(request: Request):
     """Редактор задания, по которому модель извлекает сущности и связи для TypeDB.

@@ -171,13 +171,23 @@ img, svg, video, canvas, iframe { max-width: 100%; }
              style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
       <datalist id="upload-issuer-options"></datalist>
     </div>
-    <div style="flex:1;min-width:220px">
-      <label for="upload-doc-kind" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+    <div style="flex:1;min-width:200px">
+      <label for="upload-doc-group" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
         Тип документа <span style="color:var(--red)">*</span>
       </label>
-      <input id="upload-doc-kind" list="upload-doc-kind-options" placeholder="ГОСТ, стандарт, политика…"
-             style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
-      <datalist id="upload-doc-kind-options"></datalist>
+      <select id="upload-doc-group" onchange="fillUploadKinds()"
+              style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+        <option value="">— выберите тип —</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:200px">
+      <label for="upload-doc-kind" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
+        Вид документа <span style="color:var(--red)">*</span>
+      </label>
+      <select id="upload-doc-kind"
+              style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
+        <option value="">— сначала выберите тип —</option>
+      </select>
     </div>
   </div>
   <!-- Версия редакции (ADR-008): у регулятора обязательны версия и дата вступления
@@ -201,7 +211,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
   </div>
   <div style="margin-top:8px;max-width:420px">
     <label for="upload-number" style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">
-      Номер документа (для ключа акта; необязательно, если номер есть в названии)
+      Номер документа (часть ключа документа — издатель|вид|номер; можно не заполнять, если номер есть в названии)
     </label>
     <input id="upload-number" placeholder="239, 57580.1-2017"
            style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px;font-size:12px">
@@ -220,7 +230,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 
 <!-- Права доступа при загрузке (сворачиваемый блок) --><div style="margin:14px 0 10px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);font-size:12px"><div onclick="toggleUploadAccess()" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none"><span id="upload-access-arrow" style="color:var(--accent);font-size:15px;line-height:1">▸</span><strong>Права доступа к документам</strong><span style="color:var(--text4);font-size:11px;margin-left:auto">права учитываются при доступе к документу и в чате</span></div><div id="upload-access-body" style="display:none;padding:0 12px 12px"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px"><div><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label><select id="upload-visibility" style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"><option value="public">Доступен всем</option><option value="restricted">Только избранным</option></select></div></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1.2;min-width:200px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label><div class="access-pool" id="upload-all"></div></div><div style="flex:1;min-width:170px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px"> Разрешено</label><div class="access-drop" id="upload-allow"></div></div><div style="flex:1;min-width:170px"><label style="font-size:11px;color:var(--text4);display:block;margin-bottom:4px"> Запрещено</label><div class="access-drop" id="upload-deny"></div></div></div><div style="font-size:11px;color:var(--text4);margin-top:6px">
         «Только избранным» = доступ разрешён только перетащенным группам/пользователям. Запрет действует даже если есть разрешение. × — убрать.
-      </div><div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap"><label style="font-size:11px;color:var(--text4)">Применить к существующему документу:</label><select id="upload-apply-doc" style="flex:1;min-width:180px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"></select><button class="btn" onclick="applyAccessToDoc()" style="padding:6px 14px"> Сохранить</button><span id="upload-apply-status" style="font-size:11px;color:var(--text4)"></span></div></div></div><!-- Обработка необработанных документов (общая кнопка) --><div id="proc-all-wrap" style="display:none;margin:0 0 14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" id="proc-all-btn" onclick="processAllMine()" style="padding:8px 14px">▶ Обработать все необработанные</button><span id="proc-all-count" style="color:var(--text4)"></span><span style="color:var(--text3);flex:1;min-width:200px">Запускает обработку только ваших документов со статусом «Ожидает»/«Ошибка». Документы других пользователей не затрагиваются.</span></div></div><!-- Модалка прав доступа --><div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center"><div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw;max-height:90vh;overflow-y:auto"><div style="font-size:15px;font-weight:600;margin-bottom:12px"> Права доступа документа</div><div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label><select id="edit-visibility" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"><option value="public">Доступен всем</option><option value="restricted">Только избранным</option></select></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1.2;min-width:200px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label><div class="access-pool" id="edit-all"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Разрешено</label><div class="access-drop" id="edit-allow"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Запрещено</label><div class="access-drop" id="edit-deny"></div></div></div><div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end"><button class="btn btn-secondary" onclick="document.getElementById('access-modal').style.display='none'">Отмена</button><button class="btn btn-primary" onclick="saveAccessModal()"> Сохранить</button></div><div id="access-modal-status" style="font-size:12px;color:var(--text4);margin-top:8px"></div></div></div><!-- Filters + View toggle --><div class="filters"><input type="text" id="search-input" placeholder=" Поиск по названию, типу, тэгам..." oninput="applyFilters()"><select id="type-filter" onchange="applyFilters()" title="Вид документа. Список видов берётся из словаря системы (GET /api/v1/document-kinds), а не вписан в страницу"><option value="">Все типы</option></select><select id="rubric-filter" onchange="applyFilters()" title="Тема документа (о чём он). Мягкий признак: фильтр действует только на список на странице и НЕ ограничивает поиск"><option value="">Все темы</option></select><select id="facet-filter" onchange="applyFilters()" title="Предмет защиты (на что направлены требования). Мягкий признак: действует только на список на странице"><option value="">Все предметы защиты</option></select><select id="status-filter" onchange="applyFilters()"><option value="">Все статусы</option><option value="completed"> Готово</option><option value="processing"> В обработке</option><option value="pending"> Ожидает</option><option value="failed"> Ошибка</option></select><select id="source-filter" onchange="applyFilters()" title="Фильтр по источнику"><option value="">Все источники</option><option value="user"> Файлы загруженные пользователем</option></select><select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка"><option value="date_desc"> Новые сверху</option><option value="date_asc"> Старые сверху</option><option value="name_asc"> А–Я</option><option value="name_desc"> Я–А</option><option value="size_desc"> Большие сверху</option><option value="size_asc"> Малые сверху</option></select><select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице"><option value="20">20 шт</option><option value="50" selected>50 шт</option><option value="100">100 шт</option><option value="200">200 шт</option><option value="500">500 шт</option><option value="0">Все</option></select><button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button><span id="filter-info" style="font-size:11px;color:var(--text4)"></span><button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button><button class="btn-outline" id="btn-table" onclick="setView('table')"> Таблица</button><button class="btn-outline active" id="btn-cards" onclick="setView('cards')"> Карточки</button><button class="btn" onclick="loadAll()"> Обновить</button></div><!-- Cards --><div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div><!-- Table --><div id="docs-table" style="display:none"><div id="bulk-actions" style="display:none;padding:8px 0;text-align:right"><span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span><span id="bulk-status" style="font-size:12px;margin-right:10px"></span><button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✕ Снять выбор</button><button class="tag" style="background:transparent;color:var(--text3);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:16px" onclick="processSelected()" title="Поставить выбранные документы в очередь обработки">▶ Обработать выбранные</button><span style="display:inline-block;width:1px;height:22px;background:var(--border);margin:0 16px;vertical-align:middle"></span><button id="btn-bulk-delete" class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()"> Удалить выбранные</button></div><table><thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Тип</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead><tbody id="table-body"></tbody></table><div class="empty" id="table-empty" style="display:none">Нет документов</div></div></main><!-- Modal --><div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div></div><div class="toast" id="toast"></div>
+      </div><div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap"><label style="font-size:11px;color:var(--text4)">Применить к существующему документу:</label><select id="upload-apply-doc" style="flex:1;min-width:180px;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:6px 10px"></select><button class="btn" onclick="applyAccessToDoc()" style="padding:6px 14px"> Сохранить</button><span id="upload-apply-status" style="font-size:11px;color:var(--text4)"></span></div></div></div><!-- Обработка необработанных документов (общая кнопка) --><div id="proc-all-wrap" style="display:none;margin:0 0 14px;background:var(--surface);border:1px solid var(--border-s);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" id="proc-all-btn" onclick="processAllMine()" style="padding:8px 14px">▶ Обработать все необработанные</button><span id="proc-all-count" style="color:var(--text4)"></span><span style="color:var(--text3);flex:1;min-width:200px">Запускает обработку только ваших документов со статусом «Ожидает»/«Ошибка». Документы других пользователей не затрагиваются.</span></div></div><!-- Модалка прав доступа --><div id="access-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center"><div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;width:640px;max-width:94vw;max-height:90vh;overflow-y:auto"><div style="font-size:15px;font-weight:600;margin-bottom:12px"> Права доступа документа</div><div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Доступ</label><select id="edit-visibility" style="width:100%;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 10px"><option value="public">Доступен всем</option><option value="restricted">Только избранным</option></select></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1.2;min-width:200px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px">Все пользователи и группы <small>(перетащите вправо)</small></label><div class="access-pool" id="edit-all"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Разрешено</label><div class="access-drop" id="edit-allow"></div></div><div style="flex:1;min-width:170px"><label style="font-size:12px;color:var(--text4);display:block;margin-bottom:4px"> Запрещено</label><div class="access-drop" id="edit-deny"></div></div></div><div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end"><button class="btn btn-secondary" onclick="document.getElementById('access-modal').style.display='none'">Отмена</button><button class="btn btn-primary" onclick="saveAccessModal()"> Сохранить</button></div><div id="access-modal-status" style="font-size:12px;color:var(--text4);margin-top:8px"></div></div></div><!-- Filters + View toggle --><div class="filters"><input type="text" id="search-input" placeholder=" Поиск по названию, типу, тэгам..." oninput="applyFilters()"><select id="type-filter" onchange="applyFilters()" title="Вид документа (внутри типа). Список берётся из словаря системы (GET /api/v1/document-kinds), а не вписан в страницу"><option value="">Все виды</option></select><select id="rubric-filter" onchange="applyFilters()" title="Тема документа (о чём он). Мягкий признак: фильтр действует только на список на странице и НЕ ограничивает поиск"><option value="">Все темы</option></select><select id="facet-filter" onchange="applyFilters()" title="Предмет защиты (на что направлены требования). Мягкий признак: действует только на список на странице"><option value="">Все предметы защиты</option></select><select id="status-filter" onchange="applyFilters()"><option value="">Все статусы</option><option value="completed"> Готово</option><option value="processing"> В обработке</option><option value="pending"> Ожидает</option><option value="failed"> Ошибка</option></select><select id="source-filter" onchange="applyFilters()" title="Фильтр по источнику"><option value="">Все источники</option><option value="user"> Файлы загруженные пользователем</option></select><select id="sort-filter" onchange="localStorage.setItem('docs-sort',this.value);resetPage();applyFilters()" title="Сортировка"><option value="date_desc"> Новые сверху</option><option value="date_asc"> Старые сверху</option><option value="name_asc"> А–Я</option><option value="name_desc"> Я–А</option><option value="size_desc"> Большие сверху</option><option value="size_asc"> Малые сверху</option></select><select id="count-filter" onchange="localStorage.setItem('docs-count',this.value);resetPage();applyFilters()" title="Количество на странице"><option value="20">20 шт</option><option value="50" selected>50 шт</option><option value="100">100 шт</option><option value="200">200 шт</option><option value="500">500 шт</option><option value="0">Все</option></select><button class="btn-outline" id="btn-prev" onclick="prevPage()" style="padding:4px 10px;font-size:12px" title="Предыдущая страница">◀</button><span id="filter-info" style="font-size:11px;color:var(--text4)"></span><button class="btn-outline" id="btn-next" onclick="nextPage()" style="padding:4px 10px;font-size:12px" title="Следующая страница">▶</button><button class="btn-outline" id="btn-table" onclick="setView('table')"> Таблица</button><button class="btn-outline active" id="btn-cards" onclick="setView('cards')"> Карточки</button><button class="btn" onclick="loadAll()"> Обновить</button></div><!-- Cards --><div class="docs-grid" id="docs-grid"><div class="empty"><div class="spinner"></div></div></div><!-- Table --><div id="docs-table" style="display:none"><div id="bulk-actions" style="display:none;padding:8px 0;text-align:right"><span id="bulk-count" style="color:var(--text4);font-size:12px;margin-right:10px"></span><span id="bulk-status" style="font-size:12px;margin-right:10px"></span><button class="tag" style="background:transparent;color:var(--text4);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:8px" onclick="clearSelection()" title="Снять все отметки">✕ Снять выбор</button><button class="tag" style="background:transparent;color:var(--text3);cursor:pointer;border:1px solid var(--border);font-size:12px;padding:6px 10px;border-radius:4px;margin-right:16px" onclick="processSelected()" title="Поставить выбранные документы в очередь обработки">▶ Обработать выбранные</button><span style="display:inline-block;width:1px;height:22px;background:var(--border);margin:0 16px;vertical-align:middle"></span><button id="btn-bulk-delete" class="tag" style="background:rgba(220,38,38,0.15);color:var(--red);cursor:pointer;border:none;font-size:12px;padding:6px 12px;border-radius:4px" onclick="bulkDelete()"> Удалить выбранные</button></div><table><thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleAll(this)" title="Выбрать все на странице"></th><th>Название</th><th>Вид</th><th>Тэги</th><th>Чанков</th><th>Кто</th><th>Дата</th><th>Статус</th><th>Распознано</th><th></th></tr></thead><tbody id="table-body"></tbody></table><div class="empty" id="table-empty" style="display:none">Нет документов</div></div></main><!-- Modal --><div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"><div class="modal-header"><h2 id="modal-title"></h2><button class="modal-close" onclick="closeModal()">×</button></div><div class="modal-body" id="modal-body"></div></div></div><div class="toast" id="toast"></div>
 
 <script>
 const API = '/api/v1';
@@ -317,12 +327,49 @@ function setupDragDrop() {
 const _ISSUERS = ['ФСТЭК России', 'ФСБ России', 'Росстандарт', 'Банк России',
                   'Минцифры России', 'Правительство РФ', 'Президент РФ',
                   'Роскомнадзор', 'Минобороны России'];
-const _DOC_KINDS = {
-  regulator: ['ГОСТ', 'ГОСТ Р', 'стандарт', 'приказ', 'закон', 'постановление',
-              'указ', 'положение', 'методический документ', 'рекомендации', 'регламент'],
-  company:   ['политика', 'инструкция', 'приказ', 'положение', 'регламент',
-              'стандарт организации', 'модель угроз', 'акт', 'предписание'],
-};
+// Тип и вид документа — разные оси, их нельзя смешивать в одном списке.
+//   Тип  = группа словаря document_kinds.py (стандартизация, нормативные и правовые,
+//          хозяйственные, информационные) — «что это за класс документа»;
+//   Вид  = конкретный код внутри типа (национальный стандарт, рекомендации по
+//          стандартизации, приказ, политика, инструкция, договор, отчёт…).
+// В базу уходит ВИД (documents.document_type / source_metadata.doc_kind): тип из него
+// выводится словарём, второй колонки не нужно.
+const KIND_GROUP_OF = {};   // код вида → код типа
+const KIND_GROUP_TITLE = {}; // код типа → название («Стандартизация»)
+
+function fillUploadGroups() {
+  const sel = document.getElementById('upload-doc-group');
+  if (!sel) return;
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  Object.keys(KIND_GROUP_TITLE).forEach(g => {
+    const o = document.createElement('option');
+    o.value = g; o.textContent = KIND_GROUP_TITLE[g];
+    sel.appendChild(o);
+  });
+  sel.value = cur;
+  fillUploadKinds();
+}
+
+function fillUploadKinds() {
+  const groupSel = document.getElementById('upload-doc-group');
+  const sel = document.getElementById('upload-doc-kind');
+  if (!sel) return;
+  const group = groupSel ? groupSel.value : '';
+  while (sel.options.length > 1) sel.remove(1);
+  if (!group) {
+    sel.options[0].textContent = '— сначала выберите тип —';
+    return;
+  }
+  sel.options[0].textContent = '— выберите вид —';
+  Object.keys(KIND_GROUP_OF).forEach(code => {
+    if (KIND_GROUP_OF[code] !== group) return;
+    const o = document.createElement('option');
+    o.value = code;
+    o.textContent = KIND_TITLES[code] || code;
+    sel.appendChild(o);
+  });
+}
 
 function _fillDatalist(id, values) {
   const dl = document.getElementById(id);
@@ -340,7 +387,7 @@ function syncSourceKindFields() {
   if (vreq) vreq.style.display = (kind === 'regulator') ? '' : 'none';
   if (ereq) ereq.style.display = (kind === 'regulator') ? '' : 'none';
   _fillDatalist('upload-issuer-options', _ISSUERS);
-  _fillDatalist('upload-doc-kind-options', kind ? (_DOC_KINDS[kind] || []) : []);
+  fillUploadGroups();
 }
 syncSourceKindFields();
 
@@ -360,17 +407,25 @@ async function uploadFiles(files) {
     return;
   }
   if (_srcSel) _srcSel.style.borderColor = '';
-  // Уточнения метаданных: тип обязателен всегда, издатель — для регулятора.
+  // Уточнения метаданных: тип и вид обязательны всегда, издатель — для регулятора.
   const _issuerEl = document.getElementById('upload-issuer');
+  const _groupEl = document.getElementById('upload-doc-group');
   const _kindEl = document.getElementById('upload-doc-kind');
   const issuerVal = _issuerEl ? _issuerEl.value.trim() : '';
-  const docKindVal = _kindEl ? _kindEl.value.trim() : '';
+  const groupVal = _groupEl ? _groupEl.value : '';
+  const docKindVal = _kindEl ? _kindEl.value : '';
+  if (!groupVal) {
+    toast('Выберите тип документа — от него зависит список видов', true);
+    if (_groupEl) { _groupEl.focus(); _groupEl.style.borderColor = 'var(--red)'; }
+    return;
+  }
   if (!docKindVal) {
-    toast('Укажите тип документа (ГОСТ, стандарт, политика, инструкция…)', true);
+    toast('Выберите вид документа из списка (он уходит в онтологию кодом словаря)', true);
     if (_kindEl) { _kindEl.focus(); _kindEl.style.borderColor = 'var(--red)'; }
     return;
   }
   if (_kindEl) _kindEl.style.borderColor = '';
+  if (_groupEl) _groupEl.style.borderColor = '';
   if (srcKind === 'regulator' && !issuerVal) {
     toast('Укажите регулятора (ФСТЭК России, Росстандарт, Банк России…)', true);
     if (_issuerEl) { _issuerEl.focus(); _issuerEl.style.borderColor = 'var(--red)'; }
@@ -1014,7 +1069,10 @@ async function loadDocumentKinds() {
     (d.kinds || []).forEach(k => {
       KIND_LABELS[k.code] = k.short || k.code;
       KIND_TITLES[k.code] = k.title || k.code;
+      if (k.group) KIND_GROUP_OF[k.code] = k.group;
     });
+    Object.keys(d.groups || {}).forEach(g => { KIND_GROUP_TITLE[g] = d.groups[g]; });
+    fillUploadGroups();
     // Темы (рубрики) — вторая ось, тем же роутом: страница не держит своих списков
     (d.rubrics || []).forEach(rb => { RUBRIC_TITLES[rb.code] = rb.title || rb.code; });
     // Фасеты — третья ось: закрытые перечни значений (предмет защиты, нормативная сила)
@@ -1050,7 +1108,27 @@ function fillTypeFilter() {
     if (title) o.title = title;
     sel.appendChild(o); have.add(v);
   };
-  Object.keys(KIND_LABELS).forEach(c => add(c, KIND_LABELS[c], KIND_TITLES[c]));
+  // Порядок в фильтре — по ТИПАМ (группам словаря), внутри типа виды. Тип и вид —
+  // разные оси: в базе хранится вид, тип выводится словарём; в списке фильтра это
+  // выражается optgroup, чтобы «ГОСТ» не висел в одной куче с «договором».
+  const byGroup = {};
+  Object.keys(KIND_LABELS).forEach(c => {
+    const g = KIND_GROUP_OF[c] || '';
+    (byGroup[g] = byGroup[g] || []).push(c);
+  });
+  Object.keys(byGroup).forEach(g => {
+    const og = document.createElement('optgroup');
+    og.label = KIND_GROUP_TITLE[g] || 'Прочее';
+    byGroup[g].forEach(c => {
+      const o = document.createElement('option');
+      o.value = c;
+      o.textContent = KIND_LABELS[c];
+      if (KIND_TITLES[c]) o.title = KIND_TITLES[c];
+      og.appendChild(o);
+      have.add(c);
+    });
+    sel.appendChild(og);
+  });
   // Значения СТАРЫХ словарей (пока документ не переразмечен) показываем кодом как есть:
   // иначе такой документ нельзя выбрать фильтром и он выглядит «без типа».
   (allDocs || []).forEach(d => {

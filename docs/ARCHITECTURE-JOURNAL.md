@@ -163,3 +163,38 @@ relations `document_version_of` и `supersedes`, атрибуты `effective_fro
 Открыто: `current_versions()` не подтверждена, статус старой редакции не переписывается атрибутом
 (TypeQL delete-синтаксис), файлы схемы в `project_typedb/adr/` не обновлены. Подробности —
 `docs/changes/2026-11-07-versii-dokumentov-reguljatora/result.md`.
+
+## 2026-11-08 — Кнопка выгрузки схемы называется Export
+
+В журнале версий страницы `/ontology` кнопка называлась «Скачать схему (.tql)», а при выбранной
+версии — «Скачать выбранную версию (.tql)». Одно действие читалось как два разных, и в переписке
+«скачать схему» и «export» понимались по-разному: кнопка без выбора отдаёт живой текст схемы из
+TypeDB (`/api/v1/ontology/export`), с выбранной версией — текст записи журнала
+(`/api/v1/ontology/versions/{id}/tql`). Подпись унифицирована: `Export` и `Export версии`,
+пояснение под кнопкой говорит то же слово.
+
+Проверено: файл отдаётся (`/static/ontology.html`, 39 095 байт, вхождений `Export` — 6),
+`/ontology` отдаётся с `Cache-Control: no-store`. Правка положена в работающий контейнер
+`kag-api` через `docker cp` — образ НЕ пересобран, при пересоздании контейнера правка пропадёт
+до сборки образа из репозитория.
+
+## 2026-11-08 — Отдельный журнал ошибок онтологии и страница /errors
+
+Ошибки онтологии больше не идут в общий журнал приложения. Введены два хранилища:
+файл `/var/log/kag/ontology/errors.log` (bind с хоста, JSON Lines — читается, когда api и БД
+недоступны) и таблица `ontology_errors` в Postgres (её показывает страница). Сейчас контейнер
+создан без тома `/var/log/kag/ontology`, поэтому файл пишется в bind-каталог данных:
+`/app/data/ontology-errors/errors.log` = `/home/yartsevn/kag-system/data/ontology-errors/errors.log`
+на 192.168.50.18; код сам переключится на `/var/log/kag/ontology`, когда том появится
+(нужна пересборка образа и `up -d` — тогда же `logrotate`).
+
+Пишут: применение схемы и версии схемы (`src/api/services/ontology_service.py`,
+`ontology_versions.py`), запись фактов в TypeDB (`src/indexing/typedb_writer.py`). Типы закрыты
+списком: insert_failed, validation_failed, schema_drift, extraction_failed, enum_violation,
+cardinality_violation, key_mismatch. Прочие ошибки остаются в журнале api/worker.
+
+Страница: `/errors` («Ошибки онтологии» в меню сразу после «Онтологии»), фильтры по типу,
+источнику, документу и статусу, раскрытие details, кнопка «Пометить решённым»,
+ручная запись. Проверено на 192.168.50.18: 4 записи по прогону Р 1323565.1.061—2024,
+фильтр `error_type=key_mismatch` даёт 2, PATCH resolve переводит запись в решённые,
+health 200, страница отдаётся админу (200) и редиректит остальных (302).

@@ -104,7 +104,7 @@ REQUIRED_ATTRS: Dict[str, tuple] = {
 
 # роль → допустимые типы участника (схема v3)
 RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
-    # «издан регулятором» — только нормативный акт: политику компании регулятор не издаёт
+    # «издан регулятором» — только нормативный документ: политику компании регулятор не издаёт
     "document_issuance": {"issuer": ("regulator",), "regulated_item": ("regulatory_document",)},
     "document_has_version": {"document": ("regulatory_document", "company_document"),
                              "version": ("document_version",)},
@@ -124,7 +124,7 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
                                   "target_system": ("cii_object",)},
     "measure_applicability": {"measure": ("security_measure",), "target_system": ("cii_object",)},
     "requirement_evidence": {"requirement": ("security_requirement",), "evidence": ("evidence",)},
-    # требование регулятора опирается на нормативный акт; внутренние основания
+    # требование регулятора опирается на нормативный документ; внутренние основания
     # требований компании — отдельная задача, здесь их не смешиваем
     # документ компании покрывает требование (для uncovered_documents)
     "requirement_coverage": {"covering_document": ("company_document",),
@@ -221,7 +221,14 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
     чтобы один и тот же документ не создавался заново из каждого чанка.
     """
     if etype == "regulator":
-        base = str(attrs.get("short_name") or attrs.get("name") or "")
+        # Один орган — одна сущность. Ключ считается от КОДА органа (rosstandart, fstek…),
+        # а не от строки названия: иначе «Росстандарт» и «Федеральное агентство по
+        # техническому регулированию и метрологии» дают два regulator и две связи
+        # document_issuance на один документ (живой случай 08.11.2026).
+        from src.indexing import issuers
+
+        base, _n, _s = issuers.canonical(str(attrs.get("name") or ""),
+                                         str(attrs.get("short_name") or ""))
     elif etype in ("regulatory_document", "company_document"):
         base = str(attrs.get("document_key") or attrs.get("title") or "")
     elif etype == "document_version":
@@ -318,9 +325,25 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
             return
         has.append(f'has {attr} "{_esc(value, limit)}"')
 
+    def add_date(attr: str, value) -> None:
+        """Дата в TypeDB пишется литералом без кавычек: has effective_from 2007-01-01.
+
+        В кавычках TypeDB отвергает значение целиком ([DVL15]: expects 'date',
+        received 'string') — и валится вся транзакция чанка, а не одно поле.
+        """
+        v = str(value or "").strip()[:10]
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            has.append(f"has {attr} {v}")
+
     if etype == "regulator":
-        add("name", attrs.get("name"), 300)
-        add("short_name", attrs.get("short_name"), 120)
+        from src.indexing import issuers
+
+        # Название и сокращение — канонические (по коду органа), чтобы у одной сущности
+        # не было двух разных написаний из разных чанков.
+        _code, _name, _short = issuers.canonical(str(attrs.get("name") or ""),
+                                                str(attrs.get("short_name") or ""))
+        add("name", _name or attrs.get("name"), 300)
+        add("short_name", _short or attrs.get("short_name"), 120)
     elif etype in ("regulatory_document", "company_document"):
         add("title", attrs.get("title"), 600)
         add("doc_type", attrs.get("type") or attrs.get("doc_type"), 80)
@@ -332,8 +355,8 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
         add("version_status", attrs.get("version_status") or "current", 40)
         add("version_hash", attrs.get("version_hash"), 80)
         add("kag_document_id", attrs.get("kag_document_id"), 120)
-        add("effective_from", attrs.get("effective_from"), 40)
-        add("effective_to", attrs.get("effective_to"), 40)
+        add_date("effective_from", attrs.get("effective_from"))
+        add_date("effective_to", attrs.get("effective_to"))
     elif etype == "structural_element":
         add("struct_index", attrs.get("index") or attrs.get("struct_index"), 120)
         add("text_content", attrs.get("text_content"), 3000)
@@ -350,7 +373,7 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
     elif etype == "evidence":
         add("name", attrs.get("name"), 300)
         add("evidence_kind", attrs.get("evidence_kind"), 80)
-        add("evidence_date", attrs.get("evidence_date"), 40)
+        add_date("evidence_date", attrs.get("evidence_date"))
     elif etype == "cii_object":
         add("name", attrs.get("name"), 300)
         add("system_type", attrs.get("system_type"), 120)
@@ -370,7 +393,7 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
     elif etype == "certificate":
         add("cert_number", attrs.get("cert_number"), 120)
         add("cert_authority", attrs.get("cert_authority"), 200)
-        add("cert_until", attrs.get("cert_until"), 40)
+        add_date("cert_until", attrs.get("cert_until"))
     elif etype == "threat_source":
         add("offender_class", attrs.get("offender_class"), 200)
         add("potential", attrs.get("potential"), 80)
@@ -409,7 +432,7 @@ def _inject_doc_context(payload: Dict[str, Any], doc_ctx: Dict[str, str] | None)
 
     Модель не видит граф и не может знать, что документ уже создан другим чанком.
     Поэтому document_key/version_string/kag_document_id берутся из метаданных, а не из ответа
-    модели: тогда все чанки одного файла сходятся в один акт и одну редакцию.
+    модели: тогда все чанки одного файла сходятся в один документ и одну редакцию.
     """
     if not doc_ctx:
         return
@@ -423,7 +446,10 @@ def _inject_doc_context(payload: Dict[str, Any], doc_ctx: Dict[str, str] | None)
                 attrs["document_key"] = doc_ctx["document_key"]
             if doc_ctx.get("title") and not attrs.get("title"):
                 attrs["title"] = doc_ctx["title"]
-            if doc_ctx.get("doc_type") and not attrs.get("doc_type") and not attrs.get("type"):
+            # Вид — из контекста всегда, а не «если модель не заполнила»: контекст собран
+            # из метаданных загрузки кодом словаря (src/indexing/doc_context.py), слово
+            # модели («гост», «рекомендации») его перекрывать не должно.
+            if doc_ctx.get("doc_type"):
                 attrs["doc_type"] = doc_ctx["doc_type"]
             if doc_ctx.get("number") and not attrs.get("number"):
                 attrs["number"] = doc_ctx["number"]
@@ -432,6 +458,12 @@ def _inject_doc_context(payload: Dict[str, Any], doc_ctx: Dict[str, str] | None)
                 attrs["version_string"] = doc_ctx["version_string"]
             if doc_ctx.get("kag_document_id"):
                 attrs["kag_document_id"] = doc_ctx["kag_document_id"]
+            # Статус редакции и дата действия — из метаданных загрузки: модель их не знает,
+            # а без них версия не отличает действующую редакцию от заменённой.
+            if doc_ctx.get("version_status"):
+                attrs["version_status"] = doc_ctx["version_status"]
+            if doc_ctx.get("effective_from"):
+                attrs["effective_from"] = doc_ctx["effective_from"]
 
 
 def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, int]]:
@@ -632,7 +664,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
 
     # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой.
     # Существующие связи читаем заранее: без этого повторная обработка плодит дубли
-    # (на ГОСТ 57580.2 вышло 48 document_has_version при одном акте и одной версии).
+    # (на ГОСТ 57580.2 вышло 48 document_has_version при одном документе и одной версии).
     existing_sigs: Set[str] = set()
     try:
         for rtype, roles in RELATION_ROLES.items():
@@ -705,7 +737,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
     problems: List[Dict[str, Any]] = []
     last_error = ""
     # Чанки документа обрабатываются параллельно (semaphore 3) и могут одновременно
-    # вставить один и тот же акт: второй получает конфликт @unique по document_key.
+    # вставить один и тот же документ: второй получает конфликт @unique по document_key.
     # Это не ошибка данных, а гонка — поэтому повторяем с перечитыванием существующих ключей.
     for attempt in range(3):
         drv = _driver()
@@ -744,7 +776,8 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                     entity_keys_now.add(key)
                 rel_queries, skipped_rel = build_relations()
                 continue
-            logger.error("typedb_writer: транзакция документа не выполнена: %s", last_error[:300])
+            logger.error("typedb_writer: транзакция документа не выполнена (%s): %s",
+                         type(exc).__name__, repr(exc)[:400])
             return {"entities": 0, "relations": 0, "entities_existing": 0,
                     "relations_existing": 0, "dropped": dropped,
                     "error": last_error.splitlines()[0][:200]}
@@ -929,7 +962,7 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
 
     doc_ctx (document_key, version_string, kag_document_id, title, doc_type) подставляется
     буквально: без него модель на каждом чанке придумывает новый document_key и создаёт
-    ещё один «документ» — на ГОСТ 57580.2 так появилось 5 актов и 2 версии из одного файла.
+    ещё один «документ» — на ГОСТ 57580.2 так появилось 5 документов и 2 версии из одного файла.
     """
     try:
         from src.api.services.ontology_prompts import prompt_store
@@ -1003,6 +1036,17 @@ async def extract_and_store_typedb(
         written = await asyncio.to_thread(write_facts, chunk_id, entities, relations, clause)
     except Exception as exc:  # noqa: BLE001
         logger.warning("typedb_writer: запись не удалась для %s: %s", chunk_id, exc)
+        # В журнал онтологии, а не в общий: это отказ записи фактов в TypeDB.
+        from src.api.services.ontology_errors import log_error
+
+        log_error(
+            f"запись фактов не удалась: {str(exc)[:400]}",
+            error_type="insert_failed",
+            source="writer",
+            document_id=document_id,
+            details={"chunk_id": chunk_id, "entities": len(entities),
+                     "relations": len(relations), "typedb_error": str(exc)[:1200]},
+        )
         return {"status": "error", "error": str(exc)[:200], "stats": stats}
 
     logger.info(

@@ -3,7 +3,7 @@
 """
 
 from fastapi import APIRouter
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.models import HealthCheck
 from src.config import get_settings
@@ -23,6 +23,6 @@ async def health_check():
     
     return HealthCheck(
         status="ok",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         version="0.1.0"
     )
