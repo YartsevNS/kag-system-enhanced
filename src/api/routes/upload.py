@@ -537,6 +537,7 @@ async def upload_document(
     # организации) или "regulator" (нормативка). В онтологии это разные типы —
     # company_document и regulatory_document. Парсер web monitor передаёт "regulator"
     # напрямую в сервис, минуя эту форму.
+    doc_title: str = Form(""),
     source_kind: str = Form(""),
     # Кто издатель документа и что это за вид — уточняют тип объекта в онтологии.
     # Регулятор: ФСТЭК России, Росстандарт, Банк России… Тип: ГОСТ, стандарт, приказ.
@@ -678,6 +679,7 @@ async def upload_document(
                     "source_url": source_url,
                     "source_kind": source_kind,
                     "issuer": issuer,
+                    "doc_title": (doc_title or "").strip()[:300],
                     "doc_kind": doc_kind,
                     "number": (number or "").strip()[:80],
                     "version_string": version_string,
@@ -1607,6 +1609,15 @@ async def reindex_document(
     # /{id}/process, её может запускать владелец или админ (раньше — любой
     # авторизованный, то есть чужой документ можно было переиндексировать).
     ensure_owner_or_admin(document_id, current_user)
+
+    # Переиндексация должна пройти чанки заново: сбрасываем отметки прогресса,
+    # иначе докачка посчитает их уже сделанными и LLM не будет вызван.
+    try:
+        from src.indexing import chunk_progress
+
+        chunk_progress.clear(document_id)
+    except Exception:  # noqa: BLE001
+        pass
 
     # False = задача для документа уже стоит (QueueGuard). Отвечаем честно,
     # а не «ok», как раньше с task_id="duplicate_skipped".

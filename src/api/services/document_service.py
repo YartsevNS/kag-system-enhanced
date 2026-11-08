@@ -2001,7 +2001,9 @@ class DocumentService:
                     source_metadata = json.loads(_raw) if isinstance(_raw, str) and _raw else (
                         _raw if isinstance(_raw, dict) else {})
                 if not title:
-                    title = _row.get("recognized_title") or _row.get("filename") or filename or ""
+                    _sm = source_metadata if isinstance(source_metadata, dict) else {}
+                    title = (_row.get("recognized_title") or _sm.get("doc_title")
+                             or _row.get("filename") or filename or "")
                 if not source_kind:
                     source_kind = _row.get("source_kind") or ""
             except Exception as exc:  # noqa: BLE001
@@ -2037,10 +2039,25 @@ class DocumentService:
         t0 = _time.monotonic()
         sem = asyncio.Semaphore(3)
 
+        # Докачка после сбоя: чанки, уже записанные в онтологию, повторно в LLM не уходят.
+        _done_ids: set = set()
+        try:
+            from src.indexing import chunk_progress
+
+            _done_ids = chunk_progress.done_chunks(document_id)
+            if _done_ids:
+                logger.info(f"[typedb] документ {document_id}: докачка, уже записано "
+                            f"{len(_done_ids)} чанков — они будут пропущены")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[typedb] прогресс чанков недоступен: {str(exc)[:120]}")
+
         async def _one(chunk: dict, i: int):
             chunk_id = chunk.get("chunk_id") or f"{document_id}_chunk_{i}"
             text = chunk.get("content") or ""
             clause = (chunk.get("metadata") or {}).get("clause") or ""
+            if chunk_id in _done_ids:
+                total["ok"] += 1          # уже в онтологии, LLM не вызываем
+                return
             async with sem:
                 try:
                     res = await asyncio.wait_for(
@@ -2058,6 +2075,12 @@ class DocumentService:
                 if st == "ok":
                     w = res.get("written") or {}
                     total["ok"] += 1
+                    try:
+                        from src.indexing import chunk_progress as _cp
+
+                        _cp.mark_done(document_id, chunk_id)
+                    except Exception:  # noqa: BLE001
+                        pass
                     total["entities"] += int(w.get("entities") or 0)
                     total["relations"] += int(w.get("relations") or 0)
                 elif st == "empty":

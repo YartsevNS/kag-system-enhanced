@@ -31,6 +31,28 @@ from typing import Any, Dict, Iterable, List, Set
 
 logger = logging.getLogger(__name__)
 
+# Замок на запись по документу: чанки одного документа обрабатываются параллельно
+# (semaphore 3), и без сериализации два потока успевали вставить одну и ту же связь —
+# отсюда дубли вида current_version_of 16 при 12 версиях. Один замок на document_id
+# делает запись последовательной, не замедляя извлечение LLM (оно идёт параллельно).
+_WRITE_LOCKS: Dict[str, "threading.Lock"] = {}
+_WRITE_LOCKS_GUARD = None
+
+
+def _doc_lock(doc_id: str):
+    """Вернуть (создать) замок записи для документа."""
+    global _WRITE_LOCKS_GUARD
+    import threading
+
+    if _WRITE_LOCKS_GUARD is None:
+        _WRITE_LOCKS_GUARD = threading.Lock()
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(doc_id)
+        if lock is None:
+            lock = threading.Lock()
+            _WRITE_LOCKS[doc_id] = lock
+        return lock
+
 # ── зависимость TypeDB ────────────────────────────────────────────────────────
 try:
     from typedb.driver import (  # noqa: F401
@@ -201,8 +223,14 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
         # повторная обработка того же файла создала бы вторую редакцию
         base = f"{attrs.get('kag_document_id') or doc}|{attrs.get('version_string') or ''}"
     elif etype == "structural_element":
-        base = f"{doc}|{attrs.get('struct_index') or attrs.get('index') or ''}|" \
-               f"{str(attrs.get('text_content') or '')[:200]}"
+        # Ключ по номеру пункта, а НЕ по тексту: модель переформулирует текст между
+        # прогонами, и элемент с тем же пунктом получал новый ключ — при переиндексации
+        # граф рос (1292 вместо 1284). Текст участвует только если пункта нет.
+        idx = str(attrs.get("struct_index") or attrs.get("index") or "").strip()
+        if idx:
+            base = f"{doc}|{idx}"
+        else:
+            base = f"{doc}|text:{str(attrs.get('text_content') or '')[:200]}"
     elif etype == "security_requirement":
         base = str(attrs.get("requirement_key") or attrs.get("requirement-id") or "")
     elif etype == "security_measure":
@@ -555,6 +583,16 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
     """
     if not entities and not relations:
         return {"entities": 0, "relations": 0, "entities_existing": 0, "relations_existing": 0}
+
+    doc_lock_id = str(chunk_id).split("_chunk_")[0] if chunk_id else ""
+    _lock = _doc_lock(doc_lock_id)
+    with _lock:
+        return _write_facts_locked(chunk_id, entities, relations, clause)
+
+
+def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
+                        clause: str = "") -> Dict[str, Any]:
+    """Тело write_facts под замком документа (см. _doc_lock)."""
 
     doc_id = str(chunk_id).split("_chunk_")[0] if chunk_id else ""
     entities, dropped, reasons = ensure_required(entities, doc_id=doc_id)
