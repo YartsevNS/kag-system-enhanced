@@ -168,9 +168,10 @@ fun missing_version_status() -> { document_version }:
       not { $v has version_status $s; };
     return { $v };
 
-# Расхождение двух источников правды: version_status="current" обязан совпадать
-# с current_version_of. Если статус current, а связи нет (или наоборот) — это ошибка.
-fun status_vs_current_mismatch() -> { document_version }:
+# Статус current без связи current_version_of — это НЕПОЛНОТА записи, а не нарушение:
+# связь может появиться следующим шагом пайплайна. Функция аудиторская, insert по ней
+# не блокируется.
+fun current_status_without_link() -> { document_version }:
     match
       $v isa document_version, has version_status "current";
       not { current_version_of(version: $v, document: $d); };
@@ -191,3 +192,12 @@ fun invalid_date_range() -> { document_version }:
       $v isa document_version, has effective_from $f, has effective_to $t;
       $t < $f;
     return { $v };
+
+# Категория объекта КИИ по 187-ФЗ: только 1, 2 или 3.
+fun invalid_cii_category() -> { cii_object }:
+    match
+      $o isa cii_object, has cii-category $c;
+      not { $c == 1; };
+      not { $c == 2; };
+      not { $c == 3; };
+    return { $o };

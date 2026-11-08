@@ -138,7 +138,7 @@ entity certificate sub sourced_entity,
   owns cert_authority,
   owns cert_until;
 entity threat_source sub sourced_entity,
-  owns offender_class @card(1..1),
+  owns offender_class,
   owns potential;
 
 # ---- связи: документы и версии --------------------------------------
