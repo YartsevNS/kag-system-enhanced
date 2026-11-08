@@ -17,9 +17,10 @@
 """
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -78,13 +79,26 @@ async def ontology_status(_: User = Depends(get_current_admin)):
 
 
 @router.get("/schema", summary="Прочитать схему онтологии")
-async def ontology_schema(_: User = Depends(get_current_admin)):
+async def ontology_schema(response: Response, _: User = Depends(get_current_admin)):
+    """Живое чтение схемы из TypeDB.
+
+    Ответ не кешируется: страница должна показывать состояние базы, а не снимок
+    на момент открытия. Рядом с типами отдаётся `fingerprint` — по нему UI отличает
+    «ничего не менялось» от «базу изменили снаружи», и `read_at` — время чтения.
+    """
     try:
-        return await asyncio.to_thread(ontology_service.get_schema)
+        schema = await asyncio.to_thread(ontology_service.get_schema)
     except OntologyUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — наверх уходит одна строка
         raise HTTPException(status_code=502, detail=f"TypeDB: {str(exc).splitlines()[-1][:300]}")
+
+    schema["fingerprint"] = ontology_service.fingerprint(schema)
+    schema["read_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Правки мимо UI (скрипты, миграции) попадают в журнал этим вызовом.
+    await asyncio.to_thread(ontology_versions.note_external_if_changed, schema)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return schema
 
 
 @router.post("/validate", summary="Проверить define без применения")

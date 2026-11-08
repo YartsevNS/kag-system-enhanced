@@ -212,6 +212,29 @@ class OntologyService:
 
     # ---- шаблон: структура -> TypeQL -----------------------------------
     @staticmethod
+    def fingerprint(schema: Dict[str, Any]) -> str:
+        """Отпечаток структуры схемы (16 hex).
+
+        Нужен, чтобы UI мог отличить «ничего не изменилось» от «база изменилась снаружи»
+        без повторной отрисовки графа и без сравнения всего JSON по строкам.
+        """
+        import hashlib
+        import json as _json
+
+        payload = {
+            "e": sorted((x["label"], tuple(sorted(x.get("owns") or [])),
+                         tuple(sorted(x.get("plays") or [])))
+                        for x in schema.get("entities", [])),
+            "r": sorted((x["label"], tuple(sorted(x.get("owns") or [])),
+                         tuple(sorted(x.get("roles") or [])))
+                        for x in schema.get("relations", [])),
+            "a": sorted((x["label"], (x.get("value") or "string"))
+                        for x in schema.get("attributes", [])),
+        }
+        blob = _json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
     def to_tql(snapshot: Dict[str, Any], comment: str = "") -> str:
         """Сгенерировать define-текст из структуры схемы (скачивание шаблона, экспорт).
 

@@ -321,4 +321,68 @@ class OntologyVersionService:
             db.close()
 
 
+    def note_external_if_changed(self, schema: Dict[str, Any], author: str = "вне TypeDB-UI") -> Optional[Dict[str, Any]]:
+        """Отметить в журнале правку схемы, сделанную МИМО интерфейса.
+
+        Зачем: схему меняют и скриптами (миграции, backfill). Без этой записи журнал
+        расходится с базой, и «страница показывает не то» — не баг отображения, а
+        отсутствие записи. Сравнение идёт по структуре, а не по тексту: форматирование
+        не считается изменением.
+        """
+        try:
+            cur = snapshot_of(schema)
+            fp = ontology_service.fingerprint(schema)
+            Session = get_session_local()
+            db = Session()
+            try:
+                last = (db.query(OntologySchemaVersion)
+                        .order_by(OntologySchemaVersion.created_at.desc()).first())
+                if last is None:
+                    rec = OntologySchemaVersion(
+                        id=uuid.uuid4().hex, author=author, action="snapshot",
+                        comment=f"исходное состояние, fp={fp}", define_text="",
+                        snapshot_json=json.dumps(cur, ensure_ascii=False),
+                        ntypes=cur.get("ntypes", 0), ok=True,
+                    )
+                    db.add(rec)
+                    db.commit()
+                    return rec.to_dict()
+                try:
+                    prev = json.loads(last.snapshot_json or "{}")
+                except ValueError:
+                    prev = {}
+                if prev == cur:
+                    return None
+                plan = diff_snapshots(prev, cur)
+                added = [x["label"] for x in plan.get("add") or []]
+                dropped = [x["label"] for x in plan.get("drop") or []]
+                retyped = [f"{x['type']} +{x['attr']}" for x in plan.get("add_owns") or []]
+                roles = [f"{x['type']} +{x['role']}" for x in plan.get("add_plays") or []]
+                parts = []
+                if added:
+                    parts.append("добавлено: " + ", ".join(added))
+                if dropped:
+                    parts.append("удалено: " + ", ".join(dropped))
+                if retyped:
+                    parts.append("новые owns: " + ", ".join(retyped))
+                if roles:
+                    parts.append("новые plays: " + ", ".join(roles))
+                rec = OntologySchemaVersion(
+                    id=uuid.uuid4().hex, author=author, action="external",
+                    comment=("схема изменена вне UI; " + "; ".join(parts))[:900] + f" [fp={fp}]",
+                    define_text=ontology_service.to_tql(cur),
+                    snapshot_json=json.dumps(cur, ensure_ascii=False),
+                    ntypes=cur.get("ntypes", 0), ok=True,
+                )
+                db.add(rec)
+                db.commit()
+                logger.info("онтология: зафиксировано внешнее изменение схемы %s", fp)
+                return rec.to_dict()
+            finally:
+                db.close()
+        except Exception as exc:  # noqa: BLE001 — журнал не должен ломать чтение схемы
+            logger.warning("онтология: не удалось записать внешнее изменение: %s", str(exc)[:200])
+            return None
+
+
 ontology_versions = OntologyVersionService()

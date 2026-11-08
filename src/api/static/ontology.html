@@ -66,6 +66,9 @@ button.btn[disabled]{opacity:.45;cursor:default}
   <span class="kv"><span class="dot" id="st-dot"></span><b id="st-text">проверяю подключение…</b></span>
   <span class="kv">база: <b id="st-db">—</b></span>
   <span class="kv">типов: <b id="st-count">—</b></span>
+  <span class="kv">прочитано: <b id="st-read">—</b></span>
+  <span class="kv">отпечаток: <b id="st-fp">—</b></span>
+  <button class="btn" onclick="reload()" title="Перечитать схему из TypeDB">Обновить схему</button>
   <span class="grow"></span>
   <button class="btn" id="btn-undo" onclick="undoLast()" title="Вернуть схему к предыдущей версии из журнала">Отменить</button>
   <button class="btn" id="btn-redo" onclick="redoNext()" title="Вернуть отменённое изменение">Повторить</button>
@@ -215,6 +218,8 @@ button.btn[disabled]{opacity:.45;cursor:default}
 <script src="/static/vendor/cytoscape.min.js"></script>
 <script>
 let cy = null, schema = null, selected = null;
+let lastFingerprint = '';
+let watchTimer = null;
 let position = '';   // где пользователь стоит в журнале версий (id текущей версии)
 let redoTarget = ''; // состояние, от которого отменили — цель для «Повторить»
 const $ = id => document.getElementById(id);
@@ -283,11 +288,41 @@ async function reload() {
     $('st-dot').className = 'dot ok';
     $('st-text').textContent = 'TypeDB подключён';
     $('st-db').textContent = schema.source || '—';
+    lastFingerprint = schema.fingerprint || '';
+    $('st-fp').textContent = lastFingerprint || '—';
+    $('st-read').textContent = (schema.read_at || '').replace('T', ' ').slice(11, 19) || '—';
     renderGraph(); renderList();
     say('');
   } catch (e) {
     say('Схема не прочитана: ' + e.message, false);
   }
+}
+
+// Страница обязана показывать то, что в базе. Схему меняют и скриптами, поэтому
+// раз в 15 секунд (и при возврате на вкладку) перечитываем отпечаток: совпал —
+// ничего не перерисовываем, не совпал — перерисовываем и говорим об этом.
+async function watchSchema() {
+  if (document.hidden) return;
+  try {
+    const fresh = await api('/api/v1/ontology/schema');
+    const fp = fresh.fingerprint || '';
+    $('st-read').textContent = (fresh.read_at || '').replace('T', ' ').slice(11, 19) || '—';
+    if (!lastFingerprint) { lastFingerprint = fp; $('st-fp').textContent = fp || '—'; return; }
+    if (fp && fp !== lastFingerprint) {
+      schema = fresh;
+      lastFingerprint = fp;
+      $('st-fp').textContent = fp;
+      $('st-count').textContent = fresh.ntypes || 0;
+      renderGraph(); renderList(); loadVersions();
+      say('Схема в базе изменилась — страница обновлена', true);
+    }
+  } catch (e) { /* тихо: сеть моргнула — не мешаем работе */ }
+}
+
+function startWatch() {
+  if (watchTimer) clearInterval(watchTimer);
+  watchTimer = setInterval(watchSchema, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) watchSchema(); });
 }
 
 function renderGraph() {
@@ -453,7 +488,7 @@ async function loadVersions() {
       const div = document.createElement('div');
       div.className = 'ver' + (v.ok ? '' : ' failed');
       const when = (v.created_at || '').replace('T', ' ').slice(0, 16);
-      const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон' }[v.action] || v.action;
+      const action = { apply: 'правка', create: 'создание', delete: 'удаление', restore: 'откат', template: 'шаблон', external: 'изменено вне UI', snapshot: 'исходное состояние' }[v.action] || v.action;
       const label = v.comment || '';
       const head = esc(action) + (v.ok ? '' : ' — не удалось') + (label ? ': ' + esc(label) : '');
       div.innerHTML =
@@ -582,6 +617,7 @@ function logout() {
     await loadVersions();
     const last = await api('/api/v1/ontology/versions?limit=1').catch(() => null);
     position = (last && last.versions && last.versions[0]) ? last.versions[0].id : '';
+    startWatch();
   }
 })();
 </script>
