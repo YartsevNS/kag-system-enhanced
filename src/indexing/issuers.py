@@ -108,3 +108,22 @@ def canonical(name: str = "", short_name: str = "") -> Tuple[str, str, str]:
         return code, cname, cshort
     base = normalize(short_name) or normalize(name)
     return base, (name or short_name or "").strip(), (short_name or "").strip()
+
+def detect_in_text(text: str) -> Optional[Tuple[str, str, str]]:
+    """Найти орган в произвольном тексте (шапка документа, подпись, ссылка).
+
+    Проверяем алиасы от длинных к коротким: «федеральное агентство по техническому
+    регулированию и метрологии» должно сработать раньше, чем «р».
+    Возвращает (код, name, short_name) или None.
+    """
+    hay = normalize(text)
+    if not hay:
+        return None
+    for alias in sorted(_ALIASES, key=len, reverse=True):
+        if len(alias) < 3:
+            continue
+        if alias in hay:
+            code = _ALIASES[alias]
+            name, short = ISSUERS.get(code, (alias, alias))
+            return code, name, short
+    return None

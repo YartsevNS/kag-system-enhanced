@@ -155,14 +155,11 @@ def parse_document_meta(
     elif "digital.gov.ru" in url:
         issuer = "Минцифры России"
     if not issuer:
-        # Ищем известные органы прямо в шапке (полное и краткое название)
-        for code_word, (_name, _short) in issuers.ISSUERS.items():
-            for probe in (_name, _short):
-                if probe and probe.lower() in first.lower():
-                    issuer = _name
-                    break
-            if issuer:
-                break
+        # Ищем орган прямо в шапке по всем его названиям (полное, краткое, историческое):
+        # «Федеральное агентство по техническому регулированию и метрологии» = Росстандарт.
+        found = issuers.detect_in_text(first)
+        if found:
+            issuer = found[1]
     if issuer:
         out["issuer"] = issuer
     elif (source_kind or "").lower() == "regulator":
