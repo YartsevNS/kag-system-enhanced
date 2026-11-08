@@ -52,20 +52,43 @@ def is_available() -> bool:
     return bool(_IMPORTED and c.get("pass"))
 
 
+def _number_from_title(title: str) -> str:
+    """Номер акта из названия: «от 10.07.2002 N 86-ФЗ», «№ 235», «ГОСТ ISO/IEC 27014-2021».
+
+    Зачем: при загрузке номер часто не заполняют, и ключом становилось всё название.
+    Две формулировки одного и того же закона («N 86-ФЗ» и «86-ФЗ») давали два разных
+    ключа — в онтологии появлялись два акта на один документ.
+    """
+    t = title or ""
+    for pattern in (
+        # «от 10.07.2002 N 86-ФЗ», «от 10.07.2002 86-ФЗ» — знак номера необязателен
+        r"от\s*\d{2}\.\d{2}\.\d{4}\s*(?:№|N|No\.?)?\s*([0-9][0-9А-ЯЁA-Za-z\-/]*)",
+        r"(?:№|N|No\.?)\s*([0-9][0-9А-ЯЁA-Za-z\-/]*)",
+        r"(ГОСТ(?:\s+Р)?\s*(?:ISO/IEC)?\s*[0-9][0-9.\-]*)",
+    ):
+        m = re.search(pattern, t, re.I)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def normalize_document_key(issuer: str, doc_kind: str, number: str, title: str) -> str:
     """Стабильный ключ акта: издатель + тип + номер (или название, если номера нет).
 
-    Нормализация убирает регистр, знаки «№», кавычки и лишние пробелы, поэтому
+    Нормализация убирает регистр, знаки «№», кавычки, даты и лишние пробелы, поэтому
     «Приказ ФСТЭК № 239» и «приказ фстэк 239» дают один ключ. Год сюда НЕ входит:
     редакции одного акта должны сойтись на одном ключе.
     """
-    parts = [issuer or "", doc_kind or "", number or title or ""]
+    num = (number or "").strip() or _number_from_title(title)
+    parts = [issuer or "", doc_kind or "", num or title or ""]
     raw = "|".join(p.strip().lower() for p in parts if p and p.strip())
     raw = re.sub(r"[№\"«»'`.,;:()\[\]]", " ", raw)
+    # «от 10.07.2002», «N», «No.» — служебные слова, которые меняют ключ без причины
+    raw = re.sub(r"от\s*\d{2}\.\d{2}\.\d{4}", " ", raw)
+    raw = re.sub(r"(?:no\.?|n)", " ", raw)
     raw = re.sub(r"\s+", " ", raw)
     raw = re.sub(r"\s*\|\s*", "|", raw)
-    raw = raw.strip(" |")
-    return raw[:200]
+    return raw.strip(" |")[:200]
 
 
 def _q(value: str) -> str:

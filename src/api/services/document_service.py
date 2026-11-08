@@ -2017,6 +2017,10 @@ class DocumentService:
             _meta = _row or {}
         except Exception:  # noqa: BLE001
             _meta = {}
+        _sm_title = ((source_metadata or {}).get("doc_title")
+                     if isinstance(source_metadata, dict) else "") or ""
+        if _sm_title and not title:
+            title = _sm_title
         _doc_ctx: dict = {}
         try:
             from src.indexing.typedb_versions import normalize_document_key

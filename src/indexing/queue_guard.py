@@ -89,10 +89,30 @@ def enqueue_document(document_id: str, force: bool = False) -> bool:
     # в очереди или она выполняется. Дубль не создаём.
     locked = r.set(key, "1", nx=True, ex=LOCK_TTL_SECONDS)
     if not locked:
-        logger.debug(
-            f"[QueueGuard] {document_id}: задача уже в очереди/исполнении — пропуск"
-        )
-        return False
+        # Замок мог остаться от прерванной обработки: воркер перезапустили, задачу
+        # убили, а TTL 6 часов — документ всё это время нельзя поставить заново
+        # (наблюдалось: замок висел 5.7 ч при статусе completed).
+        # Осиротевшим считаем замок, если в БД документ НЕ processing.
+        orphan = False
+        try:
+            from src.api.services.document_repository import get_doc_repo
+
+            doc = get_doc_repo().get_dict(document_id)
+            status = doc.get("status") if isinstance(doc, dict) else None
+            orphan = status != "processing"
+        except Exception:  # noqa: BLE001
+            orphan = False
+        if orphan:
+            r.delete(key)
+            locked = r.set(key, "1", nx=True, ex=LOCK_TTL_SECONDS)
+            if locked:
+                logger.info(f"[QueueGuard] {document_id}: снят осиротевший замок "
+                            f"(статус не processing)")
+        if not locked:
+            logger.debug(
+                f"[QueueGuard] {document_id}: задача уже в очереди/исполнении — пропуск"
+            )
+            return False
 
     # ── Уровень 2: проверка статуса в БД ─────────────────────────────────
     # completed без force не переставляем (защита от дублей reindex/recovery).
