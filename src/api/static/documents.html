@@ -229,7 +229,7 @@ img, svg, video, canvas, iframe { max-width: 100%; }
   </div>
 </details>
   <div id="upload-source-hint" style="font-size:11px;color:var(--text4);margin-top:6px">
-    Вид, номер, издатель и дата вступления в силу определяются по шапке документа автоматически. Если что-то не распозналось — документ загрузится с видом «иное» и меткой «требует проверки», а исправить контекст можно на странице «Ошибки онтологии».
+    Достаточно выбрать файл и источник. Вид, номер, издатель и дата вступления в силу определяются по шапке документа автоматически. Если что-то не распозналось — документ загрузится с видом «иное» и меткой «требует проверки», а исправить контекст можно на странице «Ошибки онтологии».
   </div>
 </div>
 
@@ -423,26 +423,14 @@ async function uploadFiles(files) {
   // Ручные значения используются, только если человек раскрыл «Уточнить вручную».
   if (_kindEl) _kindEl.style.borderColor = '';
   if (_groupEl) _groupEl.style.borderColor = '';
-  if (srcKind === 'regulator' && !issuerVal) {
-    toast('Укажите регулятора (ФСТЭК России, Росстандарт, Банк России…)', true);
-    if (_issuerEl) { _issuerEl.focus(); _issuerEl.style.borderColor = 'var(--red)'; }
-    return;
-  }
-  if (_issuerEl) _issuerEl.style.borderColor = '';
+  // Издатель, редакция и дата — не спрашиваем: их определяет парсер шапки документа.
+  // Ручной ввод используется, только если человек сам раскрыл «Уточнить вручную».
   const _verEl = document.getElementById('upload-version');
   const _effEl = document.getElementById('upload-effective-from');
   const _supEl = document.getElementById('upload-supersedes');
   const verVal = _verEl ? _verEl.value.trim() : '';
   const effVal = _effEl ? _effEl.value.trim() : '';
   const supVal = _supEl ? _supEl.value.trim() : '';
-  if (srcKind === 'regulator' && (!verVal || !effVal)) {
-    toast('Для регулятора укажите редакцию и дату вступления в силу', true);
-    if (!verVal && _verEl) { _verEl.focus(); _verEl.style.borderColor = 'var(--red)'; }
-    else if (_effEl) { _effEl.focus(); _effEl.style.borderColor = 'var(--red)'; }
-    return;
-  }
-  if (_verEl) _verEl.style.borderColor = '';
-  if (_effEl) _effEl.style.borderColor = '';
   const pn = document.getElementById('prog-file');
   if (pn) pn.textContent = '… Загрузка...';
 

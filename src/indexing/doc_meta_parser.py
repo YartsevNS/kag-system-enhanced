@@ -105,7 +105,11 @@ def parse_document_meta(
       title         — название документа
       missing       — список полей, которые определить не удалось
     """
-    head = _text_head(content, filename)
+    # Шапка (вид, номер, издатель, название) — с первых ДВУХ страниц: этого достаточно,
+    # и не тянем весь документ. Дата вступления в силу часто стоит дальше (в рекомендациях
+    # встречается на 5-й странице), поэтому её ищем отдельным проходом по первым восьми.
+    head = _text_head(content, filename, pages=2)
+    tail = _text_head(content, filename, pages=8)
     first = "\n".join(l.strip() for l in head.splitlines() if l.strip())[:4000]
     out: Dict[str, Any] = {"missing": []}
 
@@ -165,19 +169,19 @@ def parse_document_meta(
         out["missing"].append("issuer")
 
     # 3. Дата вступления в силу
-    mm = _EFFECTIVE_YMD.search(head)
+    mm = _EFFECTIVE_YMD.search(tail)
     if mm:
         y, mth, d = mm.groups()
         out["effective_from"] = f"{y}-{int(mth):02d}-{int(d):02d}"
     else:
-        mm = _EFFECTIVE.search(head)
+        mm = _EFFECTIVE.search(tail)
         if mm:
             a, b, y = mm.groups()
             # порядок бывает разный: «01.02.2025» (день-месяц) — приводим к ISO
             d, mth = (a, b) if int(a) <= 31 and int(b) <= 31 else (b, a)
             out["effective_from"] = f"{y}-{int(mth):02d}-{int(d):02d}"
         else:
-            iso = _iso(head)
+            iso = _iso(tail)
             if iso:
                 out["effective_from"] = iso
             else:
