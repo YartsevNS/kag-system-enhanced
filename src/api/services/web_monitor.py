@@ -1278,8 +1278,9 @@ class WebMonitorService:
                             source_kind='regulator',
                         )
                         # Запускаем обработку
-                        from src.api.routes.upload import _process_document_async
-                        await _process_document_async(record.document_id)
+                        from src.indexing.queue_guard import enqueue_document
+
+                        enqueue_document(record.document_id, force=False)
                         result.new_items = 1
                         result.items = [{'url': source.url, 'title': filename, 'source': source.name}]
                     except Exception as e:
@@ -1518,8 +1519,12 @@ class WebMonitorService:
                                                  'source_name': source.name, 'source_url': source.url},
                                 source_kind='regulator',
                             )
-                            from src.api.routes.upload import _process_document_async
-                            await _process_document_async(record.document_id)
+                            # Постановка в очередь: раньше звали _process_document_async
+                            # из routes/upload, функции там больше нет — элемент скачивался,
+                            # но не обрабатывался (документ висел в pending).
+                            from src.indexing.queue_guard import enqueue_document
+
+                            enqueue_document(record.document_id, force=False)
                             new_count += 1
                             if news_key:
                                 self._news_keys.add(news_key)
@@ -1607,8 +1612,12 @@ class WebMonitorService:
                                                  "source_name": source.name, "source_url": source.url},
                                 source_kind='regulator',
                             )
-                            from src.api.routes.upload import _process_document_async
-                            await _process_document_async(record.document_id)
+                            # Постановка в очередь: раньше звали _process_document_async
+                            # из routes/upload, функции там больше нет — элемент скачивался,
+                            # но не обрабатывался (документ висел в pending).
+                            from src.indexing.queue_guard import enqueue_document
+
+                            enqueue_document(record.document_id, force=False)
                             new_count += 1
                             self._seen_urls.add(url)
                             self._hash_cache[url] = {
@@ -1789,8 +1798,9 @@ class WebMonitorService:
                             source_kind='regulator',
                         )
                         # Запускаем фоновую обработку
-                        from src.api.routes.upload import _process_document_async
-                        await _process_document_async(record.document_id)
+                        from src.indexing.queue_guard import enqueue_document
+
+                        enqueue_document(record.document_id, force=False)
 
                         new_count += 1
                         self._seen_urls.add(url)
