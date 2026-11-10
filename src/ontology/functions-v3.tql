@@ -201,3 +201,15 @@ fun invalid_cii_category() -> { cii_object }:
       not { $c == 2; };
       not { $c == 3; };
     return { $o };
+
+fun invalid_measure_category() -> { security_measure }:
+    match
+      $m isa security_measure, has measure-category $c;
+      not { $c == "harden"; };
+      not { $c == "detect"; };
+      not { $c == "isolate"; };
+      not { $c == "deceive"; };
+      not { $c == "evict"; };
+      not { $c == "restore"; };
+    return { $m };
+

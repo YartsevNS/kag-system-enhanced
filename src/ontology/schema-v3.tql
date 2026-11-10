@@ -59,6 +59,7 @@ attribute requirement_kind, value string;
 attribute obligation-level, value string;
 
 # ---- атрибуты: меры, объекты, ПО, угрозы ----------------------------
+attribute measure-category, value string;
 attribute code, value string;
 attribute cii-category, value integer;
 attribute system_type, value string;
@@ -114,7 +115,7 @@ entity security_requirement sub sourced_entity,
   owns requirement_kind @card(1..1),
   owns description,
   owns obligation-level;
-entity security_measure sub sourced_entity,
+entity security_measure sub sourced_entity, owns measure-category,
   owns measure_key @key,
   owns code,
   owns description;
