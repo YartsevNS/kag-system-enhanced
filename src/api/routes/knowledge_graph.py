@@ -719,3 +719,114 @@ async def type_watchdog_status(current_user: Optional[User] = Depends(get_curren
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/ontology-graph", summary="Граф онтологии из TypeDB (документы, пункты, требования, меры)")
+async def ontology_graph(limit: int = 400, _: Optional[User] = Depends(get_current_user_optional)):
+    """Подграф ИЗ TYPEDB, а не из Neo4j.
+
+    Зачем отдельный роут. В Neo4j живёт «граф упоминаний» (чанк ↔ сущность), а смысловые
+    связи (документ → редакция → пункт → требование → мера) есть только в TypeDB. Пока
+    /kg показывает лишь Neo4j, вторая половина картины не видна, и кажется, что связи
+    дублируются. Этот эндпоинт отдаёт онтологический слой в том же формате узлы/связи.
+    """
+    from src.indexing import typedb_facts
+
+    if not typedb_facts.is_available():
+        return {"ok": False, "error": "TypeDB не настроен", "nodes": [], "links": []}
+
+    cap = max(1, min(int(limit or 400), 2000))
+
+    def _read():
+        from typedb.driver import TransactionType
+
+        cfg = typedb_facts._cfg()
+        drv = typedb_facts._driver()
+        nodes, links, seen = [], [], set()
+
+        def add_node(key: str, label: str, kind: str) -> None:
+            if not key or key in seen:
+                return
+            seen.add(key)
+            nodes.append({"id": key, "label": label, "type": kind})
+
+        def val(row, name):
+            v = row.get(name)
+            return (v.get("@value") if isinstance(v, dict) else v) or ""
+
+        try:
+            with drv.transaction(cfg["db"], TransactionType.READ) as tx:
+                # документы и их редакции
+                for r in tx.query(
+                    "match $d isa document, has ent-key $k; "
+                    "fetch {\"k\": $k, \"title\": $d.title, \"key\": $d.document_key};"
+                ).resolve():
+                    add_node(val(r, "k"), val(r, "title") or val(r, "key"), "document")
+
+                for r in tx.query(
+                    "match $v isa document_version, has ent-key $k; "
+                    "fetch {\"k\": $k, \"ver\": $v.version_string};"
+                ).resolve():
+                    add_node(val(r, "k"), "ред. " + (val(r, "ver") or "—"), "document_version")
+
+                # структура: версия → пункт
+                for r in tx.query(
+                    "match $v isa document_version, has ent-key $kv; "
+                    "document_structure(version: $v, element: $e); "
+                    "$e has ent-key $ke; $e has struct_index $i; "
+                    "fetch {\"v\": $kv, \"e\": $ke, \"i\": $i};"
+                ).resolve():
+                    if len(nodes) >= cap:
+                        break
+                    add_node(val(r, "e"), "п. " + (val(r, "i") or ""), "structural_element")
+                    links.append({"source": val(r, "v"), "target": val(r, "e"),
+                                  "type": "document_structure", "label": "содержит пункт"})
+
+                # требование ← пункт, требование → мера
+                for r in tx.query(
+                    "match $e isa structural_element, has ent-key $ke; "
+                    "requirement_derived_from(clause: $e, requirement: $rq); "
+                    "$rq has ent-key $kr; $rq has requirement_key $rk; "
+                    "fetch {\"e\": $ke, \"r\": $kr, \"rk\": $rk};"
+                ).resolve():
+                    if len(nodes) >= cap:
+                        break
+                    add_node(val(r, "r"), val(r, "rk") or "требование", "security_requirement")
+                    links.append({"source": val(r, "e"), "target": val(r, "r"),
+                                  "type": "requirement_derived_from", "label": "порождает требование"})
+
+                for r in tx.query(
+                    "match $rq isa security_requirement, has ent-key $kr; "
+                    "requirement_definition(requirement: $rq, measure: $m); "
+                    "$m has ent-key $km; $m has measure_key $mk; "
+                    "fetch {\"r\": $kr, \"m\": $km, \"mk\": $mk};"
+                ).resolve():
+                    if len(nodes) >= cap:
+                        break
+                    add_node(val(r, "m"), val(r, "mk") or "мера", "security_measure")
+                    links.append({"source": val(r, "r"), "target": val(r, "m"),
+                                  "type": "requirement_definition", "label": "определяется мерой"})
+
+                # требования, не связанные через пункт (например, заведены из предложений)
+                for r in tx.query(
+                    "match $rq isa security_requirement, has ent-key $k, has requirement_key $rk; "
+                    "fetch {\"k\": $k, \"rk\": $rk};"
+                ).resolve():
+                    if len(nodes) >= cap:
+                        break
+                    add_node(val(r, "k"), val(r, "rk"), "security_requirement")
+        finally:
+            try:
+                drv.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return nodes, links
+
+    try:
+        nodes, links = await asyncio.to_thread(_read)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"ontology-graph: чтение TypeDB не удалось: {str(exc)[:160]}")
+        return {"ok": False, "error": str(exc)[:200], "nodes": [], "links": []}
+
+    return {"ok": True, "source": "typedb", "nodes": nodes, "links": links,
+            "counts": {"nodes": len(nodes), "links": len(links)}}
