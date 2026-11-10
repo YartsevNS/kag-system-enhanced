@@ -649,3 +649,47 @@ async def schema_gap_review(gap_id: str, req: GapReview, user: User = Depends(ge
     finally:
         db.close()
     return {"ok": bool(n), "changed": int(n or 0)}
+
+
+@router.delete("/errors/{error_id}", summary="Удалить запись журнала ошибок онтологии")
+async def ontology_error_delete(error_id: str, _: User = Depends(get_current_admin)):
+    """Убрать запись из таблицы журнала.
+
+    «Закрыть» и «удалить» — разные вещи: закрыть (PATCH /resolve) значит «разобрано,
+    больше не показывать в нерешённых», запись остаётся в истории; удалить — убрать
+    запись совсем. Файл журнала append-only: удаление из файла не делаем, он остаётся
+    архивом на случай падения.
+    """
+    from sqlalchemy import text
+
+    from src.database.session import get_session_local
+
+    db = get_session_local()()
+    try:
+        res = db.execute(text("delete from ontology_errors where id = cast(:id as uuid)"),
+                         {"id": error_id})
+        db.commit()
+        n = res.rowcount
+    finally:
+        db.close()
+    if not n:
+        raise HTTPException(status_code=404, detail="запись не найдена")
+    return {"ok": True, "deleted": int(n)}
+
+
+@router.delete("/errors", summary="Удалить решённые записи журнала (или все при resolved=false)")
+async def ontology_errors_purge(resolved: bool = True, _: User = Depends(get_current_admin)):
+    """Массовая уборка: по умолчанию удаляет только решённые записи."""
+    from sqlalchemy import text
+
+    from src.database.session import get_session_local
+
+    db = get_session_local()()
+    try:
+        res = db.execute(text("delete from ontology_errors where resolved = :r"),
+                         {"r": bool(resolved)})
+        db.commit()
+        n = res.rowcount
+    finally:
+        db.close()
+    return {"ok": True, "deleted": int(n or 0), "resolved": bool(resolved)}

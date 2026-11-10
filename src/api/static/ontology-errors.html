@@ -41,7 +41,9 @@
 <nav><div class="logo"><span>KAG</span> · ошибки</div><div data-site-nav></div></nav>
 <main>
   <h1>Ошибки онтологии</h1>
-  <div class="muted">Только онтология: применение схемы, версии схемы, извлечение и запись фактов в TypeDB.
+  <div class="muted">Закрыть запись = «Пометить решённым» (уходит из нерешённых, остаётся в истории).
+    Удалить = убрать запись из журнала совсем; файл журнала append-only и остаётся архивом.<br>
+    Только онтология: применение схемы, версии схемы, извлечение и запись фактов в TypeDB.
     Файл журнала вне контейнера: <code id="jfile">/var/log/kag/ontology/errors.log</code> — читается с хоста,
     когда api и БД недоступны. Прочие ошибки — в общем журнале приложения.</div>
 
@@ -71,6 +73,8 @@
     </select>
     <input id="f-doc" placeholder="document_key содержит…" style="min-width:240px" onkeydown="if(event.key==='Enter')load()">
     <button onclick="load()">Обновить</button>
+    <button onclick="purgeResolved()" title="Удалить записи, помеченные решёнными">Удалить решённые</button>
+    <button onclick="purgeAll()" title="Очистить журнал полностью (файл-архив не трогаем)">Удалить все</button>
     <span class="stat" id="stat"></span>
   </div>
 
@@ -85,6 +89,7 @@
       <button class="primary" id="btn-resolve" onclick="resolveCurrent()" style="margin-left:auto">Пометить решённым</button>
       <button id="btn-fix" onclick="toggleFix()" style="display:none">Исправить контекст</button>
       <button onclick="copyCurrent()">Копировать</button>
+      <button onclick="deleteCurrent()" title="Убрать запись из журнала совсем (файл останется архивом)">Удалить</button>
       <button onclick="document.getElementById('det').classList.remove('open')">Закрыть</button>
     </div>
     <div class="muted" id="det-meta"></div>
@@ -313,6 +318,30 @@ async function applyFix() {
   } catch (e) {
     stat.textContent = 'ошибка: ' + e.message;
   }
+}
+
+async function deleteCurrent(){
+  if (!current || !current.id) return;
+  if (!confirm('Удалить запись из журнала? Действие необратимо.')) return;
+  const r = await fetch(API + '/' + encodeURIComponent(current.id), {
+    method: 'DELETE', credentials: 'same-origin'});
+  if (r.ok) { document.getElementById('det').classList.remove('open'); load(); }
+  else { alert('Не удалось удалить: HTTP ' + r.status); }
+}
+
+async function purgeResolved(){
+  if (!confirm('Удалить все записи, помеченные решёнными?')) return;
+  const r = await fetch(API + '?resolved=true', {method: 'DELETE', credentials: 'same-origin'});
+  if (r.ok) { const d = await r.json(); alert('Удалено: ' + d.deleted); load(); }
+  else { alert('Не удалось: HTTP ' + r.status); }
+}
+
+async function purgeAll(){
+  if (!confirm('Удалить ВСЕ записи журнала? Файл-архив останется, но таблица очистится.')) return;
+  if (!confirm('Точно удалить все? Восстановить записи будет нельзя.')) return;
+  const r = await fetch(API + '?resolved=false', {method: 'DELETE', credentials: 'same-origin'});
+  if (r.ok) { const d = await r.json(); alert('Удалено: ' + d.deleted); load(); }
+  else { alert('Не удалось: HTTP ' + r.status); }
 }
 
 async function resolveCurrent(){
