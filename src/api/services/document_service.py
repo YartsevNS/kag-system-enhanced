@@ -1280,12 +1280,24 @@ class DocumentService:
                                     _sm = {}
                             except Exception:  # noqa: BLE001
                                 _sm = {}
-                            await self._build_typedb_only(
-                                document_id, record.filename, chunks, plog=plog,
-                                source_kind=(getattr(record, "source_kind", None) or ""),
-                                source_metadata=_sm,
-                                title=(getattr(record, "recognized_title", None) or record.filename or ""),
-                            )
+                            # Новости в онтологии не участвуют (решение 04.11.2026): они
+                            # живут в отдельной коллекции kag_news и в граф смысла не идут.
+                            # Раньше проверка отсутствовала, и после обработки ленты в TypeDB
+                            # появились документы с видом publication — мусор в онтологии.
+                            _collection = (getattr(record, "collection", "") or "").strip().lower()
+                            if _collection == "news":
+                                if plog:
+                                    plog.log("typedb_skipped", {"reason": "новость: коллекция news"})
+                                logger.info(
+                                    f"[typedb] пропуск: {document_id} — новость, в онтологию не пишем")
+                            else:
+                                await self._build_typedb_only(
+                                    document_id, record.filename, chunks, plog=plog,
+                                    source_kind=(getattr(record, "source_kind", None) or ""),
+                                    source_metadata=_sm,
+                                    title=(getattr(record, "recognized_title", None)
+                                           or record.filename or ""),
+                                )
                     except Exception as e:  # noqa: BLE001 — онтология не должна ломать обработку
                         logger.warning(f"[typedb] контур пропущен: {e}")
                     # «Построить позже» — это НЕ «не строить никогда». При force-переиндексации

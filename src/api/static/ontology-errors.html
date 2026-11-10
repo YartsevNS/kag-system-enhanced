@@ -83,10 +83,22 @@
     <div class="row" style="margin-top:0">
       <strong id="det-title"></strong>
       <button class="primary" id="btn-resolve" onclick="resolveCurrent()" style="margin-left:auto">Пометить решённым</button>
+      <button id="btn-fix" onclick="toggleFix()" style="display:none">Исправить контекст</button>
       <button onclick="copyCurrent()">Копировать</button>
       <button onclick="document.getElementById('det').classList.remove('open')">Закрыть</button>
     </div>
     <div class="muted" id="det-meta"></div>
+    <div id="fix-box" style="display:none;border-top:1px solid var(--border,#2c3442);margin-top:12px;padding-top:12px">
+      <div class="muted" style="margin-bottom:8px">Значения подставляются в ключ документа «издатель|вид|номер» и переписываются в Postgres и TypeDB. Файл и чанки не трогаем.</div>
+      <div class="row" style="margin:0 0 8px">
+        <select id="fix-kind" style="min-width:320px"><option value="">— вид документа —</option></select>
+        <input id="fix-number" placeholder="номер: 52447-2005" style="min-width:170px">
+        <input id="fix-issuer" placeholder="издатель: Росстандарт" style="min-width:170px">
+        <input id="fix-effective" type="date" style="min-width:150px">
+        <button class="primary" onclick="applyFix()">Применить</button>
+        <span class="stat" id="fix-stat"></span>
+      </div>
+    </div>
     <pre id="det-json"></pre>
   </div>
 
@@ -154,6 +166,15 @@ function openItem(i){
   document.getElementById('det-meta').textContent = [fmt(it.ts), it.document_key, [it.entity_type, it.entity_id].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
   document.getElementById('det-json').textContent = JSON.stringify({message:it.message, details:it.details, resolved:it.resolved, resolved_by:it.resolved_by, resolved_at:it.resolved_at}, null, 2);
   document.getElementById('btn-resolve').style.display = (it.resolved || !it.id) ? 'none' : '';
+  const fixBtn = document.getElementById('btn-fix');
+  if (fixBtn) {
+    const canFix = !!(it.document_id) && (it.source === 'parser' || it.error_type === 'extraction_failed');
+    fixBtn.style.display = canFix ? '' : 'none';
+    if (!canFix) {
+      const box = document.getElementById('fix-box');
+      if (box) box.style.display = 'none';
+    }
+  }
   const det = document.getElementById('det');
   det.classList.add('open');
   det.scrollTop = 0;
@@ -223,6 +244,75 @@ function copyRow(i, ev){
   copyText(errorToText(it))
     .then(() => flash(ev && ev.target, '✓'))
     .catch(() => alert('Не удалось скопировать'));
+}
+
+// ── Исправление контекста документа из записи журнала ───────────────────────────
+// Парсер шапки не распознал документ → он в онтологии с видом other и ключом-заглушкой.
+// Правим здесь: значения уходят в ключ, ключ переписывается в Postgres и TypeDB,
+// файл и чанки не пересобираются. Доступно только для записей с document_id.
+let FIX_KINDS = null;
+
+async function loadFixKinds() {
+  if (FIX_KINDS) return FIX_KINDS;
+  try {
+    const r = await fetch('/api/v1/document-kinds', {credentials: 'same-origin'});
+    const d = await r.json();
+    FIX_KINDS = (d.kinds || []).map(k => ({code: k.code, title: k.title || k.code, group: k.group_title || ''}));
+  } catch (e) { FIX_KINDS = []; }
+  return FIX_KINDS;
+}
+
+async function toggleFix() {
+  const box = document.getElementById('fix-box');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  const kinds = await loadFixKinds();
+  const sel = document.getElementById('fix-kind');
+  while (sel.options.length > 1) sel.remove(1);
+  const groups = {};
+  kinds.forEach(k => { (groups[k.group] = groups[k.group] || []).push(k); });
+  Object.keys(groups).forEach(g => {
+    const og = document.createElement('optgroup');
+    og.label = g || 'Прочее';
+    groups[g].forEach(k => {
+      const o = document.createElement('option');
+      o.value = k.code; o.textContent = k.title;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  box.style.display = '';
+}
+
+async function applyFix() {
+  const it = current;
+  const stat = document.getElementById('fix-stat');
+  if (!it || !it.document_id) { stat.textContent = 'в записи нет document_id'; return; }
+  const body = {
+    doc_kind: document.getElementById('fix-kind').value,
+    number: document.getElementById('fix-number').value.trim(),
+    issuer: document.getElementById('fix-issuer').value.trim(),
+    effective_from: document.getElementById('fix-effective').value,
+  };
+  stat.textContent = 'пересчитываю…';
+  try {
+    const r = await fetch('/api/v1/upload/' + encodeURIComponent(it.document_id) + '/context', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) { stat.textContent = 'не применено: ' + (d.error || ('HTTP ' + r.status)); return; }
+    stat.textContent = 'ключ: ' + d.old_key + ' → ' + d.new_key;
+    if (it.id) {
+      await fetch(API + '/' + encodeURIComponent(it.id) + '/resolve', {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'}, body: '{}'
+      });
+    }
+    await load();
+  } catch (e) {
+    stat.textContent = 'ошибка: ' + e.message;
+  }
 }
 
 async function resolveCurrent(){

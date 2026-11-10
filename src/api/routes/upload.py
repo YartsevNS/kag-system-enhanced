@@ -2623,3 +2623,42 @@ async def reprocess_ocr(
         "document_id": document_id,
         "queued": True,
     }
+
+
+class DocContextFix(BaseModel):
+    """Ручное исправление контекста документа: только недостающие поля."""
+    doc_kind: str = ""
+    number: str = ""
+    issuer: str = ""
+    effective_from: str = ""
+    version_string: str = ""
+
+
+@router.post("/{document_id}/context", summary="Исправить контекст документа (вид, номер, издатель, дата)")
+async def fix_document_context(
+    document_id: str,
+    req: DocContextFix,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Пересчитать ключ документа и переписать его в Postgres и TypeDB.
+
+    Вызывается из журнала ошибок онтологии (/errors), когда парсер шапки не распознал
+    документ. Файл при этом не перезагружается: чанки и векторы остаются.
+    """
+    if current_user is None:
+        raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED",
+                                                     "message": "Требуется аутентификация"})
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN",
+                                                     "message": "Только администратор"})
+    from src.indexing import typedb_context_fix
+
+    changes = {k: v for k, v in req.model_dump().items() if str(v or "").strip()}
+    if not changes:
+        return {"ok": False, "error": "не передано ни одного поля"}
+    try:
+        res = await asyncio.to_thread(typedb_context_fix.fix_context, document_id, changes)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"исправление контекста {document_id}: {str(exc)[:200]}")
+        return {"ok": False, "error": str(exc)[:300]}
+    return res
