@@ -61,6 +61,12 @@ attribute obligation-level, value string;
 # ---- атрибуты: меры, объекты, ПО, угрозы ----------------------------
 attribute measure-category, value string;
 attribute code, value string;
+# ---- контур БДУ ФСТЭК (снимок, не документ) -----------------------
+attribute bdu-id, value string;
+attribute severity-level, value integer;
+attribute cvss-score, value double;
+attribute published-date, value date;
+attribute affected-software, value string;
 attribute cii-category, value integer;
 attribute system_type, value string;
 attribute offender_class, value string;
@@ -260,3 +266,13 @@ entity threat_source plays threat_applicability:threat;
 entity cii_object plays threat_applicability:target_system;
 entity threat_source plays threat_measure:threat;
 entity security_measure plays threat_measure:measure;
+
+# Уязвимость из БДУ ФСТЭК: ключ — BDU-идентификатор, провенанс — снимок.
+entity vulnerability sub sourced_entity,
+  owns bdu-id @key,
+  owns name,
+  owns description,
+  owns severity-level,
+  owns cvss-score,
+  owns published-date,
+  owns affected-software @card(0..);

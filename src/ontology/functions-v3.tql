@@ -213,3 +213,8 @@ fun invalid_measure_category() -> { security_measure }:
       not { $c == "restore"; };
     return { $m };
 
+fun invalid_bdu_id() -> { vulnerability }:
+    match
+      $v isa vulnerability, has bdu-id $i;
+      not { $i like "^BDU:[0-9]{4}-[0-9]{5}$"; };
+    return { $v };
