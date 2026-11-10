@@ -445,6 +445,14 @@ async def ontology_proposals_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology_proposals.html"))
 
 
+@app.get("/ontology/gaps", summary="Пробелы схемы: термины корпуса (только для admin)")
+async def ontology_gaps_page(request: Request):
+    """Очередь пробелов схемы: что корпус определяет, а онтология не покрывает."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-gaps.html"))
+
+
 @app.get("/errors", summary="Ошибки онтологии: журнал (только для admin)")
 async def ontology_errors_page(request: Request):
     """Отдельный журнал ошибок онтологии.
@@ -627,10 +635,19 @@ async def embedding_guide_page():
 @app.get("/kg", summary="Граф знаний")
 async def kg_page():
     """Страница графа знаний Neo4j"""
-    kg_path = os.path.join(static_path, "kg.html")
+    kg_path = os.path.join(static_path, "ontology-kg.html")
     if os.path.exists(kg_path):
         return FileResponse(kg_path)
     return {"error": "KG page not found"}
+
+
+@app.get("/kg-legacy", summary="Старый граф упоминаний (Neo4j), до вывода из контура")
+async def kg_legacy_page():
+    """Оставлен на время перехода: граф упоминаний чанк↔сущность из Neo4j."""
+    legacy = os.path.join(static_path, "kg.html")
+    if os.path.exists(legacy):
+        return FileResponse(legacy)
+    return {"error": "KG legacy page not found"}
 
 
 @app.get("/prompts-help", summary="Справка: промпты, типы и маркеры")

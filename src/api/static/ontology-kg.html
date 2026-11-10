@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Граф онтологии — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:20px 24px}
+  h1{font-size:20px;margin:0 0 4px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  select,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:6px 10px;font-size:12px;cursor:pointer}
+  #cy{height:calc(100vh - 190px);min-height:420px;border:1px solid var(--border-s,#252b36);border-radius:8px;background:var(--panel,#12161d)}
+  #side{position:fixed;right:20px;top:120px;width:340px;max-height:70vh;overflow:auto;display:none;
+    background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px;box-shadow:0 18px 48px rgba(0,0,0,.5);z-index:20}
+  #side h3{margin:0 0 8px;font-size:14px}
+  .kv{font-size:12px;color:var(--text2,#b4b4b4);margin:3px 0;word-break:break-word}
+  .lg span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text3,#8b93a1);margin-right:12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · граф</div><div data-site-nav></div></nav>
+<main>
+  <h1>Граф онтологии</h1>
+  <div class="muted">Смысловые связи из TypeDB: документ → редакция → пункт → требование → мера.
+    Neo4j выведен из контура; здесь только проверяемые связи онтологии.</div>
+
+  <div class="row">
+    <select id="f-type" onchange="render()">
+      <option value="">Все типы</option>
+      <option value="document">документы</option>
+      <option value="document_version">редакции</option>
+      <option value="structural_element">пункты</option>
+      <option value="security_requirement">требования</option>
+      <option value="security_measure">меры</option>
+    </select>
+    <input id="f-q" placeholder="поиск по названию…" oninput="render()"
+           style="background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:6px 10px;font-size:12px;min-width:240px">
+    <button onclick="load(true)">Обновить</button>
+    <span class="muted" id="stat"></span>
+  </div>
+
+  <div class="row lg" id="legend"></div>
+  <div id="cy"></div>
+
+  <div id="side">
+    <h3 id="side-title">—</h3>
+    <div id="side-body"></div>
+    <div class="row" style="margin-bottom:0"><button onclick="document.getElementById('side').style.display='none'">Закрыть</button></div>
+  </div>
+</main>
+
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script>
+const API = '/api/v1/kg/ontology-graph?limit=1200';
+const COLORS = {document:'#3ecf8e', document_version:'#4aa3ff', structural_element:'#c58af9',
+                security_requirement:'#f0b429', security_measure:'#ff8a65', other:'#8b93a1'};
+let DATA = {nodes: [], links: []};
+let cy = null;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function legend(){
+  const el = document.getElementById('legend');
+  const names = {document:'документ', document_version:'редакция', structural_element:'пункт',
+                 security_requirement:'требование', security_measure:'мера'};
+  el.innerHTML = Object.keys(names).map(t =>
+    `<span><i class="dot" style="background:${COLORS[t]}"></i>${names[t]}</span>`).join('');
+}
+
+async function load(force){
+  const stat = document.getElementById('stat');
+  stat.textContent = 'читаю TypeDB…';
+  try {
+    const r = await fetch(API, {credentials:'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'TypeDB недоступна');
+    DATA = {nodes: d.nodes || [], links: d.links || []};
+    stat.textContent = `узлов: ${DATA.nodes.length}, связей: ${DATA.links.length}`;
+    render();
+  } catch (e) {
+    stat.textContent = 'ошибка: ' + e.message;
+    document.getElementById('cy').innerHTML = `<div style="padding:20px;color:#ff6b6b">${esc(e.message)}</div>`;
+  }
+}
+
+function render(){
+  const t = document.getElementById('f-type').value;
+  const q = document.getElementById('f-q').value.trim().toLowerCase();
+  const keep = new Set(DATA.nodes.filter(n =>
+    (!t || n.type === t) && (!q || (n.label || '').toLowerCase().includes(q))).map(n => n.id));
+  const deg = {};
+  DATA.links.forEach(l => { deg[l.source] = (deg[l.source]||0)+1; deg[l.target] = (deg[l.target]||0)+1; });
+  // класс = тип узла: цвет задаём в stylesheet (элементный style cytoscape игнорирует)
+  const nodes = DATA.nodes.filter(n => keep.has(n.id))
+    .map(n => ({data: {id: n.id, label: n.label, type: n.type},
+                classes: n.type || 'other',
+                style: {'width': 8 + Math.min(22, Math.sqrt(deg[n.id]||1) * 4),
+                        'height': 8 + Math.min(22, Math.sqrt(deg[n.id]||1) * 4)}}));
+  const edges = DATA.links.filter(l => keep.has(l.source) && keep.has(l.target))
+    .map((l, i) => ({data: {id: 'e' + i, source: l.source, target: l.target, label: l.label || l.type}}));
+
+  if (cy) { cy.destroy(); cy = null; }
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: nodes.concat(edges),
+    style: [
+      // подписи включаем только при увеличении — иначе на 700 узлах каша
+      {selector: 'node', style: {'label': 'data(label)', 'font-size': 10, 'color': '#1f2430',
+        'text-valign': 'bottom', 'text-margin-y': 3, 'text-opacity': 0,
+        'text-wrap': 'wrap', 'text-max-width': 110}},
+      {selector: 'node.document', style: {'background-color': '#1a9c6b', 'background-fill': 'solid'}},
+      {selector: 'node.document_version', style: {'background-color': '#2f7fd1', 'background-fill': 'solid'}},
+      {selector: 'node.structural_element', style: {'background-color': '#8a63d2', 'background-fill': 'solid'}},
+      {selector: 'node.security_requirement', style: {'background-color': '#d99a12', 'background-fill': 'solid'}},
+      {selector: 'node.security_measure', style: {'background-color': '#e0653a', 'background-fill': 'solid'}},
+      {selector: 'node.other', style: {'background-color': '#8b93a1', 'background-fill': 'solid'}},
+      {selector: 'edge', style: {'width': 1, 'line-color': '#b9c0cc',
+        'target-arrow-color': '#b9c0cc', 'target-arrow-shape': 'triangle',
+        'curve-style': 'bezier', 'opacity': .6}},
+      {selector: 'node:selected', style: {'border-width': 3, 'border-color': '#111820',
+        'text-opacity': 1, 'font-size': 12, 'font-weight': 'bold'}}
+    ],
+    layout: {name: 'cose', animate: false, padding: 20, nodeRepulsion: 12000, idealEdgeLength: 90}
+  });
+  cy.on('tap', 'node', ev => showNode(ev.target.data()));
+  const labels = () => cy.nodes().style('text-opacity', cy.zoom() >= 1.1 ? 1 : 0);
+  cy.on('zoom', labels);
+  labels();
+}
+
+function showNode(d){
+  const side = document.getElementById('side');
+  document.getElementById('side-title').textContent = d.label || d.id;
+  const links = DATA.links.filter(l => l.source === d.id || l.target === d.id);
+  const inTypes = {};
+  links.forEach(l => { const k = l.label || l.type; inTypes[k] = (inTypes[k] || 0) + 1; });
+  document.getElementById('side-body').innerHTML =
+    `<div class="kv"><b>тип:</b> ${esc(d.type)}</div>
+     <div class="kv"><b>id:</b> ${esc(d.id)}</div>
+     <div class="kv"><b>связей:</b> ${links.length}</div>` +
+    Object.keys(inTypes).map(k => `<div class="kv">— ${esc(k)}: ${inTypes[k]}</div>`).join('');
+  side.style.display = 'block';
+}
+
+legend();
+load();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

@@ -568,3 +568,84 @@ async def prompt_history_version(name: str, version: int, _: User = Depends(get_
     if content is None:
         raise HTTPException(status_code=404, detail="версия не найдена")
     return {"ok": True, "version": version, "content": content}
+
+
+# ---- пробелы схемы (очередь предложений по корпусу) -------------------
+class GapReview(BaseModel):
+    status: str = Field(..., description="accepted | rejected | proposed")
+    note: str = ""
+
+
+def _gaps_ensure() -> None:
+    from sqlalchemy import text
+
+    from src.database.session import get_session_local
+
+    db = get_session_local()()
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS ontology_schema_gaps (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                term text NOT NULL UNIQUE,
+                hits integer NOT NULL DEFAULT 0,
+                examples jsonb NOT NULL DEFAULT '[]'::jsonb,
+                status text NOT NULL DEFAULT 'proposed',
+                reviewer text, reviewed_at timestamptz, note text,
+                created_at timestamptz NOT NULL DEFAULT now()
+            )"""))
+        db.commit()
+    finally:
+        db.close()
+
+
+@router.get("/schema-gaps", summary="Пробелы схемы: термины корпуса, которых нет в онтологии")
+async def schema_gaps_list(status: str = "", limit: int = 200, _: User = Depends(get_current_admin)):
+    from sqlalchemy import text
+
+    from src.database.session import get_session_local
+
+    _gaps_ensure()
+    where, params = "", {}
+    if status:
+        where = " where status = :st"
+        params["st"] = status
+    db = get_session_local()()
+    try:
+        rows = db.execute(
+            text("select id::text, term, hits, examples, status, reviewer, reviewed_at, note, "
+                 f"created_at from ontology_schema_gaps{where} "
+                 "order by hits desc, term limit :lim"),
+            {**params, "lim": max(1, min(int(limit or 200), 1000))},
+        ).mappings().all()
+        total = db.execute(text(f"select count(*) from ontology_schema_gaps{where}"), params).scalar()
+    finally:
+        db.close()
+    items = []
+    for r in rows:
+        it = dict(r)
+        for k in ("reviewed_at", "created_at"):
+            it[k] = it[k].isoformat() if it.get(k) else None
+        items.append(it)
+    return {"ok": True, "total": int(total or 0), "items": items}
+
+
+@router.post("/schema-gaps/{gap_id}/review", summary="Решение по пробелу схемы")
+async def schema_gap_review(gap_id: str, req: GapReview, user: User = Depends(get_current_admin)):
+    from sqlalchemy import text
+
+    from src.database.session import get_session_local
+
+    if req.status not in ("accepted", "rejected", "proposed"):
+        return {"ok": False, "error": "статус: accepted | rejected | proposed"}
+    db = get_session_local()()
+    try:
+        res = db.execute(
+            text("update ontology_schema_gaps set status = :st, note = :note, reviewer = :who, "
+                 "reviewed_at = now() where id = cast(:id as uuid)"),
+            {"st": req.status, "note": (req.note or "")[:2000], "who": _who(user), "id": gap_id},
+        )
+        db.commit()
+        n = res.rowcount
+    finally:
+        db.close()
+    return {"ok": bool(n), "changed": int(n or 0)}

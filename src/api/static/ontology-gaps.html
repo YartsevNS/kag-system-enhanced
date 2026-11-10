@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пробелы схемы — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px;cursor:pointer}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  tr.item:hover{background:var(--elevated,#1c2230)}
+  .q{color:var(--text2,#b4b4b4);font-size:12px;margin:4px 0}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border,#2c3442)}
+  .tag.proposed{color:#f0b429;border-color:#5a4a20}
+  .tag.accepted{color:#3ecf8e;border-color:#1f5a3c}
+  .tag.rejected{color:#ff6b6b;border-color:#5a2a2a}
+  .empty{padding:24px;color:var(--text3,#8b93a1)}
+  details.ex{margin-top:4px}
+  details.ex summary{cursor:pointer;color:var(--text3,#8b93a1);font-size:12px}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · схема</div><div data-site-nav></div></nav>
+<main>
+  <h1>Пробелы схемы</h1>
+  <div class="muted">Термины, которые корпус определяет, а онтология не покрывает. Это предложения:
+    тип/атрибут добавляется через <a href="/ontology" style="color:var(--accent-h,#3ecf8e)">редактор онтологии</a>,
+    после решения человека. Источник: <code>scripts/schema_gap.py</code> (определения «X — это Y»,
+    «под X понимается Y», пункты словаря).</div>
+
+  <div class="row">
+    <select id="f-status" onchange="load()">
+      <option value="">Все статусы</option>
+      <option value="proposed" selected>Предложенные</option>
+      <option value="accepted">Принятые</option>
+      <option value="rejected">Отклонённые</option>
+    </select>
+    <button onclick="load()">Обновить</button>
+    <span class="muted" id="stat"></span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:46%">Термин</th><th style="width:80px">Фрагменты</th>
+      <th style="width:120px">Статус</th><th style="width:230px">Решение</th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="4" class="empty">Загрузка…</td></tr></tbody>
+  </table>
+</main>
+
+<script>
+const API = '/api/v1/ontology/schema-gaps';
+let ITEMS = [];
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function load(){
+  const st = document.getElementById('f-status').value;
+  const q = st ? ('?status=' + encodeURIComponent(st)) : '';
+  try {
+    const r = await fetch(API + q, {credentials: 'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    ITEMS = d.items || [];
+    document.getElementById('stat').textContent = 'всего: ' + (d.total || 0);
+    const tb = document.getElementById('rows');
+    if (!ITEMS.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Пробелов нет</td></tr>'; return; }
+    tb.innerHTML = ITEMS.map((it, i) => {
+      const ex = (it.examples || []).map(e => '<div class="q">…' + esc(e) + '…</div>').join('');
+      const actions = it.status === 'proposed'
+        ? `<button class="primary" onclick="review(${i},'accepted')">Принять</button>
+           <button onclick="review(${i},'rejected')">Отклонить</button>`
+        : `<button onclick="review(${i},'proposed')">Вернуть в предложенные</button>`;
+      return `<tr class="item">
+        <td><b>${esc(it.term)}</b>
+          ${ex ? `<details class="ex"><summary>примеры (${(it.examples||[]).length})</summary>${ex}</details>` : ''}
+        </td>
+        <td>${it.hits}</td>
+        <td><span class="tag ${esc(it.status)}">${esc(it.status)}</span>
+          ${it.reviewer ? `<div class="muted">${esc(it.reviewer)}</div>` : ''}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('rows').innerHTML = `<tr><td colspan="4" class="empty">Не удалось прочитать очередь: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function review(i, status){
+  const it = ITEMS[i];
+  if (!it) return;
+  const r = await fetch(API + '/' + encodeURIComponent(it.id) + '/review', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: status, note: ''})
+  });
+  if (r.ok) load(); else alert('Не удалось: HTTP ' + r.status);
+}
+
+load();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>
