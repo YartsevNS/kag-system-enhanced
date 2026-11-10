@@ -490,6 +490,16 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
         if not attrs:
             stats["dropped_missing_attr"] += 1
             continue
+        # Регулятор — это ОРГАН. Модель регулярно пишет издателем сам документ
+        # («Федеральный закон № 161-ФЗ») или вид («ФЗ», «law») — такие сущности в граф
+        # не пускаем: они ломают ключ документа и плодят мусорных издателей.
+        if etype == "regulator":
+            from src.indexing import issuers
+
+            if not issuers.is_body(str(attrs.get("name") or ""),
+                                   str(attrs.get("short_name") or "")):
+                stats["dropped_type"] += 1
+                continue
         key = ent_key(etype, attrs, document_id)
         local.setdefault(str(ent.get("id") or ""), []).append((etype, key))
         slot = entities.setdefault(key, {"type": etype, "attrs": {}, "chunks": set()})
