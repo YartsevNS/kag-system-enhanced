@@ -85,6 +85,16 @@ def list_candidates(db, status: str = "pending", limit: int = 100) -> List[Dict[
                 "created_at": doc.created_at.isoformat() if doc.created_at else "",
             }
 
+    # Пары, у которых документ уже удалён, показывать нельзя: строка ведёт в никуда
+    # (так осталось после удаления копии старым кодом). Подчищаем при чтении.
+    stale = [r for r in rows
+             if r.new_document_id not in names or r.existing_document_id not in names]
+    if stale:
+        for r in stale:
+            db.delete(r)
+        db.commit()
+        rows = [r for r in rows if r not in stale]
+
     out: List[Dict[str, Any]] = []
     for r in rows:
         details = _json(r.details)
