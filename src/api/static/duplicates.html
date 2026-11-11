@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Возможные дубли — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px}
+  button{cursor:pointer}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  button.danger{color:#ff8f8f;border-color:#5a2a2a}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:8px;padding:10px}
+  .card .cap{font-size:11px;color:var(--text3,#8b93a1);text-transform:uppercase;letter-spacing:.04em}
+  .card .name{font-size:13px;margin-top:4px;word-break:break-word}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border,#2c3442);color:#9ecbff}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .empty{padding:24px;color:var(--text3,#8b93a1)}
+  #msg{font-size:12px;color:var(--accent,#3ecf8e);min-height:18px}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · дубли</div><div data-site-nav></div></nav>
+<main>
+  <h1>Возможные дубли</h1>
+  <div class="muted">
+    Сюда попадают документы, которые похожи на уже загруженные, но пришли другим файлом
+    (другой скан, водяной знак, копия с другого источника) — то есть с другим хешем.
+    Точное совпадение байтов отсекается при загрузке автоматически и здесь не показывается.
+    Ничего не происходит без решения человека:
+    «Новая редакция» — связать как версию (прежняя уйдёт из поиска после обработки),
+    «Копия» — дописать источник к существующему и убрать лишнюю запись,
+    «Другой документ» — закрыть вопрос без изменений.
+  </div>
+
+  <div class="row">
+    <label class="muted">Показать:</label>
+    <select id="fstatus">
+      <option value="pending" selected>Ждут решения</option>
+      <option value="new_version">Новые редакции</option>
+      <option value="copy">Копии</option>
+      <option value="distinct">Признаны разными</option>
+      <option value="">Все</option>
+    </select>
+    <button id="reload">Обновить</button>
+    <span id="msg"></span>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:52%">Пара документов</th><th>Причина</th><th style="width:210px">Решение</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">Очередь пуста.</div>
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+const api = '/api/v1/duplicates';
+function esc(s){return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(t){ if(!t) return ''; const d=new Date(t); return isNaN(d)?t:d.toLocaleString('ru-RU'); }
+function reasonText(r){
+  if(r==='key_match') return 'одно обозначение (издатель+вид+номер)';
+  if(r==='title_match') return 'одно название';
+  if(r==='text_similar') return 'близкий текст';
+  return r;
+}
+async function load(){
+  const status=document.getElementById('fstatus').value;
+  const r=await fetch(`${api}?status=${encodeURIComponent(status)}&limit=200`,{credentials:'include'});
+  const d=await r.json();
+  const rows=document.getElementById('rows');
+  rows.innerHTML='';
+  (d.items||[]).forEach(it=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div class="pair">
+          <div class="card">
+            <div class="cap">новый файл</div>
+            <div class="name">${esc(it.new.filename||it.new.title||it.new.document_id)}</div>
+            <div class="cap" style="margin-top:6px">${fmt(it.new.created_at)} · ${esc((it.new.hash||'').slice(0,12))}</div>
+          </div>
+          <div class="card">
+            <div class="cap">уже в базе</div>
+            <div class="name">${esc(it.existing.filename||it.existing.title||it.existing.document_id)}</div>
+            <div class="cap" style="margin-top:6px">${fmt(it.existing.created_at)} · ${esc((it.existing.hash||'').slice(0,12))}</div>
+          </div>
+        </div>
+        ${it.key?`<div class="cap" style="margin-top:8px">ключ: ${esc(it.key)}</div>`:''}
+      </td>
+      <td><span class="tag">${esc(reasonText(it.reason))}</span>
+        ${it.score?`<div class="cap">${it.score}</div>`:''}
+        <div class="cap">${esc(it.status)}</div></td>
+      <td>${it.status==='pending'?`
+        <div class="actions">
+          <button class="primary" data-act="new_version">Новая редакция</button>
+          <button data-act="copy">Копия</button>
+          <button class="danger" data-act="distinct">Другой документ</button>
+        </div>`:`<div class="cap">${esc(it.decided_by||'')} ${fmt(it.decided_at)}</div>`}
+      </td>`;
+    tr.querySelectorAll('button[data-act]').forEach(b=>{
+      b.onclick=()=>decide(it.id, b.dataset.act);
+    });
+    rows.appendChild(tr);
+  });
+  document.getElementById('empty').style.display=(d.items||[]).length?'none':'block';
+}
+async function decide(id, action){
+  const names={new_version:'связать как новую редакцию',copy:'дописать источник и убрать копию',distinct:'признать отдельным документом'};
+  if(!confirm(`Подтвердить: ${names[action]||action}?`)) return;
+  const msg=document.getElementById('msg'); msg.textContent='…';
+  try{
+    const r=await fetch(`${api}/${id}/decide`,{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({action})});
+    const d=await r.json();
+    msg.textContent = r.ok ? (d.message||'готово') : ('ошибка: '+(d.detail||d.message||r.status));
+  }catch(e){ msg.textContent='ошибка сети: '+e; }
+  load();
+}
+document.getElementById('reload').onclick=load;
+document.getElementById('fstatus').onchange=load;
+load();
+</script>
+</body>
+</html>

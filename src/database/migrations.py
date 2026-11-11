@@ -21,6 +21,7 @@ from src.database.entity_alias_models import EntityAlias  # noqa: F401 — сл�
 from src.database.document_table_models import DocumentTable  # noqa: F401 — таблицы документов для table RAG
 from src.database.table_row_models import TableRow  # noqa: F401 — строки таблиц (строчный слой)
 from src.database.ontology_models import OntologySchemaVersion  # noqa: F401 — версии схемы онтологии
+from src.database.duplicate_models import DuplicateCandidate  # noqa: F401 — очередь возможных дублей
 
 logger = logging.getLogger(__name__)
 

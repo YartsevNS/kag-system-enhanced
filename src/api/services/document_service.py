@@ -375,6 +375,48 @@ class DocumentService:
                             f"{str(exc)[:120]}")
                 return existing
 
+
+        # ---------- Возможный дубль: то же название (новости из разных RSS) ----------
+        # Новости приходят из нескольких лент одной и той же статьёй с разной разметкой:
+        # байты разные → хеш не совпадает, и в индексе появлялись три копии. Человека об этом
+        # не спрашиваем (иначе очередь забьётся), но источник дописываем к существующей записи.
+        if (collection or "") == "news" and not force_new:
+            try:
+                from src.indexing import dup_detect
+
+                _title = str((source_metadata or {}).get("doc_title")
+                             or (source_metadata or {}).get("title") or filename or "")
+                from src.database.session import get_session_local
+
+                _db = get_session_local()()
+                try:
+                    _same = dup_detect.find_title_matches(_db, _title, collection="news")
+                finally:
+                    _db.close()
+                if _same:
+                    _other = _same[0]
+                    from src.api.services.document_service import document_service as _svc
+
+                    _prev = _svc._documents.get(_other["document_id"])
+                    if _prev is not None:
+                        _meta = dict(_prev.source_metadata or {})
+                        _srcs = _meta.get("sources") if isinstance(_meta.get("sources"), list) else []
+                        _srcs.append({
+                            "filename": filename,
+                            "source_name": (source_metadata or {}).get("source_name", ""),
+                            "source_url": (source_metadata or {}).get("source_url", ""),
+                            "file_hash": file_hash,
+                        })
+                        _meta["sources"] = _srcs
+                        _prev.source_metadata = _meta
+                        self._save_document_to_db(_prev.document_id)
+                        logger.info(
+                            f"[{upload_id or '-'}] 🔁 Дубль новости по названию: {filename[:60]} "
+                            f"→ {_prev.document_id[:12]} (источников {len(_srcs)})")
+                        return _prev
+            except Exception as _e:  # noqa: BLE001 — проверка не должна ломать загрузку
+                logger.debug(f"проверка дубля новости не выполнена: {str(_e)[:140]}")
+
         # ========== Этап 3: создаём запись о документе ==========
         doc_id = str(uuid.uuid4())
         version = 1
@@ -487,6 +529,35 @@ class DocumentService:
         )
 
         self._documents[doc_id] = record
+
+        # ---------- Возможный дубль: тот же ключ издатель|вид|номер, другой файл ----------
+        # Один документ приходит из разных источников с разными байтами (другой скан,
+        # водяной знак) — хеш честно разный, и без этой проверки появляется второй документ
+        # с тем же обозначением. Решение принимает человек на странице «Дубли».
+        if (collection or "") != "news":
+            try:
+                from src.indexing import dup_detect as _dd
+                from src.database.session import get_session_local as _sess
+
+                _db = _sess()()
+                try:
+                    _same = _dd.find_key_matches(_db, source_metadata or {}, exclude_id=doc_id)
+                    if _same:
+                        from src.api.services import duplicates as _dups
+
+                        _dups.record_candidates(
+                            _db,
+                            {"document_id": doc_id, "filename": filename},
+                            _same, "key_match",
+                        )
+                        logger.info(
+                            f"[{upload_id}] ⚠ возможный дубль по обозначению: {len(_same)} "
+                            f"(первый: {_same[0].get('filename', '')[:40]}) — решение на /duplicates")
+                finally:
+                    _db.close()
+            except Exception as _e:  # noqa: BLE001
+                logger.debug(f"проверка дубля по обозначению не выполнена: {str(_e)[:140]}")
+
         logger.info(
             f"[{upload_id}] ✅ Документ загружен: {doc_id[:12]} v{version} | "
             f"хеш {file_hash[:12]}... | {filename} ({file_size} байт)"
