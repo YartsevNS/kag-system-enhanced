@@ -85,7 +85,7 @@ def delete_document_ontology(document_id: str) -> Dict[str, int]:
         # 1. Версии документа: связи, затем объект
         ver = f'match $v isa document_version, has kag_document_id "{doc}";'
         step("versions", [
-            f'{ver} $r isa document_version_of (version: $v); delete $r;',
+            f'{ver} $r isa document_has_version (version: $v); delete $r;',
             f'{ver} $s isa supersedes (newer: $v); delete $s;',
             f'{ver} $s isa supersedes (older: $v); delete $s;',
             f'{ver} delete $v;',
@@ -98,7 +98,7 @@ def delete_document_ontology(document_id: str) -> Dict[str, int]:
             step("act_links", [
                 f'{sel} $i isa document_issuance (regulated_item: $d); delete $i;',
                 f'{sel} $a isa document_assignment (regulated_doc: $d); delete $a;',
-                f'{sel} $r isa document_version_of (document: $d); delete $r;',
+                f'{sel} $r isa document_has_version (document: $d); delete $r;',
             ], "act_links")
             step("acts", [f'{sel} delete $d;'], "acts")
 

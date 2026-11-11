@@ -2,7 +2,7 @@
 
 документ (`regulatory_document` / `company_document`) — идентичность документа.
 Редакция (`document_version`) — конкретный файл: версия, дата начала действия,
-статус, провенанс на чанк. Связь `document_version_of` привязывает редакцию к документу,
+статус, провенанс на чанк. Связь `document_has_version` привязывает редакцию к документу,
 `supersedes` — цепочка замен.
 
 Почему так: TypeDB не имеет встроенного темпорального моделирования (гайд:
@@ -73,22 +73,16 @@ def _number_from_title(title: str) -> str:
 
 
 def normalize_document_key(issuer: str, doc_kind: str, number: str, title: str) -> str:
-    """Стабильный ключ документа: издатель + тип + номер (или название, если номера нет).
+    """Ключ документа — через единый сборщик doc_context.build_document_key.
 
-    Нормализация убирает регистр, знаки «№», кавычки, даты и лишние пробелы, поэтому
-    «Приказ ФСТЭК № 239» и «приказ фстэк 239» дают один ключ. Год сюда НЕ входит:
-    редакции одного документа должны сойтись на одном ключе.
+    Раньше здесь была своя нормализация: она вычищала точки, и «ГОСТ Р 34.14-2025»
+    превращался в «34 14-2025», то есть версия получала ключ, отличный от ключа
+    документа из основного конвейера. Два сборщика — два ключа на один документ.
     """
+    from src.indexing.doc_context import build_document_key
+
     num = (number or "").strip() or _number_from_title(title)
-    parts = [issuer or "", doc_kind or "", num or title or ""]
-    raw = "|".join(p.strip().lower() for p in parts if p and p.strip())
-    raw = re.sub(r"[№\"«»'`.,;:()\[\]]", " ", raw)
-    # «от 10.07.2002», «N», «No.» — служебные слова, которые меняют ключ без причины
-    raw = re.sub(r"от\s*\d{2}\.\d{2}\.\d{4}", " ", raw)
-    raw = re.sub(r"(?:no\.?|n)", " ", raw)
-    raw = re.sub(r"\s+", " ", raw)
-    raw = re.sub(r"\s*\|\s*", "|", raw)
-    return raw.strip(" |")[:200]
+    return build_document_key(issuer or "", doc_kind or "", num, title or "")
 
 
 def _q(value: str) -> str:
@@ -256,7 +250,7 @@ def upsert_from_metadata(
                     tx.query(
                         f'match $d isa {doc_type}, has ent-key "{_q(act_key)}";'
                         f' insert\n  $v isa document_version,\n    {attrs_sql};\n'
-                        f'  $r isa document_version_of (version: $v, document: $d);'
+                        f'  $r isa document_has_version (version: $v, document: $d);'
                     ).resolve()
                     result["linked"] = 1
                 else:
