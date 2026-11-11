@@ -1719,6 +1719,25 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Не удалось удалить документ {document_id} из БД: {e}")
 
+        # Очередь дублей: записи про удалённый документ больше не имеют пары.
+        try:
+            from src.database.session import get_session_local as _sess
+            from src.database.duplicate_models import DuplicateCandidate as _DC
+
+            _db = _sess()()
+            try:
+                _n = (_db.query(_DC)
+                        .filter((_DC.new_document_id == document_id)
+                                | (_DC.existing_document_id == document_id))
+                        .delete(synchronize_session=False))
+                _db.commit()
+                if _n:
+                    logger.info(f"Дубли: убрано {_n} записей очереди по {document_id}")
+            finally:
+                _db.close()
+        except Exception as _e:  # noqa: BLE001 — очередь не должна мешать удалению
+            logger.warning(f"Дубли: очередь не очищена: {str(_e)[:140]}")
+
         logger.info(f"Документ удалён: {document_id} (qdrant_ok={qdrant_ok})")
         return True
 

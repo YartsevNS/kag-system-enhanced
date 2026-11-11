@@ -175,6 +175,23 @@ def decide(db, candidate_id: str, action: str, user: str = "") -> Dict[str, Any]
         old_doc.source_metadata = json.dumps(meta, ensure_ascii=False)
         _mark(row, action, user)
         db.commit()
+        # Строка в БД обновлена, но у сервиса документов свой кэш записей: он перезапишет
+        # source_metadata прежним значением при следующем сохранении. Пишем ещё и через
+        # репозиторий и обновляем кэш — иначе источник «допишется» и тут же пропадёт.
+        try:
+            from src.api.services.document_repository import get_doc_repo
+
+            get_doc_repo().upsert(old_doc.id, {"source_metadata": old_doc.source_metadata})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("дубли: источник не записан в БД: %s", str(exc)[:140])
+        try:
+            from src.api.services.document_service import document_service as _svc
+
+            _rec = _svc._documents.get(old_doc.id)
+            if _rec is not None:
+                _rec.source_metadata = json.loads(old_doc.source_metadata)
+        except Exception:  # noqa: BLE001
+            pass
         result["message"] = ("Копия: источник дописан к существующему документу. "
                              "Новая запись будет удалена вместе с векторами.")
         result["delete"] = new_doc.id
