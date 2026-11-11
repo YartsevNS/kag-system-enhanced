@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Словарь терминов — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,input,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px}
+  button{cursor:pointer}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  button.danger{color:#ff8f8f;border-color:#5a2a2a}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border,#2c3442)}
+  .tag.ok{color:#3ecf8e;border-color:#22513c}
+  .tag.no{color:#ff8f8f;border-color:#5a2a2a}
+  .tag.wait{color:#f0b429;border-color:#5a4a20}
+  .stat{display:inline-block;margin-right:16px;font-size:12px;color:var(--text3,#8b93a1)}
+  .stat b{color:var(--text,#e8eaed);font-size:14px}
+  .canon{font-weight:600}
+  .empty{padding:24px;color:var(--text3,#8b93a1)}
+  #msg{font-size:12px;color:var(--accent,#3ecf8e);min-height:18px}
+  .add{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px;margin:16px 0}
+  .add .row{margin:8px 0}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · словарь</div><div data-site-nav></div></nav>
+<main>
+  <h1>Словарь терминов и синонимов</h1>
+  <div class="muted">
+    Пара «вариант → канон» применяется только после подтверждения человеком: до этого она
+    висит как предложение. Подтверждённые пары сводят разные написания одного термина к одному
+    канону — без этого «ЗИ» и «средство защиты информации» считаются разными понятиями.
+  </div>
+
+  <div class="row" id="stats"></div>
+
+  <div class="row">
+    <select id="ftype">
+      <option value="">все типы</option>
+      <option value="term">термины</option>
+      <option value="organization">организации</option>
+      <option value="document_ref">ссылки на документы</option>
+      <option value="location">места</option>
+    </select>
+    <select id="fdomain">
+      <option value="">все области</option>
+      <option value="infosec">информационная безопасность</option>
+      <option value="legal">право</option>
+      <option value="technical">техника</option>
+      <option value="universal">общая</option>
+    </select>
+    <select id="fstatus">
+      <option value="">все статусы</option>
+      <option value="pending">ждут подтверждения</option>
+      <option value="approved">подтверждены</option>
+      <option value="rejected">отклонены</option>
+    </select>
+    <input id="fq" placeholder="поиск по термину" style="min-width:220px">
+    <button id="reload">Применить</button>
+    <span id="msg"></span>
+  </div>
+
+  <div class="add">
+    <div class="muted">Добавить пару (сразу подтверждённую)</div>
+    <div class="row">
+      <input id="a_alias" placeholder="вариант: ЗИ" style="width:180px">
+      <input id="a_canon" placeholder="канон: средство защиты информации" style="width:300px">
+      <select id="a_type">
+        <option value="term">термин</option>
+        <option value="organization">организация</option>
+        <option value="document_ref">ссылка на документ</option>
+      </select>
+      <select id="a_domain">
+        <option value="infosec">ИБ</option>
+        <option value="legal">право</option>
+        <option value="technical">техника</option>
+        <option value="universal">общая</option>
+      </select>
+      <input id="a_comment" placeholder="комментарий (откуда термин)" style="width:240px">
+      <button class="primary" id="addBtn">Добавить</button>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:26%">Вариант</th><th style="width:30%">Канон</th>
+      <th>Тип / область</th><th>Статус</th><th style="width:210px">Решение</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">Ничего не найдено.</div>
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+const api='/api/v1/terms';
+const et={term:'термин',organization:'организация',document_ref:'ссылка на документ',location:'место',legal_term:'термин'};
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function tag(it){
+  if(it.verdict==='approved') return '<span class="tag ok">подтверждено</span>';
+  if(it.verdict==='rejected') return '<span class="tag no">отклонено</span>';
+  return '<span class="tag wait">ждёт решения</span>';
+}
+async function loadStats(){
+  try{
+    const d=await (await fetch(api+'/stats',{credentials:'include'})).json();
+    document.getElementById('stats').innerHTML =
+      `<span class="stat">всего <b>${d.total||0}</b></span>
+       <span class="stat">ждут <b>${d.pending||0}</b></span>
+       <span class="stat">подтверждено <b>${d.approved||0}</b></span>
+       <span class="stat">отклонено <b>${d.rejected||0}</b></span>`;
+  }catch(e){}
+}
+async function load(){
+  const p=new URLSearchParams({
+    entity_type:document.getElementById('ftype').value,
+    domain:document.getElementById('fdomain').value,
+    status:document.getElementById('fstatus').value,
+    q:document.getElementById('fq').value.trim(),
+  });
+  const d=await (await fetch(`${api}?${p}`,{credentials:'include'})).json();
+  const rows=document.getElementById('rows'); rows.innerHTML='';
+  (d.items||[]).forEach(it=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${esc(it.alias)}</td>
+      <td class="canon">${esc(it.canonical_name)}</td>
+      <td><span class="muted">${esc(et[it.entity_type]||it.entity_type)} · ${esc(it.domain||'—')}</span>
+        ${it.source?`<div class="muted">источник: ${esc(it.source)}</div>`:''}</td>
+      <td>${tag(it)}${it.comment?`<div class="muted">${esc(it.comment)}</div>`:''}</td>
+      <td>
+        <button data-act="approved">Подтвердить</button>
+        <button data-act="rejected" class="danger">Отклонить</button>
+        <button data-act="edit">Изменить</button>
+      </td>`;
+    tr.querySelectorAll('button[data-act]').forEach(b=>{
+      b.onclick=()=>act(it,b.dataset.act);
+    });
+    rows.appendChild(tr);
+  });
+  document.getElementById('empty').style.display=(d.items||[]).length?'none':'block';
+  loadStats();
+}
+async function act(it,what){
+  if(what==='edit'){
+    const canon=prompt('Канонический термин:', it.canonical_name);
+    if(canon===null) return;
+    const alias=prompt('Вариант написания:', it.alias);
+    if(alias===null) return;
+    const r=await fetch(`${api}/${it.id}`,{method:'PUT',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({alias,canonical:canon,entity_type:it.entity_type,domain:it.domain,comment:it.comment||''})});
+    const d=await r.json();
+    document.getElementById('msg').textContent=d.message||d.detail||'';
+    load(); return;
+  }
+  const r=await fetch(`${api}/${it.id}/review`,{method:'POST',credentials:'include',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({verdict:what})});
+  const d=await r.json();
+  document.getElementById('msg').textContent=d.message||d.detail||'';
+  load();
+}
+document.getElementById('addBtn').onclick=async()=>{
+  const body={alias:document.getElementById('a_alias').value,canonical:document.getElementById('a_canon').value,
+    entity_type:document.getElementById('a_type').value,domain:document.getElementById('a_domain').value,
+    comment:document.getElementById('a_comment').value};
+  if(!body.alias.trim()){document.getElementById('msg').textContent='нужен вариант написания';return;}
+  const r=await fetch(api,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json();
+  document.getElementById('msg').textContent=d.message||d.detail||'';
+  if(d.status==='ok'){['a_alias','a_canon','a_comment'].forEach(id=>document.getElementById(id).value='');}
+  load();
+};
+document.getElementById('reload').onclick=load;
+document.getElementById('fstatus').onchange=load;
+document.getElementById('ftype').onchange=load;
+document.getElementById('fdomain').onchange=load;
+load();
+</script>
+</body>
+</html>

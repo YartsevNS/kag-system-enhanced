@@ -20,6 +20,7 @@ from src.api.routes import branding
 from src.api.routes import system_state
 from src.api.routes import ontology
 from src.api.routes import duplicates as duplicates_routes
+from src.api.routes import terms as terms_routes
 from src.api.middleware.security import SecurityMiddleware
 from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
@@ -264,6 +265,7 @@ app.include_router(labels.router, prefix="/api/v1/labels", tags=["labels"])
 app.include_router(system_state.router, tags=["system"])
 app.include_router(ontology.router, prefix="/api/v1/ontology", tags=["ontology"])
 app.include_router(duplicates_routes.router, prefix="/api/v1/duplicates", tags=["duplicates"])
+app.include_router(terms_routes.router, prefix="/api/v1/terms", tags=["terms"])
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -453,6 +455,14 @@ async def ontology_gaps_page(request: Request):
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
     return await _html_response(os.path.join(static_path, "ontology-gaps.html"))
+
+
+@app.get("/terms", summary="Словарь терминов и синонимов (только для admin)")
+async def terms_page(request: Request):
+    """Словарь: пары «вариант → канон» и подтверждение их человеком."""
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "terms.html"))
 
 
 @app.get("/duplicates", summary="Возможные дубли документов (только для admin)")
