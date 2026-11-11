@@ -226,7 +226,12 @@ def upsert_from_metadata(
     try:
         with drv.transaction(c["db"], TransactionType.WRITE) as tx:
             if list(tx.query(
-                    f'match $v isa document_version, has ent-key "{_q(document_id)}";').resolve()):
+                    # Существование редакции проверяем по kag_document_id, а не по ent-key:
+                    # версию создаёт и writer (ent-key вида document_version:<хеш>), и этот
+                    # модуль. Проверка по своему ent-key не видела версию writer'а и создавала
+                    # вторую редакцию того же файла (живой случай 11.11.2026).
+                    'match $v isa document_version, has kag_document_id '
+                    f'"{_q(document_id)}";').resolve()):
                 result["skipped"] = "version exists"
                 tx.commit()
             else:

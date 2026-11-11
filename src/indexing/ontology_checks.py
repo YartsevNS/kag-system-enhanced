@@ -50,14 +50,19 @@ def document_issuers(kag_document_id: str) -> List[Dict[str, str]]:
                     f'"{_q(kag_document_id)}"; '
                     "document_has_version(version: $v, document: $d); "
                     "document_issuance(regulated_item: $d, issuer: $r); "
-                    'fetch {"name": $r.name, "short": $r.short_name};'
+                    'fetch {"name": $r.name, "short": $r.short_name, '
+                    '"ent": $r.ent-key};'
                 ).resolve())
             for r in rows:
-                name = r.get("name")
-                short = r.get("short")
+                def _v(x):
+                    return (x.get("@value") if isinstance(x, dict) else x) or ""
+
                 out.append({
-                    "name": (name.get("@value") if isinstance(name, dict) else name) or "",
-                    "short_name": (short.get("@value") if isinstance(short, dict) else short) or "",
+                    "name": _v(r.get("name")),
+                    "short_name": _v(r.get("short")),
+                    # ent-key — идентичность издателя: одна и та же связь, прочитанная
+                    # через две версии документа, даёт две строки с РАЗНЫМИ ent-key
+                    "ent_key": _v(r.get("ent")),
                 })
         finally:
             drv.close()
@@ -193,11 +198,19 @@ def check_document(
 
     # 3. Издатель: на один документ должна быть одна связь document_issuance.
     issuers = document_issuers(document_id)
-    if len(issuers) > 1:
-        names = sorted({(i.get("name") or i.get("short_name") or "") for i in issuers})
+    # Один документ может быть прочитан через несколько версий: тогда одна и та же
+    # связь document_issuance приходит несколькими строками. Считать надо РАЗНЫХ
+    # издателей, иначе проверка ругается на дубль там, где издатель один
+    # (живой случай 11.11.2026: две версии одного файла → ложная ошибка).
+    uniq = {}
+    for _i in issuers:
+        _k = (_i.get("ent_key") or _i.get("name") or _i.get("short_name") or "").strip().lower()
+        uniq.setdefault(_k, _i)
+    if len(uniq) > 1:
+        names = sorted({(i.get("name") or i.get("short_name") or "") for i in uniq.values()})
         found.append("key_mismatch")
         log_error(
-            f"у документа {len(issuers)} связи document_issuance с разными regulator: "
+            f"у документа {len(uniq)} разных издателя (document_issuance): "
             + "; ".join(n for n in names if n) + ". Дедупликации издателя по ent-key нет.",
             error_type="key_mismatch",
             source="writer",
