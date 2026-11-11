@@ -172,6 +172,23 @@ class DocumentParser:
                 except Exception as _e:
                     logger.debug(f"Проверка кодировки слоя не выполнена: {_e}")
 
+                # Битый слой: подстановка глифов. Признак — много символов вне обычных
+                # алфавитов либо русское имя файла при слое без кириллицы. Такой текст
+                # нельзя ни искать, ни разбирать в шапку, поэтому страницу распознаём заново.
+                if text and len(text.strip()) >= 200:
+                    try:
+                        from src.indexing.text_quality import looks_broken
+
+                        _broken, _why = looks_broken(text, Path(str(path)).name)
+                        if _broken:
+                            logger.info(
+                                f"Страница {page_num + 1}: текстовый слой подменён глифами "
+                                f"({_why}) — распознаю страницу"
+                            )
+                            text = ""
+                    except Exception as _e:
+                        logger.debug(f"проверка качества слоя не выполнена: {_e}")
+
                 # Если текст пустой или слишком короткий — используем OCR
                 if not text or len(text.strip()) < 50:
                     logger.info(
@@ -180,24 +197,24 @@ class DocumentParser:
                         f"применяю OCR..."
                     )
 
-                    # Сначала пробуем Tesseract
-                    from src.indexing.ocr_engine import ocr_engine
-                    if ocr_engine.is_available:
-                        try:
-                            if _ocr_pages_cache is None:
-                                _ocr_pages_cache = ocr_engine.extract_text_from_pdf(str(path)) or {}
-                            ocr_result = _ocr_pages_cache
-                            if ocr_result.get("pages") and page_num < len(ocr_result["pages"]):
-                                page_data = ocr_result["pages"][page_num]
-                                text = page_data.get("text", "")
-                                if text:
-                                    ocr_used = True
-                                    logger.info(
-                                        f"Страница {page_num + 1}: Tesseract OCR распознал "
-                                        f"{len(text)} символов"
-                                    )
-                        except Exception as e:
-                            logger.warning(f"Tesseract OCR не работает: {e}")
+                    # Основной распознаватель: служба PP-OCRv5 на сервере моделей,
+                    # затем локальный движок. Все страницы документа распознаются один раз
+                    # и кэшируются — раньше на каждую страницу запускался весь документ.
+                    try:
+                        from src.indexing import text_quality
+
+                        if _ocr_pages_cache is None:
+                            _ocr_pages_cache = text_quality.ocr_pdf_pages(str(path))
+                        _page_text = (_ocr_pages_cache or {}).get(page_num) or ""
+                        if _page_text.strip():
+                            text = _page_text
+                            ocr_used = True
+                            logger.info(
+                                f"Страница {page_num + 1}: OCR страницы дал "
+                                f"{len(text)} символов"
+                            )
+                    except Exception as e:
+                        logger.warning(f"OCR страницы не выполнен: {e}")
 
                     # Если Tesseract не помог - пробуем LLM OCR
                     if not text or len(text.strip()) < 50:
