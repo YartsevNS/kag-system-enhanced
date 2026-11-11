@@ -631,6 +631,24 @@ class HybridDocumentParser:
 
             doc.close()
 
+            # Подмена глифов: слой не пустой, но это не текст документа —
+            # «ФСТЭК РОССИИ» читается как «$ȿȾȿ ȺɅ0ɇȺ3». Такой слой нельзя ни искать,
+            # ни разбирать в шапку (живой случай: приказ ФСТЭК № 239, 11.11.2026).
+            # Проверка стоит ДО критерия «достаточно текста»: мусора как раз много,
+            # поэтому по объёму он проходит и раньше уходил в векторы и в граф.
+            try:
+                from src.indexing.text_quality import looks_broken
+
+                _probe = chr(10).join(pg.text for pg in pages if pg.text)
+                _broken, _why = looks_broken(_probe, path.name)
+                if _broken:
+                    logger.info(
+                        f"PyMuPDF: текстовый слой подменён глифами ({_why}) — нужен OCR"
+                    )
+                    return None
+            except Exception as _e:  # noqa: BLE001 — проверка не должна ломать разбор
+                logger.debug(f"проверка качества слоя не выполнена: {_e}")
+
             # Критерий «достаточно текста»: суммарно > 500 символов И
             # больше половины страниц имеют текстовый слой. Иначе — скан.
             if total_text < 500 or pages_with_text < max(1, len(pages) // 2):
