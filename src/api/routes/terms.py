@@ -47,7 +47,7 @@ async def terms_list(
     domain: str = "",
     status: str = Query("", description="pending | approved | rejected | ''"),
     q: str = "",
-    limit: int = 500,
+    limit: int = 2000,
     _: User = Depends(get_current_admin),
 ):
     def _load():
