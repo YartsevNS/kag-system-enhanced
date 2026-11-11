@@ -45,6 +45,22 @@ def garbage_share(text: str) -> float:
     return sum(1 for c in chars if c not in _ALLOWED) / len(chars)
 
 
+MIXED_TOKEN = re.compile(r"^(?=[^\s]*[A-Za-zЀ-ӿ])(?=[^\s]*\d)[A-Za-zЀ-ӿ\d]{4,}$")
+
+
+def mixed_token_share(text: str) -> float:
+    """Доля «слов», где буквы и цифры слиты: B59EC9, GF69D89A.
+
+    В обычном русском тексте таких токенов почти нет (номер стоит отдельно:
+    «ГОСТ Р 34.10-2012»), а при подмене глифов они идут сплошняком — это признак,
+    не зависящий от языка имени файла.
+    """
+    tokens = [t for t in re.split(r"\s+", text) if t.strip()]
+    if not tokens:
+        return 0.0
+    return sum(1 for t in tokens if MIXED_TOKEN.match(t)) / len(tokens)
+
+
 def looks_broken(text: str, name_hint: str = "") -> tuple:
     """Похож ли слой на подстановку глифов. Возвращает (подозрительно, причина)."""
     body = (text or "").strip()
@@ -53,6 +69,9 @@ def looks_broken(text: str, name_hint: str = "") -> tuple:
     share = garbage_share(body)
     if share > 0.03:
         return True, f"мусорных символов {share:.1%}"
+    mixed = mixed_token_share(body)
+    if mixed > 0.03:
+        return True, f"слитных буквенно-цифровых слов {mixed:.0%}"
     # Язык слоя против языка имени файла: у русского документа слой без кириллицы —
     # это подмена шрифта, а не английский текст (имя файла русское).
     if CYR.search(name_hint or "") and len(LETTER.findall(body)) >= 50:

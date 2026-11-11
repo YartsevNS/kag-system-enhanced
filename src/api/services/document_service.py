@@ -849,6 +849,45 @@ class DocumentService:
                 ocr_path = self._ocr_dir / f"{document_id}_{record.filename}"
                 ocr_path.write_text(parsed.full_text, encoding="utf-8")
                 logger.info(f"OCR сохранён: {ocr_path}")
+                # Шапка документа: если при загрузке её не удалось разобрать (битый слой,
+                # распознавание шло позже), пробуем ещё раз по УЖЕ РАЗОБРАННОМУ тексту.
+                # Без этого исправленный текст не исправлял ключ документа: в source_metadata
+                # оставался мусор (подмена глифов), вид оставался other и ошибка жила вечно.
+                try:
+                    _sm = dict(record.source_metadata or {})
+                    if _sm.get("parsed_missing") or _sm.get("needs_review"):
+                        from src.indexing.doc_meta_parser import parse_document_meta_from_text
+
+                        _pages = [getattr(_p, "text", "") or "" for _p in parsed.pages]
+                        _fresh = parse_document_meta_from_text(
+                            chr(10).join(_pages[:2]),
+                            chr(10).join(_pages[:8]),
+                            record.filename,
+                            str(_sm.get("source_url") or ""),
+                            str(record.source_kind or ""),
+                        )
+                        if _fresh.get("doc_kind") or _fresh.get("number") or _fresh.get("issuer"):
+                            for _k in ("doc_kind", "number", "issuer", "effective_from", "doc_title"):
+                                if _fresh.get(_k):
+                                    _sm[_k] = _fresh[_k]
+                            _missing = _fresh.get("missing") or []
+                            if _missing:
+                                _sm["parsed_missing"] = ",".join(_missing)
+                                _sm["needs_review"] = "true"
+                            else:
+                                _sm.pop("parsed_missing", None)
+                                _sm.pop("needs_review", None)
+                            record.source_metadata = _sm
+                            self._save_document_to_db(document_id)
+                            logger.info(
+                                f"[шапка] документ {document_id}: "
+                                f"вид={_sm.get('doc_kind')}, номер={_sm.get('number')}, "
+                                f"издатель={_sm.get('issuer')}, дата={_sm.get('effective_from')} "
+                                f"(не разобрано: {_sm.get('parsed_missing') or '—'})"
+                            )
+                except Exception as _e:  # noqa: BLE001 — не ломаем обработку
+                    logger.warning(f"повторный разбор шапки не выполнен: {str(_e)[:160]}")
+
                 
                 # Сохраняем Markdown-версию (с таблицами и структурой)
                 try:

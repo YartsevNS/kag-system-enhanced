@@ -110,7 +110,24 @@ def parse_document_meta(
     # встречается на 5-й странице), поэтому её ищем отдельным проходом по первым восьми.
     head = _text_head(content, filename, pages=2)
     tail = _text_head(content, filename, pages=8)
-    first = "\n".join(l.strip() for l in head.splitlines() if l.strip())[:4000]
+    return parse_document_meta_from_text(head, tail, filename, source_url, source_kind)
+
+
+def parse_document_meta_from_text(
+    head: str,
+    tail: str,
+    filename: str = "",
+    source_url: str = "",
+    source_kind: str = "",
+) -> Dict[str, Any]:
+    """Разобрать шапку по ГОТОВОМУ тексту: первые 2 страницы и первые 8.
+
+    Нужна для повторного разбора: если при загрузке слой был битым и его заменило
+    распознавание, шапку надо собрать заново по распознанному тексту, иначе в
+    source_metadata остаётся мусор («$ȿȾȿ ȺɅ0ɇȺ3») и вид документа навсегда other.
+    """
+    first = (head or "").splitlines()
+    first = " ".join(l.strip() for l in first if l.strip())[:4000]
     out: Dict[str, Any] = {"missing": []}
 
     # 1. Номер и вид — по обозначению в шапке

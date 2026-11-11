@@ -727,13 +727,18 @@ async def upload_document(
 
         # Что не распознал парсер шапки — в отдельный журнал онтологии. Документ при этом
         # загружен (терять файл из-за нераспознанной шапки нельзя), но помечен на проверку.
-        if _missing:
+        # В журнал ошибок идём только по опознавательным полям: вид, номер, издатель.
+        # Дата вступления в силу есть не в каждом документе (приказ ФСТЭК № 239 её не
+        # содержит), и раньше из-за неё документ выглядел «сломанным».
+        _identity_missing = [m for m in _missing
+                             if m in ("doc_kind", "doc_kind_not_code", "number", "issuer")]
+        if _identity_missing:
             try:
                 from src.api.services.ontology_errors import log_error
 
                 log_error(
                     "шапка документа разобрана не полностью: "
-                    + ", ".join(sorted(set(_missing)))
+                    + ", ".join(sorted(set(_identity_missing)))
                     + ". Вид документа записан как other — исправьте контекст на странице /errors.",
                     error_type="extraction_failed",
                     source="parser",
