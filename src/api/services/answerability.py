@@ -32,16 +32,28 @@ _vocab_cache: Dict[str, Any] = {"at": 0.0, "stems": set(), "size": 0}
 _VOCAB_TTL = 300.0
 
 
-def tokens(text: str) -> List[str]:
-    """Значимые слова вопроса.
+def _pairs(text: str) -> List[tuple]:
+    """Пары (слово как в тексте, стем) для сравнения и показа человеку.
 
-    Токенизация и стоп-слова берутся из src/indexing/lexical.py — того же модуля,
-    что работает в BM25-ветке поиска. Свой список стоп-слов уже расходился с ним:
-    «меры» в вопросе и «мера» в схеме считались разными словами.
+    Стем нужен для сравнения с онтологией, а исходное слово — для очереди
+    пробелов и словаря: там «биоме» вместо «биометрической» бессмысленно,
+    человек такое не подтвердит и в глоссарий оно попадёт мусором.
     """
-    from src.indexing.lexical import tokenize_lexical
+    import re
 
-    return tokenize_lexical(text or "")
+    from src.indexing.lexical import STOPWORDS_RU, stem_ru
+
+    out: List[tuple] = []
+    for w in re.findall(r"[а-яёa-z0-9][а-яёa-z0-9\-]*", (text or "").lower().replace("ё", "е")):
+        if len(w) < 3 or w in STOPWORDS_RU:
+            continue
+        out.append((w, stem_ru(w)))
+    return out
+
+
+def tokens(text: str) -> List[str]:
+    """Значимые слова вопроса в исходной форме (для показа человеку)."""
+    return [w for w, _ in _pairs(text)]
 
 
 def _stem(word: str) -> str:
@@ -51,12 +63,7 @@ def _stem(word: str) -> str:
 
 
 def _stems_of(text: str) -> List[str]:
-    try:
-        from src.indexing.lexical import stem_ru, tokenize_lexical
-
-        return [stem_ru(w) for w in tokenize_lexical(text or "") if len(w) >= 3]
-    except Exception:  # noqa: BLE001
-        return []
+    return [stem for _w, stem in _pairs(text)]
 
 
 def _schema_words() -> List[str]:
