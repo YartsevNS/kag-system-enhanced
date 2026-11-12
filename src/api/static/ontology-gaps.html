@@ -47,8 +47,11 @@
       <option value="rejected">Отклонённые</option>
     </select>
     <button onclick="load()">Обновить</button>
+    <button class="primary" onclick="draft()" title="Собрать каркас define из пробелов">Черновик схемы</button>
     <span class="muted" id="stat"></span>
   </div>
+
+  <pre id="draft" style="display:none;background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;overflow:auto;max-height:420px"></pre>
 
   <table>
     <thead><tr>
@@ -77,7 +80,10 @@ async function load(){
     const tb = document.getElementById('rows');
     if (!ITEMS.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Пробелов нет</td></tr>'; return; }
     tb.innerHTML = ITEMS.map((it, i) => {
-      const ex = (it.examples || []).map(e => '<div class="q">…' + esc(e) + '…</div>').join('');
+      const ex = (it.examples || []).map(e => {
+        const t = (e && typeof e === 'object') ? (e.q || JSON.stringify(e)) : e;
+        return '<div class="q">…' + esc(t) + '…</div>';
+      }).join('');
       const actions = it.status === 'proposed'
         ? `<button class="primary" onclick="review(${i},'accepted')">Принять</button>
            <button onclick="review(${i},'rejected')">Отклонить</button>`
@@ -100,12 +106,39 @@ async function load(){
 async function review(i, status){
   const it = ITEMS[i];
   if (!it) return;
+  // При принятии можно сразу задать канон: «канон: <полное название>».
+  // Без этого термин попадёт в словарь как реестровая запись (вариант = канон).
+  let note = '';
+  if (status === 'accepted') {
+    const v = prompt('Каноническое название (можно оставить пустым):', '');
+    if (v === null) return;
+    if (v.trim()) note = 'канон: ' + v.trim();
+  }
   const r = await fetch(API + '/' + encodeURIComponent(it.id) + '/review', {
     method: 'POST', credentials: 'same-origin',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({status: status, note: ''})
+    body: JSON.stringify({status: status, note: note})
   });
-  if (r.ok) load(); else alert('Не удалось: HTTP ' + r.status);
+  if (r.ok) {
+    const d = await r.json();
+    if (d.learned) {
+      document.getElementById('stat').textContent = d.learned.status === 'learned'
+        ? 'принято, термин добавлен в словарь' : 'принято (в словаре уже был)';
+    }
+    load();
+  } else alert('Не удалось: HTTP ' + r.status);
+}
+
+async function draft(){
+  const pre = document.getElementById('draft');
+  pre.style.display = 'block';
+  pre.textContent = 'собираю черновик…';
+  try {
+    const r = await fetch(API + '/draft?limit=60', {credentials: 'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    pre.textContent = d.tql || 'пробелов нет';
+  } catch (e) { pre.textContent = 'Не удалось: ' + e.message; }
 }
 
 load();

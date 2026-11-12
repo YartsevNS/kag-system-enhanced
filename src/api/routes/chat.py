@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, Response
 from loguru import logger
+import asyncio
 import uuid
 import json
 from datetime import datetime
@@ -236,6 +237,21 @@ async def send_message(
             model=getattr(request, "model", None),
             scope=getattr(request, "scope", None),
         )
+
+        # ── Покрытие вопроса онтологией (аналог check_answerable) ─────────────
+        # Считаем долю значимых слов вопроса, известных онтологии (словарь +
+        # типы/связи домена). Непокрытые термины уходят в очередь пробелов
+        # схемы: это цикл Learn — принятый пробел становится термином словаря
+        # и в следующий раз считается покрытым. Сбой учёта чат не роняет.
+        try:
+            from src.api.services import answerability
+
+            ans = await asyncio.to_thread(answerability.analyze, user_message)
+            md = response.setdefault("metadata", {}) or {}
+            md["answerability"] = ans
+            response["metadata"] = md
+        except Exception as e:
+            logger.debug(f"покрытие онтологией не посчитано: {e}")
 
         # Сохраняем сообщения на сервере (если пользователь авторизован).
         # Зачем: серверное хранение диалогов вместо localStorage — нет гонки

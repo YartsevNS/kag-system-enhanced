@@ -73,6 +73,7 @@
     </select>
     <input id="fq" placeholder="поиск по термину" style="min-width:220px">
     <button id="reload">Применить</button>
+    <button id="autopilot" title="Разобрать очередь детерминированными правилами">Автопилот</button>
     <span id="msg"></span>
   </div>
 
@@ -142,7 +143,7 @@ async function load(){
       <td class="canon">${esc(it.canonical_name)}</td>
       <td><span class="muted">${esc(et[it.entity_type]||it.entity_type)} · ${esc(it.domain||'—')}</span>
         ${it.source?`<div class="muted">источник: ${esc(it.source)}</div>`:''}</td>
-      <td>${tag(it)}${it.comment?`<div class="muted">${esc(it.comment)}</div>`:''}</td>
+      <td>${tag(it)}${hintChip(it)}${it.comment?`<div class="muted">${esc(it.comment)}</div>`:''}</td>
       <td>
         <button data-act="approved">Подтвердить</button>
         <button data-act="rejected" class="danger">Отклонить</button>
@@ -157,8 +158,39 @@ async function load(){
   document.getElementById('empty').style.display=(d.items||[]).length?'none':'block';
   loadStats();
 }
+function hintChip(it){
+  const h=it.hint||{};
+  if(h.verdict==='auto') return `<div><span class="tag ok">авто: ${esc(h.rule||'')}</span></div>`;
+  if(h.hint==='abbreviation_mismatch')
+    return `<div><span class="tag wait">расшифровка не выводится — похоже на мусор</span></div>`;
+  return '';
+}
+async function autopilot(){
+  const msg=document.getElementById('msg');
+  try{
+    msg.textContent='считаю…';
+    const dry=await (await fetch('/api/v1/ontology/automation/run',{
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({scope:'aliases', dry_run:true, limit:2000})
+    })).json();
+    const a=dry.aliases||{};
+    const text=`правилами решается ${a.auto||0}, человеку ${a.review||0} `+
+      `(${Object.entries(a.by_rule||{}).map(([k,v])=>k+':'+v).join(', ')})`;
+    if(!a.auto){ msg.textContent=text; return; }
+    if(!confirm(`${text}. Применить?`)){ msg.textContent=text+' — не применено'; return; }
+    const run=await (await fetch('/api/v1/ontology/automation/run',{
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({scope:'aliases', dry_run:false, limit:2000})
+    })).json();
+    msg.textContent=`подтверждено ${(run.aliases||{}).auto||0}, осталось в очереди ${(run.aliases||{}).pending_after||0}`;
+    load();
+  }catch(e){ msg.textContent='ошибка: '+e; }
+}
 function renderContext(term, items){
   if(!items.length) return '<div class="muted">Вхождений в корпусе не найдено.</div>';
+
   return items.map(x=>`<div class="snip">${esc(x.text||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}
       <div class="src">${esc(x.filename||'')} ${x.score?('· сходство '+x.score):''}</div></div>`).join('');
 }
@@ -206,6 +238,7 @@ document.getElementById('addBtn').onclick=async()=>{
   load();
 };
 document.getElementById('reload').onclick=load;
+document.getElementById('autopilot').onclick=autopilot;
 document.getElementById('fstatus').onchange=load;
 document.getElementById('ftype').onchange=load;
 document.getElementById('fdomain').onchange=load;

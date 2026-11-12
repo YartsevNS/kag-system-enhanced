@@ -631,6 +631,13 @@ async def schema_gaps_list(status: str = "", limit: int = 200, _: User = Depends
 
 @router.post("/schema-gaps/{gap_id}/review", summary="Решение по пробелу схемы")
 async def schema_gap_review(gap_id: str, req: GapReview, user: User = Depends(get_current_admin)):
+    """Решение человека по пробелу. Принятый пробел становится термином словаря.
+
+    Это цикл Learn: пробел пришёл из реального вопроса пользователя (покрытие
+    онтологией), человек его принял — и пара попадает в entity_aliases как
+    подтверждённая. Со следующего вопроса термин считается покрытым, а глоссарий
+    извлечения получает новое каноническое название.
+    """
     from sqlalchemy import text
 
     from src.database.session import get_session_local
@@ -638,17 +645,121 @@ async def schema_gap_review(gap_id: str, req: GapReview, user: User = Depends(ge
     if req.status not in ("accepted", "rejected", "proposed"):
         return {"ok": False, "error": "статус: accepted | rejected | proposed"}
     db = get_session_local()()
+    learned = None
     try:
         res = db.execute(
             text("update ontology_schema_gaps set status = :st, note = :note, reviewer = :who, "
                  "reviewed_at = now() where id = cast(:id as uuid)"),
             {"st": req.status, "note": (req.note or "")[:2000], "who": _who(user), "id": gap_id},
         )
-        db.commit()
         n = res.rowcount
+        if req.status == "accepted" and n:
+            row = db.execute(text("select term from ontology_schema_gaps where id = cast(:id as uuid)"),
+                             {"id": gap_id}).scalar()
+            learned = _learn_gap_term(db, (row or "").strip(), _who(user), req.note or "")
+        db.commit()
     finally:
         db.close()
-    return {"ok": bool(n), "changed": int(n or 0)}
+    return {"ok": bool(n), "changed": int(n or 0), "learned": learned}
+
+
+def _learn_gap_term(db, term: str, who: str, note: str) -> dict | None:
+    """Записать принятый пробел в словарь. Идемпотентно, без дублей.
+
+    Канон не выдумываем: если человек в примечании написал «канон: X», берём X,
+    иначе вариант считается равным канону (реестровая запись).
+    """
+    from sqlalchemy import text
+
+    if not term or len(term) < 3:
+        return None
+    canonical = ""
+    marker = "канон:"
+    if marker in (note or "").lower():
+        low = note.lower()
+        canonical = note[low.index(marker) + len(marker):].strip().split("\n")[0][:200]
+    exists = db.execute(
+        text("select 1 from entity_aliases where alias = :a and canonical_name = :c limit 1"),
+        {"a": term[:200], "c": (canonical or "")[:200]},
+    ).first()
+    if exists:
+        return {"status": "exists", "alias": term}
+    db.execute(
+        text("insert into entity_aliases (id, canonical_name, alias, entity_type, domain, "
+             "source, comment, reviewed, verdict) "
+             "values (:id, :c, :a, 'term', 'infosec', 'gap_accepted', :note, true, 'approved')"),
+        {"id": f"gap-{abs(hash((term, canonical))) % 10**12}", "c": (canonical or "")[:200],
+         "a": term[:200], "note": (note or "")[:1000]},
+    )
+    try:
+        from src.api.services.glossary import invalidate as _gloss_invalidate
+
+        _gloss_invalidate()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"status": "learned", "alias": term, "canonical": canonical or ""}
+
+
+# ── автопилот: уровень автоматизации, журнал решений, отзыв ─────────────────
+class AutomationRun(BaseModel):
+    scope: str = Field("aliases", description="aliases | duplicates | all")
+    dry_run: bool = Field(True, description="true — только посчитать, ничего не менять")
+    limit: int = Field(2000, ge=1, le=5000)
+
+
+@router.get("/automation/decisions", summary="Журнал авто-решений (что система решила сама)")
+async def automation_decisions(kind: str = "", status: str = "active", limit: int = 200,
+                               _: User = Depends(get_current_admin)):
+    from src.api.services import automation
+
+    return {"ok": True, "stats": await asyncio.to_thread(automation.stats),
+            "items": await asyncio.to_thread(automation.list_decisions, kind, status, limit)}
+
+
+@router.post("/automation/run", summary="Прогнать правила автопилота по очереди")
+async def automation_run(req: AutomationRun, user: User = Depends(get_current_admin)):
+    from src.api.services import automation
+
+    result = {}
+    if req.scope in ("aliases", "all"):
+        result["aliases"] = await asyncio.to_thread(
+            automation.run_alias_autopilot, req.limit, req.dry_run)
+    if req.scope in ("duplicates", "all"):
+        result["duplicates"] = await asyncio.to_thread(
+            automation.run_duplicate_autopilot, min(req.limit, 500), req.dry_run)
+    return {"ok": True, "who": _who(user), "dry_run": req.dry_run, **result}
+
+
+@router.post("/automation/decisions/{decision_id}/revoke", summary="Отозвать авто-решение")
+async def automation_revoke(decision_id: str, user: User = Depends(get_current_admin)):
+    from src.api.services import automation
+
+    return await asyncio.to_thread(automation.revoke, decision_id, _who(user), "")
+
+
+@router.get("/schema-gaps/draft", summary="Черновик расширения схемы из пробелов")
+async def schema_gaps_draft(limit: int = 60, _: User = Depends(get_current_admin)):
+    from src.api.services import automation
+
+    _gaps_ensure()
+    return await asyncio.to_thread(automation.schema_draft, limit)
+
+
+@router.get("/answerability", summary="Покрытие вопроса онтологией (проверка без чата)")
+async def answerability_check(q: str, save: bool = False, _: User = Depends(get_current_admin)):
+    from src.api.services import answerability
+
+    return {"ok": True, "question": q,
+            "result": await asyncio.to_thread(answerability.analyze, q, save)}
+
+
+@router.get("/glossary", summary="Глоссарий, который уходит в задание извлечения")
+async def glossary_view(_: User = Depends(get_current_admin)):
+    from src.api.services import glossary
+
+    return {"ok": True, "stats": await asyncio.to_thread(glossary.stats),
+            "block": await asyncio.to_thread(glossary.build)}
+
 
 
 @router.delete("/errors/{error_id}", summary="Удалить запись журнала ошибок онтологии")

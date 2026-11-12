@@ -41,6 +41,16 @@ def _dict(row: EntityAlias) -> dict:
     return row.to_dict()
 
 
+def _invalidate_glossary() -> None:
+    """Правка словаря обязана сразу попасть в задание извлечения (цикл Learn)."""
+    try:
+        from src.api.services.glossary import invalidate
+
+        invalidate()
+    except Exception:  # noqa: BLE001 - сбой кеша не должен валить сохранение
+        logger.debug("словарь: кеш глоссария не сброшен")
+
+
 @router.get("", summary="Словарь терминов: список пар")
 async def terms_list(
     entity_type: str = "",
@@ -74,6 +84,13 @@ async def terms_list(
             session.close()
 
     items = await asyncio.to_thread(_load)
+    # Подсказка автопилота: что система сделала бы сама и на что смотреть.
+    # Считается в памяти (без БД): чистая функция от двух строк.
+    from src.api.services.automation import advice
+
+    for it in items:
+        it["hint"] = advice(it.get("alias", ""), it.get("canonical_name", ""),
+                            it.get("entity_type", ""))
     return {"status": "ok", "total": len(items), "items": items}
 
 
@@ -136,6 +153,7 @@ async def terms_add(body: PairBody, user: User = Depends(get_current_admin)):
     row = await asyncio.to_thread(_add)
     if row is None:
         return {"status": "error", "message": "такая пара уже есть"}
+    _invalidate_glossary()
     logger.info("словарь: добавлена пара «%s» → «%s» (%s)", alias, canonical,
                 getattr(user, "email", "") or "")
     return {"status": "ok", "item": row, "message": "Пара добавлена и подтверждена"}
@@ -166,6 +184,7 @@ async def terms_update(pair_id: str, body: PairBody, _: User = Depends(get_curre
     row = await asyncio.to_thread(_upd)
     if row is None:
         raise HTTPException(status_code=404, detail="пара не найдена")
+    _invalidate_glossary()
     return {"status": "ok", "item": row, "message": "Сохранено"}
 
 
@@ -213,6 +232,9 @@ async def terms_review(pair_id: str, body: ReviewBody, user: User = Depends(get_
     row = await asyncio.to_thread(_review)
     if row is None:
         raise HTTPException(status_code=404, detail="пара не найдена")
+    # Решение человека вкатывается в задание извлечения со следующего документа:
+    # сбрасываем кеш глоссария, иначе правка подействует только через 10 минут.
+    _invalidate_glossary()
     logger.info("словарь: «%s» → «%s» %s (%s)", row["alias"], row["canonical_name"],
                 body.verdict, getattr(user, "email", "") or "")
     return {"status": "ok", "item": row,
@@ -236,4 +258,5 @@ async def terms_delete(pair_id: str, _: User = Depends(get_current_admin)):
     ok = await asyncio.to_thread(_del)
     if not ok:
         raise HTTPException(status_code=404, detail="пара не найдена")
+    _invalidate_glossary()
     return {"status": "ok", "message": "Пара удалена"}

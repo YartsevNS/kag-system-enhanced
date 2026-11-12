@@ -992,6 +992,16 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
         header.append(f"Документ: {document}")
     if clause:
         header.append(f"пункт: {clause}")
+    # Цикл Learn: подтверждённые и отклонённые человеком пары словаря возвращаются
+    # в задание. Правка, сделанная один раз, действует на все следующие документы.
+    try:
+        from src.api.services.glossary import build as _build_glossary
+
+        _gloss = _build_glossary()
+        if _gloss:
+            header.append(_gloss)
+    except Exception as exc:  # noqa: BLE001 - глоссарий не должен ломать извлечение
+        logger.debug("typedb_writer: глоссарий не подставлен: %s", str(exc)[:160])
     text = (("[" + "; ".join(header) + "]\n") if header else "") + chunk_text
     return template.replace("{text_chunk}", text)
 
