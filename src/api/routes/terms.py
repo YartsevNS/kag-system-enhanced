@@ -169,6 +169,30 @@ async def terms_update(pair_id: str, body: PairBody, _: User = Depends(get_curre
     return {"status": "ok", "item": row, "message": "Сохранено"}
 
 
+@router.get("/{pair_id}/context", summary="Словарь терминов: контекст употребления")
+async def terms_context(pair_id: str, limit: int = 5, _: User = Depends(get_current_admin)):
+    """Несколько слов до и после термина — чтобы решение принималось по живому тексту.
+
+    Ищем по самому варианту написания; возвращаем фрагменты, где он действительно есть,
+    с разметкой **термин** (страница выделяет жирным).
+    """
+    def _load():
+        session = get_session_local()()
+        try:
+            row = session.query(EntityAlias).filter(EntityAlias.id == pair_id).first()
+            return row.alias if row else None
+        finally:
+            session.close()
+
+    alias = await asyncio.to_thread(_load)
+    if not alias:
+        raise HTTPException(status_code=404, detail="пара не найдена")
+    from src.indexing.term_context import find_context
+
+    items = await find_context(alias, limit=limit)
+    return {"status": "ok", "term": alias, "total": len(items), "items": items}
+
+
 @router.post("/{pair_id}/review", summary="Словарь терминов: подтвердить или отклонить")
 async def terms_review(pair_id: str, body: ReviewBody, user: User = Depends(get_current_admin)):
     def _review():

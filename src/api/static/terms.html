@@ -32,6 +32,10 @@
   #msg{font-size:12px;color:var(--accent,#3ecf8e);min-height:18px}
   .add{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px;margin:16px 0}
   .add .row{margin:8px 0}
+  .ctx td{background:rgba(62,207,142,.04)}
+  .ctx .snip{margin:6px 0;line-height:1.6}
+  .ctx .src{font-size:11px;color:var(--text3,#8b93a1)}
+  .ctx b{color:var(--accent,#3ecf8e)}
 </style>
 </head>
 <body>
@@ -142,17 +146,36 @@ async function load(){
       <td>
         <button data-act="approved">Подтвердить</button>
         <button data-act="rejected" class="danger">Отклонить</button>
+        <button data-act="context">Контекст</button>
         <button data-act="edit">Изменить</button>
       </td>`;
     tr.querySelectorAll('button[data-act]').forEach(b=>{
-      b.onclick=()=>act(it,b.dataset.act);
+      b.onclick=()=>act(it,b.dataset.act,tr);
     });
     rows.appendChild(tr);
   });
   document.getElementById('empty').style.display=(d.items||[]).length?'none':'block';
   loadStats();
 }
-async function act(it,what){
+function renderContext(term, items){
+  if(!items.length) return '<div class="muted">Вхождений в корпусе не найдено.</div>';
+  return items.map(x=>`<div class="snip">${esc(x.text||'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}
+      <div class="src">${esc(x.filename||'')} ${x.score?('· сходство '+x.score):''}</div></div>`).join('');
+}
+async function act(it,what,row){
+  if(what==='context'){
+    const existing=row && row.nextElementSibling && row.nextElementSibling.classList.contains('ctx')
+      ? row.nextElementSibling : null;
+    if(existing){ existing.remove(); return; }
+    const tr=document.createElement('tr'); tr.className='ctx';
+    tr.innerHTML='<td colspan="5" class="muted">ищу контекст…</td>';
+    row.after(tr);
+    try{
+      const d=await (await fetch(`${api}/${it.id}/context?limit=5`,{credentials:'include'})).json();
+      tr.firstElementChild.innerHTML = renderContext(it.alias, d.items||[]);
+    }catch(e){ tr.firstElementChild.textContent='ошибка: '+e; }
+    return;
+  }
   if(what==='edit'){
     const canon=prompt('Канонический термин:', it.canonical_name);
     if(canon===null) return;
