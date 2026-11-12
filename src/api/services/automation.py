@@ -386,6 +386,34 @@ def revoke(decision_id: str, who: str = "", note: str = "") -> Dict[str, Any]:
 
 
 # ── P5: черновик расширения схемы из пробелов ───────────────────────────────
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh",
+    "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+    "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "c",
+    "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu",
+    "я": "ya",
+}
+
+
+def _ascii_slug(term: str) -> str:
+    """Имя типа для TypeQL: только латиница, цифры и дефис.
+
+    Русское слово в имени типа TypeDB не примет — а черновик должен быть
+    применимым, а не декоративным. Поэтому транслитерация + обрезка длины.
+    """
+    out = []
+    for ch in norm(term):
+        if ch == " ":
+            out.append("-")
+        elif ch.isascii() and (ch.isalnum() or ch == "-"):
+            out.append(ch)
+        else:
+            out.append(_TRANSLIT.get(ch, ""))
+    slug = "".join(out)
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    return slug[:40]
+
+
 def schema_draft(limit: int = 60) -> Dict[str, Any]:
     """Черновик TypeQL из очереди пробелов: человек правит, а не сочиняет.
 
@@ -430,8 +458,8 @@ def schema_draft(limit: int = 60) -> Dict[str, Any]:
     candidates = []
     for key, items in sorted(groups.items(), key=lambda kv: -sum(i["hits"] for i in kv[1])):
         top = items[0]
-        slug = re.sub(r"[^a-zа-я0-9]+", "-", norm(top["term"])).strip("-")[:40] or key
-        if slug in existing:
+        slug = _ascii_slug(top["term"]) or key
+        if slug in existing or not slug:
             continue
         candidates.append({"slug": slug, "terms": items})
         lines.append(f"# {slug} — {sum(i['hits'] for i in items)} упоминаний, "

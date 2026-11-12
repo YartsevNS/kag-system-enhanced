@@ -73,11 +73,13 @@ def build() -> str:
     if not approved and not rejected:
         return ""
 
+    approved = _sanitize(approved)
+
     lines = [
         "ГЛОССАРИЙ (решения человека по прошлым документам — соблюдай их буквально):",
         "канонические соответствия — используй ПРАВУЮ часть как название сущности:",
     ]
-    used = 0
+    used = sum(len(x) for x in lines)
     for alias, canonical in approved:
         item = f"  {alias} → {canonical}"
         if used + len(item) > MAX_CHARS:
@@ -85,17 +87,57 @@ def build() -> str:
         lines.append(item)
         used += len(item)
     if rejected:
-        lines.append("НЕ сливать в одну сущность (человек проверил и отклонил):")
-        for alias, canonical in rejected:
-            item = f"  {alias} ≠ {canonical}"
-            if used + len(item) > MAX_CHARS:
-                break
-            lines.append(item)
-            used += len(item)
+        head = "НЕ сливать в одну сущность (человек проверил и отклонил):"
+        if used + len(head) <= MAX_CHARS:
+            lines.append(head)
+            used += len(head)
+            for alias, canonical in rejected:
+                item = f"  {alias} ≠ {canonical}"
+                if used + len(item) > MAX_CHARS:
+                    break
+                lines.append(item)
+                used += len(item)
 
     block = "\n".join(lines)
     _cache.update({"at": now, "block": block})
     return block
+
+
+def _sanitize(pairs: List[tuple]) -> List[tuple]:
+    """Убрать пары, которые нельзя показывать модели как правило.
+
+    Словарь копился годами и в нём есть противоречия: одновременно
+    «Интернет → сеть Интернет» и «сеть Интернет → Интернет», а также обратные
+    пары вида «Банк России → ЦБ» (каноном записано сокращение). Если отдать это
+    модели буквально, извлечение получит взаимоисключающие указания — хуже,
+    чем без глоссария. Поэтому:
+      1) из взаимно обратных пар оставляем одну — ту, у которой канон
+         информативнее (больше слов, затем длиннее);
+      2) пару, где канон — короткое сокращение, а вариант — развёрнутое
+         название, не показываем: направление явно перепутано.
+    """
+    norm = lambda s: " ".join((s or "").lower().replace("ё", "е").split())  # noqa: E731
+    index = {(norm(a), norm(c)): (a, c) for a, c in pairs}
+    out: List[tuple] = []
+    for (na, nc), (a, c) in index.items():
+        rev = index.get((nc, na))
+        if rev is not None:
+            # канон информативнее — остаётся эта пара; иначе достанется обратной
+            if (len(rev[1].split()), len(rev[1])) > (len(c.split()), len(c)):
+                continue
+        if _looks_inverted(a, c):
+            continue
+        out.append((a, c))
+    return out
+
+
+def _looks_inverted(alias: str, canonical: str) -> bool:
+    """Канон — короткое сокращение, вариант — развёрнутое название."""
+    c = (canonical or "").strip()
+    a = (alias or "").strip()
+    c_short = len(c) <= 6 and c.isupper() and c.replace("-", "").isalpha()
+    a_long = len(a.split()) >= 2 and not a.isupper()
+    return c_short and a_long
 
 
 def stats() -> Dict[str, int]:
