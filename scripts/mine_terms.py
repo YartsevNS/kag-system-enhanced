@@ -25,6 +25,10 @@ _ABBR = re.compile(r"(?P<long>[А-ЯЁ][а-яё]+(?:[ \u2011-][а-яё]+){1,7})\
 # «3.1 автоматизированная система: Система, состоящая из …»
 _DEF = re.compile(r"^\s*\d+(?:\.\d+)*\s+(?P<term>[а-яё][^:\n]{2,60}?)\s*:\s+\S", re.M)
 
+# Знаки, которые не различают термин (переводятся в пробел перед сравнением букв)
+_PUNCT_CHARS = (list("«»\"'`.,;:!?()[]{}<>*") + ["—", "–", "−", "―", "‐", "‑", "/", chr(92), "|"])
+_PUNCT_TABLE = {ord(c): " " for c in _PUNCT_CHARS}
+
 # Служебные слова, которые не являются термином документа
 _STOP = {
     "примечание", "примечания", "пример", "примеры", "таблица", "рисунок", "сноска",
@@ -124,6 +128,12 @@ def mine(chunks: list, max_pairs: int = 500, max_defs: int = 500) -> list:
     return out
 
 
+def _norm_letters(value: str) -> str:
+    """Сравнение «по буквам»: регистр, ё/е, пунктуация и пробелы не различают термин."""
+    text = (value or "").lower().replace("ё", "е").translate(_PUNCT_TABLE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def save(candidates: list) -> tuple:
     session = None
     try:
@@ -137,11 +147,16 @@ def save(candidates: list) -> tuple:
         for alias, canonical, etype, comment in candidates:
             if (alias, canonical) in existing:
                 continue
+            # Правило владельца: если вариант и канон совпадают по буквам, это один и тот же
+            # термин — подтверждаем сразу, человеку такой вопрос задавать бессмысленно
+            # («метод криптографического анализа = метод криптографического анализа»).
+            same_letters = _norm_letters(alias) == _norm_letters(canonical) and _norm_letters(alias)
             session.add(EntityAlias(
                 id=f"{abs(hash((alias, canonical))) & ((1 << 64) - 1):x}",
                 alias=alias, canonical_name=canonical, entity_type="term",
                 domain="infosec", source="extraction", comment=comment,
-                reviewed=False, verdict="",
+                reviewed=True if same_letters else False,
+                verdict="approved" if same_letters else "",
             ))
             existing.add((alias, canonical))
             added += 1
