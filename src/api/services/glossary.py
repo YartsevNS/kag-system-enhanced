@@ -37,6 +37,13 @@ def invalidate() -> None:
 
 
 def _rows() -> tuple[List[tuple], List[tuple]]:
+    """Пары для глоссария в порядке полезности для извлечения.
+
+    Порядок важен: в словаре 500+ подтверждённых пар, а в задание попадают
+    первые 60. Если брать по алфавиту, блок заполняют английские сокращения
+    из чужого словаря (3GPP, FMLN), и полезные доменные термины туда не влезают.
+    Приоритет: термины предметной области → организации ИБ → остальное.
+    """
     from sqlalchemy import text
 
     from src.database.session import get_session_local
@@ -46,8 +53,11 @@ def _rows() -> tuple[List[tuple], List[tuple]]:
         approved = db.execute(text(
             "SELECT alias, canonical_name FROM entity_aliases "
             "WHERE verdict = 'approved' AND coalesce(canonical_name, '') <> '' "
-            "ORDER BY entity_type, alias LIMIT :lim"
-        ), {"lim": MAX_APPROVED}).all()
+            "ORDER BY CASE WHEN entity_type = 'term' THEN 0 "
+            "              WHEN domain = 'infosec' THEN 1 "
+            "              WHEN entity_type = 'organization' THEN 2 ELSE 3 END, "
+            "         alias LIMIT :lim"
+        ), {"lim": max(MAX_APPROVED * 4, 200)}).all()
         rejected = db.execute(text(
             "SELECT alias, canonical_name FROM entity_aliases "
             "WHERE verdict = 'rejected' AND coalesce(canonical_name, '') <> '' "
@@ -56,6 +66,30 @@ def _rows() -> tuple[List[tuple], List[tuple]]:
     finally:
         db.close()
     return approved, rejected
+
+
+def _is_cyrillic(text: str) -> bool:
+    return any("а" <= ch.lower() <= "я" or ch.lower() == "ё" for ch in (text or ""))
+
+
+def _select(pairs: List[tuple]) -> List[tuple]:
+    """Отобрать пары под бюджет задания.
+
+    Доменные пары (кириллица хотя бы с одной стороны) идут целиком до 60,
+    иностранные сокращения — не больше 12: они нужны редко и вытесняют
+    русские термины из блока.
+    """
+    out: List[tuple] = []
+    foreign = 0
+    for alias, canonical in pairs:
+        if not (_is_cyrillic(alias) or _is_cyrillic(canonical)):
+            if foreign >= 12:
+                continue
+            foreign += 1
+        out.append((alias, canonical))
+        if len(out) >= MAX_APPROVED:
+            break
+    return out
 
 
 def build() -> str:
@@ -73,30 +107,30 @@ def build() -> str:
     if not approved and not rejected:
         return ""
 
-    approved = _sanitize(approved)
+    approved = _sanitize(_select(approved))
 
     lines = [
         "ГЛОССАРИЙ (решения человека по прошлым документам — соблюдай их буквально):",
         "канонические соответствия — используй ПРАВУЮ часть как название сущности:",
     ]
-    used = sum(len(x) for x in lines)
+    used = sum(len(x) + 1 for x in lines)
     for alias, canonical in approved:
         item = f"  {alias} → {canonical}"
-        if used + len(item) > MAX_CHARS:
+        if used + len(item) + 1 > MAX_CHARS:
             break
         lines.append(item)
-        used += len(item)
+        used += len(item) + 1
     if rejected:
         head = "НЕ сливать в одну сущность (человек проверил и отклонил):"
-        if used + len(head) <= MAX_CHARS:
+        if used + len(head) + 1 <= MAX_CHARS:
             lines.append(head)
-            used += len(head)
+            used += len(head) + 1
             for alias, canonical in rejected:
                 item = f"  {alias} ≠ {canonical}"
-                if used + len(item) > MAX_CHARS:
+                if used + len(item) + 1 > MAX_CHARS:
                     break
                 lines.append(item)
-                used += len(item)
+                used += len(item) + 1
 
     block = "\n".join(lines)
     _cache.update({"at": now, "block": block})
