@@ -57,6 +57,7 @@ async def terms_list(
     domain: str = "",
     status: str = Query("", description="pending | approved | rejected | ''"),
     q: str = "",
+    hint: str = Query("", description="подсказка автопилота: abbreviation_mismatch | авто-правило"),
     limit: int = 2000,
     _: User = Depends(get_current_admin),
 ):
@@ -91,6 +92,8 @@ async def terms_list(
     for it in items:
         it["hint"] = advice(it.get("alias", ""), it.get("canonical_name", ""),
                             it.get("entity_type", ""))
+    if hint:
+        items = [it for it in items if it["hint"].get("hint") == hint]
     return {"status": "ok", "total": len(items), "items": items}
 
 
@@ -108,12 +111,64 @@ async def terms_stats(_: User = Depends(get_current_admin)):
                         .filter(EntityAlias.verdict == "rejected").scalar() or 0)
             by_type = dict(session.query(EntityAlias.entity_type, func.count(EntityAlias.id))
                            .group_by(EntityAlias.entity_type).all())
+            # Разбивка ожидающих по подсказке: сколько из них машина считает мусором
+            # («расшифровка не выводится») и сколько решается правилом. Нужна, чтобы
+            # человек видел объём работы пачкой, а не пересчитывал вручную.
+            rows = (session.query(EntityAlias.alias, EntityAlias.canonical_name,
+                                  EntityAlias.entity_type)
+                    .filter(EntityAlias.reviewed.is_(False)).limit(5000).all())
             return {"total": total, "pending": pending, "approved": approved,
-                    "rejected": rejected, "by_type": by_type}
+                    "rejected": rejected, "by_type": by_type, "_pending_rows": rows}
         finally:
             session.close()
 
-    return {"status": "ok", **(await asyncio.to_thread(_load))}
+    data = await asyncio.to_thread(_load)
+    rows = data.pop("_pending_rows", [])
+    from src.api.services.automation import advice
+
+    by_hint: dict = {}
+    for alias, canonical, etype in rows:
+        h = advice(alias or "", canonical or "", etype or "").get("hint") or "none"
+        by_hint[h] = by_hint.get(h, 0) + 1
+    return {"status": "ok", "pending_by_hint": by_hint, **data}
+
+
+class BulkReviewBody(BaseModel):
+    ids: List[str] = Field(..., min_length=1, max_length=500,
+                           description="id пар, решение применяется ко всем")
+    verdict: str = Field(..., pattern="^(approved|rejected)$")
+    comment: str = ""
+
+
+@router.post("/review-bulk", summary="Словарь терминов: подтвердить или отклонить пачкой")
+async def terms_review_bulk(body: BulkReviewBody, user: User = Depends(get_current_admin)):
+    """Пакетное решение по парам.
+
+    Нужно потому, что очередь мусора (чужие словари, неверные расшифровки) приходит
+    десятками: вычитывать их по одной — та самая ручная работа, от которой уходим.
+    Решение человека здесь настоящее: каждая пара получает verdict, reviewer, дату,
+    и все они попадают в глоссарий извлечения (или в запреты на слияние).
+    """
+    def _apply():
+        session = get_session_local()()
+        try:
+            changed = (session.query(EntityAlias)
+                       .filter(EntityAlias.id.in_(body.ids))
+                       .update({EntityAlias.verdict: body.verdict,
+                                EntityAlias.reviewed: True},
+                               synchronize_session=False))
+            session.commit()
+            return int(changed or 0)
+        finally:
+            session.close()
+
+    changed = await asyncio.to_thread(_apply)
+    if changed:
+        _invalidate_glossary()
+    logger.info("словарь: пачкой %s пар решения «%s» (%s)",
+                changed, body.verdict, getattr(user, "email", "") or "")
+    return {"status": "ok", "changed": changed, "verdict": body.verdict,
+            "message": f"Пар обработано: {changed}"}
 
 
 @router.post("", summary="Словарь терминов: добавить пару")

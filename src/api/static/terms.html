@@ -71,7 +71,12 @@
       <option value="approved">подтверждены</option>
       <option value="rejected">отклонены</option>
     </select>
-    <input id="fq" placeholder="поиск по термину" style="min-width:220px">
+    <input id="fq" placeholder="поиск по термину" style="min-width:200px">
+    <select id="fhint" title="Подсказка автопилота: на что смотреть в первую очередь">
+      <option value="">все подсказки</option>
+      <option value="abbreviation_mismatch">похоже, не расшифровка</option>
+      <option value="abbreviation_from_full">решается правилом</option>
+    </select>
     <button id="reload">Применить</button>
     <button id="autopilot" title="Разобрать очередь детерминированными правилами">Автопилот</button>
     <span id="msg"></span>
@@ -98,8 +103,16 @@
     </div>
   </div>
 
+  <div class="row" id="bulkbar" style="display:none">
+    <span class="muted" id="bulkcount">выбрано 0</span>
+    <button class="primary" onclick="bulk('approved')">Подтвердить выбранные</button>
+    <button class="danger" onclick="bulk('rejected')">Отклонить выбранные</button>
+    <button onclick="clearPicks()">Снять выделение</button>
+  </div>
+
   <table>
     <thead><tr>
+      <th style="width:34px"><input type="checkbox" id="chk-all" title="Выбрать всё на странице"></th>
       <th style="width:26%">Вариант</th><th style="width:30%">Канон</th>
       <th>Тип / область</th><th>Статус</th><th style="width:210px">Решение</th>
     </tr></thead>
@@ -124,8 +137,44 @@ async function loadStats(){
       `<span class="stat">всего <b>${d.total||0}</b></span>
        <span class="stat">ждут <b>${d.pending||0}</b></span>
        <span class="stat">подтверждено <b>${d.approved||0}</b></span>
-       <span class="stat">отклонено <b>${d.rejected||0}</b></span>`;
+       <span class="stat">отклонено <b>${d.rejected||0}</b></span>${hintStats(d)}`;
   }catch(e){}
+}
+// Разбивка очереди по подсказке: показывает объём работы пачкой, а не по одной паре.
+function hintStats(d){
+  const h=(d&&d.pending_by_hint)||{};
+  const junk=h.abbreviation_mismatch||0, auto=h.abbreviation_from_full||0;
+  if(!junk && !auto) return '';
+  return `<span class="stat">из ждущих: похоже на мусор <b>${junk}</b>` +
+         (auto?`, решается правилом <b>${auto}</b>`:'')+`</span>`;
+}
+function picks(){
+  return Array.from(document.querySelectorAll('#rows input.pick:checked')).map(c=>c.dataset.id);
+}
+function updatePickCount(){
+  const n=picks().length;
+  document.getElementById('bulkbar').style.display=n?'flex':'none';
+  document.getElementById('bulkcount').textContent='выбрано '+n;
+}
+function clearPicks(){
+  document.querySelectorAll('#rows input.pick').forEach(c=>c.checked=false);
+  const all=document.getElementById('chk-all'); if(all) all.checked=false;
+  updatePickCount();
+}
+async function bulk(verdict){
+  const ids=picks();
+  if(!ids.length){ document.getElementById('msg').textContent='ничего не выбрано'; return; }
+  const word=verdict==='approved'?'подтвердить':'отклонить';
+  if(!confirm(`${word} ${ids.length} пар?`)) return;
+  try{
+    const r=await fetch(api+'/review-bulk',{method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids,verdict,comment:''})});
+    const d=await r.json();
+    document.getElementById('msg').textContent=d.message||d.detail||('HTTP '+r.status);
+    clearPicks();
+    load();
+  }catch(e){ document.getElementById('msg').textContent='ошибка: '+e; }
 }
 async function load(){
   const p=new URLSearchParams({
@@ -133,12 +182,14 @@ async function load(){
     domain:document.getElementById('fdomain').value,
     status:document.getElementById('fstatus').value,
     q:document.getElementById('fq').value.trim(),
+    hint:document.getElementById('fhint').value,
   });
   const d=await (await fetch(`${api}?${p}`,{credentials:'include'})).json();
   const rows=document.getElementById('rows'); rows.innerHTML='';
   (d.items||[]).forEach(it=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`
+      <td><input type="checkbox" class="pick" data-id="${esc(it.id)}"></td>
       <td>${esc(it.alias)}</td>
       <td class="canon">${esc(it.canonical_name)}</td>
       <td><span class="muted">${esc(et[it.entity_type]||it.entity_type)} · ${esc(it.domain||'—')}</span>
@@ -156,6 +207,7 @@ async function load(){
     rows.appendChild(tr);
   });
   document.getElementById('empty').style.display=(d.items||[]).length?'none':'block';
+  clearPicks();
   loadStats();
 }
 function hintChip(it){
@@ -200,7 +252,7 @@ async function act(it,what,row){
       ? row.nextElementSibling : null;
     if(existing){ existing.remove(); return; }
     const tr=document.createElement('tr'); tr.className='ctx';
-    tr.innerHTML='<td colspan="5" class="muted">ищу контекст…</td>';
+    tr.innerHTML='<td colspan="6" class="muted">ищу контекст…</td>';
     row.after(tr);
     try{
       const d=await (await fetch(`${api}/${it.id}/context?limit=5`,{credentials:'include'})).json();
@@ -239,6 +291,14 @@ document.getElementById('addBtn').onclick=async()=>{
 };
 document.getElementById('reload').onclick=load;
 document.getElementById('autopilot').onclick=autopilot;
+document.getElementById('fhint').onchange=load;
+document.getElementById('chk-all').onchange=(e)=>{
+  document.querySelectorAll('#rows input.pick').forEach(c=>c.checked=e.target.checked);
+  updatePickCount();
+};
+document.addEventListener('change',(e)=>{
+  if(e.target && e.target.classList && e.target.classList.contains('pick')) updatePickCount();
+});
 document.getElementById('fstatus').onchange=load;
 document.getElementById('ftype').onchange=load;
 document.getElementById('fdomain').onchange=load;
