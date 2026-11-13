@@ -91,11 +91,12 @@ async function load(force){
     // 2. Очереди и документы
     const q=d.queues||{}, doc=d.documents||{};
     document.getElementById('queues').innerHTML = `
-      <div class="card"><div class="num">${num(doc.total)}</div><div class="lbl">документов в деле</div></div>
-      <div class="card"><div class="num">${num(doc.completed)}</div><div class="lbl">обработано</div></div>
+      <div class="card"><div class="num">${num(doc.corpus)}</div><div class="lbl">документов в корпусе</div></div>
+      <div class="card"><div class="num">${num(doc.completed)}</div><div class="lbl">из них обработано</div></div>
       <div class="card"><div class="num">${num(doc.processing)}</div><div class="lbl">в очереди / в работе</div></div>
       <div class="card${doc.failed?' attn':''}"><div class="num">${num(doc.failed)}</div><div class="lbl">с ошибкой обработки</div></div>
-      <div class="card"><div class="num">${num(doc.chunks)}</div><div class="lbl">фрагментов (чанков)</div></div>
+      <div class="card"><div class="num">${num(doc.chunks)}</div><div class="lbl">фрагментов корпуса</div></div>
+      <div class="card"><div class="num">${num(doc.news)}</div><div class="lbl">новостей (вне онтологии)</div></div>
       <div class="card${q.errors_open?' attn':''}"><div class="num">${num(q.errors_open)}</div><div class="lbl">открытых ошибок онтологии</div></div>
       <div class="card"><div class="num">${num(q.auto_decisions)}</div><div class="lbl">решений автопилота в силе</div></div>`;
 
@@ -108,7 +109,11 @@ async function load(force){
       box.innerHTML='';
     } else {
       const entries=Object.entries(f.by_type||{});
-      note.textContent=`всего объектов: ${num(f.total)}` + (f.relations!=null?`, связей: ${num(f.relations)}`:'');
+      const corpus=(d.documents||{}).corpus;
+      const inOntology=(f.by_type||{}).regulatory_document;
+      note.textContent=`всего объектов: ${num(f.total)}` + (f.relations!=null?`, связей: ${num(f.relations)}`:'')
+        + (corpus!=null && inOntology!=null
+            ? ` · документов корпуса: ${corpus}, записей regulatory_document в онтологии: ${inOntology}` : '');
       box.innerHTML=entries.length
         ? entries.map(([k,v])=>`<div class="fact"><span>${esc(k)}</span><b>${num(v)}</b></div>`).join('')
         : '<div class="empty">Типы не объявлены или объектов нет</div>';

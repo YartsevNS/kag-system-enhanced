@@ -180,14 +180,26 @@ def _queues(db) -> Dict[str, int]:
 
 
 def _documents(db) -> Dict[str, int]:
+    """Документы: корпус отдельно от новостей.
+
+    Новости лежат в той же таблице (collection='news'), но в онтологию не идут —
+    при обработке шаг TypeDB для них пропускается. Считать их «документами в деле»
+    значит показывать владельцу число, которого в корпусе нет: 385 новостей против
+    86 документов корпуса на 13.11.2026.
+    """
+    corpus = "coalesce(collection,'') <> 'news'"
     return {
         "total": _scalar(db, "SELECT count(*) FROM documents WHERE is_active"),
-        "completed": _scalar(db, "SELECT count(*) FROM documents WHERE status = 'completed'"),
-        "processing": _scalar(db, "SELECT count(*) FROM documents "
-                                  "WHERE status IN ('processing','queued','pending')"),
-        "failed": _scalar(db, "SELECT count(*) FROM documents WHERE status = 'failed'"),
-        "chunks": _scalar(db, "SELECT coalesce(sum(chunks_count),0) FROM documents "
-                              "WHERE status = 'completed'"),
+        "corpus": _scalar(db, f"SELECT count(*) FROM documents WHERE is_active AND {corpus}"),
+        "news": _scalar(db, "SELECT count(*) FROM documents WHERE is_active "
+                             "AND collection = 'news'"),
+        "completed": _scalar(db, f"SELECT count(*) FROM documents WHERE status = 'completed' "
+                                 f"AND {corpus}"),
+        "processing": _scalar(db, f"SELECT count(*) FROM documents "
+                                  f"WHERE status IN ('processing','queued','pending') AND {corpus}"),
+        "failed": _scalar(db, f"SELECT count(*) FROM documents WHERE status = 'failed' AND {corpus}"),
+        "chunks": _scalar(db, f"SELECT coalesce(sum(chunks_count),0) FROM documents "
+                              f"WHERE status = 'completed' AND {corpus}"),
     }
 
 
