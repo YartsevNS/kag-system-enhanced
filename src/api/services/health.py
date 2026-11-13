@@ -84,32 +84,45 @@ def _facts_by_type() -> Dict[str, Any]:
 
 
 def _count_relations(tx) -> int | None:
-    """Число связей. Абстрактный тип «relation» берётся вариантом `isa!`; если движок
-    не поддерживает — считаем по конкретным типам связей из доменной схемы."""
-    last = None
-    for q in ("match $r isa! relation; reduce $n = count;",
-              "match $r isa relation; reduce $n = count;"):
-        try:
-            return _value(list(tx.query(q).resolve()))
-        except Exception as exc:  # noqa: BLE001
-            last = exc
-    try:
-        from src.indexing.graph_ontology import RELATIONS
+    """Число связей.
 
-        total = 0
-        got = False
-        for spec in RELATIONS:
-            try:
-                n = _value(list(tx.query(
-                    f"match $r isa {spec.code}; reduce $n = count;").resolve()))
-            except Exception:  # noqa: BLE001 - типа связи может не быть в схеме
-                continue
-            if n:
-                total += n
-                got = True
-        return total if got else None
-    except Exception:  # noqa: BLE001
-        raise last if last else RuntimeError("не удалось посчитать связи")
+    Корневой тип `relation` в TypeQL 3 нельзя использовать как идентификатор
+    (проверено на стенде: REP27 «A reserved keyword 'relation' was used as identifier»).
+    Поэтому сначала получаем список типов связей из живой схемы, затем суммируем
+    инстансы каждого. Если список пуст — None, и экран честно пишет «—», а не ноль.
+    """
+    labels = _relation_labels(tx)
+    if not labels:
+        return None
+    total = 0
+    counted = 0
+    for label in labels:
+        try:
+            n = _value(list(tx.query(f"match $r isa {label}; reduce $n = count;").resolve()))
+        except Exception:  # noqa: BLE001 - типа может не быть в этой базе
+            continue
+        if n is not None:
+            total += n
+            counted += 1
+    return total if counted else None
+
+
+def _relation_labels(tx) -> list[str]:
+    """Типы связей из схемы: те, у которых kind == relation."""
+    try:
+        rows = list(tx.query('match $t sub $r; fetch { "t": $t };').resolve())
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("здоровье: типы связей не прочитаны: %s", str(exc)[:160])
+        return []
+    out = []
+    for row in rows:
+        try:
+            t = row.get("t") or {}
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(t, dict) and t.get("kind") == "relation" and t.get("label"):
+            out.append(t["label"])
+    return sorted(set(out))
 
 
 def _value(rows: List[Any]) -> int | None:
