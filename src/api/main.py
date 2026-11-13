@@ -462,6 +462,18 @@ async def ontology_automation_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology-automation.html"))
 
 
+@app.get("/ontology/health", summary="Здоровье онтологии: очереди, факты, авто-решения (только для admin)")
+async def ontology_health_page(request: Request):
+    """Один экран вместо шести: что требует человека сегодня и что накопилось.
+
+    Раньше состояние было размазано по /terms, /duplicates, /ontology/gaps, /errors,
+    /ontology/automation и /kg. Здесь — сводка с числами и ссылками, где разбирать.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-health.html"))
+
+
 @app.get("/ontology/gaps", summary="Пробелы схемы: термины корпуса (только для admin)")
 async def ontology_gaps_page(request: Request):
     """Очередь пробелов схемы: что корпус определяет, а онтология не покрывает."""

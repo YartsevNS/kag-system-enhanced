@@ -761,6 +761,14 @@ async def glossary_view(_: User = Depends(get_current_admin)):
             "block": await asyncio.to_thread(glossary.build)}
 
 
+@router.get("/health", summary="Здоровье онтологии: очереди, факты, последние авто-решения")
+async def ontology_health(_: User = Depends(get_current_admin)):
+    """Снимок состояния для экрана «Здоровье»: что требует человека и что накопилось."""
+    from src.api.services import health
+
+    return {"ok": True, **await asyncio.to_thread(health.snapshot)}
+
+
 
 @router.delete("/errors/{error_id}", summary="Удалить запись журнала ошибок онтологии")
 async def ontology_error_delete(error_id: str, _: User = Depends(get_current_admin)):
