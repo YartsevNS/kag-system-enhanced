@@ -320,24 +320,19 @@ try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag
             gap:1rem;
         }
 
-        /* Покрытие вопроса онтологией: бейдж под ответом.
-           Смысл — показать, насколько онтология «знает» слова вопроса, и какие слова
-           ей неизвестны. Это не оценка правильности ответа, а граница: при uncovered
-           ответ построен на текстах, а не на онтологии. */
+        /* Плашка «на чём собран ответ». Нейтральная: это не оценка и не диагноз,
+           а указание источника опоры (тексты документов, а не онтология). */
         .coverage{
             margin-top:0.45rem;
             display:inline-block;
             font-size:0.7rem;
             line-height:1.5;
+            color:var(--text3);
             padding:2px 8px;
             border-radius:10px;
-            border:1px solid var(--border);
-            cursor:help;
+            border:1px dashed var(--border);
             max-width:100%;
         }
-        .coverage.cov-ok{color:var(--accent);border-color:var(--accent)}
-        .coverage.cov-mid{color:var(--warn,#e5c07b);border-color:var(--warn,#e5c07b)}
-        .coverage.cov-low{color:var(--red,#ff6b6b);border-color:var(--red,#ff6b6b)}
 
         .sources{
             margin-top:0.75rem;
@@ -1191,23 +1186,19 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 `;
             }
             
-            // Бейдж покрытия вопроса онтологией: metadata.answerability считает сервер
-            // (src/api/services/answerability.py) — доля значимых слов вопроса, известных
-            // словарю и схеме. Показываем только когда сервер ответил: без данных молчим.
+            // Плашка о том, на чём собран ответ. Проценты покрытия в интерфейсе не показываем:
+            // «Онтология: 40%» читается как оценка правильности ответа, хотя это лишь доля
+            // знакомых системе слов вопроса. Пользователю важно другое: ответ построен по
+            // текстам документов или с опорой на онтологию. Молчим, когда сказать нечего:
+            // при покрытом вопросе плашки нет, при отказе по score система уже сказала сама.
             let coverageHTML = '';
             const ans = metadata && metadata.answerability;
-            if (ans && typeof ans.coverage === 'number' && ans.verdict && ans.verdict !== 'empty') {
-                const pct = Math.round(ans.coverage * 100);
-                const miss = (ans.missing || []).slice(0, 6);
-                const cls = ans.verdict === 'covered' ? 'cov-ok'
-                          : (ans.verdict === 'partial' ? 'cov-mid' : 'cov-low');
-                const hint = miss.length
-                    ? 'В онтологии нет: ' + miss.join(', ')
-                    : 'Все значимые слова вопроса есть в словаре и схеме';
-                const label = ans.verdict === 'covered'
-                    ? `Онтология: ${pct}%`
-                    : `Онтология: ${pct}% — нет: ${miss.join(', ')}`;
-                coverageHTML = `<div class="coverage ${cls}" title="${escapeHTML(hint)}">${escapeHTML(label)}</div>`;
+            const fromSources = metadata && metadata.sources_count > 0;
+            const refused = metadata && metadata.refused_low_score;
+            if (ans && fromSources && !refused
+                    && (ans.verdict === 'partial' || ans.verdict === 'uncovered')) {
+                coverageHTML = '<div class="coverage">Ответ собран по текстам документов, ' +
+                    'без опоры на онтологию: понятий вопроса в ней нет.</div>';
             }
             messageDiv.innerHTML = `
                 <div class="message-avatar">${avatar}</div>

@@ -178,6 +178,33 @@ _GENERIC = frozenset("""
 нужно также более менее самый очень через между после перед кроме всего
 """.split())
 
+# Глагольные и наречные окончания: в очередь пробелов должны попадать ПОНЯТИЯ
+# (термины, названия, аббревиатуры), а не «потратили» и «применяет». Отсутствие
+# глагола в онтологии ничего не значит — такой пробел человек не подтвердит.
+_VERB_TAILS = (
+    "ал", "ала", "али", "ало", "ать", "ять", "ить", "еть", "уть", "ыть",
+    "ют", "ут", "ят", "ит", "ат", "ется", "ются", "ится", "атся", "лся",
+    "лась", "лись", "лось", "ешь", "ишь", "ите", "йте", "ует", "уют",
+    "ает", "ают", "яет", "яют", "ирует", "ируют", "овать", "евать",
+    "ывать", "ивать", "ться", "или", "ыли", "ели",
+    "применяет", "применяют", "использует", "используют",
+)
+
+
+def _is_term_candidate(word: str) -> bool:
+    """Похоже ли слово на понятие, а не на глагол/общее слово.
+
+    Короткие слова НЕ отбрасываются: аббревиатуры из трёх букв (АВЗ, ОПС, ЗНИ)
+    — это и есть самые нужные кандидаты в словарь. Отбрасываются только общие
+    слова и глагольные формы.
+    """
+    w = (word or "").strip().lower()
+    if len(w) < 3 or w in _GENERIC:
+        return False
+    if any(w.endswith(t) for t in _VERB_TAILS):
+        return False
+    return True
+
 
 def record_gap(question: str, missing: List[str], source: str = "chat") -> int:
     """Дописать непокрытые термины в очередь пробелов схемы (идемпотентно)."""
@@ -193,7 +220,7 @@ def record_gap(question: str, missing: List[str], source: str = "chat") -> int:
     example = {"q": (question or "")[:300], "src": source}
     try:
         for term in dict.fromkeys(w.lower() for w in missing):
-            if len(term) < 3 or term in _GENERIC:
+            if not _is_term_candidate(term):
                 continue
             term = term[:200]
             row = db.execute(
@@ -230,8 +257,19 @@ def record_gap(question: str, missing: List[str], source: str = "chat") -> int:
 
 
 def analyze(question: str, save: bool = True) -> Dict[str, Any]:
-    """Полный прогон для одного вопроса: покрытие + (по желанию) запись пробелов."""
+    """Полный прогон для одного вопроса: покрытие + (по желанию) запись пробелов.
+
+    Пробел записывается только если в вопросе есть хотя бы одно слово, известное
+    онтологии: иначе вопрос не про нашу предметную область, и это не пробел схемы,
+    а посторонний вопрос. Иначе очередь заполняется «потратили», «погода», «флешек» —
+    человек такое не подтвердит, а шум прячет настоящие пробелы.
+    """
     res = check(question)
-    if save and res["missing"]:
-        res["recorded"] = record_gap(question, res["missing"])
+    if not save or not res["missing"]:
+        return res
+    if not res["covered"]:
+        res["recorded"] = 0
+        res["gap_note"] = "вопрос вне предметной области: ни одно слово не знакомо онтологии"
+        return res
+    res["recorded"] = record_gap(question, res["missing"])
     return res
