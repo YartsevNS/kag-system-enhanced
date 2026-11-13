@@ -147,6 +147,12 @@ def detail(document_id: str) -> Dict[str, Any]:
         out["note"] = "лога этапов для этого документа нет"
         return out
 
+    # В лог одного документа дописываются ВСЕ прогоны (save() расширяет список).
+    # Показываем последний прогон: иначе «доля этапа» считается против общего времени
+    # другого прогона и получается 155% (живой случай 13.11.2026).
+    starts = [i for i, e in enumerate(entries) if str(e.get("step")) in ("start", "find_file")]
+    if starts:
+        entries = entries[starts[-1]:]
     total = float(entries[-1].get("elapsed_ms") or 0)
     out["total_ms"] = total
     out["started_at"] = entries[0].get("timestamp")
