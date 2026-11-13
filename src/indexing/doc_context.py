@@ -197,6 +197,11 @@ def build_context(
     ) or ""
 
     key = str(sm.get("document_key") or rw.get("document_key") or "").strip()
+    if key and "(" in key:
+        # Ключ, сохранённый при загрузке, мог содержать скобочное «(утв. 11.02.2014)»:
+        # разное написание даты давало две записи одного документа. Чистим при чтении,
+        # чтобы старые данные не тянули ошибку дальше.
+        key = _key_title(key)
     if not key:
         key = build_document_key(issuer, doc_type, number, title)
 

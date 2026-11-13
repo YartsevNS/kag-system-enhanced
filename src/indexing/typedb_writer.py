@@ -253,8 +253,8 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
     elif etype == "security_requirement":
         base = str(attrs.get("requirement_key") or attrs.get("requirement-id") or "")
     elif etype == "security_measure":
-        base = str(attrs.get("measure_key") or attrs.get("code")
-                   or str(attrs.get("description") or "")[:200])
+        # Только код: описание модель переформулирует между прогонами, и ключ уплывает.
+        base = str(attrs.get("measure_key") or attrs.get("code") or "")
     elif etype == "certificate":
         base = str(attrs.get("cert_number") or "")
     elif etype in ("cii_object", "security_software", "evidence"):
@@ -306,11 +306,17 @@ def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
             rid = attrs.get("requirement-id") or attrs.get("requirement_id")
             if rid:
                 attrs["requirement_key"] = f"{doc_key}|{_norm_key(rid)}" if doc_key else _norm_key(rid)
-        if etype == "security_measure" and not attrs.get("measure_key"):
+        if etype == "security_measure":
+            # Мера без кода (АВЗ.1, ИАФ.2) — это заголовок направления мер, а не мера.
+            # Раньше ключ строился из описания, и один и тот же раздел при повторном
+            # прогоне давал новый объект (229 «мер» вместо 114 на одном документе).
             code = attrs.get("code")
-            base = code or str(attrs.get("description") or "")[:60]
-            if base:
-                attrs["measure_key"] = f"{doc_key}|{_norm_key(base)}" if doc_key else _norm_key(base)
+            if not code:
+                dropped.append("security_measure: нет code (заголовок направления)")
+                continue
+            if not attrs.get("measure_key"):
+                base = _norm_key(code)
+                attrs["measure_key"] = f"{doc_key}|{base}" if doc_key else base
 
         missing = [a for a in REQUIRED_ATTRS.get(etype, ()) if not attrs.get(a)]
         if missing:

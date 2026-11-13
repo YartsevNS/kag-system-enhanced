@@ -85,3 +85,30 @@ left = sorted({str(r.get("k")) for r in rows})
 print("осталось документов:", len(left))
 for k in left:
     print(" -", k[:100])
+
+# ── дополнительно: снять меры и требования этого документа ────────────────────
+# Меры, у которых ключ начинался с названия документа, а кода не было, писались как
+# объекты и при повторных прогонах плодились (229 «мер» вместо 114). Удаляем их вместе
+# с требованиями этого документа, чтобы пересоздать по исправленному ключу.
+if "--with-children" in sys.argv:
+    for etype, attr in (("security_measure", "measure_key"),
+                        ("security_requirement", "requirement_key")):
+        try:
+            with d.transaction(c["db"], TransactionType.READ) as tx:
+                found = [str(r.get("v")) for r in list(tx.query(
+                    f'match $e isa {etype}, has {attr} $v; fetch {{ "v": $v }};').resolve())]
+            target = []
+            for key in {f for f in found if NEEDLE in f.lower()}:
+                target.append(key)
+            deleted = 0
+            for key in target:
+                try:
+                    with d.transaction(c["db"], TransactionType.WRITE) as tx:
+                        tx.query(f'match $e isa {etype}, has {attr} "{key}"; delete $e;').resolve()
+                        tx.commit()
+                    deleted += 1
+                except Exception as e:  # noqa: BLE001 - связи мешают удалению
+                    print(f"  {etype} не удалён ({key[:50]}): {str(e)[:80]}")
+            print(f"{etype}: найдено {len(target)}, удалено {deleted}")
+        except Exception as e:  # noqa: BLE001
+            print(f"{etype}: ошибка разбора: {str(e)[:120]}")
