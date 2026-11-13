@@ -297,6 +297,14 @@ def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
             if not doc_key:
                 doc_key = dk
 
+    # Документ опознаётся ФАЙЛОМ, а не названием: модель в разных фрагментах пишет
+    # название по-своему («…(утв. 11.02.2014)», «Меры защиты информации в ГИС»),
+    # и документ ложился в базу двумя записями. Ключ = kag:<document_id>, если
+    # контекст загрузки не дал канонический «издатель|вид|номер».
+    for e in entities.values():
+        if e["type"] in ("regulatory_document", "company_document"):
+            e["attrs"]["document_key"] = doc_key or (f"kag:{doc_id}" if doc_id else "")
+
     for key, e in entities.items():
         etype, attrs = e["type"], e["attrs"]
         if etype == "document_version" and doc_id and not attrs.get("kag_document_id"):
