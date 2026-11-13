@@ -66,11 +66,10 @@ def _facts_by_type() -> Dict[str, Any]:
                     except Exception:  # noqa: BLE001 - типа может не быть в этой схеме
                         out["by_type"][etype] = None
                 try:
-                    row = list(tx.query("match $r isa relation; reduce $n = count;").resolve())
-                    out["relations"] = _value(row)
+                    out["relations"] = _count_relations(tx)
                 except Exception as exc:  # noqa: BLE001
                     out["relations"] = None
-                    out["relations_error"] = str(exc)[:160]
+                    out["relations_error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
         finally:
             try:
                 drv.close()
@@ -84,26 +83,55 @@ def _facts_by_type() -> Dict[str, Any]:
     return out
 
 
+def _count_relations(tx) -> int | None:
+    """Число связей. Абстрактный тип «relation» берётся вариантом `isa!`; если движок
+    не поддерживает — считаем по конкретным типам связей из доменной схемы."""
+    last = None
+    for q in ("match $r isa! relation; reduce $n = count;",
+              "match $r isa relation; reduce $n = count;"):
+        try:
+            return _value(list(tx.query(q).resolve()))
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+    try:
+        from src.indexing.graph_ontology import RELATIONS
+
+        total = 0
+        got = False
+        for spec in RELATIONS:
+            try:
+                n = _value(list(tx.query(
+                    f"match $r isa {spec.code}; reduce $n = count;").resolve()))
+            except Exception:  # noqa: BLE001 - типа связи может не быть в схеме
+                continue
+            if n:
+                total += n
+                got = True
+        return total if got else None
+    except Exception:  # noqa: BLE001
+        raise last if last else RuntimeError("не удалось посчитать связи")
+
+
 def _value(rows: List[Any]) -> int | None:
+    """Целое из ответа reduce: ConceptRow → Value → get_integer().
+
+    Проверено на стенде: объект Value не приводится к int() и не имеет as_integer,
+    единственный рабочий путь — row.get("n").get_integer().
+    """
     if not rows:
         return None
-    first = rows[0]
+    row = rows[0]
     try:
-        val = first["n"] if isinstance(first, dict) else first
+        val = row.get("n") if hasattr(row, "get") else row
     except Exception:  # noqa: BLE001
         return None
-    for attr in ("as_integer", "get_integer", "integer"):
+    try:
+        return int(val.get_integer())
+    except Exception:  # noqa: BLE001
         try:
-            v = getattr(val, attr)
-            v = v() if callable(v) else v
-            if isinstance(v, int):
-                return v
+            return int(val)
         except Exception:  # noqa: BLE001
-            continue
-    try:
-        return int(val)
-    except Exception:  # noqa: BLE001
-        return None
+            return None
 
 
 def _queues(db) -> Dict[str, int]:
@@ -190,7 +218,7 @@ def snapshot() -> Dict[str, Any]:
         db.close()
 
     facts = _facts_by_type()
-    by_type = {k: v for k, v in (facts.get("by_type") or {}).items() if v}
+    by_type = {k: v for k, v in (facts.get("by_type") or {}).items() if v is not None}
     facts_total = sum(v for v in by_type.values() if isinstance(v, int))
 
     # «Требует человека сегодня»: только то, где решение действительно нужно,
