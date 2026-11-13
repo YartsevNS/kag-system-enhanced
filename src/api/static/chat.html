@@ -319,7 +319,26 @@ try{document.documentElement.setAttribute("data-theme",localStorage.getItem("kag
             display:flex;
             gap:1rem;
         }
-        
+
+        /* Покрытие вопроса онтологией: бейдж под ответом.
+           Смысл — показать, насколько онтология «знает» слова вопроса, и какие слова
+           ей неизвестны. Это не оценка правильности ответа, а граница: при uncovered
+           ответ построен на текстах, а не на онтологии. */
+        .coverage{
+            margin-top:0.45rem;
+            display:inline-block;
+            font-size:0.7rem;
+            line-height:1.5;
+            padding:2px 8px;
+            border-radius:10px;
+            border:1px solid var(--border);
+            cursor:help;
+            max-width:100%;
+        }
+        .coverage.cov-ok{color:var(--accent);border-color:var(--accent)}
+        .coverage.cov-mid{color:var(--warn,#e5c07b);border-color:var(--warn,#e5c07b)}
+        .coverage.cov-low{color:var(--red,#ff6b6b);border-color:var(--red,#ff6b6b)}
+
         .sources{
             margin-top:0.75rem;
             padding-top:0.75rem;
@@ -1172,10 +1191,29 @@ img, svg, video, canvas, iframe { max-width: 100%; }
                 `;
             }
             
+            // Бейдж покрытия вопроса онтологией: metadata.answerability считает сервер
+            // (src/api/services/answerability.py) — доля значимых слов вопроса, известных
+            // словарю и схеме. Показываем только когда сервер ответил: без данных молчим.
+            let coverageHTML = '';
+            const ans = metadata && metadata.answerability;
+            if (ans && typeof ans.coverage === 'number' && ans.verdict && ans.verdict !== 'empty') {
+                const pct = Math.round(ans.coverage * 100);
+                const miss = (ans.missing || []).slice(0, 6);
+                const cls = ans.verdict === 'covered' ? 'cov-ok'
+                          : (ans.verdict === 'partial' ? 'cov-mid' : 'cov-low');
+                const hint = miss.length
+                    ? 'В онтологии нет: ' + miss.join(', ')
+                    : 'Все значимые слова вопроса есть в словаре и схеме';
+                const label = ans.verdict === 'covered'
+                    ? `Онтология: ${pct}%`
+                    : `Онтология: ${pct}% — нет: ${miss.join(', ')}`;
+                coverageHTML = `<div class="coverage ${cls}" title="${escapeHTML(hint)}">${escapeHTML(label)}</div>`;
+            }
             messageDiv.innerHTML = `
                 <div class="message-avatar">${avatar}</div>
                 <div class="message-content">
                     <div class="message-text">${formatMessageText(content)}</div>
+                    ${coverageHTML}
                     <div class="message-meta">
                         ${metadata ? `<span> ${metadata.model || 'N/A'}</span>` : ''}
                         ${metadata && metadata.backend ? `<span> ${metadata.backend}</span>` : ''}
