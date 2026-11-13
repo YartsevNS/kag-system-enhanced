@@ -30,7 +30,11 @@
 6. **Цифра без объекта — брак.** Не «237 сущностей», а «237 объектов в
    `cybersecurity_ontology_v2`: 166 `structural_element`, 37 `security_measure`, …».
 7. **Не трогать** ветку `PREPROD` и базу `cybersecurity_ontology` — это путь отката.
-8. **Промпт извлечения сущностей — авторский** (`src/api/services/ontology_prompts.py`).
+8. **Обработка документа — только через воркер.** Запуск через очередь
+   (`src.indexing.queue_guard.enqueue_document`), а не прямым вызовом
+   `document_service.process_document` из `kag-api`: скриптовый прогон внутри api умирает
+   при пересборке образа, и документ остаётся «обработанным наполовину» (случай 13.11.2026).
+9. **Промпт извлечения сущностей — авторский** (`src/api/services/ontology_prompts.py`).
    Правки предлагать, не применять молча.
 
 ## Проверка изменений
