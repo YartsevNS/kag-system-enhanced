@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Авто-решения онтологии — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px;cursor:pointer}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  button.danger{color:#ff8f8f;border-color:#5a2a2a}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--border,#2c3442)}
+  .tag.active{color:#3ecf8e;border-color:#1f5a3c}
+  .tag.revoked{color:#8b93a1;border-color:#2c3442}
+  .empty{padding:24px;color:var(--text3,#8b93a1)}
+  .stat{display:inline-block;margin-right:16px;font-size:12px;color:var(--text3,#8b93a1)}
+  .stat b{color:var(--text,#e8eaed);font-size:14px}
+  #msg{font-size:12px;color:var(--accent,#3ecf8e);min-height:18px}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · авто-решения</div><div data-site-nav></div></nav>
+<main>
+  <h1>Авто-решения онтологии</h1>
+  <div class="muted">
+    Здесь видно, что система решила <b>сама</b>, по какому правилу и с какой уверенностью.
+    Решение можно отозвать — запись вернётся в очередь человеку. Пустой журнал означает, что
+    автопилот ещё не запускался: правила применяются кнопкой на странице
+    <a href="/terms" style="color:var(--accent,#3ecf8e)">словаря</a> или через
+    <code>POST /api/v1/ontology/automation/run</code>.
+  </div>
+
+  <div class="row" id="stats"></div>
+
+  <div class="row">
+    <select id="f-kind" onchange="load()">
+      <option value="">все типы</option>
+      <option value="alias">словарь терминов</option>
+      <option value="duplicate">дубли документов</option>
+      <option value="gap">пробелы схемы</option>
+    </select>
+    <select id="f-status" onchange="load()">
+      <option value="active" selected>действующие</option>
+      <option value="revoked">отозванные</option>
+      <option value="">все</option>
+    </select>
+    <button onclick="load()">Обновить</button>
+    <button onclick="dryRun()" title="Посчитать, что сделали бы правила, ничего не меняя">Сухой прогон</button>
+    <span id="msg"></span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:150px">Когда</th><th style="width:130px">Тип</th>
+      <th>Решение и правило</th><th style="width:90px">Уверен.</th>
+      <th style="width:110px">Статус</th><th style="width:120px"></th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="6" class="empty">Загрузка…</td></tr></tbody>
+  </table>
+</main>
+
+<script>
+const API = '/api/v1/ontology/automation';
+const KIND = {alias: 'словарь', duplicate: 'дубли', gap: 'пробелы', proposal: 'предложения'};
+let ITEMS = [];
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(ts){ if(!ts) return '—'; try{ const d=new Date(ts); return d.toLocaleString('ru-RU'); }catch(e){ return ts; } }
+
+async function load(){
+  const kind = document.getElementById('f-kind').value;
+  const status = document.getElementById('f-status').value;
+  const p = new URLSearchParams();
+  if (kind) p.set('kind', kind);
+  if (status) p.set('status', status);
+  try {
+    const r = await fetch(API + '/decisions?' + p.toString(), {credentials: 'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    ITEMS = d.items || [];
+    const s = d.stats || {rows: []};
+    const by = {};
+    (s.rows || []).forEach(x => { by[x.kind + ':' + x.status] = x.n; });
+    const parts = [];
+    Object.keys(KIND).forEach(k => {
+      const a = by[k + ':active'] || 0, rev = by[k + ':revoked'] || 0;
+      if (a || rev) parts.push(`<span class="stat">${KIND[k]}: решено <b>${a}</b>${rev ? ' · отозвано ' + rev : ''}</span>`);
+    });
+    document.getElementById('stats').innerHTML = parts.join('') || '<span class="stat">журнал пуст</span>';
+
+    const tb = document.getElementById('rows');
+    if (!ITEMS.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">Решений нет</td></tr>'; return; }
+    tb.innerHTML = ITEMS.map((it, i) => {
+      const payload = it.payload && Object.keys(it.payload).length
+        ? `<div class="muted">${esc(JSON.stringify(it.payload).slice(0, 220))}</div>` : '';
+      const revoke = it.status === 'active'
+        ? `<button class="danger" onclick="revoke(${i})">Отозвать</button>` : '';
+      return `<tr>
+        <td>${esc(fmt(it.created_at))}</td>
+        <td>${esc(KIND[it.kind] || it.kind)}<div class="muted">${esc(it.subject || '')}</div></td>
+        <td><b>${esc(it.decision)}</b> <span class="muted">· ${esc(it.rule || '—')}</span>${payload}</td>
+        <td>${it.confidence != null ? esc(Number(it.confidence).toFixed(2)) : '—'}</td>
+        <td><span class="tag ${esc(it.status)}">${esc(it.status)}</span></td>
+        <td>${revoke}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('rows').innerHTML = `<tr><td colspan="6" class="empty">Не удалось прочитать журнал: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function revoke(i){
+  const it = ITEMS[i];
+  if (!it) return;
+  if (!confirm('Отозвать решение? Записи вернутся в очередь человеку.')) return;
+  const r = await fetch(API + '/decisions/' + encodeURIComponent(it.id) + '/revoke',
+    {method: 'POST', credentials: 'same-origin'});
+  const d = await r.json();
+  document.getElementById('msg').textContent = d.ok
+    ? 'отозвано, возвращено в очередь: ' + (d.restored || 0)
+    : ('не удалось: ' + (d.error || ('HTTP ' + r.status)));
+  load();
+}
+
+async function dryRun(){
+  const msg = document.getElementById('msg');
+  msg.textContent = 'считаю…';
+  try {
+    const r = await fetch(API + '/run', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({scope: 'all', dry_run: true, limit: 2000})
+    });
+    const d = await r.json();
+    const a = d.aliases || {}, u = d.duplicates || {};
+    msg.textContent = `правилами словаря решается ${a.auto || 0}, человеку ${a.review || 0}; ` +
+      `дублей к авто-слиянию ${u.auto || 0}, человеку ${u.review || 0}`;
+  } catch (e) { msg.textContent = 'ошибка: ' + e; }
+}
+
+load();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

@@ -436,17 +436,30 @@ async def ontology_guide_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology-guide.html"))
 
 
-@app.get("/ontology/proposals", summary="Очередь предложений онтологии (только для admin)")
+@app.get("/ontology/proposals", summary="Очередь предложений онтологии (историческая, перенаправление)")
 async def ontology_proposals_page(request: Request):
-    """Проверка извлечённых требований до записи в TypeDB.
+    """Очередь предложений онтологии — мёртвая с 12.11.2026.
 
-    Здесь человек решает, что попадёт в онтологию: принять, отклонить, поправить
-    формулировку или отложить как «нужен новый тип схемы». До решения факт в
-    TypeDB отсутствует, поэтому ложных нарушений из непроверенных данных не будет.
+    Все 1994 записи созданы одним прогоном 06.11.2026, писателя в таблицу в коде
+    больше нет; 1265 «предложенных» закрыты в superseded. Проверять там нечего,
+    поэтому страница ведёт на живую очередь — журнал авто-решений.
     """
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
-    return await _html_response(os.path.join(static_path, "ontology_proposals.html"))
+    return RedirectResponse(url="/ontology/automation", status_code=307)
+
+
+@app.get("/ontology/automation", summary="Авто-решения онтологии: что система решила сама (только для admin)")
+async def ontology_automation_page(request: Request):
+    """Журнал решений автопилота: правило, уверенность, отзыв.
+
+    Смысл страницы — сделать автоматизацию проверяемой: человек видит не только
+    «сколько осталось в очереди», но и что система уже подтвердила сама и по какому
+    правилу. Отзыв возвращает запись в очередь (пары словаря, дубли, пробелы).
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-automation.html"))
 
 
 @app.get("/ontology/gaps", summary="Пробелы схемы: термины корпуса (только для admin)")
@@ -654,7 +667,11 @@ async def embedding_guide_page():
 
 @app.get("/kg", summary="Граф знаний")
 async def kg_page():
-    """Страница графа знаний Neo4j"""
+    """Страница графа знаний из TypeDB (объекты, связи, схема).
+
+    Историческое имя маршрута: здесь был Neo4j. С 12.11.2026 страница берёт данные
+    из GET /api/v1/kg/ontology-graph (TypeDB), целиком на онтологии.
+    """
     kg_path = os.path.join(static_path, "ontology-kg.html")
     if os.path.exists(kg_path):
         return FileResponse(kg_path)
