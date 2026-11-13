@@ -2200,9 +2200,19 @@ class DocumentService:
                "prompt_chars": 0, "payload_chars": 0, "retries": 0,
                "empty_n": 0, "filled_n": 0}
         t0 = _time.monotonic()
-        # 3 → 6: замер 13.11.2026 показал, что при 6 потоках LLM-часть идёт
-        # вдвое быстрее, ошибок/429 нет (p95 растёт, но календарно выигрыш есть).
-        sem = asyncio.Semaphore(6)
+        # Сколько фрагментов одновременно уходит в модель — настройка админки
+        # (страница «Конвейер обработки», поле «Одновременно в модель»).
+        # Раньше было жёстко 3 («семафор 3» — это и есть ограничитель числа
+        # одновременных запросов). Замер 13.11.2026: при 6 документ вдвое быстрее,
+        # 429 и ошибок нет.
+        try:
+            from src.api.services.pipeline import extraction_parallel as _ep
+
+            _parallel = _ep()
+        except Exception:  # noqa: BLE001 - без настройки работаем как раньше
+            _parallel = 6
+        logger.info(f"[typedb] параллельность извлечения: {_parallel}")
+        sem = asyncio.Semaphore(_parallel)
 
         # Докачка после сбоя: чанки, уже записанные в онтологию, повторно в LLM не уходят.
         _done_ids: set = set()

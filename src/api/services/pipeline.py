@@ -199,3 +199,38 @@ def snapshot(limit: int = 30) -> Dict[str, Any]:
     docs = documents(limit)
     latest = detail(docs[0]["document_id"]) if docs else None
     return {"collecting": enabled(), "documents": docs, "latest": latest}
+
+# ── параллельность извлечения ────────────────────────────────────────────────
+# Простыми словами: это СКОЛЬКО ФРАГМЕНТОВ ДОКУМЕНТА ОДНОВРЕМЕННО ОТПРАВЛЯЮТСЯ В МОДЕЛЬ.
+# В коде это «семафор» — счётчик, который не даёт отправить больше N запросов сразу.
+# Больше параллельность — быстрее документ, но выше риск упереться в лимиты провайдера
+# и получить пустые ответы; меньше — медленнее и безопаснее для качества.
+PARALLEL_KEY = "extraction"
+PARALLEL_DEFAULT = 6
+PARALLEL_MIN, PARALLEL_MAX = 1, 16
+
+
+def extraction_parallel() -> int:
+    """Сколько фрагментов обрабатывать одновременно (настройка админки)."""
+    try:
+        from src.api.services.config_store import config_store
+
+        cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+        if isinstance(cfg, dict) and cfg.get("parallel") is not None:
+            n = int(cfg["parallel"])
+            return max(PARALLEL_MIN, min(PARALLEL_MAX, n))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("параллельность извлечения не прочитана: %s", str(exc)[:120])
+    return PARALLEL_DEFAULT
+
+
+def set_extraction_parallel(value: int, who: str = "") -> int:
+    """Записать параллельность извлечения (1..16). Возвращает применённое значение."""
+    from src.api.services.config_store import config_store
+
+    n = max(PARALLEL_MIN, min(PARALLEL_MAX, int(value)))
+    ok = config_store.set(FLAG_CATEGORY, PARALLEL_KEY,
+                          {"parallel": n, "changed_by": who,
+                           "why": "сколько фрагментов одновременно отправляется в модель"})
+    logger.info("конвейер: параллельность извлечения = %s (%s), записано=%s", n, who or "—", ok)
+    return n

@@ -39,13 +39,21 @@
   <div class="muted">
     Этапы обработки документа и время на каждом — по логу процесса. Экран показывает
     выбранный документ (по умолчанию последний обработанный), его размер, число фрагментов
-    и где именно уходит время.
+    и где именно уходит время.<br>
+    <b>Одновременно в модель</b> — сколько фрагментов документа обрабатывается
+    одновременно (в коде это называлось «семафор»). Больше — документ быстрее, но выше риск
+    упереться в лимиты провайдера; меньше — медленнее и безопаснее. Допустимо 1–16.
   </div>
 
   <div class="row">
     <select id="docs"></select>
     <button onclick="loadDoc()">Показать</button>
     <button id="toggle" onclick="toggleCollect()">Сбор статистики: …</button>
+    <span class="muted" title="Сколько фрагментов документа одновременно отправляется в модель.
+Больше — быстрее, но выше риск упереться в лимиты провайдера.">Одновременно в модель:</span>
+    <input id="parallel" type="number" min="1" max="16" style="width:70px"
+           title="Параллельность извлечения: сколько фрагментов сразу уходит в модель (1–16)">
+    <button onclick="saveParallel()">Сохранить</button>
     <span id="msg"></span>
   </div>
 
@@ -119,6 +127,28 @@ async function loadDoc(){
     : '';
 }
 
+async function loadParallel(){
+  try{
+    const r = await fetch(API + '/parallel', {credentials:'same-origin'});
+    const d = await r.json();
+    const el = document.getElementById('parallel');
+    if (el) el.value = d.parallel;
+  }catch(e){}
+}
+
+async function saveParallel(){
+  const el = document.getElementById('parallel');
+  const n = parseInt(el.value, 10);
+  if(!n || n < 1 || n > 16){ document.getElementById('msg').textContent = 'допустимо 1–16'; return; }
+  const r = await fetch(API + '/parallel', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({parallel: n})
+  });
+  const d = await r.json();
+  document.getElementById('msg').textContent = d.message || (d.ok ? 'сохранено' : 'не удалось');
+}
+
 async function toggleCollect(){
   const r = await fetch(API + '/collect', {
     method:'POST', credentials:'same-origin',
@@ -130,7 +160,7 @@ async function toggleCollect(){
   document.getElementById('msg').textContent = d.message || (d.ok ? 'готово' : 'не удалось');
 }
 
-(async () => { const id = await loadDocs(); if (id) await loadDoc(); })();
+(async () => { await loadParallel(); const id = await loadDocs(); if (id) await loadDoc(); })();
 </script>
 <script src="/static/site-nav.js" defer></script>
 </body></html>
