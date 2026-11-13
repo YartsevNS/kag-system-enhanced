@@ -13,7 +13,7 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from src.api.routes import chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks, meta, labels
+from src.api.routes import pipeline, chat, upload, admin, health, admin_models, auth, watchers, notifications, knowledge_graph, process_logs, web_monitor, chunks, meta, labels
 from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
@@ -253,6 +253,7 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_models.router, prefix="/api/v1/admin/models", tags=["models"])
 app.include_router(knowledge_graph.router, prefix="/api/v1/kg", tags=["knowledge-graph"])
 app.include_router(process_logs.router, prefix="/api/v1/process-logs", tags=["process-logs"])
+app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["pipeline"])
 app.include_router(web_monitor.router, prefix="/api/v1/monitor", tags=["web-monitor"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(watchers.router, prefix="/api/v1/watchers", tags=["watchers"])
@@ -460,6 +461,18 @@ async def ontology_automation_page(request: Request):
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
     return await _html_response(os.path.join(static_path, "ontology-automation.html"))
+
+
+@app.get("/pipeline", summary="Конвейер обработки: этапы и время (только для admin)")
+async def pipeline_page(request: Request):
+    """Этапы обработки документа и время на каждом — по логу процесса.
+
+    Показывает выбранный документ (по умолчанию последний обработанный), его размер,
+    число фрагментов и таблицу «этап → время → доля». Кнопка включает/выключает сбор.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "pipeline.html"))
 
 
 @app.get("/ontology/health", summary="Здоровье онтологии: очереди, факты, авто-решения (только для admin)")

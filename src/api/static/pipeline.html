@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конвейер обработки — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  h2{font-size:15px;margin:24px 0 10px;color:var(--text2,#b4b4b4)}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,button{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px;cursor:pointer}
+  select{min-width:340px}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:12px 0}
+  .card{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px}
+  .card .num{font-size:22px;font-weight:600}
+  .card .lbl{font-size:12px;color:var(--text3,#8b93a1);margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  tr.slow td{background:rgba(240,180,41,.08)}
+  .bar{height:6px;background:var(--elevated,#1c2230);border-radius:3px;overflow:hidden;min-width:80px}
+  .bar > i{display:block;height:100%;background:var(--accent,#3ecf8e)}
+  .err{color:#ff8f8f}
+  #msg{font-size:12px;color:var(--accent,#3ecf8e)}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · конвейер</div><div data-site-nav></div></nav>
+<main>
+  <h1>Конвейер обработки</h1>
+  <div class="muted">
+    Этапы обработки документа и время на каждом — по логу процесса. Экран показывает
+    выбранный документ (по умолчанию последний обработанный), его размер, число фрагментов
+    и где именно уходит время.
+  </div>
+
+  <div class="row">
+    <select id="docs"></select>
+    <button onclick="loadDoc()">Показать</button>
+    <button id="toggle" onclick="toggleCollect()">Сбор статистики: …</button>
+    <span id="msg"></span>
+  </div>
+
+  <div class="cards" id="info"></div>
+
+  <h2>Этапы</h2>
+  <div id="stages"><div class="muted">Загрузка…</div></div>
+
+  <div id="errors"></div>
+</main>
+
+<script>
+const API = '/api/v1/pipeline';
+let COLLECTING = true;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function mb(bytes){ return bytes ? (bytes/1024/1024).toFixed(1)+' МБ' : '—'; }
+function secs(ms){ return ms ? (ms/1000).toFixed(1)+' с' : '—'; }
+
+function paintToggle(){
+  const b=document.getElementById('toggle');
+  b.textContent = 'Сбор статистики: ' + (COLLECTING ? 'включён' : 'выключен');
+  b.className = COLLECTING ? 'primary' : '';
+}
+
+async function loadDocs(){
+  const r = await fetch(API + '/documents?limit=50', {credentials:'same-origin'});
+  const d = await r.json();
+  COLLECTING = !!d.collecting; paintToggle();
+  const sel = document.getElementById('docs');
+  const items = d.items || [];
+  if (!items.length) { sel.innerHTML = '<option>логов пока нет</option>'; return; }
+  sel.innerHTML = items.map((it,i)=>
+    `<option value="${esc(it.document_id)}" ${i===0?'selected':''}>` +
+    `${esc(it.filename || it.document_id.slice(0,8))} · ${secs(it.total_ms)} · ` +
+    `${it.chunks||0} фр.</option>`).join('');
+  return items[0] && items[0].document_id;
+}
+
+async function loadDoc(){
+  const id = document.getElementById('docs').value;
+  if (!id) return;
+  const r = await fetch(API + '/' + encodeURIComponent(id), {credentials:'same-origin'});
+  const d = await r.json();
+  COLLECTING = !!d.collecting; paintToggle();
+
+  document.getElementById('info').innerHTML = `
+    <div class="card"><div class="num">${esc(mb(d.size_bytes))}</div><div class="lbl">размер файла</div></div>
+    <div class="card"><div class="num">${d.chunks||0}</div><div class="lbl">фрагментов (чанков)</div></div>
+    <div class="card"><div class="num">${secs(d.total_ms)}</div><div class="lbl">всего на обработку</div></div>
+    <div class="card"><div class="num">${(d.stages||[]).length}</div><div class="lbl">этапов в логе</div></div>
+    ${d.slowest ? `<div class="card"><div class="num">${esc(d.slowest.title)}</div>
+      <div class="lbl">самый долгий этап: ${secs(d.slowest.ms)} (${d.slowest.share}%)</div></div>` : ''}`;
+
+  const stages = d.stages || [];
+  document.getElementById('stages').innerHTML = stages.length
+    ? `<table><thead><tr><th style="width:26%">Этап</th><th style="width:110px">Время</th>
+        <th style="width:120px">Доля</th><th>Что произошло</th></tr></thead><tbody>` +
+      stages.map(s=>{
+        const w = Math.max(1, Math.min(100, Number(s.share)||0));
+        const slow = d.slowest && s.step === d.slowest.step ? ' class="slow"' : '';
+        return `<tr${slow}><td>${esc(s.title)}</td><td>${secs(s.delta_ms)}</td>
+          <td><div class="bar"><i style="width:${w}%"></i></div><span class="muted">${s.share==null?'—':s.share+'%'}</span></td>
+          <td class="muted">${esc(s.detail)}</td></tr>`;
+      }).join('') + '</tbody></table>'
+    : `<div class="muted">${esc(d.note || 'лога этапов нет')}</div>`;
+
+  const errs = d.errors || [];
+  document.getElementById('errors').innerHTML = errs.length
+    ? '<h2>Ошибки на этапах</h2>' + errs.map(e=>`<div class="err">${esc(e.step)}: ${esc(e.error)}</div>`).join('')
+    : '';
+}
+
+async function toggleCollect(){
+  const r = await fetch(API + '/collect', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({enabled: !COLLECTING})
+  });
+  const d = await r.json();
+  COLLECTING = !!d.collecting; paintToggle();
+  document.getElementById('msg').textContent = d.message || (d.ok ? 'готово' : 'не удалось');
+}
+
+(async () => { const id = await loadDocs(); if (id) await loadDoc(); })();
+</script>
+<script src="/static/site-nav.js" defer></script>
+</body></html>

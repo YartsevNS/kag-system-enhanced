@@ -48,7 +48,16 @@ class ProcessLogger:
             "details": details or {}
         }
         self._last = now
-        self._log.append(entry)
+        # Сбор можно выключить настройкой system/process_logs.collect: тогда шаг
+        # остаётся в консольном логе, но в config_store не пишется. Проверка дешёвая
+        # (кэш настроек), поэтому её можно делать на каждом шаге.
+        try:
+            from src.api.services.pipeline import enabled as _collect_enabled
+
+            if _collect_enabled():
+                self._log.append(entry)
+        except Exception:  # noqa: BLE001 - при сбое настроек лучше писать, чем терять
+            self._log.append(entry)
         logger.info(
             f"[{self.document_id[:8]}] {step} "
             f"(+{entry['delta_ms']}ms, total {entry['elapsed_ms']}ms): {details or ''}"
@@ -60,7 +69,9 @@ class ProcessLogger:
         logger.error(f"[{self.document_id[:8]}] {step} ERROR: {error}")
 
     def save(self):
-        """Сохранить лог в config_store."""
+        """Сохранить лог в config_store (если сбор включён)."""
+        if not self._log:
+            return
         try:
             from src.api.services.config_store import config_store
             key = f"log_{self.document_id}"
