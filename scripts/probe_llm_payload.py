@@ -15,7 +15,7 @@ DOC = "fb4d9a84-e723-41fa-970d-2ed75683674d"
 
 async def main():
     await embeddings_service.initialize()
-    client = getattr(embeddings_service, 'client', None) or getattr(embeddings_service, '_client', None)
+    client = getattr(embeddings_service, '_qdrant_client', None)
     print('client:', type(client).__name__)
     points = client.scroll(
         collection_name="kag_documents",
