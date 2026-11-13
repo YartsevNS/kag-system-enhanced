@@ -230,7 +230,13 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
         base, _n, _s = issuers.canonical(str(attrs.get("name") or ""),
                                          str(attrs.get("short_name") or ""))
     elif etype in ("regulatory_document", "company_document"):
-        base = str(attrs.get("document_key") or attrs.get("title") or "")
+        # Ключ документа не должен зависеть от свободного текста названия: разное
+        # написание даты утверждения давало два «разных» документа (13.11.2026).
+        from src.indexing.doc_context import _key_title
+
+        base = str(attrs.get("document_key") or "")
+        if not base:
+            base = _key_title(str(attrs.get("title") or ""))
     elif etype == "document_version":
         # ключ не должен зависеть от того, подставлен ли kag_document_id: иначе
         # повторная обработка того же файла создала бы вторую редакцию
@@ -283,7 +289,10 @@ def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
         if e["type"] in ("regulatory_document", "company_document"):
             dk = e["attrs"].get("document_key")
             if not dk:
-                dk = f"{_norm_key(e['attrs'].get('number')) or _norm_key(e['attrs'].get('title'))}"
+                from src.indexing.doc_context import _key_title
+
+                dk = (f"{_norm_key(e['attrs'].get('number'))}"
+                      or _norm_key(_key_title(str(e['attrs'].get('title') or ""))))
                 e["attrs"]["document_key"] = dk
             if not doc_key:
                 doc_key = dk
