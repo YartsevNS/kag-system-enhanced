@@ -74,7 +74,7 @@
     <input id="fq" placeholder="поиск по термину" style="min-width:200px">
     <select id="fhint" title="Подсказка автопилота: на что смотреть в первую очередь">
       <option value="">все подсказки</option>
-      <option value="abbreviation_mismatch">похоже, не расшифровка</option>
+      <option value="abbreviation_mismatch">сокращение не выводится из названия</option>
       <option value="abbreviation_from_full">решается правилом</option>
     </select>
     <button id="reload">Применить</button>
@@ -145,7 +145,7 @@ function hintStats(d){
   const h=(d&&d.pending_by_hint)||{};
   const junk=h.abbreviation_mismatch||0, auto=h.abbreviation_from_full||0;
   if(!junk && !auto) return '';
-  return `<span class="stat">из ждущих: похоже на мусор <b>${junk}</b>` +
+  return `<span class="stat">сокращение не выводится: <b>${junk}</b>` +
          (auto?`, решается правилом <b>${auto}</b>`:'')+`</span>`;
 }
 function picks(){
@@ -214,7 +214,7 @@ function hintChip(it){
   const h=it.hint||{};
   if(h.verdict==='auto') return `<div><span class="tag ok">авто: ${esc(h.rule||'')}</span></div>`;
   if(h.hint==='abbreviation_mismatch')
-    return `<div><span class="tag wait">расшифровка не выводится — похоже на мусор</span></div>`;
+    return `<div><span class="tag wait">сокращение не выводится из названия — проверьте</span></div>`;
   return '';
 }
 async function autopilot(){
