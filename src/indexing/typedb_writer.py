@@ -621,24 +621,55 @@ def ensure_provenance_schema() -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)[:200]}
 
 
+
+
+# ── общий драйвер ────────────────────────────────────────────────────────────
+# Создание драйвера TypeDB стоит ~79 мс. Раньше _read() создавал его на КАЖДЫЙ запрос,
+# а запросов на фрагмент было 43 (ent-key + 21 тип связей дважды) — это 3,4 с на фрагмент
+# и 100% CPU у TypeDB (замер 13.11.2026). Держим один драйвер на процесс.
+_SHARED_DRIVER = None
+_SHARED_DRIVER_LOCK = None
+
+
+def _shared_driver():
+    """Драйвер TypeDB на процесс: подключение переиспользуется между запросами."""
+    global _SHARED_DRIVER, _SHARED_DRIVER_LOCK
+    import threading
+
+    if _SHARED_DRIVER_LOCK is None:
+        _SHARED_DRIVER_LOCK = threading.Lock()
+    with _SHARED_DRIVER_LOCK:
+        if _SHARED_DRIVER is None:
+            _SHARED_DRIVER = _driver()
+        return _SHARED_DRIVER
+
+
+def _reset_shared_driver() -> None:
+    """Сбросить общий драйвер (после ошибки соединения — переподключимся)."""
+    global _SHARED_DRIVER
+    try:
+        if _SHARED_DRIVER is not None:
+            _SHARED_DRIVER.close()
+    except Exception:  # noqa: BLE001
+        pass
+    _SHARED_DRIVER = None
+
 # ── запись ────────────────────────────────────────────────────────────────────
 def _write(query: str) -> None:
     from typedb.driver import TransactionType
 
     c = _cfg()
-    with _driver() as dr:
-        with dr.transaction(c["db"], TransactionType.WRITE) as tx:
-            list(tx.query(query).resolve())
-            tx.commit()
+    with _shared_driver().transaction(c["db"], TransactionType.WRITE) as tx:
+        list(tx.query(query).resolve())
+        tx.commit()
 
 
 def _read(query: str) -> list:
     from typedb.driver import TransactionType
 
     c = _cfg()
-    with _driver() as dr:
-        with dr.transaction(c["db"], TransactionType.READ) as tx:
-            return list(tx.query(query).resolve())
+    with _shared_driver().transaction(c["db"], TransactionType.READ) as tx:
+        return list(tx.query(query).resolve())
 
 
 def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
@@ -675,106 +706,123 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
 
 def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
                         clause: str = "") -> Dict[str, Any]:
-    """Тело write_facts под замком документа (см. _doc_lock)."""
+    """Тело write_facts под замком документа (см. _doc_lock).
 
+    Чтения — точечные и в ОДНОЙ транзакции с общим драйвером. Раньше здесь был полный
+    проход по всем ent-key базы, а связи читались перебором всех 21 типа дважды; каждый
+    запрос открывал свой драйвер (~79 мс). Замер 13.11.2026: 43 драйвера и 1,4 с чтений
+    на фрагмент, TypeDB упиралась в 100% одного ядра.
+    """
     doc_id = str(chunk_id).split("_chunk_")[0] if chunk_id else ""
     entities, dropped, reasons = ensure_required(entities, doc_id=doc_id)
     if dropped:
         logger.warning("typedb_writer: пропущено %d сущностей без обязательных полей: %s",
                        dropped, "; ".join(reasons[:5]))
 
-    tm = {"reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0, "commit_ms": 0.0, "retries": 0}
-    _t = time.monotonic()
-    existing_keys: Set[str] = set()
-    try:
-        existing_keys = {_value(r.get("k")) for r in
-                         _read('match $x has ent-key $k; fetch { "k": $k };')}
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("typedb_writer: существующие ключи не прочитаны: %s", exc)
+    tm = {"reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0,
+          "commit_ms": 0.0, "retries": 0}
+    from typedb.driver import TransactionType as _TT
 
-    tm["reads_ms"] += round((time.monotonic() - _t) * 1000, 1)
-    entity_queries: List[str] = []
-    inserted_e = 0
-    entity_keys_now = set(existing_keys)
-
-    for key, e in entities.items():
-        if key in existing_keys:
-            # существующей сущности добавляем только провенанс
-            ch_lines = ", ".join(
-                f'source-chunk-ids "{_esc(ch, 200)}"' for ch in sorted(e["chunks"])[:40])
-            if ch_lines:
-                entity_queries.append(
-                    f'match $x isa {e["type"]}, has ent-key "{key}"; insert $x has {ch_lines};')
-            continue
-        has = _attr_line(key, e["attrs"], e["chunks"], clause)
-        entity_queries.append(f'put $x isa {e["type"]}{has};')
-        inserted_e += 1
-        entity_keys_now.add(key)
-
-    # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой.
-    def build_relations() -> tuple:
-        """Собрать запросы связей с учётом уже существующих и уже собранных."""
-        _existing: Set[str] = set()
+    def _ent_exists(rtx, etype: str, key: str) -> bool:
         try:
-            for rtype, roles in RELATION_ROLES.items():
-                role_items = list(roles.keys())
-                if len(role_items) < 2:
+            return bool(list(rtx.query(
+                f'match $x isa {etype}, has ent-key "{_esc(key, 300)}"; '
+                f'fetch {{ "k": $x.ent-key }};').resolve()))
+        except Exception:  # noqa: BLE001 - тип мог быть отброшен схемой
+            return False
+
+    def _rel_exists(rtx, rel: Dict[str, Any]) -> bool:
+        items = list((rel.get("parts") or {}).items())
+        if len(items) < 2:
+            return False
+        (r1, k1), (r2, k2) = items[0], items[1]
+        try:
+            return bool(list(rtx.query(
+                f'match ({r1}: $a, {r2}: $b) isa {rel["type"]}; '
+                f'$a has ent-key "{_esc(k1, 300)}"; $b has ent-key "{_esc(k2, 300)}"; '
+                f'fetch {{ "a": $a.ent-key }};').resolve()))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _prepare() -> Dict[str, Any]:
+        """Собрать запросы пачки: точечные проверки ключей и связей в одной транзакции."""
+        _t0 = time.monotonic()
+        existing: Set[str] = set()
+        ent_q: List[str] = []
+        rel_q: List[str] = []
+        inserted = 0
+        skipped = 0
+        with _shared_driver().transaction(_cfg()["db"], _TT.READ) as rtx:
+            for key, e in entities.items():
+                if _ent_exists(rtx, e["type"], key):
+                    existing.add(key)
+
+            keys_now = set(existing)
+            for key, e in entities.items():
+                if key in existing:
+                    ch_lines = ", ".join(
+                        f'source-chunk-ids "{_esc(ch, 200)}"' for ch in sorted(e["chunks"])[:40])
+                    if ch_lines:
+                        ent_q.append(
+                            f'match $x isa {e["type"]}, has ent-key "{_esc(key, 300)}"; '
+                            f'insert $x has {ch_lines};')
                     continue
-                r1, r2 = role_items[0], role_items[1]
-                for row in _read(
-                    f'match ({r1}: $a, {r2}: $b) isa {rtype}; '
-                    f'$a has ent-key $ka; $b has ent-key $kb; '
-                    f'fetch {{ "a": $ka, "b": $kb }};'
-                ):
-                    _existing.add(
-                        f"{rtype}|{r1}={_value(row.get('a'))}|{r2}={_value(row.get('b'))}")
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("typedb_writer: существующие связи не прочитаны: %s", str(exc)[:120])
+                has = _attr_line(key, e["attrs"], e["chunks"], clause)
+                ent_q.append(f'put $x isa {e["type"]}{has};')
+                inserted += 1
+                keys_now.add(key)
 
-        _queries: List[str] = []
-        _written: Set[str] = set()
-        _skipped = 0
-        for sig, rel in relations.items():
-            parts = rel["parts"]
-            if any(k not in entity_keys_now for k in parts.values()):
-                _skipped += 1
-                continue
-            roles_sorted = "|".join(f"{k}={v}" for k, v in sorted(parts.items()))
-            if sig in _written or f"{rel['type']}|{roles_sorted}" in _existing:
-                _skipped += 1
-                continue
-            match_lines, roles_str = [], []
-            for i, (role, key) in enumerate(parts.items()):
-                etype = key.split(":", 1)[0]
-                match_lines.append(f'$v{i} isa {etype}, has ent-key "{key}";')
-                roles_str.append(f"{role}: $v{i}")
-            _queries.append("match\n  " + "\n  ".join(match_lines)
-                            + "\ninsert\n  " + rel["type"]
-                            + " (" + ", ".join(roles_str) + ");")
-            _written.add(sig)
-        return _queries, _skipped
+            checked: Dict[str, bool] = {}
 
-    _t = time.monotonic()
-    rel_queries, skipped_rel = build_relations()
-    tm["reads_ms"] += round((time.monotonic() - _t) * 1000, 1)
+            def _participant_ok(key: str) -> bool:
+                if key in keys_now:
+                    return True
+                if key not in checked:
+                    checked[key] = _ent_exists(rtx, key.split(":", 1)[0], key)
+                return checked[key]
+
+            written_sigs: Set[str] = set()
+            for sig, rel in relations.items():
+                parts = rel["parts"]
+                if not all(_participant_ok(k) for k in parts.values()):
+                    skipped += 1
+                    continue
+                if sig in written_sigs or _rel_exists(rtx, rel):
+                    skipped += 1
+                    continue
+                match_lines, roles_str = [], []
+                for i, (role, key) in enumerate(parts.items()):
+                    etype = key.split(":", 1)[0]
+                    match_lines.append(f'$v{i} isa {etype}, has ent-key "{_esc(key, 300)}";')
+                    roles_str.append(f"{role}: $v{i}")
+                rel_q.append(
+                    "match" + chr(10) + "  " + (chr(10) + "  ").join(match_lines)
+                    + chr(10) + "insert" + chr(10) + "  " + rel["type"]
+                    + " (" + ", ".join(roles_str) + ");"
+                )
+                written_sigs.add(sig)
+        tm["reads_ms"] += round((time.monotonic() - _t0) * 1000, 1)
+        return {"existing_keys": existing, "entity_queries": ent_q, "rel_queries": rel_q,
+                "inserted_e": inserted, "skipped_rel": skipped}
+
+    prep = _prepare()
+    existing_keys = prep["existing_keys"]
+    entity_queries = prep["entity_queries"]
+    rel_queries = prep["rel_queries"]
+    inserted_e = prep["inserted_e"]
+    skipped_rel = prep["skipped_rel"]
 
     if not entity_queries and not rel_queries:
         return {"entities": 0, "relations": 0,
                 "entities_existing": len(entities), "relations_existing": skipped_rel,
-                "dropped": dropped}
-
-    from typedb.driver import TransactionType as _TT
+                "dropped": dropped, "timings": tm}
 
     cfg = _cfg()
     problems: List[Dict[str, Any]] = []
     last_error = ""
-    # Чанки документа обрабатываются параллельно (semaphore 3) и могут одновременно
-    # вставить один и тот же документ: второй получает конфликт @unique по document_key.
-    # Это не ошибка данных, а гонка — поэтому повторяем с перечитыванием существующих ключей.
     for attempt in range(3):
-        drv = _driver()
         try:
-            with drv.transaction(cfg["db"], _TT.WRITE) as tx:
+            with _shared_driver().transaction(cfg["db"], _TT.WRITE) as tx:
                 _ti = time.monotonic()
                 for q in entity_queries + rel_queries:
                     tx.query(q).resolve()
@@ -783,10 +831,12 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                 problems = _integrity_in_tx(tx, set(entities.keys()))
                 tm["integrity_ms"] += round((time.monotonic() - _tc) * 1000, 1)
                 if problems:
-                    logger.warning("typedb_writer: документ не записан, нарушений целостности %d: %s",
-                                   len(problems), problems[:3])
+                    logger.warning(
+                        "typedb_writer: документ не записан, нарушений целостности %d: %s",
+                        len(problems), problems[:3])
                     return {"entities": 0, "relations": 0, "entities_existing": 0,
-                            "relations_existing": 0, "dropped": dropped, "integrity": problems}
+                            "relations_existing": 0, "dropped": dropped,
+                            "integrity": problems, "timings": tm}
                 _tcm = time.monotonic()
                 tx.commit()
                 tm["commit_ms"] += round((time.monotonic() - _tcm) * 1000, 1)
@@ -799,41 +849,31 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
             if race and attempt < 2:
                 tm["retries"] += 1
                 logger.info("typedb_writer: гонка по ключу, повтор %d/3", attempt + 1)
-                # перечитать существующие ключи и пересобрать пачку «только новое»
                 try:
-                    existing_keys = {_value(r.get("k")) for r in
-                                     _read('match $x has ent-key $k; fetch { "k": $k };')}
+                    _reset_shared_driver()
                 except Exception:  # noqa: BLE001
-                    existing_keys = set()
-                entity_queries = []
-                entity_keys_now = set(existing_keys)
-                for key, e in entities.items():
-                    if key in existing_keys:
-                        continue
-                    has = _attr_line(key, e["attrs"], e["chunks"], clause)
-                    entity_queries.append(f'put $x isa {e["type"]}{has};')
-                    entity_keys_now.add(key)
-                rel_queries, skipped_rel = build_relations()
+                    pass
+                prep = _prepare()
+                existing_keys = prep["existing_keys"]
+                entity_queries = prep["entity_queries"]
+                rel_queries = prep["rel_queries"]
+                inserted_e = prep["inserted_e"]
+                skipped_rel = prep["skipped_rel"]
                 continue
             logger.error("typedb_writer: транзакция документа не выполнена (%s): %s",
                          type(exc).__name__, repr(exc)[:400])
             return {"entities": 0, "relations": 0, "entities_existing": 0,
                     "relations_existing": 0, "dropped": dropped, "timings": tm,
                     "error": last_error.splitlines()[0][:200]}
-        finally:
-            try:
-                drv.close()
-            except Exception:
-                pass
+
     if last_error:
         return {"entities": 0, "relations": 0, "entities_existing": 0,
-                "relations_existing": 0, "dropped": dropped,
+                "relations_existing": 0, "dropped": dropped, "timings": tm,
                 "error": last_error.splitlines()[0][:200]}
 
     return {"entities": inserted_e, "relations": len(rel_queries),
             "entities_existing": len(entities) - inserted_e,
             "relations_existing": skipped_rel, "dropped": dropped, "timings": tm}
-
 
 # Проверки читают ent-key участников: по ним нарушение привязывается к текущей пачке.
 # Иначе одно старое нарушение в базе блокировало бы загрузку любого документа.
