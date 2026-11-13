@@ -203,7 +203,13 @@ def build_context(
         # чтобы старые данные не тянули ошибку дальше.
         key = _key_title(key)
     if not key:
-        key = build_document_key(issuer, doc_type, number, title)
+        # Есть номер — канонический ключ «издатель|вид|номер». Номера нет — ключ по файлу:
+        # иначе в ключ попадает название, и один документ расходится с онтологией
+        # (проверка key_mismatch дала 17 расхождений на 7 документах, 13.11.2026).
+        if normalize_number(number) or not document_id:
+            key = build_document_key(issuer, doc_type, number, title)
+        else:
+            key = f"kag:{document_id}"
 
     return {
         "document_key": key,
