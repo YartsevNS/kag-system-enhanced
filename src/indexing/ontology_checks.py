@@ -151,7 +151,13 @@ def check_document(
     expected_kind = doc_context.resolve_doc_type(
         str(sm.get("doc_kind") or ""), str((doc_ctx or {}).get("doc_type") or ""), title,
     ) or ""
-    expected_key = doc_context.build_document_key(issuer, expected_kind, number, title)
+    # Ключ по файлу, когда номера нет — ровно как в doc_context.build_context().
+    # Иначе проверка сравнивает канонический ключ (kag:<id>) с ключом из названия
+    # и пишет ложное расхождение (живой случай 13.11.2026).
+    if expected_kind and document_id and not doc_context.normalize_number(number):
+        expected_key = f"kag:{document_id}"
+    else:
+        expected_key = doc_context.build_document_key(issuer, expected_kind, number, title)
 
     # 1. Ключ документа: «издатель|вид|номер», вид — кодом словаря.
     if expected_kind and expected_key and doc_key and doc_key != expected_key:
