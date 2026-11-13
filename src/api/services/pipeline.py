@@ -42,6 +42,7 @@ STEP_TITLES = {
     "graph_skipped": "граф пропущен",
     "typedb": "онтология TypeDB",
     "typedb_write": "онтология TypeDB",
+    "typedb_timings": "тайминги извлечения",
     "types": "определение вида и темы",
     "doc_context": "контекст документа",
     "sections": "разделы",

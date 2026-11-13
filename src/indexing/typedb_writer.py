@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 import json
 import logging
 import os
@@ -657,8 +658,19 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
 
     doc_lock_id = str(chunk_id).split("_chunk_")[0] if chunk_id else ""
     _lock = _doc_lock(doc_lock_id)
-    with _lock:
-        return _write_facts_locked(chunk_id, entities, relations, clause)
+    # Замер ожидания замка: если фрагменты стоят в очереди, это видно как lock_wait,
+    # а не как «медленная запись». Без этого разрыв «факт против суммы фаз» не закрыть.
+    t_wait = time.monotonic()
+    _lock.acquire()
+    lock_wait_ms = round((time.monotonic() - t_wait) * 1000, 1)
+    try:
+        res = _write_facts_locked(chunk_id, entities, relations, clause)
+    finally:
+        _lock.release()
+    timings = dict(res.get("timings") or {})
+    timings["lock_wait_ms"] = lock_wait_ms
+    res["timings"] = timings
+    return res
 
 
 def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
@@ -671,6 +683,8 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
         logger.warning("typedb_writer: пропущено %d сущностей без обязательных полей: %s",
                        dropped, "; ".join(reasons[:5]))
 
+    tm = {"reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0, "commit_ms": 0.0, "retries": 0}
+    _t = time.monotonic()
     existing_keys: Set[str] = set()
     try:
         existing_keys = {_value(r.get("k")) for r in
@@ -678,6 +692,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
     except Exception as exc:  # noqa: BLE001
         logger.debug("typedb_writer: существующие ключи не прочитаны: %s", exc)
 
+    tm["reads_ms"] += round((time.monotonic() - _t) * 1000, 1)
     entity_queries: List[str] = []
     inserted_e = 0
     entity_keys_now = set(existing_keys)
@@ -758,7 +773,9 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
             _written.add(sig)
         return _queries, _skipped
 
+    _t = time.monotonic()
     rel_queries, skipped_rel = build_relations()
+    tm["reads_ms"] += round((time.monotonic() - _t) * 1000, 1)
 
     if not entity_queries and not rel_queries:
         return {"entities": 0, "relations": 0,
@@ -777,15 +794,21 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
         drv = _driver()
         try:
             with drv.transaction(cfg["db"], _TT.WRITE) as tx:
+                _ti = time.monotonic()
                 for q in entity_queries + rel_queries:
                     tx.query(q).resolve()
+                tm["insert_ms"] += round((time.monotonic() - _ti) * 1000, 1)
+                _tc = time.monotonic()
                 problems = _integrity_in_tx(tx, set(entities.keys()))
+                tm["integrity_ms"] += round((time.monotonic() - _tc) * 1000, 1)
                 if problems:
                     logger.warning("typedb_writer: документ не записан, нарушений целостности %d: %s",
                                    len(problems), problems[:3])
                     return {"entities": 0, "relations": 0, "entities_existing": 0,
                             "relations_existing": 0, "dropped": dropped, "integrity": problems}
+                _tcm = time.monotonic()
                 tx.commit()
+                tm["commit_ms"] += round((time.monotonic() - _tcm) * 1000, 1)
             last_error = ""
             break
         except Exception as exc:  # noqa: BLE001
@@ -793,6 +816,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
             low = last_error.lower()
             race = ("cnt9" in low or "@unique" in low or "@key" in low or "unique" in low)
             if race and attempt < 2:
+                tm["retries"] += 1
                 logger.info("typedb_writer: гонка по ключу, повтор %d/3", attempt + 1)
                 # перечитать существующие ключи и пересобрать пачку «только новое»
                 try:
@@ -813,7 +837,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
             logger.error("typedb_writer: транзакция документа не выполнена (%s): %s",
                          type(exc).__name__, repr(exc)[:400])
             return {"entities": 0, "relations": 0, "entities_existing": 0,
-                    "relations_existing": 0, "dropped": dropped,
+                    "relations_existing": 0, "dropped": dropped, "timings": tm,
                     "error": last_error.splitlines()[0][:200]}
         finally:
             try:
@@ -827,7 +851,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
 
     return {"entities": inserted_e, "relations": len(rel_queries),
             "entities_existing": len(entities) - inserted_e,
-            "relations_existing": skipped_rel, "dropped": dropped}
+            "relations_existing": skipped_rel, "dropped": dropped, "timings": tm}
 
 
 # Проверки читают ent-key участников: по ним нарушение привязывается к текущей пачке.
@@ -1053,9 +1077,14 @@ async def extract_and_store_typedb(
 
     prompt = _render_prompt(chunk_text, clause=clause,
                             document=filename or document_id, doc_ctx=doc_ctx)
+    tm = {"prompt_chars": len(prompt), "chunk_chars": len(chunk_text)}
+    _t = time.monotonic()
     payload = await _call_llm(prompt, chunk_id)
+    tm["llm_ms"] = round((time.monotonic() - _t) * 1000, 1)
     if not payload:
-        return {"status": "empty", "reason": "модель не вернула фактов"}
+        tm["payload_chars"] = 0
+        return {"status": "empty", "reason": "модель не вернула фактов", "timings": tm}
+    tm["payload_chars"] = len(json.dumps(payload, ensure_ascii=False))
     _inject_doc_context(payload, doc_ctx)
 
     # Документ организации: модель по форме текста всё равно называет его «нормативным
@@ -1072,12 +1101,19 @@ async def extract_and_store_typedb(
                 if not (isinstance(r, dict) and r.get("type") == "document_issuance")
             ]
 
+    _t = time.monotonic()
     entities, relations, stats = _collect(payload, chunk_id, document_id)
+    tm["collect_ms"] = round((time.monotonic() - _t) * 1000, 1)
+    tm["entities"] = len(entities)
+    tm["relations"] = len(relations)
     if not entities and not relations:
-        return {"status": "empty", "stats": stats}
+        return {"status": "empty", "stats": stats, "timings": tm}
 
+    _t = time.monotonic()
     try:
         written = await asyncio.to_thread(write_facts, chunk_id, entities, relations, clause)
+        tm["write_ms"] = round((time.monotonic() - _t) * 1000, 1)
+        tm.update({k: v for k, v in (written.get("timings") or {}).items()})
     except Exception as exc:  # noqa: BLE001
         logger.warning("typedb_writer: запись не удалась для %s: %s", chunk_id, exc)
         # В журнал онтологии, а не в общий: это отказ записи фактов в TypeDB.
@@ -1100,4 +1136,4 @@ async def extract_and_store_typedb(
         written["relations"], written["relations_existing"],
         stats["dropped_type"], stats["dropped_role"], stats["dropped_missing_attr"],
     )
-    return {"status": "ok", "written": written, "stats": stats}
+    return {"status": "ok", "written": written, "stats": stats, "timings": tm}

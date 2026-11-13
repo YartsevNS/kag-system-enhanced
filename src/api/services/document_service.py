@@ -2193,6 +2193,13 @@ class DocumentService:
             logger.warning(f"[typedb] контекст документа не собран: {str(exc)[:160]}")
 
         total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
+        # Фазовые тайминги: нужны, чтобы объяснить фактическое время прогона, а не гадать.
+        # Суммы по фазам + разброс по фрагментам + раздельно пустые/непустые + очередь на семафоре.
+        agg = {"llm_ms": 0.0, "collect_ms": 0.0, "write_ms": 0.0, "lock_wait_ms": 0.0,
+               "reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0, "commit_ms": 0.0,
+               "queue_ms": 0.0, "prompt_chars": 0, "payload_chars": 0, "retries": 0,
+               "empty_wall_ms": 0.0, "empty_n": 0, "filled_wall_ms": 0.0, "filled_n": 0}
+        walls: list = []
         t0 = _time.monotonic()
         sem = asyncio.Semaphore(3)
 
@@ -2215,7 +2222,9 @@ class DocumentService:
             if chunk_id in _done_ids:
                 total["ok"] += 1          # уже в онтологии, LLM не вызываем
                 return
+            _t_start = _time.monotonic()
             async with sem:
+                agg["queue_ms"] += round((_time.monotonic() - _t_start) * 1000, 1)
                 try:
                     res = await asyncio.wait_for(
                         typedb_writer.extract_and_store_typedb(
@@ -2228,6 +2237,20 @@ class DocumentService:
                     total["error"] += 1
                     logger.warning(f"[typedb] таймаут для {chunk_id}")
                     return
+                _tm = res.get("timings") or {}
+                for _k in ("llm_ms", "collect_ms", "write_ms", "lock_wait_ms", "reads_ms",
+                           "insert_ms", "integrity_ms", "commit_ms", "prompt_chars",
+                           "payload_chars", "retries"):
+                    if _k in _tm:
+                        agg[_k] = agg.get(_k, 0) + (_tm[_k] or 0)
+                _wall = round((_time.monotonic() - _t_start) * 1000, 1)
+                walls.append(_wall)
+                if int(_tm.get("entities") or 0) > 0 or int(_tm.get("relations") or 0) > 0:
+                    agg["filled_wall_ms"] += _wall
+                    agg["filled_n"] += 1
+                else:
+                    agg["empty_wall_ms"] += _wall
+                    agg["empty_n"] += 1
                 st = res.get("status")
                 if st == "ok":
                     w = res.get("written") or {}
@@ -2254,7 +2277,27 @@ class DocumentService:
             f"сущностей {total['entities']}, связей {total['relations']} ({ms} ms)"
         )
         try:
+            import statistics as _st
+            walls_sorted = sorted(walls)
+            summary = {
+                **{k: round(v, 1) if isinstance(v, float) else v for k, v in agg.items()},
+                "fragments": len(walls),
+                "wall_p50_ms": round(_st.median(walls_sorted), 1) if walls_sorted else 0,
+                "wall_p95_ms": (walls_sorted[int(len(walls_sorted) * 0.95) - 1]
+                                if walls_sorted else 0),
+                "wall_max_ms": max(walls_sorted) if walls_sorted else 0,
+            }
+            if agg["filled_n"]:
+                summary["filled_avg_ms"] = round(agg["filled_wall_ms"] / agg["filled_n"], 1)
+            if agg["empty_n"]:
+                summary["empty_avg_ms"] = round(agg["empty_wall_ms"] / agg["empty_n"], 1)
+            logger.info(f"[typedb] тайминги по фазам: {summary}")
+        except Exception as _e:  # noqa: BLE001
+            summary = {}
+            logger.debug(f"[typedb] сводка таймингов не собрана: {_e}")
+        try:
             plog.log("typedb_write", total) if plog else None
+            plog.log("typedb_timings", summary) if plog and summary else None
         except Exception:  # noqa: BLE001
             pass
 
