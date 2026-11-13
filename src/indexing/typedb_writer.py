@@ -712,25 +712,6 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
         entity_keys_now.add(key)
 
     # Связи: только те, у кого все участники есть в базе или вставляются этой же пачкой.
-    # Существующие связи читаем заранее: без этого повторная обработка плодит дубли
-    # (на ГОСТ 57580.2 вышло 48 document_has_version при одном документе и одной версии).
-    existing_sigs: Set[str] = set()
-    try:
-        for rtype, roles in RELATION_ROLES.items():
-            role_items = list(roles.keys())
-            if len(role_items) < 2:
-                continue
-            r1, r2 = role_items[0], role_items[1]
-            for row in _read(
-                f'match ({r1}: $a, {r2}: $b) isa {rtype}; '
-                f'$a has ent-key $ka; $b has ent-key $kb; '
-                f'fetch {{ "a": $ka, "b": $kb }};'
-            ):
-                existing_sigs.add(
-                    f"{rtype}|{r1}={_value(row.get('a'))}|{r2}={_value(row.get('b'))}")
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("typedb_writer: существующие связи не прочитаны: %s", str(exc)[:120])
-
     def build_relations() -> tuple:
         """Собрать запросы связей с учётом уже существующих и уже собранных."""
         _existing: Set[str] = set()
