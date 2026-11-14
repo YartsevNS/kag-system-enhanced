@@ -176,21 +176,37 @@ def is_available() -> bool:
 
 def write_enabled() -> bool:
     """Выключатель записи: настройка админки system/typedb.write_enabled главнее,
-    затем — TYPEDB_WRITE_ENABLED из конфигурации приложения."""
+    затем — TYPEDB_WRITE_ENABLED из конфигурации приложения.
+
+    Если НИ ОДИН источник не прочитан — считаем запись ЗАПРЕЩЁННОЙ (fail-closed) и пишем
+    ошибку: молчаливое «True по умолчанию» означало «пишем в базу, не зная, можно ли»,
+    то есть ровно тот класс тихой потери, который чинили 14.11.2026.
+    """
     try:
         from src.api.services.config_store import config_store
 
         cfg = config_store.get("system", "typedb") or {}
         if "write_enabled" in cfg:
             return bool(cfg["write_enabled"])
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("typedb_writer: настройка записи не прочитана (%s) — пробую конфиг",
+                       str(exc)[:120])
     try:
         from src.config import get_settings
 
         return bool(get_settings().TYPEDB_WRITE_ENABLED)
-    except Exception:  # noqa: BLE001
-        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.error("typedb_writer: разрешение записи неизвестно (%s) — запись выключена, "
+                     "чтобы не писать в онтологию вслепую", str(exc)[:160])
+        try:
+            from src.api.services.ontology_errors import log_error
+
+            log_error("разрешение записи в TypeDB неизвестно — запись пропущена",
+                      error_type="write_flag_unknown", source="writer",
+                      details={"error": str(exc)[:400]})
+        except Exception:  # noqa: BLE001
+            pass
+        return False
 
 
 def _driver():

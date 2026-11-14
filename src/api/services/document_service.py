@@ -2278,6 +2278,11 @@ class DocumentService:
                     agg["filled_n"] += 1
                 else:
                     agg["empty_n"] += 1
+                # «Тихое обеднение»: фрагмент не пуст, но дал 1–2 объекта вместо обычных 5–10.
+                # empty_share такое не видит, поэтому считаем отдельно (ревью 14.11.2026).
+                _produced = int(_tm.get("entities") or 0) + int(_tm.get("relations") or 0)
+                if 0 < _produced <= 2:
+                    agg["low_yield_n"] = agg.get("low_yield_n", 0) + 1
                 st = res.get("status")
                 if st == "ok":
                     w = res.get("written") or {}
@@ -2328,6 +2333,16 @@ class DocumentService:
         except Exception:  # noqa: BLE001
             _limit = 0.30
         _suspect = bool(_chunks_total) and _empty_share > _limit
+        _low = int(agg.get("low_yield_n") or 0)
+        _low_share = (_low / _chunks_total) if _chunks_total else 0.0
+        if bool(_chunks_total) and _low_share > 0.5:
+            # «Тихое обеднение»: почти все фрагменты отдали 1–2 объекта вместо обычных 5–10.
+            logger.error(
+                "[typedb] прогон ОБЕДНЁННЫЙ: фрагментов с 1–2 объектами %s из %s (%.0f%%)",
+                _low, _chunks_total, _low_share * 100,
+            )
+            summary["low_yield_share"] = round(_low_share, 3)
+            _suspect = True
         if _suspect:
             logger.error(
                 "[typedb] прогон ПОДОЗРИТЕЛЬНЫЙ: пустых %s из %s (%.0f%%, порог %.0f%%) — "
