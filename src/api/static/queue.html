@@ -195,6 +195,15 @@ function resolveCell(row) {
          '<button class="danger" data-act="reject" data-id="' + row.id + '">отклонить</button>';
 }
 
+// ключ показываем коротким: полный хеш нужен только в подсказке, в таблице он занимает
+// половину строки и мешает читать подробности
+function shortKey(key) {
+  const k = String(key || '');
+  const tail = k.includes('|') ? k.split('|').pop() : k;
+  const h = tail.startsWith('sha256:') ? tail.slice(7, 19) + '…' : tail;
+  return h || '—';
+}
+
 function paintRows(rows) {
   const tb = $('rows');
   tb.innerHTML = '';
@@ -210,7 +219,8 @@ function paintRows(rows) {
     tr.innerHTML =
       '<td>' + esc(reasonLabel(row.reason)) + '</td>' +
       '<td class="mono">' + esc(row.entity_type || '—') + '</td>' +
-      '<td class="mono">' + esc((row.cluster_key || '').slice(0, 60)) + '</td>' +
+      '<td class="mono" title="' + esc(row.cluster_key || '') + '">' +
+        esc(shortKey(row.cluster_key)) + '</td>' +
       '<td class="mono">' + esc(row.detail || '—') + '</td>' +
       '<td>' + resolveCell(row) + '</td>';
     tb.appendChild(tr);
