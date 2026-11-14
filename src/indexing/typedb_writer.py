@@ -445,6 +445,16 @@ def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
         if etype == "document_version" and doc_id and not attrs.get("kag_document_id"):
             # ссылка на файл-источник: связывает редакцию с документом в Postgres/Qdrant
             attrs["kag_document_id"] = doc_id
+        if etype == "security_requirement":
+            # Описание подпункта меры (нет глагола требования + id вида «МЕРА-N-а») — это не
+            # требование: в Gold не пишем. Bronze при этом остаётся сырьём, а Silver кладёт
+            # такие строки в очередь с причиной measure_subitem_not_requirement.
+            from src.indexing.bronze_resolve import is_measure_subitem
+
+            if is_measure_subitem(attrs.get("requirement-id") or attrs.get("requirement_id"),
+                                  attrs.get("description") or attrs.get("text")):
+                dropped.append("security_requirement: подпункт меры, не требование")
+                continue
         if etype == "security_requirement" and not attrs.get("requirement_key"):
             rid = attrs.get("requirement-id") or attrs.get("requirement_id")
             if rid:
@@ -655,16 +665,7 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
         # значение из ответа модели: 14.11 в Bronze пришёл ключ вида «kag:<id>|упд.15-1»,
         # то есть старый «документ|номер», и через setdefault наш хэш не применялся.
         if etype == "security_requirement":
-            from src.indexing.bronze_resolve import (is_measure_subitem,
-                                                     requirement_key as _req_key)
-
-            # Описание подпункта меры (нет глагола требования + id вида «МЕРА-N-а») — это не
-            # требование: в онтологию не пишем, иначе запрос «какие требования» выдаёт
-            # «взаимная аутентификация устройства» (решение 15.11.2026).
-            if is_measure_subitem(attrs.get("requirement-id") or attrs.get("requirement_id"),
-                                  attrs.get("description") or attrs.get("text")):
-                stats["dropped_subitem"] = stats.get("dropped_subitem", 0) + 1
-                continue
+            from src.indexing.bronze_resolve import requirement_key as _req_key
 
             h = _req_key(attrs)
             if h:
