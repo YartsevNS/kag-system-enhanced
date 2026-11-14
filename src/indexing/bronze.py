@@ -55,6 +55,26 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS extraction_bronze_run_idx ON extraction_bronze (run_id)",
     "CREATE INDEX IF NOT EXISTS extraction_bronze_doc_idx ON extraction_bronze (document_id)",
     "CREATE INDEX IF NOT EXISTS extraction_bronze_key_idx ON extraction_bronze (raw_ent_key)",
+    """
+    CREATE TABLE IF NOT EXISTS bronze_queue (
+        id           bigserial PRIMARY KEY,
+        run_id       text NOT NULL,
+        document_id  text NOT NULL DEFAULT '',
+        bronze_id    bigint,
+        entity_type  text NOT NULL DEFAULT '',
+        cluster_key  text NOT NULL DEFAULT '',
+        reason       text NOT NULL,
+        detail       text NOT NULL DEFAULT '',
+        status       text NOT NULL DEFAULT 'pending',
+        resolved_by  text NOT NULL DEFAULT '',
+        resolved_at  timestamptz,
+        created_at   timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (run_id, bronze_id, reason)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS bronze_queue_run_idx ON bronze_queue (run_id)",
+    "CREATE INDEX IF NOT EXISTS bronze_queue_reason_idx ON bronze_queue (reason)",
+    "CREATE INDEX IF NOT EXISTS bronze_queue_status_idx ON bronze_queue (status)",
 ]
 
 _ready = False
@@ -166,6 +186,78 @@ def finish_run(run_id: str, chunks: int, entities: int, relations: int,
         logger.debug("bronze: прогон не закрыт: %s", str(exc)[:160])
     finally:
         db.close()
+
+
+def run_by_prefix(prefix: str) -> str:
+    """run_id по началу строки (для скриптов и ручных проверок)."""
+    ensure_tables()
+    from sqlalchemy import text
+
+    db = _db()()
+    try:
+        row = db.execute(text(
+            "SELECT run_id FROM bronze_runs WHERE run_id LIKE :p ORDER BY started_at DESC LIMIT 1"),
+            {"p": f"{prefix}%"}).first()
+    finally:
+        db.close()
+    return (row[0] if row else "") or ""
+
+
+def queue_add(run_id: str, rows: List[Dict[str, Any]]) -> int:
+    """Положить спорные записи в очередь разбора (bronze_queue).
+
+    Идемпотентно: повторный расчёт того же прогона не плодит строки (уникальность
+    run_id + bronze_id + reason). Ничего не удаляет и не решает — только фиксирует «нужен человек».
+    """
+    if not run_id or not rows:
+        return 0
+    ensure_tables()
+    from sqlalchemy import text
+
+    db = _db()()
+    added = 0
+    try:
+        for r in rows:
+            res = db.execute(text(
+                "INSERT INTO bronze_queue (run_id, document_id, bronze_id, entity_type, "
+                "cluster_key, reason, detail) VALUES (:run, :doc, :bid, :etype, :key, :reason, :d) "
+                "ON CONFLICT (run_id, bronze_id, reason) DO NOTHING"),
+                {"run": run_id, "doc": r.get("document_id") or "", "bid": r.get("bronze_id"),
+                 "etype": (r.get("entity_type") or "")[:80],
+                 "key": (r.get("cluster_key") or "")[:200], "reason": r.get("reason") or "",
+                 "d": (r.get("detail") or "")[:300]})
+            added += max(0, res.rowcount or 0)
+        db.commit()
+        return added
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.debug("bronze: очередь не записана: %s", str(exc)[:160])
+        return 0
+    finally:
+        db.close()
+
+
+def queue_stats(run_id: str = "") -> Dict[str, Any]:
+    """Сколько записей в очереди разбора и по каким причинам."""
+    ensure_tables()
+    from sqlalchemy import text
+
+    db = _db()()
+    try:
+        if run_id:
+            rows = db.execute(text(
+                "SELECT reason, status, count(*) AS n FROM bronze_queue WHERE run_id = :r "
+                "GROUP BY reason, status ORDER BY n DESC"), {"r": run_id}).mappings().all()
+        else:
+            rows = db.execute(text(
+                "SELECT reason, status, count(*) AS n FROM bronze_queue "
+                "GROUP BY reason, status ORDER BY n DESC")).mappings().all()
+    finally:
+        db.close()
+    out: Dict[str, int] = {}
+    for r in rows:
+        out[f"{r['reason']}:{r['status']}"] = int(r["n"])
+    return {"run_id": run_id or "все", "разбивка": out, "всего": sum(out.values())}
 
 
 def runs(document_id: str, limit: int = 20) -> List[Dict[str, Any]]:
