@@ -1,0 +1,34 @@
+define
+# =====================================================================
+#  МОДУЛЬ ДОМЕНА: it — информационные технологии.
+#
+#  Минимальный модуль: требование, контроль, сервис, актив, конфигурационная
+#  единица. Домен проявляется префиксом в имени типа; связей и ролей здесь нет —
+#  они в ядре, поэтому ИТ-требование участвует в тех же связях, что требование ИБ.
+#  Ключи: it:<код> для контролей, «<документ>#<пункт>#<порядок>» для требований.
+# =====================================================================
+
+# ---- доменные атрибуты ----------------------------------------------
+attribute service-criticality, value string;   # low | medium | high | critical
+attribute control-family, value string;        # например: access-control, logging
+
+# ---- документы домена ------------------------------------------------
+entity it_document sub document;
+entity it_standard sub document;
+
+# ---- требования и контроли домена ------------------------------------
+entity it_requirement sub requirement;
+entity it_control sub control,
+  owns control-family;
+
+# ---- объекты ИТ -------------------------------------------------------
+entity it_service sub sourced_entity,
+  owns name @card(1..1),
+  owns service-criticality;
+entity it_asset sub sourced_entity,
+  owns name @card(1..1),
+  owns vendor,
+  owns software_version;
+entity it_configuration_item sub sourced_entity,
+  owns name @card(1..1),
+  owns description;

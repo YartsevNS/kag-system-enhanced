@@ -1,0 +1,233 @@
+define
+# =====================================================================
+#  ЯДРО ОНТОЛОГИИ KAG — доменно-независимые типы и связи.
+#
+#  Правила ядра (ADR-010):
+#   * в этом файле НЕТ доменных имён (sec_, it_, security, cii, bdu): домен живёт
+#     в модулях src/ontology/modules/<домен>.tql и проявляется префиксом в имени типа;
+#   * связи и роли объявлены один раз здесь; доменные типы только «играют» роли,
+#     поэтому требование любого домена участвует в одних и тех же связях;
+#   * ключи содержат домен (sec:авз.1 / it:ac-2), но объявлены здесь — правило одно
+#     для всех доменов.
+#
+#  Ограничение платформы (проверено по docs): в TypeDB 3 @abstract не навязывает
+#  подтипам контракт, поэтому обязательность атрибутов дополнительно проверяется
+#  конвейером (guard'ы, integrity-функции), а не только схемой.
+# =====================================================================
+
+# ---- атрибуты: идентичность и происхождение -------------------------
+attribute ent-key, value string;
+attribute source_origin, value string;
+attribute source-chunk-id, value string;
+attribute source-chunk-ids, value string;
+attribute source-clause, value string;
+
+# ---- атрибуты: документы и редакции ---------------------------------
+attribute name, value string;
+attribute short_name, value string;
+attribute title, value string;
+attribute number, value string;
+attribute doc_type, value string;
+attribute document_key, value string;
+attribute version_string, value string;
+attribute version_status, value string;
+attribute version_hash, value string;
+attribute kag_document_id, value string;
+attribute effective_from, value date;
+attribute effective_to, value date;
+
+# ---- атрибуты: структура, требования, контроли ----------------------
+attribute struct_index, value string;
+attribute text_content, value string;
+attribute requirement-id, value string;
+attribute requirement_key, value string;
+attribute requirement_kind, value string;
+attribute obligation-level, value string;
+attribute description, value string;
+attribute measure_key, value string;
+attribute measure-category, value string;
+attribute code, value string;
+attribute point-in-measure, value string;
+
+# ---- атрибуты: выравнивание доменов ---------------------------------
+# Связь alignment: exact | close | related + уверенность + автор.
+attribute alignment-kind, value string;
+attribute confidence, value double;
+attribute authored-by, value string;
+
+# ---- атрибуты: доказательства и сертификация ------------------------
+attribute cert_number, value string;
+attribute cert_authority, value string;
+attribute cert_until, value date;
+attribute evidence_kind, value string;
+attribute evidence_date, value date;
+
+# ---- атрибуты: угрозы и уязвимости ----------------------------------
+attribute vendor, value string;
+attribute software_version, value string;
+
+# ---- происхождение и идентичность -----------------------------------
+entity identified_entity @abstract, owns ent-key @key;
+entity sourced_entity @abstract, sub identified_entity,
+  owns source_origin,
+  owns source-chunk-id,
+  owns source-chunk-ids @card(0..),
+  owns source-clause;
+
+# ---- ДОКУМЕНТ (ядро) ------------------------------------------------
+entity document @abstract;
+entity document sub sourced_entity,
+  owns title @card(1..1),
+  owns doc_type,
+  owns document_key @key;
+entity version @abstract;
+entity version sub sourced_entity,
+  owns version_string @card(1..1),
+  owns version_status @card(1..1),
+  owns version_hash @unique,
+  owns effective_from,
+  owns effective_to,
+  owns kag_document_id;
+
+# ---- СТРУКТУРА ДОКУМЕНТА (ядро) -------------------------------------
+entity clause @abstract;
+entity clause sub sourced_entity,
+  owns struct_index @card(1..1),
+  owns text_content;
+
+# ---- ТРЕБОВАНИЕ (ядро) ----------------------------------------------
+entity requirement @abstract;
+entity requirement sub sourced_entity,
+  owns requirement_key @key,
+  owns requirement-id @card(1..1),
+  owns requirement_kind @card(1..1),
+  owns description,
+  owns obligation-level;
+
+# ---- КОНТРОЛЬ / МЕРА (ядро) -----------------------------------------
+# Один тип на все домены: мера ИБ и ИТ-контроль — разные подтипы одного control.
+entity control @abstract;
+entity control sub sourced_entity,
+  owns measure_key @key,
+  owns measure-category,
+  owns code,
+  owns description;
+
+# ---- ДОКАЗАТЕЛЬСТВО (ядро) ------------------------------------------
+entity evidence @abstract;
+entity evidence sub sourced_entity,
+  owns name @card(1..1),
+  owns evidence_kind,
+  owns evidence_date;
+
+# ---- связи: документы и редакции ------------------------------------
+relation document_issuance,
+  relates issuer @card(1..1),
+  relates regulated_item @card(1..1);
+relation document_has_version,
+  relates document @card(1..1),
+  relates version @card(1..1);
+relation current_version_of,
+  relates document @card(1..1),
+  relates version @card(1..1);
+relation supersedes,
+  relates newer @card(1..1),
+  relates older @card(1..1);
+relation document_structure,
+  relates version @card(1..1),
+  relates element @card(1..1);
+relation document_hierarchy,
+  relates parent @card(1..1),
+  relates child @card(1..1);
+
+# ---- связи: требование ↔ структура ↔ контроль ------------------------
+relation requirement_derived_from,
+  relates requirement @card(1..1),
+  relates clause @card(1..1);
+relation requirement_definition,
+  relates requirement @card(1..1),
+  relates measure @card(1..1),
+  owns point-in-measure @card(0..1);
+relation measure_source,
+  relates measure @card(1..1),
+  relates clause @card(1..1);
+relation measure_detailing,
+  relates submeasure @card(1..1),
+  relates parent_measure @card(1..1);
+relation compensatory_relation,
+  relates core_measure @card(1..1),
+  relates alternative_measure @card(1..1);
+relation requirement_applicability,
+  relates requirement @card(1..1),
+  relates target_system @card(1..1);
+relation measure_applicability,
+  relates measure @card(1..1),
+  relates target_system @card(1..1);
+relation requirement_evidence,
+  relates requirement @card(1..1),
+  relates evidence @card(1..1);
+relation requirement_basis,
+  relates requirement @card(1..1),
+  relates source_document @card(1..1);
+relation requirement_coverage,
+  relates covered_requirement @card(1..1),
+  relates covering_document @card(1..1),
+  # статус покрытия: covered | partial | gap (проверяется конвейером)
+  owns coverage-status @card(0..1);
+relation document_compliance,
+  relates company_doc @card(1..1),
+  relates regulated_doc @card(1..1);
+relation document_assignment,
+  relates regulated_doc @card(1..1),
+  relates regulated_subject @card(1..1);
+
+# ---- связи: выравнивание доменов (ключ к мульти-доменности) ---------
+relation alignment,
+  relates alignment_source @card(1..1),
+  relates alignment_target @card(1..1),
+  owns alignment-kind @card(1..1),
+  owns confidence @card(0..1),
+  owns authored-by @card(0..1),
+  owns source-clause @card(0..1);
+
+# ---- роли: играют АБСТРАКТНЫЕ типы, поэтому любой домен подходит -----
+entity document plays document_has_version:document;
+entity version plays document_has_version:version;
+entity document plays current_version_of:document;
+entity version plays current_version_of:version;
+entity version plays supersedes:newer;
+entity version plays supersedes:older;
+entity version plays document_structure:version;
+entity clause plays document_structure:element;
+entity clause plays document_hierarchy:parent;
+entity clause plays document_hierarchy:child;
+entity requirement plays requirement_derived_from:requirement;
+entity clause plays requirement_derived_from:clause;
+entity requirement plays requirement_definition:requirement;
+entity control plays requirement_definition:measure;
+entity control plays measure_source:measure;
+entity clause plays measure_source:clause;
+entity control plays measure_detailing:submeasure;
+entity control plays measure_detailing:parent_measure;
+entity control plays compensatory_relation:core_measure;
+entity control plays compensatory_relation:alternative_measure;
+entity requirement plays requirement_applicability:requirement;
+entity control plays measure_applicability:measure;
+entity requirement plays requirement_evidence:requirement;
+entity evidence plays requirement_evidence:evidence;
+entity requirement plays requirement_basis:requirement;
+entity document plays requirement_basis:source_document;
+entity document plays requirement_coverage:covering_document;
+entity requirement plays requirement_coverage:covered_requirement;
+entity document plays document_compliance:company_doc;
+entity document plays document_compliance:regulated_doc;
+entity document plays document_assignment:regulated_doc;
+entity requirement plays alignment:alignment_source;
+entity requirement plays alignment:alignment_target;
+entity control plays alignment:alignment_source;
+entity control plays alignment:alignment_target;
+entity document plays alignment:alignment_source;
+entity document plays alignment:alignment_target;
+
+# ---- атрибут статуса покрытия ---------------------------------------
+attribute coverage-status, value string;

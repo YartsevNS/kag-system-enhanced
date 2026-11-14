@@ -1,0 +1,100 @@
+define
+# =====================================================================
+#  МОДУЛЬ ДОМЕНА: sec — информационная безопасность.
+#
+#  Здесь только то, что принадлежит домену: конкретные типы (подтипы ядра),
+#  доменные атрибуты и доменные связи. Ядро не правится.
+#  Имена типов сохранены историческими (security_requirement, security_measure),
+#  чтобы существующий путь записи и запросы работали без миграции кода.
+# =====================================================================
+
+# ---- доменные атрибуты ----------------------------------------------
+attribute cii-category, value integer;
+attribute system_type, value string;
+
+# ---- доменные атрибуты: угрозы и уязвимости --------------------------
+attribute offender_class, value string;
+attribute potential, value string;
+attribute bdu-id, value string;
+attribute severity-level, value integer;
+attribute cvss-score, value double;
+attribute published-date, value date;
+attribute affected-software, value string;
+
+# ---- документы и органы ---------------------------------------------
+entity regulator sub sourced_entity,
+  owns name @card(1..1),
+  owns short_name,
+  plays document_issuance:issuer;
+
+entity regulatory_document sub document,
+  owns number;
+
+entity company_document sub document;
+
+entity document_version sub version;
+
+# ---- структура -------------------------------------------------------
+entity structural_element sub clause;
+
+# ---- требования и меры домена (подтипы ядра) -------------------------
+entity security_requirement sub requirement;
+entity security_measure sub control;
+
+# ---- объекты, ПО, сертификаты, угрозы --------------------------------
+entity cii_object sub sourced_entity,
+  owns name @card(1..1),
+  owns cii-category @card(1..1),
+  owns system_type;
+
+entity security_software sub sourced_entity,
+  owns name @card(1..1),
+  owns vendor,
+  owns software_version;
+
+entity certificate sub sourced_entity,
+  owns cert_number @key,
+  owns cert_authority,
+  owns cert_until;
+
+entity threat_source sub sourced_entity,
+  owns offender_class,
+  owns potential;
+
+entity vulnerability sub sourced_entity,
+  owns bdu-id @key,
+  owns name,
+  owns description,
+  owns severity-level,
+  owns cvss-score,
+  owns published-date,
+  owns affected-software @card(0..);
+
+# ---- доменные связи ---------------------------------------------------
+relation certification,
+  relates certified_software @card(1..1),
+  relates certificate @card(1..1),
+  relates basis_requirement @card(0..1);
+relation asset_protection,
+  relates protected_system @card(1..1),
+  relates deployed_szi @card(1..1);
+relation threat_applicability,
+  relates threat @card(1..1),
+  relates target_system @card(1..1);
+relation threat_measure,
+  relates threat @card(1..1),
+  relates measure @card(1..1);
+
+# ---- роли доменных типов ---------------------------------------------
+entity cii_object plays requirement_applicability:target_system;
+entity cii_object plays measure_applicability:target_system;
+entity cii_object plays document_assignment:regulated_subject;
+entity cii_object plays asset_protection:protected_system;
+entity cii_object plays threat_applicability:target_system;
+entity security_software plays asset_protection:deployed_szi;
+entity security_software plays certification:certified_software;
+entity certificate plays certification:certificate;
+entity security_requirement plays certification:basis_requirement;
+entity threat_source plays threat_applicability:threat;
+entity threat_source plays threat_measure:threat;
+entity security_measure plays threat_measure:measure;
