@@ -475,6 +475,15 @@ async def pipeline_page(request: Request):
     return await _html_response(os.path.join(static_path, "pipeline.html"))
 
 
+@app.get("/worklog", summary="Журнал работ и архитектура (открытая страница)")
+async def worklog_page():
+    """Открытая страница: состояние, что сделано, целевая архитектура, открытые вопросы.
+
+    Без входа: предназначена для показа внешним ревьюерам и другим моделям.
+    """
+    return await _html_response(os.path.join(static_path, "worklog.html"))
+
+
 @app.get("/queue", summary="Очередь разбора Silver-слоя (только для admin)")
 async def queue_page(request: Request):
     """Спорные записи Silver: ненадёжный номер, конфликт текстов, сироты.

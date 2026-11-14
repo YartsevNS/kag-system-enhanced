@@ -14,7 +14,7 @@ class SetupCheckMiddleware(BaseHTTPMiddleware):
     PUBLIC_PATHS = {
         "/setup", "/api/v1/setup", "/api/v1/health",
         "/login", "/api/v1/auth", "/api/docs",
-        "/api/redoc", "/api/openapi.json", "/static", "/favicon.ico",
+        "/api/redoc", "/api/openapi.json", "/static", "/favicon.ico", "/worklog",
         # /metrics — для скрейпа Prometheus: скрапер ходит без сессии и cookies, поэтому путь
         # должен быть публичным. Наружу его не публикуем: закрывать на уровне nginx
         # (или ограничивать по IP), потому что метрики содержат имена моделей и объёмы.
