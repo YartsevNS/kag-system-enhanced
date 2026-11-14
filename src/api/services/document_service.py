@@ -2198,7 +2198,16 @@ class DocumentService:
         try:
             from src.indexing import bronze as _bronze
 
-            _run_id = _bronze.start_run(document_id, filename or "", "", 0)
+            _pv, _model = 0, ""
+            try:
+                from src.api.services.ontology_prompts import prompt_store as _ps
+                from src.api.services.provider_service import provider_service as _pvs
+
+                _pv = int((_ps.get() or {}).get("version") or 0)
+                _model = str((_pvs.get_function_llm_config("graph") or {}).get("model") or "")
+            except Exception:  # noqa: BLE001
+                pass
+            _run_id = _bronze.start_run(document_id, filename or "", _model, _pv)
             if _run_id:
                 logger.info(f"[bronze] прогон извлечения {_run_id} для {document_id}")
         except Exception as _exc:  # noqa: BLE001

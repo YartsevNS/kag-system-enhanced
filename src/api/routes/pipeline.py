@@ -77,6 +77,37 @@ async def pipeline_bronze_compare(document_id: str, run_a: str, run_b: str,
     return {"ok": True, **(await asyncio.to_thread(bronze.compare, document_id, run_a, run_b))}
 
 
+@router.get("/bronze/{document_id}/clusters",
+            summary="Нормализация и блокировка: сколько разных объектов в сырье прогона")
+async def pipeline_bronze_clusters(document_id: str, run_id: str = "",
+                                   _: User = Depends(get_current_admin)):
+    """Silver-шаг: нормализация строк и блокировка по ключам, без слияния.
+
+    Отвечает на вопрос «2204 строки в Bronze — это сколько разных объектов?»
+    Для каждого типа: сколько строк, сколько кластеров, крупнейшие кластеры.
+    """
+    from src.indexing import bronze, bronze_resolve
+
+    if not run_id:
+        runs = await asyncio.to_thread(bronze.runs, document_id, 1)
+        if not runs:
+            return {"ok": False, "error": "прогонов для документа нет"}
+        run_id = runs[0]["run_id"]
+    return {"ok": True, **(await asyncio.to_thread(bronze_resolve.clusters, run_id))}
+
+
+@router.get("/bronze/{document_id}/prompt-stats",
+            summary="Эффективность по версиям промпта извлечения")
+async def pipeline_bronze_prompt_stats(document_id: str, limit: int = 20,
+                                       _: User = Depends(get_current_admin)):
+    """Сколько сырья дала каждая версия промпта: основа для сравнения версий."""
+    from src.indexing import bronze, bronze_resolve
+
+    runs = await asyncio.to_thread(bronze.runs, document_id, limit)
+    stats = await asyncio.to_thread(bronze_resolve.by_prompt, [r["run_id"] for r in runs])
+    return {"ok": True, "document_id": document_id, "runs": len(runs), **stats}
+
+
 @router.post("/collect", summary="Включить или выключить сбор статистики этапов")
 async def pipeline_collect(body: CollectBody, user: User = Depends(get_current_admin)):
     from src.api.services import pipeline
