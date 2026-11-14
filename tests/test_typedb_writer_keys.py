@@ -37,6 +37,9 @@ def test_measure_link_created_and_stub_measure_added():
     assert rel["parts"]["requirement"] == "security_requirement:r1"
     m_key = rel["parts"]["measure"]
     assert m_key in entities and entities[m_key]["type"] == "security_measure"
+    # measure_key обязателен (@key, @card(1..1)): без него TypeDB отклонит всю транзакцию
+    # фрагмента, и требования потеряются молча (CNT5/DVL8)
+    assert entities[m_key]["attrs"].get("measure_key")
 
 
 def test_measure_link_uses_existing_measure():

@@ -303,7 +303,9 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
             continue
         m_key = by_code.get(code)
         if not m_key:
-            m_attrs = {"code": code}
+            # measure_key обязателен (@key, @card(1..1)): без него TypeDB отвергает ВСЮ
+            # транзакцию фрагмента (CNT5/DVL8), и требования этого фрагмента теряются.
+            m_attrs = {"code": code, "measure_key": code}
             m_key = ent_key("security_measure", m_attrs)
             entities.setdefault(m_key, {"type": "security_measure", "attrs": m_attrs,
                                         "chunks": set(e.get("chunks") or [])})
@@ -1290,7 +1292,6 @@ async def extract_and_store_typedb(
         tm["write_ms"] = round((time.monotonic() - _t) * 1000, 1)
         tm.update({k: v for k, v in (written.get("timings") or {}).items()})
     except Exception as exc:  # noqa: BLE001
-        logger.warning("typedb_writer: запись не удалась для %s: %s", chunk_id, exc)
         # В журнал онтологии, а не в общий: это отказ записи фактов в TypeDB.
         from src.api.services.ontology_errors import log_error
 
@@ -1303,6 +1304,25 @@ async def extract_and_store_typedb(
                      "relations": len(relations), "typedb_error": str(exc)[:1200]},
         )
         return {"status": "error", "error": str(exc)[:200], "stats": stats}
+
+    # Ошибка транзакции не бросает исключение: write_facts возвращает {"error": ...}.
+    # Без этой проверки фрагмент считался записанным («статус ok»), хотя в базу не попало
+    # ничего — замер 14.11.2026: 100 фрагментов из 305 потеряны молча (CNT5, measure_key).
+    if isinstance(written, dict) and written.get("error"):
+        detail = str(written.get("error"))[:300]
+        logger.warning("typedb_writer: фрагмент НЕ записан (%s): %s", chunk_id, detail)
+        from src.api.services.ontology_errors import log_error
+
+        log_error(
+            f"запись фрагмента не выполнена: {detail[:200]}",
+            error_type="insert_failed",
+            source="writer",
+            document_id=document_id,
+            details={"chunk_id": chunk_id, "entities": len(entities),
+                     "relations": len(relations), "typedb_error": detail},
+        )
+        return {"status": "error", "error": detail, "written": written,
+                "stats": stats, "timings": tm}
 
     logger.info(
         "typedb_writer: %s — сущностей %s (+%s уже было), связей %s (+%s уже было), "
