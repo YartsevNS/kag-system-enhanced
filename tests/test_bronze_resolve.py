@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from src.indexing import bronze_resolve as br
+from src.indexing import typedb_writer as tw
 
 
 def test_requirement_key_ignores_id_and_case():
@@ -81,6 +82,21 @@ def test_measure_key_is_code():
     b = {"code": "авз-1", "name": "антивирусная защита"}
     assert br.entity_cluster_key("security_measure", a) == \
         br.entity_cluster_key("security_measure", b)
+
+
+def test_measure_key_normalized_in_collect():
+    # ключ меры считается в ent_key из measure_key, поэтому нормализуем код ДО ent_key:
+    # иначе «АВЗ-1» и «АВЗ.1» — два разных объекта (замер 14.11.2026: 431 мера вместо 120)
+    def key_for(code: str) -> str:
+        payload = {"entities": [{"id": "m1", "type": "security_measure",
+                                 "attributes": {"code": code, "name": "Антивирусная защита"}}],
+                   "relations": []}
+        ents, _rels, _st = tw._collect(payload, "doc_chunk_1", "doc-1")
+        (k, e), = ents.items()
+        assert e["attrs"]["measure_key"] == "авз.1"
+        return k
+
+    assert key_for("АВЗ-1") == key_for("АВЗ.1") == key_for("авз 1")
 
 
 def test_regulatory_document_is_not_regulator():

@@ -576,6 +576,15 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
                     logger.debug("typedb_writer: ключ требования из модели перебит хэшем: %s → %s",
                                  model_key[:40], h[:24])
                 attrs["requirement_key"] = h
+        # Мера опознаётся по НОРМАЛИЗОВАННОМУ коду («АВЗ-1», «авз 1», «АВЗ.1» → «авз.1»):
+        # ключ считается в ent_key из measure_key, и без нормализации один и тот же код
+        # ложился разными объектами (замер 14.11.2026: 431 мера вместо 120).
+        if etype == "security_measure":
+            from src.indexing.bronze_resolve import norm_code as _norm_code
+
+            code = _norm_code(attrs.get("code") or attrs.get("measure_key") or "")
+            if code:
+                attrs["measure_key"] = code
         # Регулятор — это ОРГАН. Модель регулярно пишет издателем сам документ
         # («Федеральный закон № 161-ФЗ») или вид («ФЗ», «law») — такие сущности в граф
         # не пускаем: они ломают ключ документа и плодят мусорных издателей.

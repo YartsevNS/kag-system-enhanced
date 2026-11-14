@@ -46,6 +46,8 @@ def norm_code(value: Any) -> str:
     s = norm_text(value)
     s = _CODE_HEADS.sub("", s)
     s = _CODE_SEP.sub(".", s)
+    # пробел внутри кода — тоже разделитель: «авз 1» и «иаф 2 1» → «авз.1», «иаф.2.1»
+    s = re.sub(r"\s+", ".", s)
     return s.strip(".")
 
 
