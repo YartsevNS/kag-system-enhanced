@@ -80,8 +80,8 @@
 <script>
 const API = '/api/v1/pipeline/bronze/queue';
 const REASONS = {
-  word_as_key: 'номер — слово',
-  bare_number: 'голый номер',
+  word_as_key: 'вместо номера — слово',
+  bare_number: 'номер без контекста',
   identical_text_diff_id: 'один текст, разные id',
   reference_only: 'обрывок-ссылка',
   orphan_submeasure: 'подмера без родителя',
@@ -154,6 +154,9 @@ async function loadRuns() {
   }
 }
 
+// причины, которые показываем всегда (даже с нулём): иначе непонятно, существует ли причина
+const ALWAYS_SHOWN = ['reference_only'];
+
 function paintCards(stats) {
   const box = $('cards');
   const map = (stats && stats['разбивка']) || {};
@@ -163,19 +166,21 @@ function paintCards(stats) {
     if (STATE.status && st !== STATE.status) continue;
     counts[reason] = (counts[reason] || 0) + map[k];
   }
+  for (const reason of ALWAYS_SHOWN) if (!(reason in counts)) counts[reason] = 0;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const entries = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   box.innerHTML = '';
   const all = document.createElement('div');
   all.className = 'card' + (STATE.reason ? '' : ' active');
-  all.innerHTML = '<div class="num">' + Object.values(counts).reduce((a, b) => a + b, 0) +
-                  '</div><div class="lbl">все причины</div>';
+  all.innerHTML = '<div class="num">' + total + '</div><div class="lbl">все причины</div>';
   all.onclick = () => { STATE.reason = ''; STATE.offset = 0; loadQueue(); };
   box.appendChild(all);
   for (const reason of entries) {
     const d = document.createElement('div');
     d.className = 'card' + (STATE.reason === reason ? ' active' : '');
+    // «(из N)» вместо процентов: контекст без доли, которую легко прочитать как оценку
     d.innerHTML = '<div class="num">' + counts[reason] + '</div><div class="lbl">' +
-                  esc(reasonLabel(reason)) + '</div>';
+                  esc(reasonLabel(reason)) + ' (из ' + total + ')</div>';
     d.onclick = () => { STATE.reason = reason; STATE.offset = 0; loadQueue(); };
     box.appendChild(d);
   }
@@ -194,9 +199,10 @@ function paintRows(rows) {
   const tb = $('rows');
   tb.innerHTML = '';
   if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="5"><div class="empty">Под этим фильтром записей нет.' +
-                   ' Если только что переключились на новый прогон — очередь ещё не заполнена:' +
-                   ' заполнение идёт пересчётом Silver по прогону.</div></td></tr>';
+    tb.innerHTML = '<tr><td colspan="5"><div class="empty">Записей с выбранным фильтром нет.' +
+                   ' Если ожидали увидеть — проверьте прогон и причину: возможно, все записи уже' +
+                   ' разрешены либо по этому прогону очередь ещё не заполнялась (заполнение идёт' +
+                   ' пересчётом Silver по прогону).</div></td></tr>';
     return;
   }
   for (const row of rows) {
@@ -240,7 +246,9 @@ async function onResolve(id, action, btn) {
       return;
     }
     const d = await r.json();
-    toast(d.ok ? 'Решение записано' : 'Запись уже разрешена — обновите список', !d.ok);
+    const done = action === 'accept' ? 'Принято' : 'Отклонено';
+    toast(d.ok ? done + ': запись ' + id + ' — решение записано'
+               : 'Запись ' + id + ' уже разрешена — обновите список', !d.ok);
     await loadQueue();
   } catch (e) {
     toast('Ошибка запроса: ' + e.message, true);
