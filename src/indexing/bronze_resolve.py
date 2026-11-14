@@ -147,6 +147,28 @@ def split_measure_ref(value: Any) -> tuple:
     return measure, tail
 
 
+# Глаголы, которые делают текст ТРЕБОВАНИЕМ («должно быть сделано»). Если их нет, а id похож
+# на подпункт меры (ИАФ.2-1-а, УПД.13-б), текст описывает подпункт меры, а не требование.
+_REQ_VERB = re.compile(
+    r"(должн|обеспеч|осуществля|подлеж|регламент|применя|определя|исключа|контролиру|фиксир)",
+    re.I,
+)
+_SUBITEM_ID = re.compile(r"^(?:[а-яёa-z]{2,6}\.\d+(?:[-–—]\d+)*|[а-яёa-z][а-яёa-z\-]*)[-–—][а-яё]$")
+
+
+def is_measure_subitem(requirement_id: Any, text: Any) -> bool:
+    """Текст — описание подпункта меры, а не требование.
+
+    Признаки: нет глагола требования И идентификатор вида «МЕРА-N-а» (или словесный
+    «контроль-подключения-носителей-а»). Решение 15.11.2026: такие строки не становятся
+    требованием в онтологии — они описывают, что входит в меру.
+    """
+    t = norm_text(text)
+    if not t or _REQ_VERB.search(t):
+        return False
+    return bool(_SUBITEM_ID.match(norm_text(requirement_id)))
+
+
 def regulator_code(payload: Dict[str, Any]) -> str:
     """Код органа из словаря `issuers.canonical` (ФСТЭК России → fstek), иначе ""."""
     p = payload or {}
@@ -376,6 +398,9 @@ def resolve(run_id: str, persist: bool = True) -> Dict[str, Any]:
                 text = requirement_text(p)
                 if not text:
                     add_queue(r, key, "empty_description", "")
+                elif is_measure_subitem(rid, text):
+                    # описание подпункта меры, а не требование: в очередь на пересмотр типа
+                    add_queue(r, key, "measure_subitem_not_requirement", text[:120])
                 elif len(text) < 40:
                     add_queue(r, key, "reference_only", text[:80])
                 elif kind == "bare_number":

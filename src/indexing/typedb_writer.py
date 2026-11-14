@@ -631,7 +631,7 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
     """
     stats = {"entities_raw": 0, "entities_kept": 0, "relations_raw": 0,
              "relations_kept": 0, "dropped_type": 0, "dropped_role": 0,
-             "dropped_missing_attr": 0}
+             "dropped_missing_attr": 0, "dropped_subitem": 0}
     entities: Dict[str, Dict[str, Any]] = {}
     local: Dict[str, List[tuple]] = {}
 
@@ -655,7 +655,16 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
         # значение из ответа модели: 14.11 в Bronze пришёл ключ вида «kag:<id>|упд.15-1»,
         # то есть старый «документ|номер», и через setdefault наш хэш не применялся.
         if etype == "security_requirement":
-            from src.indexing.bronze_resolve import requirement_key as _req_key
+            from src.indexing.bronze_resolve import (is_measure_subitem,
+                                                     requirement_key as _req_key)
+
+            # Описание подпункта меры (нет глагола требования + id вида «МЕРА-N-а») — это не
+            # требование: в онтологию не пишем, иначе запрос «какие требования» выдаёт
+            # «взаимная аутентификация устройства» (решение 15.11.2026).
+            if is_measure_subitem(attrs.get("requirement-id") or attrs.get("requirement_id"),
+                                  attrs.get("description") or attrs.get("text")):
+                stats["dropped_subitem"] = stats.get("dropped_subitem", 0) + 1
+                continue
 
             h = _req_key(attrs)
             if h:
@@ -1558,9 +1567,10 @@ async def extract_and_store_typedb(
 
     logger.info(
         "typedb_writer: %s — сущностей %s (+%s уже было), связей %s (+%s уже было), "
-        "отброшено: тип %s, роль %s, без ключа %s",
+        "отброшено: тип %s, роль %s, без ключа %s, подпунктов мер %s",
         chunk_id, written["entities"], written["entities_existing"],
         written["relations"], written["relations_existing"],
         stats["dropped_type"], stats["dropped_role"], stats["dropped_missing_attr"],
+        stats.get("dropped_subitem", 0),
     )
     return {"status": "ok", "written": written, "stats": stats, "timings": tm}
