@@ -176,7 +176,7 @@ def runs(document_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     try:
         rows = db.execute(text(
             "SELECT run_id, filename, started_at, finished_at, chunks, entities, relations, "
-            "empty_chunks, model, note FROM bronze_runs WHERE document_id = :d "
+            "empty_chunks, model, prompt_version, note FROM bronze_runs WHERE document_id = :d "
             "ORDER BY started_at DESC LIMIT :l"), {"d": document_id, "l": limit}).mappings().all()
     finally:
         db.close()
