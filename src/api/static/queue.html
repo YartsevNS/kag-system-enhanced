@@ -122,7 +122,7 @@ function query() {
 }
 
 async function loadDocuments() {
-  const r = await fetch('/api/v1/pipeline/documents?limit=50', {credentials: 'same-origin'});
+  const r = await fetch(API + '/documents?limit=50', {credentials: 'same-origin'});
   if (!r.ok) return;
   const d = await r.json();
   const sel = $('doc');
@@ -130,7 +130,7 @@ async function loadDocuments() {
     const o = document.createElement('option');
     o.value = it.document_id;
     o.textContent = (it.filename || it.document_id.slice(0, 8)) +
-                    (it.chunks ? ' · ' + it.chunks + ' фр.' : '');
+                    ' · прогонов ' + (it.runs || 0);
     sel.appendChild(o);
   }
 }
@@ -293,7 +293,16 @@ $('next').addEventListener('click', () => { STATE.offset += LIMIT; loadQueue(); 
 
 (async function init() {
   await loadDocuments();
-  await loadRuns();
+  // по умолчанию — последний документ и его последний прогон: очередь привязана к прогону,
+  // иначе на экране смешались бы записи всех прогонов (и это читается как «не то число»)
+  const doc = $('doc');
+  if (doc.options.length > 1) {
+    doc.selectedIndex = 1;
+    STATE.doc = doc.value;
+    await loadRuns();
+    const run = $('run');
+    if (run.options.length > 1) { run.selectedIndex = 1; STATE.run = run.value; }
+  }
   await loadQueue();
 })();
 </script>

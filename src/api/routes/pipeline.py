@@ -62,6 +62,13 @@ class QueueResolveBody(BaseModel):
 
 # ВАЖНО: маршруты /bronze/queue* объявлены ДО /bronze/{document_id}, иначе «queue» попадёт
 # в параметр document_id и вернётся пустой прогон вместо очереди.
+@router.get("/bronze/queue/documents", summary="Документы с прогонами Bronze (селектор очереди)")
+async def pipeline_queue_documents(limit: int = 50, _: User = Depends(get_current_admin)):
+    from src.indexing import bronze
+
+    return {"ok": True, "items": await asyncio.to_thread(bronze.documents_with_runs, limit)}
+
+
 @router.get("/bronze/queue/runs", summary="Прогоны документа для выбора очереди прошлого прогона")
 async def pipeline_queue_runs(document_id: str, limit: int = 20,
                               _: User = Depends(get_current_admin)):
@@ -94,7 +101,8 @@ async def pipeline_queue_resolve(queue_id: int, body: QueueResolveBody,
     if body.action not in ("accept", "reject"):
         raise HTTPException(status_code=400, detail="action must be accept|reject")
     ok = await asyncio.to_thread(bronze.queue_resolve, queue_id, body.action,
-                                 getattr(user, "email", "") or "", body.note)
+                                 (getattr(user, "email", "") or getattr(user, "username", "")
+                                  or getattr(user, "id", "") or ""), body.note)
     return {"ok": ok, "status": "resolved" if ok else "already_resolved",
             "message": "решение записано" if ok else "запись уже разрешена"}
 

@@ -260,6 +260,32 @@ def queue_stats(run_id: str = "") -> Dict[str, Any]:
     return {"run_id": run_id or "все", "разбивка": out, "всего": sum(out.values())}
 
 
+def documents_with_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    """Документы, у которых есть прогоны Bronze: для селектора очереди разбора.
+
+    Почему не список документов из логов: у страницы очереди источник — Bronze, и документ
+    без лога этапов (сбор статистики выключен) иначе в селектор не попадёт.
+    """
+    ensure_tables()
+    from sqlalchemy import text
+
+    db = _db()()
+    try:
+        rows = db.execute(text(
+            "SELECT document_id, max(started_at) AS last_started, count(*) AS runs, "
+            "max(filename) AS filename FROM bronze_runs GROUP BY document_id "
+            "ORDER BY last_started DESC LIMIT :l"), {"l": max(1, min(200, int(limit)))}).mappings().all()
+    finally:
+        db.close()
+    out = []
+    for r in rows:
+        out.append({"document_id": r["document_id"],
+                    "filename": r["filename"] or "",
+                    "runs": int(r["runs"] or 0),
+                    "last_started": r["last_started"].isoformat() if r.get("last_started") else None})
+    return out
+
+
 def queue_list(run_id: str = "", reason: str = "", status: str = "pending",
                limit: int = 100, offset: int = 0) -> Dict[str, Any]:
     """Записи очереди разбора страницей: строки + сколько всего под фильтром.
