@@ -206,6 +206,8 @@ def snapshot(limit: int = 30) -> Dict[str, Any]:
 # Больше параллельность — быстрее документ, но выше риск упереться в лимиты провайдера
 # и получить пустые ответы; меньше — медленнее и безопаснее для качества.
 PARALLEL_KEY = "extraction"
+MAXTOK_DEFAULT = 6000
+MAXTOK_MIN, MAXTOK_MAX = 1000, 16000
 PARALLEL_DEFAULT = 6
 PARALLEL_MIN, PARALLEL_MAX = 1, 16
 
@@ -233,4 +235,34 @@ def set_extraction_parallel(value: int, who: str = "") -> int:
                           {"parallel": n, "changed_by": who,
                            "why": "сколько фрагментов одновременно отправляется в модель"})
     logger.info("конвейер: параллельность извлечения = %s (%s), записано=%s", n, who or "—", ok)
+    return n
+
+
+def extraction_max_tokens() -> int:
+    """Сколько токенов разрешено генерировать модели на один фрагмент.
+
+    Почему это настройка: при 2000 токенах плотные документы обрезались
+    (finish_reason=length), JSON не закрывался и фрагмент терялся целиком.
+    """
+    try:
+        from src.api.services.config_store import config_store
+
+        cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+        if isinstance(cfg, dict) and cfg.get("max_tokens") is not None:
+            return max(MAXTOK_MIN, min(MAXTOK_MAX, int(cfg["max_tokens"])))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("max_tokens извлечения не прочитан: %s", str(exc)[:120])
+    return MAXTOK_DEFAULT
+
+
+def set_extraction_max_tokens(value: int, who: str = "") -> int:
+    from src.api.services.config_store import config_store
+
+    n = max(MAXTOK_MIN, min(MAXTOK_MAX, int(value)))
+    cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    cfg.update({"max_tokens": n, "changed_by": who})
+    config_store.set(FLAG_CATEGORY, PARALLEL_KEY, cfg)
+    logger.info("конвейер: max_tokens извлечения = %s (%s)", n, who or "—")
     return n

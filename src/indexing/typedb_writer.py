@@ -964,12 +964,16 @@ def write_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
     return {"fact_id": e_key, "written": written}
 
 
-def _llm_payload(messages: list, model: str, provider: str, api_key: str, temperature: float) -> dict:
+def _llm_payload(messages: list, model: str, provider: str, api_key: str, temperature: float,
+                 max_tokens: int = 6000) -> dict:
     payload = {
         "model": model,
         "messages": messages,
         "temperature": min(max(temperature, 0.0), 0.5),
-        "max_tokens": 2000,
+        # 2000 не хватало: на плотных документах модель выдавала ~6000 символов JSON и
+        # упиралась в лимит (finish_reason=length), ответ обрезался, JSON не разбирался —
+        # это и было большинство «пустых» фрагментов (замер 14.11.2026: 83 обрезки на 321).
+        "max_tokens": int(max_tokens),
         "response_format": {"type": "json_object"},
     }
     try:
@@ -1009,10 +1013,18 @@ async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
     api_key = cfg.get("api_key", "")
     model = cfg["model"]
     temperature = float((cfg.get("parameters") or {}).get("temperature", 0.05) or 0.05)
+    max_tokens = int((cfg.get("parameters") or {}).get("max_tokens", 0) or 0)
+    if not max_tokens:
+        try:
+            from src.api.services.pipeline import extraction_max_tokens
+
+            max_tokens = extraction_max_tokens()
+        except Exception:  # noqa: BLE001
+            max_tokens = 6000
 
     payload = _llm_payload(
         messages=[{"role": "user", "content": prompt}], model=model,
-        provider=provider, api_key=api_key, temperature=temperature,
+        provider=provider, api_key=api_key, temperature=temperature, max_tokens=max_tokens,
     )
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -1053,6 +1065,41 @@ async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
         return {}
 
     parsed = _parse_json(content)
+    if not parsed and finish == "length":
+        # Ответ обрезан по лимиту токенов: JSON не закрыт. Один повтор с удвоенным лимитом
+        # и требованием только JSON. Это дешевле, чем терять фрагмент целиком.
+        try:
+            retry_tokens = min(16000, max_tokens * 2)
+            retry_payload = _llm_payload(
+                messages=[{"role": "user", "content": prompt
+                           + chr(10) + chr(10)
+                           + "Верни ТОЛЬКО JSON-объект, без текста до и после; "
+                             "не повторяй уже извлечённое."}],
+                model=model, provider=provider, api_key=api_key,
+                temperature=temperature, max_tokens=retry_tokens,
+            )
+            async with aiohttp.ClientSession() as s2:
+                async with s2.post(endpoint, json=retry_payload, headers=headers,
+                                   timeout=aiohttp.ClientTimeout(total=120)) as r2:
+                    body2 = await r2.text()
+                    data2 = json.loads(body2) if r2.status == 200 else {}
+            ch2 = (data2.get("choices") or [{}])[0]
+            content2 = (ch2.get("message") or {}).get("content", "") or ""
+            finish2 = str(ch2.get("finish_reason") or "")
+            parsed2 = _parse_json(content2) if content2.strip() else {}
+            if parsed2:
+                _LAST_LLM_DIAG.clear()
+                _LAST_LLM_DIAG.update({"kind": "ok_retry", "chunk_id": chunk_id,
+                                       "finish": finish2, "content_len": len(content2)})
+                logger.info("typedb_writer: обрезанный ответ восстановлен повтором (%s), "
+                            "%s символов", chunk_id, len(content2))
+                return parsed2
+            logger.warning("typedb_writer: повтор после обрезки не помог (%s): finish=%s, %s симв.",
+                           chunk_id, finish2, len(content2))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("typedb_writer: повтор после обрезки не удался (%s): %s",
+                           chunk_id, str(exc)[:120])
+
     if not parsed:
         _LAST_LLM_DIAG.clear()
         _LAST_LLM_DIAG.update({"kind": "parse_fail", "chunk_id": chunk_id, "finish": finish,
