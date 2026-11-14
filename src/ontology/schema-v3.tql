@@ -181,6 +181,12 @@ relation measure_source,
 relation compensatory_relation,
   relates core_measure @card(1..1),
   relates alternative_measure @card(1..1);
+# Подпункт меры (АВЗ.1.1) — отдельная мера со связью с родительской (АВЗ.1).
+# Решение владельца 14.11.2026: вариант A + явная иерархия. Роли симметричны и обязательны,
+# чтобы валидатор мог отбросить/вынести в очередь подмеру без родителя.
+relation measure_detailing,
+  relates submeasure @card(1..1),
+  relates parent_measure @card(1..1);
 relation requirement_applicability,
   relates requirement @card(1..1),
   relates target_system @card(1..1);
@@ -242,6 +248,8 @@ entity security_measure plays measure_source:measure;
 entity structural_element plays measure_source:clause;
 entity security_measure plays compensatory_relation:core_measure;
 entity security_measure plays compensatory_relation:alternative_measure;
+entity security_measure plays measure_detailing:submeasure;
+entity security_measure plays measure_detailing:parent_measure;
 entity security_requirement plays requirement_applicability:requirement;
 entity cii_object plays requirement_applicability:target_system;
 entity security_measure plays measure_applicability:measure;

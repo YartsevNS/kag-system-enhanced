@@ -277,6 +277,16 @@ def resolve(run_id: str, persist: bool = True) -> Dict[str, Any]:
     for r in ents:
         groups[entity_cluster_key(r["type"], r["payload"], r["raw_key"])].append(r)
 
+    # Все коды мер прогона — нужны, чтобы отличить подмеру с родителем от сироты
+    # без автолинковки по префиксу (решение владельца 14.11.2026).
+    all_measure_codes: set = set()
+    for r in ents:
+        if entity_branch(r["type"]) == "measure":
+            c = norm_code((r["payload"] or {}).get("code")
+                          or (r["payload"] or {}).get("measure_key") or "")
+            if c:
+                all_measure_codes.add(c)
+
     objects: List[Dict[str, Any]] = []
     queue: List[Dict[str, Any]] = []
     per_type: Dict[str, Dict[str, int]] = defaultdict(lambda: {"строк": 0, "объектов": 0})
@@ -353,6 +363,14 @@ def resolve(run_id: str, persist: bool = True) -> Dict[str, Any]:
                 for r in items:
                     add_queue(r, key, "code_name_conflict",
                               "; ".join(sorted(names))[:200])
+            # Подмера (АВЗ.1.1) без родительской меры (АВЗ.1) в этом прогоне — в очередь:
+            # авто-линковку по префиксу кода НЕ делаем (решение владельца 14.11.2026).
+            _parts = code.split(".")
+            if len(_parts) >= 3:
+                _parent = ".".join(_parts[:-1])
+                if _parent not in all_measure_codes:
+                    for r in items:
+                        add_queue(r, key, "orphan_submeasure", f"нет меры {_parent}")
 
         elif branch == "document":
             # regulatory_document и document_version: ключ уже посчитан entity_cluster_key

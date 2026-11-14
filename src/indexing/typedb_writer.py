@@ -344,6 +344,50 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
     return added, missing
 
 
+def link_submeasures(entities: Dict[str, Dict[str, Any]],
+                     relations: Dict[str, Dict[str, Any]],
+                     exists=None) -> tuple:
+    """Подмера (АВЗ.1.1) → родительская мера (АВЗ.1): связь `measure_detailing`.
+
+    Родителя берём из ответа модели (атрибут `parent_measure`), а НЕ из префикса кода:
+    префиксный матч — то самое «похожее по коду», которое решили не делать автоматически
+    (решение владельца 14.11.2026). Если родителя нет ни в пачке, ни в базе — связь
+    не создаётся, подмера считается сиротой (`orphan_submeasures` в сводке и в очереди).
+    Возвращает (поставлено связей, сирот).
+    """
+    if not entities:
+        return 0, 0
+    from src.indexing.bronze_resolve import norm_code
+
+    by_code: Dict[str, str] = {}
+    for k, e in entities.items():
+        if e["type"] == "security_measure":
+            c = norm_code(e["attrs"].get("code") or e["attrs"].get("measure_key") or "")
+            if c:
+                by_code.setdefault(c, k)
+
+    added = 0
+    orphans = 0
+    for key, e in list(entities.items()):
+        if e["type"] != "security_measure":
+            continue
+        attrs = e["attrs"]
+        parent_code = norm_code(attrs.get("parent_measure") or attrs.get("parent_code") or "")
+        if not parent_code:
+            continue
+        p_key = by_code.get(parent_code) or ent_key(
+            "security_measure", {"code": parent_code, "measure_key": parent_code})
+        if exists is not None and not exists(p_key):
+            orphans += 1
+            continue
+        sig = f"measure_detailing|submeasure={key}|parent_measure={p_key}"
+        if sig not in relations:
+            relations[sig] = {"type": "measure_detailing",
+                              "parts": {"submeasure": key, "parent_measure": p_key}}
+            added += 1
+    return added, orphans
+
+
 def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
                     doc_id: str = "") -> tuple:
     """Дозаполнить обязательные атрибуты v3 и отбросить то, что дозаполнить нельзя.
@@ -862,6 +906,14 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                 exists=lambda k: k in keys_now or _ent_exists(rtx, "security_measure", k))
             tm["measure_links"] = _links
             tm["measure_refs_missing"] = _missing
+            _sub, _orph = link_submeasures(
+                entities, relations,
+                exists=lambda k: k in keys_now or _ent_exists(rtx, "security_measure", k))
+            tm["submeasure_links"] = _sub
+            tm["orphan_submeasures"] = _orph
+            if _orph:
+                logger.warning("typedb_writer: подмер без родительской меры: %s "
+                               "(связь не ставим, уйдёт в очередь разбора)", _orph)
             for key, e in entities.items():
                 if key in existing:
                     ch_lines = ", ".join(
