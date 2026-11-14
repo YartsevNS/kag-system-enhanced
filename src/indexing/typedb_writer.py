@@ -561,13 +561,19 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
         # Требование опознаётся ХЭШЕМ ТЕКСТА, а не номером пункта: замер 14.11.2026 —
         # номер надёжен только у 10 строк из 508 (363 — код меры, 96 — слово, 39 — голое
         # число), из-за чего один и тот же текст ложился разными объектами, а разные
-        # требования склеивались под одним ключом. Ключ считаем ДО ent_key.
+        # требования склеивались под одним ключом. Ключ считаем ДО ent_key и ПЕРЕБИВАЕМ
+        # значение из ответа модели: 14.11 в Bronze пришёл ключ вида «kag:<id>|упд.15-1»,
+        # то есть старый «документ|номер», и через setdefault наш хэш не применялся.
         if etype == "security_requirement":
             from src.indexing.bronze_resolve import requirement_key as _req_key
 
             h = _req_key(attrs)
             if h:
-                attrs.setdefault("requirement_key", h)
+                model_key = str(attrs.get("requirement_key") or "")
+                if model_key and model_key != h:
+                    logger.debug("typedb_writer: ключ требования из модели перебит хэшем: %s → %s",
+                                 model_key[:40], h[:24])
+                attrs["requirement_key"] = h
         # Регулятор — это ОРГАН. Модель регулярно пишет издателем сам документ
         # («Федеральный закон № 161-ФЗ») или вид («ФЗ», «law») — такие сущности в граф
         # не пускаем: они ломают ключ документа и плодят мусорных издателей.
