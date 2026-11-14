@@ -260,6 +260,75 @@ def queue_stats(run_id: str = "") -> Dict[str, Any]:
     return {"run_id": run_id or "все", "разбивка": out, "всего": sum(out.values())}
 
 
+def queue_list(run_id: str = "", reason: str = "", status: str = "pending",
+               limit: int = 100, offset: int = 0) -> Dict[str, Any]:
+    """Записи очереди разбора страницей: строки + сколько всего под фильтром.
+
+    «Всего» возвращается отдельно, чтобы страница могла показать «показано N из M»:
+    без этого лимит 100 на очереди из 153 выглядит как потерянный хвост.
+    """
+    ensure_tables()
+    from sqlalchemy import text
+
+    where = " WHERE 1=1"
+    params: Dict[str, Any] = {}
+    if run_id:
+        where += " AND run_id = :r"
+        params["r"] = run_id
+    if reason:
+        where += " AND reason = :reason"
+        params["reason"] = reason
+    if status:
+        where += " AND status = :st"
+        params["st"] = status
+    params["lim"] = max(1, min(1000, int(limit)))
+    params["off"] = max(0, int(offset))
+    db = _db()()
+    try:
+        total = db.execute(text("SELECT count(*) FROM bronze_queue" + where), params).scalar()
+        rows = db.execute(text(
+            "SELECT id, run_id, document_id, entity_type, cluster_key, reason, detail, status, "
+            "resolved_by, created_at FROM bronze_queue" + where +
+            " ORDER BY id DESC LIMIT :lim OFFSET :off"), params).mappings().all()
+    finally:
+        db.close()
+    out = []
+    for r in rows:
+        it = dict(r)
+        it["created_at"] = it["created_at"].isoformat() if it.get("created_at") else None
+        out.append(it)
+    return {"записи": out, "показано": len(out), "всего": int(total or 0),
+            "лимит": params["lim"], "смещение": params["off"]}
+
+
+def queue_resolve(queue_id: int, action: str, by: str = "", note: str = "") -> bool:
+    """Решение человека по записи очереди. Только accept|reject и только pending.
+
+    coalesce(detail,'') — иначе при пустом detail строка затиралась бы в NULL и причина
+    исчезала; AND status='pending' — чтобы двойной клик не перезаписал уже принятое решение.
+    """
+    if action not in ("accept", "reject"):
+        return False
+    ensure_tables()
+    from sqlalchemy import text
+
+    db = _db()()
+    try:
+        res = db.execute(text(
+            "UPDATE bronze_queue SET status = :s, resolved_by = :b, resolved_at = now(), "
+            "detail = left(coalesce(detail, '') || :n, 500) "
+            "WHERE id = :i AND status = 'pending'"),
+            {"s": f"resolved_{action}", "b": (by or "")[:80],
+             "n": (" " + note) if note else "", "i": int(queue_id)})
+        db.commit()
+        return bool(res.rowcount)
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
 def runs(document_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     from sqlalchemy import text
 

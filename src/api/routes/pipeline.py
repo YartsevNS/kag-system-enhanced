@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.middleware.auth_v2 import get_current_admin
@@ -53,6 +53,50 @@ async def pipeline_parallel_set(body: ParallelBody, user: User = Depends(get_cur
                                 getattr(user, "email", "") or "")
     return {"ok": True, "parallel": n,
             "message": f"Параллельность извлечения: {n} фрагментов одновременно"}
+
+
+class QueueResolveBody(BaseModel):
+    action: str = Field(..., description="accept | reject")
+    note: str = Field("", description="комментарий человека (необязательно)")
+
+
+# ВАЖНО: маршруты /bronze/queue* объявлены ДО /bronze/{document_id}, иначе «queue» попадёт
+# в параметр document_id и вернётся пустой прогон вместо очереди.
+@router.get("/bronze/queue/runs", summary="Прогоны документа для выбора очереди прошлого прогона")
+async def pipeline_queue_runs(document_id: str, limit: int = 20,
+                              _: User = Depends(get_current_admin)):
+    from src.indexing import bronze
+
+    items = await asyncio.to_thread(bronze.runs, document_id, limit)
+    return {"ok": True, "document_id": document_id,
+            "items": [{"run_id": r["run_id"], "started_at": r.get("started_at"),
+                       "chunks": r.get("chunks"), "empty_chunks": r.get("empty_chunks"),
+                       "prompt_version": r.get("prompt_version"),
+                       "model": r.get("model")} for r in items]}
+
+
+@router.get("/bronze/queue", summary="Очередь разбора Silver-слоя (спорные записи)")
+async def pipeline_queue(run_id: str = "", reason: str = "", status: str = "pending",
+                         limit: int = 100, offset: int = 0,
+                         _: User = Depends(get_current_admin)):
+    from src.indexing import bronze
+
+    page = await asyncio.to_thread(bronze.queue_list, run_id, reason, status, limit, offset)
+    stats = await asyncio.to_thread(bronze.queue_stats, run_id)
+    return {"ok": True, **page, "stats": stats}
+
+
+@router.post("/bronze/queue/{queue_id}/resolve", summary="Решение по записи очереди")
+async def pipeline_queue_resolve(queue_id: int, body: QueueResolveBody,
+                                 user: User = Depends(get_current_admin)):
+    from src.indexing import bronze
+
+    if body.action not in ("accept", "reject"):
+        raise HTTPException(status_code=400, detail="action must be accept|reject")
+    ok = await asyncio.to_thread(bronze.queue_resolve, queue_id, body.action,
+                                 getattr(user, "email", "") or "", body.note)
+    return {"ok": ok, "status": "resolved" if ok else "already_resolved",
+            "message": "решение записано" if ok else "запись уже разрешена"}
 
 
 @router.get("/bronze/{document_id}", summary="Прогоны извлечения документа (Bronze-слой)")

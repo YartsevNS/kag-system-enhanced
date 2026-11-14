@@ -475,6 +475,19 @@ async def pipeline_page(request: Request):
     return await _html_response(os.path.join(static_path, "pipeline.html"))
 
 
+@app.get("/queue", summary="Очередь разбора Silver-слоя (только для admin)")
+async def queue_page(request: Request):
+    """Спорные записи Silver: ненадёжный номер, конфликт текстов, сироты.
+
+    Показывает разбивку по причинам с числами, таблицу записей выбранного прогона
+    (можно посмотреть очередь прошлого прогона по run_id) и решение по записи —
+    двумя нажатиями, без window.confirm.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "queue.html"))
+
+
 @app.get("/ontology/health", summary="Здоровье онтологии: очереди, факты, авто-решения (только для admin)")
 async def ontology_health_page(request: Request):
     """Один экран вместо шести: что требует человека сегодня и что накопилось.

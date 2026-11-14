@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Очередь разбора — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  nav .logo{padding:0 24px 20px;font-size:18px;font-weight:600;border-bottom:1px solid var(--border-s,#252b36);margin-bottom:12px}
+  nav .logo span{color:var(--accent,#3ecf8e)}
+  main{margin-left:240px;padding:24px 32px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  h2{font-size:15px;margin:24px 0 10px;color:var(--text2,#b4b4b4)}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  select,button,input{background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:7px 10px;font-size:13px}
+  button{cursor:pointer}
+  select{min-width:200px}
+  button.primary{background:var(--accent,#3ecf8e);color:#08110c;border-color:transparent;font-weight:600}
+  button.danger{background:#3a1d1d;border-color:#5c2a2a;color:#ffb4b4}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
+  .card{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px;cursor:pointer}
+  .card.active{border-color:var(--accent,#3ecf8e)}
+  .card .num{font-size:22px;font-weight:600}
+  .card .lbl{font-size:12px;color:var(--text3,#8b93a1);margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px}
+  td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--text2,#b4b4b4);word-break:break-all}
+  .tag{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--elevated,#1c2230);font-size:11px;color:var(--text2,#b4b4b4)}
+  .err{color:#ff8f8f}
+  #msg{font-size:12px;color:var(--accent,#3ecf8e)}
+  .empty{padding:18px;border:1px dashed var(--border,#2c3442);border-radius:10px;color:var(--text3,#8b93a1);font-size:13px}
+</style>
+</head>
+<body>
+<nav><div class="logo"><span>KAG</span> · очередь разбора</div><div data-site-nav></div></nav>
+<main>
+  <h1>Очередь разбора</h1>
+  <div class="muted">
+    Спорные записи Silver-слоя: ненадёжный номер требования, один текст с разными идентификаторами,
+    обрывок-ссылка, конфликт кодов меры. Такие записи <b>не удалены и не слиты автоматически</b> —
+    решение принимает человек. Ниже: сколько записей по каждой причине и таблица выбранного прогона.
+  </div>
+
+  <div class="row">
+    <select id="doc"><option value="">— документ —</option></select>
+    <select id="run"><option value="">— последний прогон —</option></select>
+    <select id="status">
+      <option value="pending">ожидают решения</option>
+      <option value="resolved_accept">принятые</option>
+      <option value="resolved_reject">отклонённые</option>
+      <option value="">все</option>
+    </select>
+    <button id="reload">Обновить</button>
+    <span id="msg"></span>
+  </div>
+
+  <div id="cards" class="cards"></div>
+  <div class="muted" id="shown"></div>
+
+  <table>
+    <thead><tr>
+      <th style="width:190px">причина</th><th style="width:160px">тип</th>
+      <th>ключ / фрагмент</th><th>подробности</th><th style="width:260px">решение</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="row">
+    <button id="prev">← предыдущие</button>
+    <button id="next">следующие →</button>
+    <span class="muted" id="page"></span>
+  </div>
+</main>
+
+<script src="/static/site-nav.js"></script>
+<script>
+const API = '/api/v1/pipeline/bronze/queue';
+const REASONS = {
+  word_as_key: 'номер — слово',
+  bare_number: 'голый номер',
+  identical_text_diff_id: 'один текст, разные id',
+  reference_only: 'обрывок-ссылка',
+  orphan_submeasure: 'подмера без родителя',
+  code_name_conflict: 'код меры с разными названиями',
+  conflicting_measure_refs: 'один текст, разные меры',
+  measure_ref_missing: 'ссылка на меру без меры',
+  multiple_parents: 'пункт с двумя родителями',
+  multiple_current_versions: 'две действующие редакции',
+  element_in_multiple_structures: 'пункт в разных редакциях',
+  not_a_requirement: 'не требование',
+  empty_description: 'пустое описание'
+};
+const LIMIT = 100;
+let STATE = {doc: '', run: '', status: 'pending', reason: '', offset: 0};
+let TOTAL = 0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g,
+  (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const reasonLabel = (r) => REASONS[r] || r;
+
+function toast(text, bad) {
+  $('msg').textContent = text || '';
+  $('msg').className = bad ? 'err' : '';
+  if (!bad) setTimeout(() => { if ($('msg').textContent === text) $('msg').textContent = ''; }, 4000);
+}
+
+// query string собирается из состояния фильтра, а НЕ из location.search:
+// иначе «?tab=resolved» или любой другой параметр уйдёт в API и сломает выборку
+function query() {
+  const p = new URLSearchParams();
+  if (STATE.run) p.set('run_id', STATE.run);
+  if (STATE.reason) p.set('reason', STATE.reason);
+  if (STATE.status) p.set('status', STATE.status);
+  p.set('limit', LIMIT);
+  p.set('offset', STATE.offset);
+  return p.toString();
+}
+
+async function loadDocuments() {
+  const r = await fetch('/api/v1/pipeline/documents?limit=50', {credentials: 'same-origin'});
+  if (!r.ok) return;
+  const d = await r.json();
+  const sel = $('doc');
+  for (const it of (d.items || [])) {
+    const o = document.createElement('option');
+    o.value = it.document_id;
+    o.textContent = (it.filename || it.document_id.slice(0, 8)) +
+                    (it.chunks ? ' · ' + it.chunks + ' фр.' : '');
+    sel.appendChild(o);
+  }
+}
+
+async function loadRuns() {
+  const sel = $('run');
+  sel.innerHTML = '<option value="">— последний прогон —</option>';
+  if (!STATE.doc) return;
+  const r = await fetch(API + '/runs?document_id=' + encodeURIComponent(STATE.doc) + '&limit=20',
+                        {credentials: 'same-origin'});
+  if (!r.ok) return;
+  const d = await r.json();
+  for (const it of (d.items || [])) {
+    const o = document.createElement('option');
+    o.value = it.run_id;
+    o.textContent = (it.started_at || '').replace('T', ' ').slice(0, 16) +
+                    ' · фрагментов ' + (it.chunks || 0) +
+                    ' · пустых ' + (it.empty_chunks || 0) +
+                    ' · промпт v' + (it.prompt_version || 0);
+    sel.appendChild(o);
+  }
+}
+
+function paintCards(stats) {
+  const box = $('cards');
+  const map = (stats && stats['разбивка']) || {};
+  const counts = {};
+  for (const k in map) {
+    const [reason, st] = k.split(':');
+    if (STATE.status && st !== STATE.status) continue;
+    counts[reason] = (counts[reason] || 0) + map[k];
+  }
+  const entries = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  box.innerHTML = '';
+  const all = document.createElement('div');
+  all.className = 'card' + (STATE.reason ? '' : ' active');
+  all.innerHTML = '<div class="num">' + Object.values(counts).reduce((a, b) => a + b, 0) +
+                  '</div><div class="lbl">все причины</div>';
+  all.onclick = () => { STATE.reason = ''; STATE.offset = 0; loadQueue(); };
+  box.appendChild(all);
+  for (const reason of entries) {
+    const d = document.createElement('div');
+    d.className = 'card' + (STATE.reason === reason ? ' active' : '');
+    d.innerHTML = '<div class="num">' + counts[reason] + '</div><div class="lbl">' +
+                  esc(reasonLabel(reason)) + '</div>';
+    d.onclick = () => { STATE.reason = reason; STATE.offset = 0; loadQueue(); };
+    box.appendChild(d);
+  }
+}
+
+function resolveCell(row) {
+  if (row.status !== 'pending') {
+    return '<span class="tag">' + esc(row.status) +
+           (row.resolved_by ? ' · ' + esc(row.resolved_by) : '') + '</span>';
+  }
+  return '<button data-act="accept" data-id="' + row.id + '">принять</button> ' +
+         '<button class="danger" data-act="reject" data-id="' + row.id + '">отклонить</button>';
+}
+
+function paintRows(rows) {
+  const tb = $('rows');
+  tb.innerHTML = '';
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="5"><div class="empty">Под этим фильтром записей нет.' +
+                   ' Если только что переключились на новый прогон — очередь ещё не заполнена:' +
+                   ' заполнение идёт пересчётом Silver по прогону.</div></td></tr>';
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + esc(reasonLabel(row.reason)) + '</td>' +
+      '<td class="mono">' + esc(row.entity_type || '—') + '</td>' +
+      '<td class="mono">' + esc((row.cluster_key || '').slice(0, 60)) + '</td>' +
+      '<td class="mono">' + esc(row.detail || '—') + '</td>' +
+      '<td>' + resolveCell(row) + '</td>';
+    tb.appendChild(tr);
+  }
+}
+
+// подтверждение — двумя нажатиями в самой панели: системный диалог браузер умеет глушить,
+// и кнопка становится мёртвой без следа
+const armed = new Map();
+async function onResolve(id, action, btn) {
+  const key = id + ':' + action;
+  if (!armed.has(key)) {
+    armed.set(key, Date.now());
+    btn.dataset.oldText = btn.textContent;
+    btn.textContent = 'нажмите ещё раз';
+    toast('Повторное нажатие запишет решение по записи ' + id);
+    setTimeout(() => {
+      if (armed.has(key)) { armed.delete(key); btn.textContent = btn.dataset.oldText || action; }
+    }, 15000);
+    return;
+  }
+  armed.delete(key);
+  btn.disabled = true;
+  try {
+    const r = await fetch(API + '/' + id + '/resolve', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: action})
+    });
+    if (r.status === 400) {
+      const e = await r.json().catch(() => ({}));
+      toast('Сервер отклонил действие: ' + (e.detail || 'неверный action'), true);
+      return;
+    }
+    const d = await r.json();
+    toast(d.ok ? 'Решение записано' : 'Запись уже разрешена — обновите список', !d.ok);
+    await loadQueue();
+  } catch (e) {
+    toast('Ошибка запроса: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadQueue() {
+  const r = await fetch(API + '?' + query(), {credentials: 'same-origin'});
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    toast('Не удалось загрузить очередь: ' + (e.detail || r.status), true);
+    return;
+  }
+  const d = await r.json();
+  TOTAL = d['всего'] || 0;
+  paintCards(d.stats || {});
+  paintRows(d['записи'] || []);
+  const from = TOTAL ? STATE.offset + 1 : 0;
+  const to = STATE.offset + (d['записи'] || []).length;
+  $('shown').textContent = 'Показано ' + to + ' из ' + TOTAL +
+    ' (строк в таблице ' + (d['записи'] || []).length + ', лимит ' + LIMIT + ')';
+  $('page').textContent = 'записи ' + from + '–' + to;
+  $('prev').disabled = STATE.offset <= 0;
+  $('next').disabled = STATE.offset + LIMIT >= TOTAL;
+}
+
+$('rows').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-id]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  if (act !== 'accept' && act !== 'reject') { toast('Неизвестное действие', true); return; }
+  onResolve(btn.dataset.id, act, btn);
+});
+
+$('doc').addEventListener('change', async (e) => {
+  STATE.doc = e.target.value; STATE.run = ''; STATE.offset = 0;
+  await loadRuns();
+  // очередь привязана к прогону: без выбора прогона показываем последний заполненный
+  const sel = $('run');
+  if (sel.options.length > 1) { STATE.run = sel.options[1].value; sel.selectedIndex = 1; }
+  await loadQueue();
+});
+$('run').addEventListener('change', (e) => { STATE.run = e.target.value; STATE.offset = 0; loadQueue(); });
+$('status').addEventListener('change', (e) => { STATE.status = e.target.value; STATE.offset = 0; loadQueue(); });
+$('reload').addEventListener('click', () => loadQueue());
+$('prev').addEventListener('click', () => { STATE.offset = Math.max(0, STATE.offset - LIMIT); loadQueue(); });
+$('next').addEventListener('click', () => { STATE.offset += LIMIT; loadQueue(); });
+
+(async function init() {
+  await loadDocuments();
+  await loadRuns();
+  await loadQueue();
+})();
+</script>
+</body>
+</html>
