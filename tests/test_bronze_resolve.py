@@ -108,3 +108,15 @@ def test_regulatory_document_is_not_regulator():
     assert br.entity_branch("security_requirement") == "requirement"
     assert br.entity_branch("security_measure") == "measure"
     assert br.entity_branch("structural_element") == "other"
+
+
+def test_split_measure_ref_cases():
+    """Ссылка «мера + пункт» раскладывается, а голая мера хвоста не получает."""
+    assert br.split_measure_ref("АВЗ.1") == ("авз.1", "")
+    assert br.split_measure_ref("АВЗ.1-1") == ("авз.1", "1")
+    assert br.split_measure_ref("АВЗ.1-а") == ("авз.1", "а")
+    assert br.split_measure_ref("АВЗ.1-1-а") == ("авз.1", "1-а")
+    assert br.split_measure_ref("АВЗ.1-1.2") == ("авз.1", "1.2")
+    assert br.split_measure_ref("АВЗ 1-1") == ("авз.1", "1")   # пробел вместо точки
+    assert br.split_measure_ref("2.3-а") == ("", "")           # это пункт документа
+    assert br.split_measure_ref("5") == ("", "")

@@ -305,7 +305,7 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
     """
     if not entities:
         return 0, 0
-    from src.indexing.bronze_resolve import norm_code, requirement_measure_code
+    from src.indexing.bronze_resolve import norm_code, split_measure_ref
 
     by_code: Dict[str, str] = {}
     for k, e in entities.items():
@@ -319,7 +319,8 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
     for rkey, e in list(entities.items()):
         if e["type"] != "security_requirement":
             continue
-        code = requirement_measure_code(e["attrs"])
+        rid = e["attrs"].get("requirement-id") or e["attrs"].get("requirement_id")
+        code, point = split_measure_ref(rid)
         if not code:
             continue
         m_key = by_code.get(code)
@@ -338,8 +339,13 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
             by_code.setdefault(code, m_key)
         sig = f"requirement_definition|measure={m_key}|requirement={rkey}"
         if sig not in relations:
-            relations[sig] = {"type": "requirement_definition",
-                              "parts": {"requirement": rkey, "measure": m_key}}
+            _rel = {"type": "requirement_definition",
+                    "parts": {"requirement": rkey, "measure": m_key}}
+            if point:
+                # номер пункта ВНУТРИ меры живёт на связи, а не на требовании:
+                # одна мера может быть связана с разными требованиями через разные пункты
+                _rel["attrs"] = {"point-in-measure": point}
+            relations[sig] = _rel
             added += 1
     return added, missing
 
@@ -953,8 +959,12 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                     roles_str.append(f"{role}: $v{i}")
                 rel_q.append(
                     "match" + chr(10) + "  " + (chr(10) + "  ").join(match_lines)
-                    + chr(10) + "insert" + chr(10) + "  " + rel["type"]
-                    + " (" + ", ".join(roles_str) + ");"
+                    + chr(10) + "insert" + chr(10) + "  $r isa " + rel["type"]
+                    + " (" + ", ".join(roles_str) + ")"
+                    + "".join(
+                        f', has {k} "{_esc(v, 200)}"'
+                        for k, v in (rel.get("attrs") or {}).items() if v
+                    ) + ";"
                 )
                 written_sigs.add(sig)
         tm["reads_ms"] += round((time.monotonic() - _t0) * 1000, 1)

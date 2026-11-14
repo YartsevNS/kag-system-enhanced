@@ -48,6 +48,8 @@ attribute effective_to, value date;
 attribute struct_index, value string;
 attribute text_content, value string;
 attribute requirement-id, value string;
+# Номер пункта ВНУТРИ меры для ссылки «требование → мера» (АВЗ.1-1 → «1»).
+attribute point-in-measure, value string;
 # Синтетический уникальный ключ требования: document_key|requirement-id.
 # Нужен, потому что requirement-id («1.1») повторяется в разных документах.
 attribute requirement_key, value string;
@@ -174,7 +176,10 @@ relation requirement_derived_from,
   relates clause @card(1..1);
 relation requirement_definition,
   relates requirement @card(1..1),
-  relates measure @card(1..1);
+  relates measure @card(1..1),
+  # Пункт внутри меры («АВЗ.1-1» → мера АВЗ.1, пункт «1»). Атрибут живёт НА СВЯЗИ:
+  # одна мера может быть связана с разными требованиями через разные пункты.
+  owns point-in-measure @card(0..1);
 relation measure_source,
   relates measure @card(1..1),
   relates clause @card(1..1);

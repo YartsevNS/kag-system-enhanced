@@ -106,10 +106,45 @@ def id_compare_key(value: Any) -> str:
 
 
 def requirement_measure_code(payload: Dict[str, Any]) -> str:
-    """Код меры, на которую ссылается требование (ИАФ.2-1 → «иаф.2-1»), иначе ""."""
+    """Код меры, на которую ссылается требование (ИАФ.2-1 → «иаф.2.1»), иначе ""."""
     p = payload or {}
     rid = p.get("requirement-id") or p.get("requirement_id")
     return norm_code(rid) if requirement_id_kind(rid) == "measure_ref" else ""
+
+
+# Ссылка вида «мера + пункт»: АВЗ.1-1, АВЗ.1-а, АВЗ.1-1-а, АВЗ.1-1.2.
+# Хвост — цепочка сегментов (номер 1–3 цифры или одна буква), разделённых дефисом/точкой.
+_REF_SPLIT = re.compile(
+    r"^([а-яёa-z]{2,6})[\s.\-–—]*(\d{1,3})\s*[-–—]\s*"
+    r"(\d{1,3}|[а-яёa-z])(?:[-.](\d{1,3}|[а-яёa-z]))*$"
+)
+
+
+def split_measure_ref(value: Any) -> tuple:
+    """Разложить ссылку требования на (нормализованный код меры, номер пункта внутри меры).
+
+    «АВЗ.1»       → («авз.1», "")        — прямая ссылка на меру
+    «АВЗ.1-1»     → («авз.1», "1")      — мера АВЗ.1, пункт 1
+    «АВЗ 1-1-а»   → («авз.1», "1-а")    — мера, пункт, подпункт
+    «АВЗ.1-1.2»   → («авз.1», "1.2")
+    «2.3-а»       → ("", "")            — это пункт документа, а не ссылка на меру
+
+    Сравнение с базой идёт по НОРМАЛИЗОВАННОМУ коду меры (АВЗ 1 = АВЗ.1 = авз-1 → авз.1):
+    иначе «АВЗ 1-1» не нашла бы меру «авз.1» и ушла бы в measure_ref_missing ложно.
+    """
+    s = norm_text(value)
+    if not s:
+        return "", ""
+    m = _REF_SPLIT.match(s)
+    if not m:
+        # не «мера-пункт»: либо голая мера (АВЗ.1), либо пункт документа (2.3-а)
+        nc = norm_code(s)
+        return (nc, "") if re.match(r"^[а-яёa-z]{2,6}\.\d{1,3}$", nc) else ("", "")
+    measure = f"{m.group(1)}.{m.group(2)}"
+    _sep = re.search(r"[-–—]", s[m.end(2):])
+    tail = s[m.end(2) + _sep.end():] if _sep else ""
+    tail = re.sub(r"\s+", "", tail).replace("–", "-").replace("—", "-")
+    return measure, tail
 
 
 def regulator_code(payload: Dict[str, Any]) -> str:
