@@ -89,3 +89,29 @@ def test_missing_measure_is_not_invented_when_exists_given():
     assert (added, missing) == (0, 1)
     assert not relations
     assert len(entities) == 1  # заглушка не появилась
+
+
+def test_localize_conflicts_drops_both_parent_links():
+    """Конфликт «два родителя»: сущности пишутся, обе связи снимаются, конфликт в очередь."""
+    rel_items = [
+        {"sig": "document_hierarchy|parent=a|child=c", "query": "q1",
+         "rel": {"type": "document_hierarchy", "parts": {"parent": "element:a", "child": "element:c"}}},
+        {"sig": "document_hierarchy|parent=b|child=c", "query": "q2",
+         "rel": {"type": "document_hierarchy", "parts": {"parent": "element:b", "child": "element:c"}}},
+        {"sig": "requirement_derived_from|requirement=r|clause=c", "query": "q3",
+         "rel": {"type": "requirement_derived_from",
+                 "parts": {"requirement": "security_requirement:r", "clause": "element:c"}}},
+    ]
+    problems = [{"problem": "у пункта несколько родителей",
+                 "subject": {"c": "element:c", "p1": "element:a"}}]
+    drop, rows, unresolved = tw._localize_conflicts(problems, rel_items)
+    assert unresolved == []
+    assert drop == {"document_hierarchy|parent=a|child=c", "document_hierarchy|parent=b|child=c"}
+    assert rows and rows[0]["reason"] == "multiple_parents"
+
+
+def test_localize_conflicts_unresolved_stays_fatal():
+    rel_items = []
+    problems = [{"problem": "у пункта несколько родителей", "subject": {"c": "element:x"}}]
+    drop, rows, unresolved = tw._localize_conflicts(problems, rel_items)
+    assert drop == set() and rows == [] and len(unresolved) == 1

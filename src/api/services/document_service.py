@@ -2271,7 +2271,9 @@ class DocumentService:
                 _tm = res.get("timings") or {}
                 for _k in ("llm_ms", "collect_ms", "write_ms", "lock_wait_ms", "reads_ms",
                            "insert_ms", "integrity_ms", "commit_ms", "prompt_chars",
-                           "payload_chars", "retries"):
+                           "payload_chars", "retries", "conflicts", "measure_links",
+                           "measure_refs_missing", "submeasure_links",
+                           "orphan_submeasures"):
                     if _k in _tm:
                         agg[_k] = agg.get(_k, 0) + (_tm[_k] or 0)
                 if int(_tm.get("entities") or 0) > 0 or int(_tm.get("relations") or 0) > 0:
@@ -2309,7 +2311,8 @@ class DocumentService:
         logger.info(
             f"[typedb] документ {document_id}: чанков {len(chunks)}, записано {total['ok']}, "
             f"пусто {total['empty']}, ошибок {total['error']}; "
-            f"сущностей {total['entities']}, связей {total['relations']} ({ms} ms)"
+            f"сущностей {total['entities']}, связей {total['relations']}, "
+            f"конфликтов {agg.get('conflicts', 0)} ({ms} ms)"
         )
         try:
             summary = {

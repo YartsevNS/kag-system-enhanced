@@ -320,12 +320,24 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
         if e["type"] != "security_requirement":
             continue
         rid = e["attrs"].get("requirement-id") or e["attrs"].get("requirement_id")
-        code, point = split_measure_ref(rid)
-        if not code:
-            continue
-        m_key = by_code.get(code)
+        # ПОРЯДОК ВАЖЕН: сначала пробуем ВЕСЬ код как меру («ИАФ.2-1» — это мера иаф.2.1,
+        # а не мера иаф.2 + пункт 1). Только если такой меры нет — разбираем как «мера-пункт»
+        # («АВЗ.1-1» → мера авз.1 + пункт 1). Иначе ИАФ.2-1 уходил бы в measure_ref_missing.
+        direct = norm_code(rid)
+        m_key = ""
+        point = ""
+        if direct:
+            candidate = by_code.get(direct) or ent_key(
+                "security_measure", {"code": direct, "measure_key": direct})
+            if direct in by_code or (exists is not None and exists(candidate)):
+                m_key = candidate
+                code = direct
         if not m_key:
-            m_key = ent_key("security_measure", {"code": code, "measure_key": code})
+            code, point = split_measure_ref(rid)
+            if not code:
+                continue
+            m_key = by_code.get(code) or ent_key(
+                "security_measure", {"code": code, "measure_key": code})
         if m_key not in entities:
             if exists is None:
                 # одиночный вызов (тесты, ручные сценарии): объект-меру создаём сами,
@@ -818,8 +830,79 @@ def _read(query: str) -> list:
         return list(tx.query(query).resolve())
 
 
+# Правила целостности → (тип связи, ключ участника в subject, причина в очереди).
+# Нужны, чтобы локализовать нарушение: снять именно конфликтующие связи, а сущности записать.
+_CONFLICT_RULES = {
+    "у пункта несколько родителей": ("document_hierarchy", "c", "multiple_parents"),
+    "у документа больше одной действующей редакции": ("current_version_of", "d",
+                                                     "multiple_current_versions"),
+    "пункт принадлежит нескольким редакциям": ("document_structure", "e",
+                                               "element_in_multiple_structures"),
+}
+
+
+def _localize_conflicts(problems: List[Dict[str, Any]],
+                        rel_items: List[Dict[str, Any]]) -> tuple:
+    """Свести нарушения целостности к конкретным связям пачки.
+
+    Возвращает (сигнатуры связей к снятию, записи для очереди, нелокализованные нарушения).
+    Нелокализованное нарушение — повод откатить фрагмент, как раньше.
+    """
+    drop: Set[str] = set()
+    rows: List[Dict[str, Any]] = []
+    unresolved: List[Dict[str, Any]] = []
+    for p in problems:
+        rule = _CONFLICT_RULES.get(str(p.get("problem") or ""))
+        if not rule:
+            unresolved.append(p)
+            continue
+        rel_type, subj_key, reason = rule
+        anchor = str((p.get("subject") or {}).get(subj_key) or "")
+        hits = [it for it in rel_items
+                if (it["rel"].get("type") == rel_type and anchor
+                    and anchor in [str(v) for v in (it["rel"].get("parts") or {}).values()])]
+        if not hits:
+            unresolved.append(p)
+            continue
+        drop.update(it["sig"] for it in hits)
+        subject = p.get("subject") or {}
+        rows.append({"reason": reason, "anchor": anchor,
+                     "detail": f"{reason}: {', '.join(f'{k}={v}' for k, v in subject.items())}",
+                     "candidates": dict(subject)})
+    return drop, rows, unresolved
+
+
+def _queue_conflicts(run_id: str, chunk_id: str, document_id: str,
+                     rows: List[Dict[str, Any]]) -> None:
+    """Локальный конфликт — в очередь разбора (не в откат фрагмента и не в онтологию)."""
+    if not rows:
+        return
+    try:
+        if run_id:
+            from src.indexing import bronze
+
+            bronze.queue_add(run_id, [
+                {"bronze_id": None, "document_id": document_id or "",
+                 "entity_type": "structural_element", "cluster_key": r["anchor"][:200],
+                 "reason": r["reason"], "detail": r["detail"][:300]}
+                for r in rows
+            ])
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from src.api.services.ontology_errors import log_error
+
+        log_error(
+            f"конфликт локализован, связь не записана: {rows[0]['reason']}",
+            error_type="conflict_localized", source="writer", document_id=document_id,
+            details={"chunk_id": chunk_id, "conflicts": rows[:3]},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
-                clause: str = "") -> Dict[str, Any]:
+                clause: str = "", run_id: str = "") -> Dict[str, Any]:
     """Записать сущности и связи документа ОДНОЙ транзакцией и проверить целостность.
 
     Почему одной транзакцией: раньше на каждую сущность и связь открывалась своя
@@ -841,7 +924,7 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
     _lock.acquire()
     lock_wait_ms = round((time.monotonic() - t_wait) * 1000, 1)
     try:
-        res = _write_facts_locked(chunk_id, entities, relations, clause)
+        res = _write_facts_locked(chunk_id, entities, relations, clause, run_id=run_id)
     finally:
         _lock.release()
     timings = dict(res.get("timings") or {})
@@ -851,7 +934,7 @@ def write_facts(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, An
 
 
 def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict[str, Any],
-                        clause: str = "") -> Dict[str, Any]:
+                        clause: str = "", run_id: str = "") -> Dict[str, Any]:
     """Тело write_facts под замком документа (см. _doc_lock).
 
     Чтения — точечные и в ОДНОЙ транзакции с общим драйвером. Раньше здесь был полный
@@ -896,6 +979,7 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
         existing: Set[str] = set()
         ent_q: List[str] = []
         rel_q: List[str] = []
+        rel_items: List[Dict[str, Any]] = []
         inserted = 0
         skipped = 0
         with _shared_driver().transaction(_cfg()["db"], _TT.READ) as rtx:
@@ -966,15 +1050,17 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                         for k, v in (rel.get("attrs") or {}).items() if v
                     ) + ";"
                 )
+                rel_items.append({"sig": sig, "rel": rel, "query": rel_q[-1]})
                 written_sigs.add(sig)
         tm["reads_ms"] += round((time.monotonic() - _t0) * 1000, 1)
         return {"existing_keys": existing, "entity_queries": ent_q, "rel_queries": rel_q,
-                "inserted_e": inserted, "skipped_rel": skipped}
+                "rel_items": rel_items, "inserted_e": inserted, "skipped_rel": skipped}
 
     prep = _prepare()
     existing_keys = prep["existing_keys"]
     entity_queries = prep["entity_queries"]
     rel_queries = prep["rel_queries"]
+    rel_items = prep["rel_items"]
     inserted_e = prep["inserted_e"]
     skipped_rel = prep["skipped_rel"]
 
@@ -986,7 +1072,9 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
     cfg = _cfg()
     problems: List[Dict[str, Any]] = []
     last_error = ""
-    for attempt in range(3):
+    conflicts_total = 0
+    for attempt in range(4):
+        retry_conflicts = False
         try:
             with _shared_driver().transaction(cfg["db"], _TT.WRITE) as tx:
                 _ti = time.monotonic()
@@ -997,15 +1085,35 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                 problems = _integrity_in_tx(tx, set(entities.keys()))
                 tm["integrity_ms"] += round((time.monotonic() - _tc) * 1000, 1)
                 if problems:
-                    logger.warning(
-                        "typedb_writer: документ не записан, нарушений целостности %d: %s",
-                        len(problems), problems[:3])
-                    return {"entities": 0, "relations": 0, "entities_existing": 0,
-                            "relations_existing": 0, "dropped": dropped,
-                            "integrity": problems, "timings": tm}
-                _tcm = time.monotonic()
-                tx.commit()
-                tm["commit_ms"] += round((time.monotonic() - _tcm) * 1000, 1)
+                    # Локальное нарушение — локальная реакция: сущности пишутся ВСЕ,
+                    # конфликтующие связи фрагмента не пишутся ни одна (не выбираем «первую»),
+                    # обе кандидатуры уходят в очередь разбора. Откат всего фрагмента —
+                    # только если нарушение не удалось локализовать (15.11.2026).
+                    _drop, _rows, _unresolved = _localize_conflicts(problems, rel_items)
+                    if _rows and not _unresolved:
+                        rel_items = [it for it in rel_items if it["sig"] not in _drop]
+                        rel_queries = [it["query"] for it in rel_items]
+                        conflicts_total += len(_rows)
+                        tm["conflicts"] = conflicts_total
+                        logger.warning(
+                            "typedb_writer: %s — конфликт локализован, снято связей %d: %s",
+                            chunk_id, len(_drop), _rows[0]["detail"][:160])
+                        _queue_conflicts(run_id, chunk_id, doc_id, _rows)
+                        retry_conflicts = True
+                    else:
+                        logger.warning(
+                            "typedb_writer: документ не записан, нарушений целостности %d: %s",
+                            len(problems), problems[:3])
+                        return {"entities": 0, "relations": 0, "entities_existing": 0,
+                                "relations_existing": 0, "dropped": dropped,
+                                "integrity": problems, "timings": tm}
+                if not retry_conflicts:
+                    _tcm = time.monotonic()
+                    tx.commit()
+                    tm["commit_ms"] += round((time.monotonic() - _tcm) * 1000, 1)
+            if retry_conflicts:
+                tm["retries"] += 1
+                continue
             last_error = ""
             break
         except Exception as exc:  # noqa: BLE001
@@ -1039,7 +1147,8 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
 
     return {"entities": inserted_e, "relations": len(rel_queries),
             "entities_existing": len(entities) - inserted_e,
-            "relations_existing": skipped_rel, "dropped": dropped, "timings": tm}
+            "relations_existing": skipped_rel, "dropped": dropped,
+            "conflicts": conflicts_total, "timings": tm}
 
 # Проверки читают ent-key участников: по ним нарушение привязывается к текущей пачке.
 # Иначе одно старое нарушение в базе блокировало бы загрузку любого документа.
@@ -1390,7 +1499,8 @@ async def extract_and_store_typedb(
 
     _t = time.monotonic()
     try:
-        written = await asyncio.to_thread(write_facts, chunk_id, entities, relations, clause)
+        written = await asyncio.to_thread(write_facts, chunk_id, entities, relations, clause,
+                                          run_id)
         tm["write_ms"] = round((time.monotonic() - _t) * 1000, 1)
         tm.update({k: v for k, v in (written.get("timings") or {}).items()})
     except Exception as exc:  # noqa: BLE001
