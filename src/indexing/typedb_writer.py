@@ -1013,14 +1013,16 @@ async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
     api_key = cfg.get("api_key", "")
     model = cfg["model"]
     temperature = float((cfg.get("parameters") or {}).get("temperature", 0.05) or 0.05)
-    max_tokens = int((cfg.get("parameters") or {}).get("max_tokens", 0) or 0)
-    if not max_tokens:
-        try:
-            from src.api.services.pipeline import extraction_max_tokens
+    # ВАЖНО: приоритет — настройка конвейера, а не параметр привязки функции.
+    # В привязке стояло max_tokens=800, из-за чего плотные фрагменты обрезались
+    # (finish_reason=length → JSON не закрыт → фрагмент терялся). Замер 14.11.2026:
+    # 76–98 обрезанных ответов на документ из 321.
+    try:
+        from src.api.services.pipeline import extraction_max_tokens
 
-            max_tokens = extraction_max_tokens()
-        except Exception:  # noqa: BLE001
-            max_tokens = 6000
+        max_tokens = extraction_max_tokens()
+    except Exception:  # noqa: BLE001
+        max_tokens = int((cfg.get("parameters") or {}).get("max_tokens", 6000) or 6000)
 
     payload = _llm_payload(
         messages=[{"role": "user", "content": prompt}], model=model,
