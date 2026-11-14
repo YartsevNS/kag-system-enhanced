@@ -1426,6 +1426,26 @@ async def extract_and_store_typedb(
         return {"status": "error", "error": detail, "written": written,
                 "stats": stats, "timings": tm}
 
+    # Нарушение целостности — такой же отказ, как ошибка транзакции: пакет откатан целиком,
+    # но вызывающая сторона видела «ok, сущностей 0». Замер 15.11.2026: так потерялся
+    # элемент XIII (фрагмент 315 откачен правилом «у пункта несколько родителей»).
+    if isinstance(written, dict) and written.get("integrity"):
+        _probs = written["integrity"]
+        logger.warning("typedb_writer: фрагмент НЕ записан, нарушений целостности %s (%s)",
+                       len(_probs), str(_probs[:2])[:300])
+        from src.api.services.ontology_errors import log_error
+
+        log_error(
+            f"откат по целостности: {len(_probs)} нарушений",
+            error_type="integrity_failed",
+            source="writer",
+            document_id=document_id,
+            details={"chunk_id": chunk_id, "entities": len(entities),
+                     "relations": len(relations), "problems": str(_probs[:3])[:1000]},
+        )
+        return {"status": "error", "error": "integrity", "written": written,
+                "stats": stats, "timings": tm}
+
     logger.info(
         "typedb_writer: %s — сущностей %s (+%s уже было), связей %s (+%s уже было), "
         "отброшено: тип %s, роль %s, без ключа %s",
