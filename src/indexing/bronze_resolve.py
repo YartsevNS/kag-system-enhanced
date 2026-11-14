@@ -385,6 +385,19 @@ def resolve(run_id: str, persist: bool = True) -> Dict[str, Any]:
                 if requirement_measure_code(p):
                     measure_links += 1
 
+            # Один текст, но разные меры в разных фрагментах — конфликт ссылок, решает человек.
+            # Пример 15.11.2026: требование «Ограничение прав пользователей…» пришло с id
+            # ОЦЛ.6 и ОЦЛ.6-док и попало сразу на меры УПД.4 и УПД.5.
+            _codes = {
+                split_measure_ref((r["payload"] or {}).get("requirement-id"))[0]
+                for r in items
+            }
+            _codes.discard("")
+            if len(_codes) > 1:
+                for r in items:
+                    add_queue(r, key, "conflicting_measure_refs",
+                              ", ".join(sorted(_codes))[:120])
+
         elif branch == "measure":
             names = {norm_text((r["payload"] or {}).get("name")
                                or (r["payload"] or {}).get("measure_name") or "")
