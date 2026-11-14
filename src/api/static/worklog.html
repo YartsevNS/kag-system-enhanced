@@ -46,7 +46,7 @@
   <h2>2. Состояние на 15.11.2026</h2>
   <table>
     <tr><th>Что</th><th>Значение</th></tr>
-    <tr><td>Образы</td><td><code>kre44et/kag-api:2026.11.14.18</code>, <code>kre44et/kag-worker:2026.11.14.18</code></td></tr>
+    <tr><td>Образы</td><td>определяются <code>docker-compose.yml</code> стенда; проверка: <code>docker ps --format '{{.Image}}' | grep kag</code> (страница не фиксирует тег, чтобы не устаревать)</td></tr>
     <tr><td>База TypeDB</td><td><code>cybersecurity_ontology_v23</code> (предыдущие v20–v22 сохранены как история)</td></tr>
     <tr><td>Промпт извлечения</td><td>версия 16 (текст v13), хранится в Postgres с историей версий</td></tr>
     <tr><td>Модель извлечения</td><td>deepseek-v4-flash, параллельность 6 фрагментов</td></tr>
@@ -155,7 +155,7 @@
   <h2>7. Как проверить</h2>
   <pre class="muted" style="background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:8px;padding:12px;overflow:auto">
 curl -s -o /dev/null -w '%{http_code}\n' http://192.168.50.18:8000/api/v1/health   # 200
-docker ps --format '{{.Names}} {{.Image}}' | grep kag                            # образы 2026.11.14.18
+docker ps --format '{{.Names}} {{.Image}}' | grep kag                            # текущие образы
 # очередь разбора: страница /queue (админ) или
 GET /api/v1/pipeline/bronze/queue?run_id=<id>                                    # записи + разбивка
   </pre>
