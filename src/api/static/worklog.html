@@ -46,10 +46,11 @@
   <h2>2. Состояние на 15.11.2026</h2>
   <table>
     <tr><th>Что</th><th>Значение</th></tr>
-    <tr><td>Образы</td><td><code>kre44et/kag-api:2026.11.14.17</code>, <code>kre44et/kag-worker:2026.11.14.17</code></td></tr>
+    <tr><td>Образы</td><td><code>kre44et/kag-api:2026.11.14.18</code>, <code>kre44et/kag-worker:2026.11.14.18</code></td></tr>
     <tr><td>База TypeDB</td><td><code>cybersecurity_ontology_v23</code> (предыдущие v20–v22 сохранены как история)</td></tr>
     <tr><td>Промпт извлечения</td><td>версия 16 (текст v13), хранится в Postgres с историей версий</td></tr>
     <tr><td>Модель извлечения</td><td>deepseek-v4-flash, параллельность 6 фрагментов</td></tr>
+    <tr><td>Актуальность</td><td>страница отражает состояние на момент выкладки; текущие теги проверяются командой <code>docker ps</code></td></tr>
     <tr><td>Документ для замеров</td><td>fstek-2014-mery-zashchity-gis.pdf, 321 фрагмент, 176 страниц</td></tr>
   </table>
 
@@ -154,7 +155,7 @@
   <h2>7. Как проверить</h2>
   <pre class="muted" style="background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:8px;padding:12px;overflow:auto">
 curl -s -o /dev/null -w '%{http_code}\n' http://192.168.50.18:8000/api/v1/health   # 200
-docker ps --format '{{.Names}} {{.Image}}' | grep kag                            # образы 2026.11.14.17
+docker ps --format '{{.Names}} {{.Image}}' | grep kag                            # образы 2026.11.14.18
 # очередь разбора: страница /queue (админ) или
 GET /api/v1/pipeline/bronze/queue?run_id=<id>                                    # записи + разбивка
   </pre>
