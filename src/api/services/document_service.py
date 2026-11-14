@@ -2315,12 +2315,46 @@ class DocumentService:
         except Exception as _e:  # noqa: BLE001
             summary = {}
             logger.debug(f"[typedb] сводка таймингов не собрана: {_e}")
+
+        # Guard «подозрительного прогона»: слишком много пустых фрагментов — это сбой
+        # провайдера, а не «нечего извлекать». 14.11.2026 такой прогон (266 из 321 = 83%)
+        # прошёл как успех, и об этом узнали только по числу сущностей.
+        _chunks_total = total["ok"] + total["empty"] + total["error"]
+        _empty_share = (total["empty"] / _chunks_total) if _chunks_total else 0.0
+        try:
+            from src.api.services.pipeline import empty_share_limit
+
+            _limit = empty_share_limit()
+        except Exception:  # noqa: BLE001
+            _limit = 0.30
+        _suspect = bool(_chunks_total) and _empty_share > _limit
+        if _suspect:
+            logger.error(
+                "[typedb] прогон ПОДОЗРИТЕЛЬНЫЙ: пустых %s из %s (%.0f%%, порог %.0f%%) — "
+                "проверьте провайдера и повторите обработку",
+                total["empty"], _chunks_total, _empty_share * 100, _limit * 100,
+            )
+            try:
+                from src.api.services.ontology_errors import log_error
+
+                log_error(
+                    f"подозрительный прогон: пустых фрагментов {total['empty']} из {_chunks_total}",
+                    error_type="suspect_run", source="writer", document_id=document_id,
+                    details={"run_id": _run_id, "empty": total["empty"],
+                             "chunks": _chunks_total, "limit": _limit},
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            summary["suspect"] = True
+            summary["empty_share"] = round(_empty_share, 3)
         try:
             if _run_id:
                 from src.indexing import bronze as _bronze2
 
                 _chunks = total["ok"] + total["empty"] + total["error"]
                 _note = str(summary.get("empty_kinds") or "")[:300]
+                if _suspect:
+                    _note = (f"suspect: пустых {total['empty']}/{_chunks_total}; " + _note)[:300]
                 _bronze2.finish_run(_run_id, _chunks, total["entities"],
                                     total["relations"], total["empty"], note=_note)
         except Exception as _exc:  # noqa: BLE001

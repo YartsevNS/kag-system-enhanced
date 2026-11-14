@@ -255,6 +255,24 @@ def extraction_max_tokens() -> int:
     return MAXTOK_DEFAULT
 
 
+def empty_share_limit() -> float:
+    """Допустимая доля пустых фрагментов в прогоне (настройка, по умолчанию 0.30).
+
+    Зачем: 14.11.2026 один прогон дал 266 пустых фрагментов из 321 (83%) при той же модели
+    и промпте — и это прошло как «успех»: сводка писала «ошибок 0», а онтология получалась
+    разреженной. Порог превращает такой прогон в явно подозрительный (журнал + пометка).
+    """
+    try:
+        from src.api.services.config_store import config_store
+
+        cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+        if isinstance(cfg, dict) and cfg.get("empty_share_max") is not None:
+            return max(0.05, min(0.9, float(cfg["empty_share_max"])))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("порог пустых фрагментов не прочитан: %s", str(exc)[:120])
+    return 0.30
+
+
 def set_extraction_max_tokens(value: int, who: str = "") -> int:
     from src.api.services.config_store import config_store
 
