@@ -274,17 +274,21 @@ def _norm_key(value: Any) -> str:
 
 
 def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
-                                  relations: Dict[str, Dict[str, Any]]) -> int:
+                                  relations: Dict[str, Dict[str, Any]],
+                                  exists=None) -> tuple:
     """Связать требование с мерой по коду, который модель положила в requirement-id.
 
-    Замер 14.11.2026: в 363 строках из 508 в поле `requirement-id` стоит код меры
+    Замер 14.11.2026: в 358 строках из 491 в поле `requirement-id` стоит код меры
     (`ИАФ.2-1`, `АВЗ.1`) — это не ошибка типа, а ссылка на меру. Ставим
-    `requirement_definition` (мера реализует требование). Если меры в пачке нет,
-    создаём объект меры по коду: мера есть в документе, просто не попала в этот фрагмент.
-    Возвращает число поставленных связей.
+    `requirement_definition` (мера реализует требование).
+
+    `exists(key)` проверяет, есть ли мера в базе/пачке. Если проверка дана и меры нет —
+    связь НЕ создаётся и НЕ выдумывается объект-заглушка: раньше так появлялись 241 «мера»
+    из одних ссылок (замер 14.11.2026: 354 объекта меры против 113 реальных кодов).
+    Возвращает (поставлено связей, ссылок без меры).
     """
     if not entities:
-        return 0
+        return 0, 0
     from src.indexing.bronze_resolve import norm_code, requirement_measure_code
 
     by_code: Dict[str, str] = {}
@@ -295,6 +299,7 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
                 by_code.setdefault(c, k)
 
     added = 0
+    missing = 0
     for rkey, e in list(entities.items()):
         if e["type"] != "security_requirement":
             continue
@@ -303,19 +308,24 @@ def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
             continue
         m_key = by_code.get(code)
         if not m_key:
-            # measure_key обязателен (@key, @card(1..1)): без него TypeDB отвергает ВСЮ
-            # транзакцию фрагмента (CNT5/DVL8), и требования этого фрагмента теряются.
-            m_attrs = {"code": code, "measure_key": code}
-            m_key = ent_key("security_measure", m_attrs)
-            entities.setdefault(m_key, {"type": "security_measure", "attrs": m_attrs,
-                                        "chunks": set(e.get("chunks") or [])})
-            by_code[code] = m_key
+            m_key = ent_key("security_measure", {"code": code, "measure_key": code})
+        if m_key not in entities:
+            if exists is None:
+                # одиночный вызов (тесты, ручные сценарии): объект-меру создаём сами,
+                # иначе связь некуда ставить
+                m_attrs = {"code": code, "measure_key": code}
+                entities.setdefault(m_key, {"type": "security_measure", "attrs": m_attrs,
+                                            "chunks": set(e.get("chunks") or [])})
+            elif not exists(m_key):
+                missing += 1
+                continue
+            by_code.setdefault(code, m_key)
         sig = f"requirement_definition|measure={m_key}|requirement={rkey}"
         if sig not in relations:
             relations[sig] = {"type": "requirement_definition",
                               "parts": {"requirement": rkey, "measure": m_key}}
             added += 1
-    return added
+    return added, missing
 
 
 def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
@@ -791,9 +801,6 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
 
     tm = {"reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0,
           "commit_ms": 0.0, "retries": 0}
-    # Требование ↔ мера: код меры в requirement-id (363 строки из 508) раньше терялся —
-    # требование писалось без связи с мерой. Теперь связь ставится до записи.
-    tm["measure_links"] = link_requirements_to_measures(entities, relations)
     from typedb.driver import TransactionType as _TT
 
     def _ent_exists(rtx, etype: str, key: str) -> bool:
@@ -831,6 +838,14 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
                     existing.add(key)
 
             keys_now = set(existing)
+            # Требование ↔ мера: код меры в requirement-id (358 строк из 491) раньше терялся.
+            # Связь ставим здесь, где есть чтение базы: меру ищем в пачке или в базе,
+            # и если её нет — связь не выдумываем (иначе появлялись 241 «мера» из ссылок).
+            _links, _missing = link_requirements_to_measures(
+                entities, relations,
+                exists=lambda k: k in keys_now or _ent_exists(rtx, "security_measure", k))
+            tm["measure_links"] = _links
+            tm["measure_refs_missing"] = _missing
             for key, e in entities.items():
                 if key in existing:
                     ch_lines = ", ".join(

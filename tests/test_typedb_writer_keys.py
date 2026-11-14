@@ -30,8 +30,8 @@ def test_measure_link_created_and_stub_measure_added():
         }
     }
     relations: dict = {}
-    added = tw.link_requirements_to_measures(entities, relations)
-    assert added == 1
+    added, missing = tw.link_requirements_to_measures(entities, relations)
+    assert (added, missing) == (1, 0)
     rel = next(iter(relations.values()))
     assert rel["type"] == "requirement_definition"
     assert rel["parts"]["requirement"] == "security_requirement:r1"
@@ -54,7 +54,7 @@ def test_measure_link_uses_existing_measure():
         },
     }
     relations: dict = {}
-    assert tw.link_requirements_to_measures(entities, relations) == 1
+    assert tw.link_requirements_to_measures(entities, relations)[0] == 1
     assert next(iter(relations.values()))["parts"]["measure"] == m_key
 
 
@@ -67,5 +67,25 @@ def test_no_link_for_clause_id():
         }
     }
     relations: dict = {}
-    assert tw.link_requirements_to_measures(entities, relations) == 0
+    assert tw.link_requirements_to_measures(entities, relations) == (0, 0)
     assert not relations
+
+
+def test_missing_measure_is_not_invented_when_exists_given():
+    """Ссылка на меру, которой нет в базе, НЕ создаёт «меру из воздуха».
+
+    Иначе на документе появлялись 241 объект-заглушка (354 меры против 113 кодов).
+    """
+    entities = {
+        "security_requirement:r1": {
+            "type": "security_requirement",
+            "attrs": {"description": "Требование про антивирусную защиту.",
+                      "requirement-id": "АВЗ.9-9"},
+            "chunks": {"c1"},
+        }
+    }
+    relations: dict = {}
+    added, missing = tw.link_requirements_to_measures(entities, relations, exists=lambda k: False)
+    assert (added, missing) == (0, 1)
+    assert not relations
+    assert len(entities) == 1  # заглушка не появилась
