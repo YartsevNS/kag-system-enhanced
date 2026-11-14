@@ -273,6 +273,49 @@ def _norm_key(value: Any) -> str:
     return s[:200]
 
 
+def link_requirements_to_measures(entities: Dict[str, Dict[str, Any]],
+                                  relations: Dict[str, Dict[str, Any]]) -> int:
+    """Связать требование с мерой по коду, который модель положила в requirement-id.
+
+    Замер 14.11.2026: в 363 строках из 508 в поле `requirement-id` стоит код меры
+    (`ИАФ.2-1`, `АВЗ.1`) — это не ошибка типа, а ссылка на меру. Ставим
+    `requirement_definition` (мера реализует требование). Если меры в пачке нет,
+    создаём объект меры по коду: мера есть в документе, просто не попала в этот фрагмент.
+    Возвращает число поставленных связей.
+    """
+    if not entities:
+        return 0
+    from src.indexing.bronze_resolve import norm_code, requirement_measure_code
+
+    by_code: Dict[str, str] = {}
+    for k, e in entities.items():
+        if e["type"] == "security_measure":
+            c = norm_code(e["attrs"].get("code") or e["attrs"].get("measure_key") or "")
+            if c:
+                by_code.setdefault(c, k)
+
+    added = 0
+    for rkey, e in list(entities.items()):
+        if e["type"] != "security_requirement":
+            continue
+        code = requirement_measure_code(e["attrs"])
+        if not code:
+            continue
+        m_key = by_code.get(code)
+        if not m_key:
+            m_attrs = {"code": code}
+            m_key = ent_key("security_measure", m_attrs)
+            entities.setdefault(m_key, {"type": "security_measure", "attrs": m_attrs,
+                                        "chunks": set(e.get("chunks") or [])})
+            by_code[code] = m_key
+        sig = f"requirement_definition|measure={m_key}|requirement={rkey}"
+        if sig not in relations:
+            relations[sig] = {"type": "requirement_definition",
+                              "parts": {"requirement": rkey, "measure": m_key}}
+            added += 1
+    return added
+
+
 def ensure_required(entities: Dict[str, Dict[str, Any]], doc_key: str = "",
                     doc_id: str = "") -> tuple:
     """Дозаполнить обязательные атрибуты v3 и отбросить то, что дозаполнить нельзя.
@@ -515,6 +558,16 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
         if not attrs:
             stats["dropped_missing_attr"] += 1
             continue
+        # Требование опознаётся ХЭШЕМ ТЕКСТА, а не номером пункта: замер 14.11.2026 —
+        # номер надёжен только у 10 строк из 508 (363 — код меры, 96 — слово, 39 — голое
+        # число), из-за чего один и тот же текст ложился разными объектами, а разные
+        # требования склеивались под одним ключом. Ключ считаем ДО ent_key.
+        if etype == "security_requirement":
+            from src.indexing.bronze_resolve import requirement_key as _req_key
+
+            h = _req_key(attrs)
+            if h:
+                attrs.setdefault("requirement_key", h)
         # Регулятор — это ОРГАН. Модель регулярно пишет издателем сам документ
         # («Федеральный закон № 161-ФЗ») или вид («ФЗ», «law») — такие сущности в граф
         # не пускаем: они ломают ключ документа и плодят мусорных издателей.
@@ -721,6 +774,9 @@ def _write_facts_locked(chunk_id: str, entities: Dict[str, Any], relations: Dict
 
     tm = {"reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0,
           "commit_ms": 0.0, "retries": 0}
+    # Требование ↔ мера: код меры в requirement-id (363 строки из 508) раньше терялся —
+    # требование писалось без связи с мерой. Теперь связь ставится до записи.
+    tm["measure_links"] = link_requirements_to_measures(entities, relations)
     from typedb.driver import TransactionType as _TT
 
     def _ent_exists(rtx, etype: str, key: str) -> bool:
