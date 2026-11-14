@@ -55,6 +55,28 @@ async def pipeline_parallel_set(body: ParallelBody, user: User = Depends(get_cur
             "message": f"Параллельность извлечения: {n} фрагментов одновременно"}
 
 
+@router.get("/bronze/{document_id}", summary="Прогоны извлечения документа (Bronze-слой)")
+async def pipeline_bronze_runs(document_id: str, limit: int = 20,
+                               _: User = Depends(get_current_admin)):
+    """Список прогонов извлечения: сколько сущностей/связей дал каждый прогон.
+
+    Отвечает на вопрос «почему в этот раз меньше, чем в прошлый»: сравнение прогонов
+    по ключам, а не по общему числу.
+    """
+    from src.indexing import bronze
+
+    return {"ok": True, "document_id": document_id,
+            "items": await asyncio.to_thread(bronze.runs, document_id, limit)}
+
+
+@router.get("/bronze/{document_id}/compare", summary="Диф двух прогонов извлечения")
+async def pipeline_bronze_compare(document_id: str, run_a: str, run_b: str,
+                                  _: User = Depends(get_current_admin)):
+    from src.indexing import bronze
+
+    return {"ok": True, **(await asyncio.to_thread(bronze.compare, document_id, run_a, run_b))}
+
+
 @router.post("/collect", summary="Включить или выключить сбор статистики этапов")
 async def pipeline_collect(body: CollectBody, user: User = Depends(get_current_admin)):
     from src.api.services import pipeline

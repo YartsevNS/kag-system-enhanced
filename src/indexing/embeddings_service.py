@@ -351,6 +351,12 @@ class EmbeddingsService:
                     field_name="chunk_id",
                     field_schema=PayloadSchemaType.KEYWORD)
 
+                # Структурный ключ: по нему будет работать блокировка (сравнение внутри
+                # пункта) и фильтры. Индекс создаём до загрузки данных.
+                await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
+                    field_name="structural_key",
+                    field_schema=PayloadSchemaType.KEYWORD)
+
                 await asyncio.to_thread(self._qdrant_client.create_payload_index, collection_name=self.collection_name,
                     field_name="file_type",
                     field_schema=PayloadSchemaType.KEYWORD)
@@ -525,6 +531,17 @@ class EmbeddingsService:
                 "domain": metadata.get("domain", "") if metadata else "",
                 **structure,
             }
+            # Структурный путь: документ → раздел → пункт. Нужен для блокировки при
+            # дедупликации (сравнивать внутри пункта, а не «каждый с каждым») и для
+            # фильтров поиска без обращения к TypeDB. Строится из того, что уже есть
+            # в метаданных чанка: номер стандарта, крошка раздела, номер пункта.
+            _path = [str(p) for p in (structure.get("standard_number"),
+                                      structure.get("section"),
+                                      structure.get("clause")) if p]
+            if _path:
+                payload["structural_path"] = _path
+                payload["structural_key"] = "|".join(x.lower() for x in _path)[:300]
+
             # Семантические поля — ВЕРХНИМ уровнем payload, и только если значение непустое.
             # Зачем верхним уровнем: по ним фильтрует поиск (тема), и они видны в выдаче. Пока они
             # лежали только во вложенном `metadata`, фильтр по теме не находил НИЧЕГО у документов,

@@ -2192,13 +2192,25 @@ class DocumentService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[typedb] контекст документа не собран: {str(exc)[:160]}")
 
+        # Bronze: прогон извлечения. Нужен, чтобы сравнивать прогоны между собой (техдолг п.20)
+        # и чтобы можно было пересобрать онтологию без повторного вызова модели.
+        _run_id = ""
+        try:
+            from src.indexing import bronze as _bronze
+
+            _run_id = _bronze.start_run(document_id, filename or "", "", 0)
+            if _run_id:
+                logger.info(f"[bronze] прогон извлечения {_run_id} для {document_id}")
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug(f"[bronze] прогон не открыт: {str(_exc)[:140]}")
+
         total = {"ok": 0, "empty": 0, "error": 0, "entities": 0, "relations": 0}
         # Фазовые тайминги: нужны, чтобы объяснить фактическое время прогона, а не гадать.
         # Суммы по фазам + разброс по фрагментам + раздельно пустые/непустые + очередь на семафоре.
         agg = {"llm_ms": 0.0, "collect_ms": 0.0, "write_ms": 0.0, "lock_wait_ms": 0.0,
                "reads_ms": 0.0, "insert_ms": 0.0, "integrity_ms": 0.0, "commit_ms": 0.0,
                "prompt_chars": 0, "payload_chars": 0, "retries": 0,
-               "empty_n": 0, "filled_n": 0}
+               "empty_n": 0, "filled_n": 0, "empty_kinds": {}}
         t0 = _time.monotonic()
         # Сколько фрагментов одновременно уходит в модель — настройка админки
         # (страница «Конвейер обработки», поле «Одновременно в модель»).
@@ -2239,7 +2251,7 @@ class DocumentService:
                     res = await asyncio.wait_for(
                         typedb_writer.extract_and_store_typedb(
                             text, chunk_id, document_id, clause=clause, filename=filename,
-                            source_kind=source_kind, doc_ctx=_doc_ctx,
+                            source_kind=source_kind, doc_ctx=_doc_ctx, run_id=_run_id,
                         ),
                         timeout=_t,
                     )
@@ -2271,6 +2283,9 @@ class DocumentService:
                     total["relations"] += int(w.get("relations") or 0)
                 elif st == "empty":
                     total["empty"] += 1
+                    _kind = str(_tm.get("empty_kind") or "unknown")
+                    _kinds = agg.setdefault("empty_kinds", {})
+                    _kinds[_kind] = _kinds.get(_kind, 0) + 1
                 else:
                     total["error"] += 1
 
@@ -2291,6 +2306,16 @@ class DocumentService:
         except Exception as _e:  # noqa: BLE001
             summary = {}
             logger.debug(f"[typedb] сводка таймингов не собрана: {_e}")
+        try:
+            if _run_id:
+                from src.indexing import bronze as _bronze2
+
+                _chunks = total["ok"] + total["empty"] + total["error"]
+                _note = str(summary.get("empty_kinds") or "")[:300]
+                _bronze2.finish_run(_run_id, _chunks, total["entities"],
+                                    total["relations"], total["empty"], note=_note)
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug(f"[bronze] прогон не закрыт: {str(_exc)[:140]}")
         try:
             plog.log("typedb_write", total) if plog else None
             plog.log("typedb_timings", summary) if plog and summary else None

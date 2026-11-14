@@ -981,8 +981,17 @@ def _llm_payload(messages: list, model: str, provider: str, api_key: str, temper
     return payload
 
 
+# Диагностика «пустых» ответов: без неё в логе виден только счётчик empty и непонятно,
+# модель промолчала, ответ обрезан по max_tokens или JSON не разобрался.
+_LAST_LLM_DIAG: Dict[str, Any] = {}
+
+
 async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
-    """Один вызов модели по промпту из БД. Возвращает распарсенный JSON."""
+    """Один вызов модели по промпту из БД. Возвращает распарсенный JSON.
+
+    На пустом/неразобранном ответе пишет в лог причину (finish_reason, длина, начало
+    тела) и кладёт её в _LAST_LLM_DIAG — это нужно для техдолга п.20.
+    """
     try:
         from src.api.services.provider_service import provider_service
 
@@ -1028,11 +1037,34 @@ async def _call_llm(prompt: str, chunk_id: str) -> Dict[str, Any]:
 
     if provider == "ollama":
         content = data.get("response", "") or ""
+        finish = str(data.get("done_reason") or "")
     else:
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        choice = (data.get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content", "") or ""
+        finish = str(choice.get("finish_reason") or "")
+    usage = data.get("usage") or {}
+
     if not content.strip():
+        _LAST_LLM_DIAG.clear()
+        _LAST_LLM_DIAG.update({"kind": "no_content", "chunk_id": chunk_id, "finish": finish,
+                               "body_len": len(body), "body_head": body[:200], "usage": usage})
+        logger.warning("typedb_writer: ПУСТОЙ ответ модели (%s): finish=%s, тело %s символов, "
+                       "начало=%r", chunk_id, finish, len(body), body[:160])
         return {}
-    return _parse_json(content)
+
+    parsed = _parse_json(content)
+    if not parsed:
+        _LAST_LLM_DIAG.clear()
+        _LAST_LLM_DIAG.update({"kind": "parse_fail", "chunk_id": chunk_id, "finish": finish,
+                               "content_len": len(content), "content_head": content[:200],
+                               "usage": usage})
+        logger.warning("typedb_writer: ответ не разобран как JSON (%s): finish=%s, %s символов, "
+                       "начало=%r", chunk_id, finish, len(content), content[:160])
+        return {}
+    _LAST_LLM_DIAG.clear()
+    _LAST_LLM_DIAG.update({"kind": "ok", "chunk_id": chunk_id, "finish": finish,
+                           "content_len": len(content), "usage": usage})
+    return parsed
 
 
 def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
@@ -1079,6 +1111,7 @@ async def extract_and_store_typedb(
     chunk_text: str, chunk_id: str, document_id: str = "",
     clause: str = "", filename: str = "", auto_schema: bool = True,
     source_kind: str = "", doc_ctx: Dict[str, str] | None = None,
+    run_id: str = "",
 ) -> Dict[str, Any]:
     """Извлечь сущности/связи из чанка и записать в TypeDB (ADR-007).
 
@@ -1104,6 +1137,8 @@ async def extract_and_store_typedb(
     tm["llm_ms"] = round((time.monotonic() - _t) * 1000, 1)
     if not payload:
         tm["payload_chars"] = 0
+        tm["empty_kind"] = str(_LAST_LLM_DIAG.get("kind") or "unknown")
+        tm["empty_finish"] = str(_LAST_LLM_DIAG.get("finish") or "")
         return {"status": "empty", "reason": "модель не вернула фактов", "timings": tm}
     tm["payload_chars"] = len(json.dumps(payload, ensure_ascii=False))
     _inject_doc_context(payload, doc_ctx)
@@ -1127,6 +1162,14 @@ async def extract_and_store_typedb(
     tm["collect_ms"] = round((time.monotonic() - _t) * 1000, 1)
     tm["entities"] = len(entities)
     tm["relations"] = len(relations)
+    # Bronze: сырьё как пришло от модели, до валидации/дедупа. Ошибки Bronze не мешают записи.
+    if run_id:
+        try:
+            from src.indexing import bronze
+
+            bronze.write_chunk(run_id, document_id, chunk_id, clause, entities, relations)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("typedb_writer: bronze не записан для %s: %s", chunk_id, str(exc)[:140])
     if not entities and not relations:
         return {"status": "empty", "stats": stats, "timings": tm}
 
