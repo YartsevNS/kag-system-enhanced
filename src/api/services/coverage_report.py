@@ -37,14 +37,14 @@ def coverage_of(document_id: str) -> Dict[str, Any]:
         return {"ok": False, "error": "не указан document_id"}
 
     def has_chunk(var: str = "x") -> str:
-        return (f'$c like "{doc_id[:16]}%";' if len(doc_id) >= 16 else "")
+        return (f'$c like "^{doc_id[:16]}";' if len(doc_id) >= 16 else "")
 
     def scoped(etype: str) -> str:
-        like = f'$c like "{doc_id[:16]}%";'
+        like = f'$c like "^{doc_id[:16]}";'
         return f'match $x isa {etype}, has source-chunk-id $c; {like} fetch {{ "k": $x.ent-key }};'
 
     def scoped_link(rel: str, role1: str, role2: str, v1: str = "$a", v2: str = "$b") -> str:
-        like = f'$c like "{doc_id[:16]}%";'
+        like = f'$c like "^{doc_id[:16]}";'
         return (f'match $link isa {rel} ({role1}: {v1}, {role2}: {v2}); '
                 f'{v1} has source-chunk-id $c; {like} fetch {{ "k": {v1}.ent-key }};')
 

@@ -18,7 +18,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-ENT_QUERY = ('match $x isa {etype}, has {attr} $v; $v like "{code}%"; '
+ENT_QUERY = ('match $x isa {etype}, has {attr} $v; $v like "^{code}"; '
              'fetch {{ "k": $x.ent-key }};')
 LINK_EXISTS = ('match $link isa alignment (alignment_source: $a, alignment_target: $b); '
                '$a has ent-key "{ka}"; $b has ent-key "{kb}"; fetch {{ "k": $a.ent-key }};')
@@ -36,20 +36,43 @@ def _db() -> Tuple[Any, Any, str]:
     return typedb_facts._driver(), cfg, cfg["db"]
 
 
-def _find(driver, db: str, etype: str, code: str) -> List[str]:
+_CODES_CACHE: Dict[str, List[Tuple[str, str]]] = {}
+
+
+def _codes_of(driver, db: str, etype: str) -> List[Tuple[str, str]]:
+    """Все (код, ent-key) типа — ищем в Python, потому что TypeDB `like`
+    чувствителен к регистру, а коды в базе пишутся то «АВЗ.1», то «авз.1»."""
     from typedb.driver import TransactionType
 
+    if etype in _CODES_CACHE:
+        return _CODES_CACHE[etype]
     attr = KEY_ATTR.get(etype, "code")
-    q = ENT_QUERY.format(etype=etype, attr=attr, code=code.lower())
+    q = f'match $x isa {etype}, has {attr} $v; fetch {{ "v": $v, "k": $x.ent-key }};'
     with driver.transaction(db, TransactionType.READ) as tx:
         rows = list(tx.query(q).resolve())
-    keys: List[str] = []
+    out: List[Tuple[str, str]] = []
     for r in rows:
-        v = r.get("k")
+        v = r.get("v")
         v = v.get("@value") if isinstance(v, dict) else v
-        if v:
-            keys.append(str(v))
-    return sorted(set(keys))
+        k = r.get("k")
+        k = k.get("@value") if isinstance(k, dict) else k
+        if v and k:
+            out.append((str(v), str(k)))
+    _CODES_CACHE[etype] = out
+    return out
+
+
+def _find(driver, db: str, etype: str, code: str) -> List[str]:
+    want = str(code or "").strip().lower()
+    if not want:
+        return []
+    keys = [k for v, k in _codes_of(driver, db, etype) if str(v).strip().lower() == want]
+    if not keys:
+        # вхождение как префикс: код меры может иметь суффикс (АВЗ.1.1) — точное совпадение
+        # уже проверено, здесь только начало строки
+        keys = [k for v, k in _codes_of(driver, db, etype)
+                if str(v).strip().lower().startswith(want)]
+    return sorted(set(keys))[:1]
 
 
 def run(file: Path, dry_run: bool) -> Dict[str, Any]:
