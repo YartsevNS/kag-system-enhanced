@@ -1,6 +1,6 @@
 # Схема онтологии KAG — документ для аудита
 
-Сформирован: 15.11.2026 16:09
+Сформирован: 15.11.2026 16:29
 Источник: `src/ontology/core.tql` (ядро) и `src/ontology/modules/*.tql` (доменные модули).
 Это ровно те файлы, из которых собирается и загружается схема в TypeDB.
 
@@ -23,13 +23,15 @@
 
 | модуль | файл | сущностей | связей | атрибутов |
 |---|---|---|---|---|
-| core | `core.tql` | 21 | 31 | 50 |
+| core | `core.tql` | 21 | 35 | 50 |
 | it | `it.tql` | 7 | 0 | 1 |
-| sec | `sec.tql` | 11 | 4 | 8 |
+| sec | `sec.tql` | 11 | 3 | 8 |
 
-Итого: **39 сущностей**, **35 связей**,
-**59 атрибутов**, **77 ролей в связях**,
-**81 подписок plays**.
+Подписки ролей для типов, объявленных в другом модуле: модуль sec: `asset`, `threat`. Это не новые типы модуля — тип объявлен в ядре, модуль только подписывает его на роль.
+
+Итого: **39 сущностей**, **38 связей**,
+**59 атрибутов**, **88 ролей в связях**,
+**1 подписок plays**.
 
 ## 3. Соглашения (важно для аудита)
 
@@ -63,24 +65,24 @@
 |---|---|---|---|---|---|
 | `identified_entity` | любой объект с постоянным ключом (основа всех типов) | — | да | `ent-key` **@key** | — |
 | `sourced_entity` | объект с происхождением: чанк, пункт, документ-источник | `identified_entity` | да | `source_origin`, `source-chunk-id`, `source-chunk-ids` @card(0..), `source-clause` | — |
-| `document` | документ: закон, приказ, стандарт или документ компании | `sourced_entity` | да | `title` @card(1..1), `doc_type`, `document_key` **@key** | `document_issuance:regulated_item`, `document_has_version:document`, `current_version_of:document`, `requirement_basis:source_document`, `requirement_coverage:covering_document`, `document_compliance:company_doc`, `document_compliance:regulated_doc`, `document_assignment:regulated_doc`, `alignment:alignment_source`, `alignment:alignment_target`, `document_reference:referring`, `document_reference:referenced` |
-| `version` | редакция документа (версия со статусом и хешем текста) | `sourced_entity` | да | `version_string` @card(1..1), `version_status` @card(1..1), `version_hash` @unique, `effective_from`, `effective_to`, `kag_document_id` | `document_has_version:version`, `current_version_of:version`, `supersedes:newer`, `supersedes:older`, `document_structure:version` |
-| `clause` | структурный элемент документа: раздел, пункт, приложение | `sourced_entity` | да | `struct_index` @card(1..1), `text_content` | `document_structure:element`, `document_hierarchy:parent`, `document_hierarchy:child`, `requirement_derived_from:clause`, `measure_source:clause` |
-| `requirement` | требование: что должно быть сделано | `sourced_entity` | да | `requirement_key` **@key**, `requirement-id` @card(1..1), `requirement_kind` @card(1..1), `description`, `obligation-level` | `requirement_derived_from:requirement`, `requirement_definition:requirement`, `requirement_applicability:requirement`, `requirement_evidence:requirement`, `requirement_basis:requirement`, `requirement_coverage:covered_requirement`, `alignment:alignment_source`, `alignment:alignment_target`, `responsibility:duty_requirement` |
-| `control` | мера или контроль: чем требование выполняется | `sourced_entity` | да | `measure_key` **@key**, `measure-category`, `code`, `description` | `requirement_definition:measure`, `measure_source:measure`, `measure_detailing:submeasure`, `measure_detailing:parent_measure`, `compensatory_relation:core_measure`, `compensatory_relation:alternative_measure`, `measure_applicability:measure`, `alignment:alignment_source`, `alignment:alignment_target`, `responsibility:duty_control`, `function_execution:used_control`, `control_mitigation:mitigating_control` |
-| `evidence` | доказательство выполнения: сертификат, акт, протокол | `sourced_entity` | да | `name` @card(1..1), `evidence_kind`, `evidence_date` | `requirement_evidence:evidence` |
-| `party` | субъект: организация, орган, человек, роль-исполнитель | `sourced_entity` | — | `name` @card(1..1), `party_kind` | `asset_ownership:owner`, `responsibility:responsible`, `data_processing:processor`, `function_execution:performer` |
-| `asset` | актив: система, объект, оборудование, ПО, услуга | `sourced_entity` | — | `name` @card(1..1), `asset_kind`, `criticality` | `asset_ownership:owned_asset`, `asset_part_of:part`, `asset_part_of:whole`, `threat_target:target_asset`, `incident_impact:affected_asset`, `risk_composition:risk_asset` |
-| `data_object` | объект данных: набор сведений, обрабатываемый системой | `sourced_entity` | — | `name` @card(1..1), `data_kind` | `data_processing:processed_data`, `data_classification:classified_data` |
-| `data_category` | категория данных: ПДн, КТ, ГТ, коммерческая тайна | `sourced_entity` | — | `name` @card(1..1) | `data_classification:category` |
-| `threat` | угроза: источник или событие, способное нанести ущерб | `sourced_entity` | — | `name` @card(1..1), `threat_kind` | `threat_exploits:threat`, `threat_target:threat`, `risk_composition:risk_threat`, `incident_impact:incident_threat`, `control_mitigation:mitigated_threat` |
-| `vulnerability` | уязвимость: слабое место, через которое действует угроза | `sourced_entity` | — | `name` @card(1..1) | `threat_exploits:exploited_vulnerability`, `risk_composition:risk_vulnerability` |
-| `risk` | риск: сочетание угрозы, уязвимости и ценности актива | `sourced_entity` | — | `name` @card(1..1), `risk_level`, `likelihood`, `impact` | `risk_composition:risk` |
-| `incident` | инцидент: произошедшее событие с ущербом | `sourced_entity` | — | `name` @card(1..1), `incident_date`, `incident_kind` | `incident_impact:incident` |
+| `document` | документ: закон, приказ, стандарт или документ компании | `sourced_entity` | да | `title` @card(1..1), `doc_type`, `document_key` **@key** | — |
+| `version` | редакция документа (версия со статусом и хешем текста) | `sourced_entity` | да | `version_string` @card(1..1), `version_status` @card(1..1), `version_hash` @unique, `effective_from`, `effective_to`, `kag_document_id` | — |
+| `clause` | структурный элемент документа: раздел, пункт, приложение | `sourced_entity` | да | `struct_index` @card(1..1), `text_content` | — |
+| `requirement` | требование: что должно быть сделано | `sourced_entity` | да | `requirement_key` **@key**, `requirement-id` @card(1..1), `requirement_kind` @card(1..1), `description`, `obligation-level` | — |
+| `control` | мера или контроль: чем требование выполняется | `sourced_entity` | да | `measure_key` **@key**, `measure-category`, `code`, `description` | — |
+| `evidence` | доказательство выполнения: сертификат, акт, протокол | `sourced_entity` | да | `name` @card(1..1), `evidence_kind`, `evidence_date` | — |
+| `party` | субъект: организация, орган, человек, роль-исполнитель | `sourced_entity` | — | `name` @card(1..1), `party_kind` | — |
+| `asset` | актив: система, объект, оборудование, ПО, услуга | `sourced_entity` | — | `name` @card(1..1), `asset_kind`, `criticality` | — |
+| `data_object` | объект данных: набор сведений, обрабатываемый системой | `sourced_entity` | — | `name` @card(1..1), `data_kind` | — |
+| `data_category` | категория данных: ПДн, КТ, ГТ, коммерческая тайна | `sourced_entity` | — | `name` @card(1..1) | — |
+| `threat` | угроза: источник или событие, способное нанести ущерб | `sourced_entity` | — | `name` @card(1..1), `threat_kind` | — |
+| `vulnerability` | уязвимость: слабое место, через которое действует угроза | `sourced_entity` | — | `name` @card(1..1) | — |
+| `risk` | риск: сочетание угрозы, уязвимости и ценности актива | `sourced_entity` | — | `name` @card(1..1), `risk_level`, `likelihood`, `impact` | — |
+| `incident` | инцидент: произошедшее событие с ущербом | `sourced_entity` | — | `name` @card(1..1), `incident_date`, `incident_kind` | — |
 | `violation` | нарушение: невыполненное требование или отсутствующая мера | `sourced_entity` | — | `name` @card(1..1), `violation_kind` | — |
 | `term` | термин с определением (словарная статья в онтологии) | `sourced_entity` | — | `name` @card(1..1), `definition` | — |
-| `business_function` | функция: что организация делает (оценка рисков, аудит) | `sourced_entity` | — | `name` @card(1..1) | `function_execution:performed_function` |
-| `business_process` | процесс: как функция выполняется | `sourced_entity` | — | `name` @card(1..1) | `responsibility:duty_process` |
+| `business_function` | функция: что организация делает (оценка рисков, аудит) | `sourced_entity` | — | `name` @card(1..1) | — |
+| `business_process` | процесс: как функция выполняется | `sourced_entity` | — | `name` @card(1..1) | — |
 | `actor_role` | роль исполнителя: кто отвечает за действие | `sourced_entity` | — | `name` @card(1..1) | — |
 
 ### 4.2 Связи ядра
@@ -110,14 +112,18 @@
 | `asset_part_of` | актив входит в состав другого актива | — | `part` @card(1..1), `whole` @card(1..1) | — |
 | `data_processing` | субъект обрабатывает данные | — | `processor` @card(1..1), `processed_data` @card(1..) | — |
 | `data_classification` | данные отнесены к категории | — | `classified_data` @card(1..1), `category` @card(1..1) | — |
-| `responsibility` | субъект отвечает за требование, меру или процесс | — | `responsible` @card(1..1), `duty_requirement` @card(0..), `duty_control` @card(0..), `duty_process` @card(0..) | — |
-| `risk_composition` | из чего сложился риск: угроза, уязвимость, актив | — | `risk` @card(1..1), `risk_threat` @card(0..), `risk_vulnerability` @card(0..), `risk_asset` @card(0..) | `likelihood`, `impact`, `risk_level` |
+| `responsibility` | субъект отвечает за требование, меру или процесс | — | `responsible` @card(1..1), `duty_requirement` @card(0..), `duty_control` @card(0..), `duty_process` @card(0..), `duty_role` @card(0..) | — |
+| `risk_composition` | из чего сложился риск: угроза, уязвимость, актив | — | `risk` @card(1..1), `risk_threat` @card(0..), `risk_vulnerability` @card(0..), `risk_asset` @card(0..) | — |
 | `threat_exploits` | угроза использует уязвимость | — | `threat` @card(1..1), `exploited_vulnerability` @card(1..) | — |
 | `threat_target` | угроза направлена на актив | — | `threat` @card(1..1), `target_asset` @card(1..) | — |
 | `incident_impact` | инцидент затронул актив | — | `incident` @card(1..1), `affected_asset` @card(0..), `incident_threat` @card(0..1) | — |
 | `function_execution` | функцию выполняет субъект | — | `performed_function` @card(1..1), `performer` @card(1..), `used_control` @card(0..) | — |
 | `document_reference` | документ ссылается на другой документ | — | `referring` @card(1..1), `referenced` @card(1..1) | `source-clause` |
 | `control_mitigation` | мера снижает угрозу | — | `mitigating_control` @card(1..1), `mitigated_threat` @card(1..) | `confidence` |
+| `violation_of` | — | — | `violation` @card(1..1), `violated_requirement` @card(0..), `missing_control` @card(0..), `violating_document` @card(0..), `affected_object` @card(0..), `detected_evidence` @card(0..) | — |
+| `term_source` | — | — | `defined_term` @card(1..1), `defining_clause` @card(1..1) | — |
+| `requirement_succession` | — | — | `newer_requirement` @card(1..1), `older_requirement` @card(1..1) | `alignment-kind`, `confidence` |
+| `clause_reference` | — | — | `referring_clause` @card(1..1), `referenced_clause` @card(1..1) | `source-clause` |
 
 ### 4.3 Атрибуты ядра
 
@@ -184,9 +190,9 @@
 | `it_standard` | стандарт домена ИТ (например, ISO 27001, Cobit) | `document` | — | — | — |
 | `it_requirement` | требование ИТ-контура | `requirement` | — | — | — |
 | `it_control` | ИТ-контроль (AC-2, AU-6) | `control` | — | `control-family` | — |
-| `it_service` | ИТ-услуга | `sourced_entity` | — | `name` @card(1..1), `service-criticality` | — |
-| `it_asset` | ИТ-актив: сервер, сеть, рабочая станция | `sourced_entity` | — | `name` @card(1..1), `vendor`, `software_version` | — |
-| `it_configuration_item` | единица конфигурации (CI) в ITSM | `sourced_entity` | — | `name` @card(1..1), `description` | — |
+| `it_service` | ИТ-услуга | `asset` | — | `service-criticality` | — |
+| `it_asset` | ИТ-актив: сервер, сеть, рабочая станция | `asset` | — | `vendor`, `software_version` | — |
+| `it_configuration_item` | единица конфигурации (CI) в ITSM | `asset` | — | `description` | — |
 
 ### Атрибуты
 
@@ -200,17 +206,17 @@
 
 | тип | по-русски | родитель | @abstract | атрибуты (owns) | роли (plays) |
 |---|---|---|---|---|---|
-| `regulator` | регулятор: ФСТЭК, ФСБ, Банк России, Минцифры | `sourced_entity` | — | `name` @card(1..1), `short_name` | `document_issuance:issuer` |
+| `regulator` | регулятор: ФСТЭК, ФСБ, Банк России, Минцифры | `party` | — | `short_name` | `document_issuance:issuer` |
 | `regulatory_document` | нормативный документ регулятора | `document` | — | `number` | — |
 | `company_document` | документ компании (политика, приказ, регламент) | `document` | — | — | — |
 | `document_version` | редакция нормативного документа | `version` | — | — | — |
 | `structural_element` | пункт нормативного документа | `clause` | — | — | — |
-| `security_requirement` | требование информационной безопасности | `requirement` | — | — | `certification:basis_requirement` |
-| `security_measure` | мера защиты информации (АВЗ.1, ЗНИ.2) | `control` | — | — | `threat_measure:measure` |
-| `cii_object` | объект критической информационной инфраструктуры | `asset` | — | `cii-category` @card(1..1), `system_type` | `requirement_applicability:target_system`, `measure_applicability:target_system`, `document_assignment:regulated_subject`, `asset_protection:protected_system`, `threat_applicability:target_system` |
-| `security_software` | средство защиты информации | `asset` | — | `vendor`, `software_version` | `asset_protection:deployed_szi`, `certification:certified_software` |
-| `certificate` | сертификат соответствия на СЗИ | `evidence` | — | `cert_number` **@key**, `cert_authority`, `cert_until` | `certification:certificate` |
-| `threat_source` | источник угрозы: класс нарушителя и его возможности | `threat` | — | `offender_class`, `potential` | `threat_applicability:threat`, `threat_measure:threat` |
+| `security_requirement` | требование информационной безопасности | `requirement` | — | — | — |
+| `security_measure` | мера защиты информации (АВЗ.1, ЗНИ.2) | `control` | — | — | — |
+| `cii_object` | объект критической информационной инфраструктуры | `asset` | — | `cii-category` @card(1..1), `system_type` | — |
+| `security_software` | средство защиты информации | `asset` | — | `vendor`, `software_version` | — |
+| `certificate` | сертификат соответствия на СЗИ | `evidence` | — | `cert_number` **@key**, `cert_authority`, `cert_until` | — |
+| `threat_source` | источник угрозы: класс нарушителя и его возможности | `threat` | — | `offender_class`, `potential` | — |
 
 ### Связи
 
@@ -219,7 +225,6 @@
 | `certification` | сертификат подтверждает соответствие СЗИ требованию | — | `certified_software` @card(1..1), `certificate` @card(1..1), `basis_requirement` @card(0..1) | — |
 | `asset_protection` | СЗИ защищает объект | — | `protected_system` @card(1..1), `deployed_szi` @card(1..1) | — |
 | `threat_applicability` | угроза актуальна для объекта | — | `threat` @card(1..1), `target_system` @card(1..1) | — |
-| `threat_measure` | мера противодействует угрозе | — | `threat` @card(1..1), `measure` @card(1..1) | — |
 
 ### Атрибуты
 
@@ -286,6 +291,14 @@
 4. Нужны ли правила вывода (TypeDB rules) и какие именно — или вывод должен остаться в коде?
 5. Как правильно моделировать таблицы и приложения, не потеряв дословность?
 6. Что в схеме лишнее или преждевременное?
+
+## 9.1. Реакция на внешний аудит
+
+Аудит схемы выполнен внешней моделью; решения по каждому замечанию (принято / отклонено / отложено)
+зафиксированы в `docs/ontology/AUDIT-RESPONSE.md`. Кратко: принято 13 замечаний, из них закрыты
+в схеме — ИТ-домен как подтипы `asset`, `regulator sub party`, `bdu-id @unique`, удаление дубля
+`threat_measure`, расширение ролей применимости, новые связи `violation_of`, `term_source`,
+`requirement_succession`, `clause_reference`, роль `duty_role` в `responsibility`.
 
 ## 10. Полный исходный текст схемы
 
@@ -562,15 +575,14 @@ relation responsibility,
   relates responsible @card(1..1),
   relates duty_requirement @card(0..),
   relates duty_control @card(0..),
-  relates duty_process @card(0..);
+  relates duty_process @card(0..),
+  relates duty_role @card(0..);
 relation risk_composition,
   relates risk @card(1..1),
   relates risk_threat @card(0..),
   relates risk_vulnerability @card(0..),
-  relates risk_asset @card(0..),
-  owns likelihood @card(0..1),
-  owns impact @card(0..1),
-  owns risk_level @card(0..1);
+  relates risk_asset @card(0..);
+# likelihood/impact/risk_level живут только на risk — иначе два источника истины
 relation threat_exploits,
   relates threat @card(1..1),
   relates exploited_vulnerability @card(1..);
@@ -593,6 +605,26 @@ relation control_mitigation,
   relates mitigating_control @card(1..1),
   relates mitigated_threat @card(1..),
   owns confidence @card(0..1);
+# ── связи, которых не хватало по итогам аудита ──────────────────────────────
+relation violation_of,
+  relates violation @card(1..1),
+  relates violated_requirement @card(0..),
+  relates missing_control @card(0..),
+  relates violating_document @card(0..),
+  relates affected_object @card(0..),
+  relates detected_evidence @card(0..);
+relation term_source,
+  relates defined_term @card(1..1),
+  relates defining_clause @card(1..1);
+relation requirement_succession,
+  relates newer_requirement @card(1..1),
+  relates older_requirement @card(1..1),
+  owns alignment-kind @card(0..1),
+  owns confidence @card(0..1);
+relation clause_reference,
+  relates referring_clause @card(1..1),
+  relates referenced_clause @card(1..1),
+  owns source-clause @card(0..1);
 
 # ---- роли: играют АБСТРАКТНЫЕ типы, поэтому любой домен подходит -----
 # документ в роли «объект издания»: без этой подписки TypeDB не выводит тип
@@ -670,6 +702,26 @@ entity requirement plays responsibility:duty_requirement;
 entity control plays responsibility:duty_control;
 entity control plays function_execution:used_control;
 entity control plays control_mitigation:mitigating_control;
+
+# ---- роли новых связей (аудит 15.11.2026) ----------------------------
+entity violation plays violation_of:violation;
+entity requirement plays violation_of:violated_requirement;
+entity control plays violation_of:missing_control;
+entity document plays violation_of:violating_document;
+entity asset plays violation_of:affected_object;
+entity evidence plays violation_of:detected_evidence;
+entity term plays term_source:defined_term;
+entity clause plays term_source:defining_clause;
+entity requirement plays requirement_succession:newer_requirement;
+entity requirement plays requirement_succession:older_requirement;
+entity clause plays clause_reference:referring_clause;
+entity clause plays clause_reference:referenced_clause;
+entity actor_role plays responsibility:duty_role;
+# применимость требования и меры — на родовой актив, а не только на объект КИИ (аудит P0-2)
+entity asset plays requirement_applicability:target_system;
+entity asset plays measure_applicability:target_system;
+entity party plays document_assignment:regulated_subject;
+entity asset plays document_assignment:regulated_subject;
 ```
 
 
@@ -700,15 +752,13 @@ entity it_control sub control,
   owns control-family;
 
 # ---- объекты ИТ -------------------------------------------------------
-entity it_service sub sourced_entity,
-  owns name @card(1..1),
+# name наследуется от родового asset — здесь только доменные признаки
+entity it_service sub asset,
   owns service-criticality;
-entity it_asset sub sourced_entity,
-  owns name @card(1..1),
+entity it_asset sub asset,
   owns vendor,
   owns software_version;
-entity it_configuration_item sub sourced_entity,
-  owns name @card(1..1),
+entity it_configuration_item sub asset,
   owns description;
 ```
 
@@ -740,8 +790,8 @@ attribute published-date, value date;
 attribute affected-software, value string;
 
 # ---- документы и органы ---------------------------------------------
-entity regulator sub sourced_entity,
-  owns name @card(1..1),
+# regulator — субъект домена: name наследуется от party, здесь только своё
+entity regulator sub party,
   owns short_name,
   plays document_issuance:issuer;
 
@@ -783,7 +833,7 @@ entity threat_source sub threat,
 
 # Уязвимость — родовой тип ядра; доменные признаки (БДУ, CVSS) добавляются владением,
 # а не вторым типом с тем же именем.
-vulnerability owns bdu-id @key,
+vulnerability owns bdu-id @unique,
   owns description,
   owns severity-level,
   owns cvss-score,
@@ -802,21 +852,15 @@ relation asset_protection,
 relation threat_applicability,
   relates threat @card(1..1),
   relates target_system @card(1..1);
-relation threat_measure,
-  relates threat @card(1..1),
-  relates measure @card(1..1);
 
 # ---- роли доменных типов ---------------------------------------------
-entity cii_object plays requirement_applicability:target_system;
-entity cii_object plays measure_applicability:target_system;
-entity cii_object plays document_assignment:regulated_subject;
+# применимость требования/меры к активу и назначение документа объявлены в ядре
+# (типы родовые) — здесь только доменные подписки.
 entity cii_object plays asset_protection:protected_system;
-entity cii_object plays threat_applicability:target_system;
+entity asset plays threat_applicability:target_system;
 entity security_software plays asset_protection:deployed_szi;
 entity security_software plays certification:certified_software;
 entity certificate plays certification:certificate;
 entity security_requirement plays certification:basis_requirement;
-entity threat_source plays threat_applicability:threat;
-entity threat_source plays threat_measure:threat;
-entity security_measure plays threat_measure:measure;
+entity threat plays threat_applicability:threat;
 ```

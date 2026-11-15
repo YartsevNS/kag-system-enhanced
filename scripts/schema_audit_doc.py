@@ -107,10 +107,10 @@ def main() -> int:
     players = [(m['name'], list((m.get('role_players') or {}).keys())) for m in modules]
     players = [(n, ks) for n, ks in players if ks]
     if players:
-        parts.append("
-Подписки ролей для типов, объявленных в другом модуле: "
-                     + "; ".join(f"модуль {n}: " + ", ".join(f"`{k}`" for k in ks) for n, ks in players)
-                     + ". Это не новые типы модуля — тип объявлен в ядре, модуль только подписывает его на роль.")
+        parts.append(
+            "\nПодписки ролей для типов, объявленных в другом модуле: "
+            + "; ".join(f"модуль {n}: " + ", ".join(f"`{k}`" for k in ks) for n, ks in players)
+            + ". Это не новые типы модуля — тип объявлен в ядре, модуль только подписывает его на роль.")
     parts.append(f"""
 Итого: **{totals['entities']} сущностей**, **{totals['relations']} связей**,
 **{totals['attributes']} атрибутов**, **{totals['roles']} ролей в связях**,
