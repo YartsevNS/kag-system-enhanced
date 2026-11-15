@@ -151,6 +151,19 @@ def process_document(
         # граф Neo4j, чтобы не оставалось «осиротевших» точек при изменении
         # числа чанков (иначе старые точки с document_id висели бы вечно).
         result = asyncio.run(document_service.process_document(document_id, force=force))
+        # Третий проход: для документа компании сопоставить его пункты
+        # с требованиями регуляторов и записать покрытие. Ошибки не роняют
+        # задачу: документ уже обработан, покрытие можно догнать отдельно.
+        try:
+            if doc_data and doc_data.get("source_kind") == "company":
+                from src.indexing.coverage_linker import coverage_enabled, link_coverage
+
+                if coverage_enabled():
+                    _cov = asyncio.run(link_coverage(document_id))
+                    logger.info(f"[Celery] Покрытие: {document_id}: {_cov}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[Celery] Покрытие не посчитано для {document_id}: {exc}")
+
         # Успех — снимаем замок QueueGuard (задача завершена, документ
         # обработан; при необходимости его можно будет поставить заново).
         from src.indexing.queue_guard import release_lock
