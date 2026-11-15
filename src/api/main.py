@@ -522,6 +522,17 @@ async def ontology_schema_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology-schema.html"))
 
 
+@app.get("/ontology/coverage", summary="Паспорт покрытия документа (только для admin)")
+async def ontology_coverage_page(request: Request):
+    """Числа по документу: пункты, требования, меры, доли связей, очередь.
+
+    Вместо скриптов: выбираешь документ — видишь, что извлечено и что связано.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-coverage.html"))
+
+
 @app.get("/ontology/gaps", summary="Пробелы схемы: термины корпуса (только для admin)")
 async def ontology_gaps_page(request: Request):
     """Очередь пробелов схемы: что корпус определяет, а онтология не покрывает."""

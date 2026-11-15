@@ -117,6 +117,18 @@ async def ontology_schema_live(response: Response, db: str | None = None,
     return data
 
 
+@router.get("/coverage", summary="Паспорт покрытия документа: узлы, связи, очередь")
+async def ontology_coverage(document_id: str, _: User = Depends(get_current_admin)):
+    """Одним запросом — состояние извлечения по документу: сколько пунктов, требований,
+    мер, сколько из них связаны, какие родовые типы заполнились, сколько в очереди."""
+    from src.api.services import coverage_report
+
+    try:
+        return await asyncio.to_thread(coverage_report.coverage_of, document_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)[:300])
+
+
 @router.post("/validate", summary="Проверить define без применения")
 async def ontology_validate(req: DefineRequest, _: User = Depends(get_current_admin)):
     try:
