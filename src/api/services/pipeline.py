@@ -238,6 +238,40 @@ def set_extraction_parallel(value: int, who: str = "") -> int:
     return n
 
 
+def extraction_pass2() -> bool:
+    """Включён ли второй проход (родовые понятия) — настройка system/extraction."""
+    try:
+        from src.api.services.config_store import config_store
+
+        cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+        if isinstance(cfg, dict) and cfg.get("pass2") is not None:
+            return bool(cfg["pass2"])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("pipeline: настройка pass2 недоступна: %s", exc)
+    return True
+
+
+def extraction_pass2_keywords() -> str:
+    """Регулярное выражение: по каким словам фрагмент отправляется во второй проход.
+
+    Цель — не гонять модель дважды на фрагментах, где родовых понятий быть не может
+    (таблицы мер, реквизиты). Пустая строка — второй проход на всех фрагментах.
+    """
+    try:
+        from src.api.services.config_store import config_store
+
+        cfg = config_store.get(FLAG_CATEGORY, PARALLEL_KEY) or {}
+        if isinstance(cfg, dict) and cfg.get("pass2_keywords") is not None:
+            return str(cfg["pass2_keywords"])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("pipeline: ключевые слова pass2 недоступны: %s", exc)
+    return DEFAULT_PASS2_KEYWORDS
+
+
+DEFAULT_PASS2_KEYWORDS = (r"угроз|риск|актив|инцидент|нарушен|термин|функци|процесс|"
+                          r"роль|владел|категор|уязвим")
+
+
 def extraction_max_tokens() -> int:
     """Сколько токенов разрешено генерировать модели на один фрагмент.
 

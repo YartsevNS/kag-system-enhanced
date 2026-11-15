@@ -24,6 +24,10 @@ from sqlalchemy.engine import Engine
 logger = logging.getLogger(__name__)
 
 ENTITY_PROMPT = "entity_extraction"
+# Второй проход: только родовые понятия ядра (субъект, актив, данные, угроза, уязвимость,
+# риск, инцидент, нарушение, термин, функция, процесс, роль). Отдельный промпт выбран
+# замером: расширение основного промпта роняло урожайность структуры на 40 %.
+GENERIC_PROMPT = "generic_extraction"
 
 # Заводской текст: то, что владелец сформулировал для извлечения сущностей в
 # TypeDB. Восстановление этого текста — кнопка «Сбросить» на странице.
@@ -60,7 +64,35 @@ DEFAULT_ENTITY_PROMPT = """Ты — модуль извлечения онтол
 {text_chunk}
 """
 
-DEFAULTS = {ENTITY_PROMPT: DEFAULT_ENTITY_PROMPT}
+DEFAULT_GENERIC_PROMPT = """Ты извлекаешь из фрагмента документа только родовые понятия онтологии. Верни только JSON.
+
+Формат:
+{"entities":[{"id":"тип:ключ","type":"тип","attributes":{"name":"..."}}],
+ "relations":[{"type":"связь","participants":[{"role":"роль","target_id":"id"}]}]}
+
+Типы: party, asset, data_object, data_category, threat, vulnerability, risk, incident,
+violation, term, business_function, business_process, actor_role.
+У каждого обязателен name — дословная именная группа из текста.
+
+Связи: asset_ownership(owner, owned_asset), asset_part_of(part, whole),
+data_processing(processor, processed_data), data_classification(classified_data, category),
+responsibility(responsible, duty_requirement*, duty_control*, duty_process*),
+risk_composition(risk, risk_threat*, risk_vulnerability*, risk_asset*),
+threat_exploits(threat, exploited_vulnerability), threat_target(threat, target_asset),
+incident_impact(incident, affected_asset*, incident_threat*),
+function_execution(performed_function, performer, used_control*),
+document_reference(referring, referenced), control_mitigation(mitigating_control, mitigated_threat).
+
+Правила: только явно выраженное; требования, меры и пункты документов здесь НЕ извлекаются;
+связь — только при явном основании в тексте; ничего не выдумывать.
+Если родовых понятий в тексте нет — верни {"entities":[],"relations":[]}.
+
+Текст:
+{text_chunk}
+"""
+
+DEFAULTS = {ENTITY_PROMPT: DEFAULT_ENTITY_PROMPT,
+            GENERIC_PROMPT: DEFAULT_GENERIC_PROMPT}
 
 # Что произойдёт после сохранения — показываем прямо на странице, а не в
 # документации: иначе правку делают, не понимая её цены.

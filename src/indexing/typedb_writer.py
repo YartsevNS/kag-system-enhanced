@@ -1562,6 +1562,82 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
     return template.replace("{text_chunk}", text)
 
 
+def _render_generic_prompt(chunk_text: str) -> str:
+    """Промпт второго прохода: только родовые понятия (субъект, актив, угроза, риск…).
+
+    Отдельный промпт, а не расширение основного: замер 15.11.2026 показал, что единый
+    расширенный промпт теряет 40 % сущностей структуры, тогда как второй проход их не трогает.
+    """
+    try:
+        from src.api.services.ontology_prompts import GENERIC_PROMPT, prompt_store
+
+        template = prompt_store.get(GENERIC_PROMPT)["content"]
+    except Exception:  # noqa: BLE001
+        from src.api.services.ontology_prompts import DEFAULT_GENERIC_PROMPT
+
+        template = DEFAULT_GENERIC_PROMPT
+    return template.replace("{text_chunk}", chunk_text)
+
+
+def _merge_pass2(payload: Dict[str, Any], extra: Dict[str, Any]) -> tuple:
+    """Добавить факты второго прохода к основным, не дублируя по id и по сигнатуре связи."""
+    added_e = added_r = 0
+    ids = {e.get("id") for e in (payload.get("entities") or []) if isinstance(e, dict)}
+    for ent in extra.get("entities") or []:
+        if isinstance(ent, dict) and ent.get("id") and ent["id"] not in ids:
+            payload.setdefault("entities", []).append(ent)
+            ids.add(ent["id"])
+            added_e += 1
+    sigs = set()
+    for rel in payload.get("relations") or []:
+        if isinstance(rel, dict):
+            parts = rel.get("participants") or []
+            sigs.add(str(rel.get("type")) + "|" + "|".join(
+                sorted(f"{p.get('role')}={p.get('target_id')}" for p in parts if isinstance(p, dict))))
+    for rel in extra.get("relations") or []:
+        if not isinstance(rel, dict):
+            continue
+        parts = rel.get("participants") or []
+        sig = str(rel.get("type")) + "|" + "|".join(
+            sorted(f"{p.get('role')}={p.get('target_id')}" for p in parts if isinstance(p, dict)))
+        if sig not in sigs:
+            payload.setdefault("relations", []).append(rel)
+            sigs.add(sig)
+            added_r += 1
+    return added_e, added_r
+
+
+async def _pass2_enrich(payload: Dict[str, Any], chunk_text: str, chunk_id: str,
+                        tm: Dict[str, Any]) -> None:
+    """Второй проход по фрагменту: родовые понятия. Ошибки не ломают основной результат."""
+    try:
+        from src.api.services.pipeline import extraction_pass2, extraction_pass2_keywords
+
+        if not extraction_pass2():
+            tm["pass2"] = "выключен"
+            return
+        kw = extraction_pass2_keywords()
+        if kw:
+            import re as _re
+
+            if not _re.search(kw, chunk_text, flags=_re.IGNORECASE):
+                tm["pass2"] = "нет ключевых слов"
+                return
+        _t = time.monotonic()
+        extra = await _call_llm(_render_generic_prompt(chunk_text), chunk_id)
+        tm["pass2_ms"] = round((time.monotonic() - _t) * 1000, 1)
+        if not extra:
+            tm["pass2"] = "пусто"
+            return
+        added_e, added_r = _merge_pass2(payload, extra)
+        tm["pass2_entities"] = added_e
+        tm["pass2_relations"] = added_r
+        tm["pass2"] = "ok"
+    except Exception as exc:  # noqa: BLE001 - второй проход не должен ронять обработку
+        tm["pass2"] = f"ошибка: {str(exc)[:120]}"
+        logger.debug("typedb_writer: второй проход не удался для %s: %s", chunk_id, exc)
+
+
 async def extract_and_store_typedb(
     chunk_text: str, chunk_id: str, document_id: str = "",
     clause: str = "", filename: str = "", auto_schema: bool = True,
@@ -1597,6 +1673,8 @@ async def extract_and_store_typedb(
         return {"status": "empty", "reason": "модель не вернула фактов", "timings": tm}
     tm["payload_chars"] = len(json.dumps(payload, ensure_ascii=False))
     _inject_doc_context(payload, doc_ctx)
+    # Второй проход: родовые понятия (субъект, актив, угроза, риск, термин…).
+    await _pass2_enrich(payload, chunk_text, chunk_id, tm)
 
     # Документ организации: модель по форме текста всё равно называет его «нормативным
     # документом», поэтому тип переопределяем ДО валидации. Связь выдачи
