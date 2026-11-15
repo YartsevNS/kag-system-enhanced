@@ -42,33 +42,36 @@ entity security_requirement sub requirement;
 entity security_measure sub control;
 
 # ---- объекты, ПО, сертификаты, угрозы --------------------------------
-entity cii_object sub sourced_entity,
-  owns name @card(1..1),
+# Объект КИИ и СЗИ — активы домена ИБ: подтипы родового asset из ядра,
+# поэтому автоматически участвуют в asset_ownership, asset_part_of, threat_target.
+entity cii_object sub asset,
   owns cii-category @card(1..1),
   owns system_type;
 
-entity security_software sub sourced_entity,
-  owns name @card(1..1),
+entity security_software sub asset,
   owns vendor,
   owns software_version;
 
-entity certificate sub sourced_entity,
+# Сертификат — доказательство: подтип родового evidence из ядра.
+entity certificate sub evidence,
   owns cert_number @key,
   owns cert_authority,
   owns cert_until;
 
-entity threat_source sub sourced_entity,
+# Источник угрозы (нарушитель) — подтип родового threat из ядра.
+entity threat_source sub threat,
   owns offender_class,
   owns potential;
 
-entity vulnerability sub sourced_entity,
-  owns bdu-id @key,
-  owns name,
+# Уязвимость — родовой тип ядра; доменные признаки (БДУ, CVSS) добавляются владением,
+# а не вторым типом с тем же именем.
+vulnerability owns bdu-id @key,
   owns description,
   owns severity-level,
   owns cvss-score,
   owns published-date,
   owns affected-software @card(0..);
+
 
 # ---- доменные связи ---------------------------------------------------
 relation certification,

@@ -66,6 +66,21 @@ attribute evidence_date, value date;
 attribute vendor, value string;
 attribute software_version, value string;
 
+# ---- атрибуты: субъекты, активы, данные, риски, инциденты (ядро) -----
+# Родовые признаки: доменное уточнение живёт в модуле (например, cii-category — в sec).
+attribute party_kind, value string;          # organization | person | regulator | operator | owner | user | admin | auditor
+attribute asset_kind, value string;          # information_system | kii_object | gis | ispdn | asu_tp | hardware | software | network | facility | service
+attribute criticality, value string;         # low | medium | high | critical
+attribute data_kind, value string;           # personal | biometric | confidential | state_secret | commercial | public
+attribute threat_kind, value string;         # source | event | impact
+attribute risk_level, value string;          # low | medium | high | critical
+attribute likelihood, value string;          # rare | unlikely | possible | likely | almost_certain
+attribute impact, value string;              # minor | moderate | major | critical
+attribute incident_date, value date;
+attribute incident_kind, value string;       # leak | failure | attack | error
+attribute violation_kind, value string;      # missing_control | outdated_document | unfulfilled_requirement
+attribute definition, value string;          # текст определения термина
+
 # ---- происхождение и идентичность -----------------------------------
 entity identified_entity @abstract, owns ent-key @key;
 entity sourced_entity @abstract, sub identified_entity,
@@ -119,6 +134,48 @@ entity evidence sub sourced_entity,
   owns name @card(1..1),
   owns evidence_kind,
   owns evidence_date;
+
+# ---- СУБЪЕКТЫ, АКТИВЫ, ДАННЫЕ, УГРОЗЫ, РИСКИ, ИНЦИДЕНТЫ (ядро) -------
+# Родовые понятия без домена: ИБ, ИТ и любой следующий домен используют их напрямую.
+# Доменное уточнение — подтипами в модуле (например, threat_source sub threat в sec).
+entity party sub sourced_entity,
+  owns name @card(1..1),
+  owns party_kind;
+entity asset sub sourced_entity,
+  owns name @card(1..1),
+  owns asset_kind,
+  owns criticality;
+entity data_object sub sourced_entity,
+  owns name @card(1..1),
+  owns data_kind;
+entity data_category sub sourced_entity,
+  owns name @card(1..1);
+entity threat sub sourced_entity,
+  owns name @card(1..1),
+  owns threat_kind;
+entity vulnerability sub sourced_entity,
+  owns name @card(1..1);
+entity risk sub sourced_entity,
+  owns name @card(1..1),
+  owns risk_level,
+  owns likelihood,
+  owns impact;
+entity incident sub sourced_entity,
+  owns name @card(1..1),
+  owns incident_date,
+  owns incident_kind;
+entity violation sub sourced_entity,
+  owns name @card(1..1),
+  owns violation_kind;
+entity term sub sourced_entity,
+  owns name @card(1..1),
+  owns definition;
+entity business_function sub sourced_entity,
+  owns name @card(1..1);
+entity business_process sub sourced_entity,
+  owns name @card(1..1);
+entity actor_role sub sourced_entity,
+  owns name @card(1..1);
 
 # ---- связи: документы и редакции ------------------------------------
 relation document_issuance,
@@ -190,6 +247,56 @@ relation alignment,
   owns authored-by @card(0..1),
   owns source-clause @card(0..1);
 
+# ---- связи: субъекты, активы, данные, угрозы, риски, инциденты -------
+# Роли объявлены один раз на родовые типы: доменные подтипы играют их без правки ядра.
+relation asset_ownership,
+  relates owner @card(1..1),
+  relates owned_asset @card(1..1);
+relation asset_part_of,
+  relates part @card(1..1),
+  relates whole @card(1..1);
+relation data_processing,
+  relates processor @card(1..1),
+  relates processed_data @card(1..);
+relation data_classification,
+  relates classified_data @card(1..1),
+  relates category @card(1..1);
+relation responsibility,
+  relates responsible @card(1..1),
+  relates duty_requirement @card(0..),
+  relates duty_control @card(0..),
+  relates duty_process @card(0..);
+relation risk_composition,
+  relates risk @card(1..1),
+  relates risk_threat @card(0..),
+  relates risk_vulnerability @card(0..),
+  relates risk_asset @card(0..),
+  owns likelihood @card(0..1),
+  owns impact @card(0..1),
+  owns risk_level @card(0..1);
+relation threat_exploits,
+  relates threat @card(1..1),
+  relates exploited_vulnerability @card(1..);
+relation threat_target,
+  relates threat @card(1..1),
+  relates target_asset @card(1..);
+relation incident_impact,
+  relates incident @card(1..1),
+  relates affected_asset @card(0..),
+  relates incident_threat @card(0..1);
+relation function_execution,
+  relates performed_function @card(1..1),
+  relates performer @card(1..),
+  relates used_control @card(0..);
+relation document_reference,
+  relates referring @card(1..1),
+  relates referenced @card(1..1),
+  owns source-clause @card(0..1);
+relation control_mitigation,
+  relates mitigating_control @card(1..1),
+  relates mitigated_threat @card(1..),
+  owns confidence @card(0..1);
+
 # ---- роли: играют АБСТРАКТНЫЕ типы, поэтому любой домен подходит -----
 entity document plays document_has_version:document;
 entity version plays document_has_version:version;
@@ -231,3 +338,35 @@ entity document plays alignment:alignment_target;
 
 # ---- атрибут статуса покрытия ---------------------------------------
 attribute coverage-status, value string;
+
+# ---- роли: субъекты, активы, данные, угрозы, риски, инциденты --------
+entity party plays asset_ownership:owner;
+entity party plays responsibility:responsible;
+entity party plays data_processing:processor;
+entity party plays function_execution:performer;
+entity asset plays asset_ownership:owned_asset;
+entity asset plays asset_part_of:part;
+entity asset plays asset_part_of:whole;
+entity asset plays threat_target:target_asset;
+entity asset plays incident_impact:affected_asset;
+entity asset plays risk_composition:risk_asset;
+entity data_object plays data_processing:processed_data;
+entity data_object plays data_classification:classified_data;
+entity data_category plays data_classification:category;
+entity threat plays threat_exploits:threat;
+entity threat plays threat_target:threat;
+entity threat plays risk_composition:risk_threat;
+entity threat plays incident_impact:incident_threat;
+entity threat plays control_mitigation:mitigated_threat;
+entity vulnerability plays threat_exploits:exploited_vulnerability;
+entity vulnerability plays risk_composition:risk_vulnerability;
+entity risk plays risk_composition:risk;
+entity incident plays incident_impact:incident;
+entity business_function plays function_execution:performed_function;
+entity business_process plays responsibility:duty_process;
+entity document plays document_reference:referring;
+entity document plays document_reference:referenced;
+entity requirement plays responsibility:duty_requirement;
+entity control plays responsibility:duty_control;
+entity control plays function_execution:used_control;
+entity control plays control_mitigation:mitigating_control;

@@ -118,6 +118,7 @@ function renderModule() {
     const plays = (e.plays || []).map(p => `<code>${esc(p)}</code>`).join(', ');
     return `<tr>
       <td><code>${esc(e.label)}</code>${e.abstract ? ' <span class="abstract">@abstract</span>' : ''}</td>
+      <td class="muted">${esc(e.ru || '—')}</td>
       <td>${e.super ? '<code>' + esc(e.super) + '</code>' : '<span class="muted">—</span>'}</td>
       <td>${owns || '<span class="muted">—</span>'}</td>
       <td>${plays || '<span class="muted">—</span>'}</td></tr>`;
@@ -128,6 +129,7 @@ function renderModule() {
     const owns = (r.owns || []).map(o => `<code>${esc(o.attr)}</code>`).join(', ');
     return `<tr>
       <td><code>${esc(r.label)}</code>${r.abstract ? ' <span class="abstract">@abstract</span>' : ''}</td>
+      <td class="muted">${esc(r.ru || '—')}</td>
       <td>${r.super ? '<code>' + esc(r.super) + '</code>' : '<span class="muted">—</span>'}</td>
       <td>${roles || '<span class="muted">—</span>'}</td>
       <td>${owns || '<span class="muted">—</span>'}</td></tr>`;
@@ -141,13 +143,14 @@ function renderModule() {
       ${m.entities.length} сущностей · ${m.relations.length} связей · ${m.attributes.length} атрибутов</div>
 
     <h3>Сущности и роли</h3>
-    <table><thead><tr><th style="width:230px">тип</th><th style="width:150px">родитель</th>
-      <th>атрибуты (owns)</th><th style="width:280px">роли (plays)</th></tr></thead>
-      <tbody>${entRows || '<tr><td colspan="4" class="muted">сущностей нет</td></tr>'}</tbody></table>
+    <table><thead><tr><th style="width:200px">тип</th><th style="width:300px">по-русски</th>
+      <th style="width:130px">родитель</th><th>атрибуты (owns)</th>
+      <th style="width:240px">роли (plays)</th></tr></thead>
+      <tbody>${entRows || '<tr><td colspan="5" class="muted">сущностей нет</td></tr>'}</tbody></table>
 
     ${m.relations.length ? `<h3>Связи и роли</h3>
-    <table><thead><tr><th style="width:250px">связь</th><th style="width:130px">родитель</th>
-      <th>роли (relates)</th><th style="width:200px">атрибуты</th></tr></thead>
+    <table><thead><tr><th style="width:220px">связь</th><th style="width:320px">по-русски</th>
+      <th style="width:120px">родитель</th><th>роли (relates)</th><th style="width:180px">атрибуты</th></tr></thead>
       <tbody>${relRows}</tbody></table>` : ''}
 
     ${m.attributes.length ? `<h3>Атрибуты</h3>

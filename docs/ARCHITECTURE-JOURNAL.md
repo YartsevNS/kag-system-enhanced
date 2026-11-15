@@ -1607,3 +1607,32 @@ data_category, threat, risk, incident, violation, term, function, process, role 
 1 712 знаков) и замерен на 12 фрагментах × 3 повтора: 2,1 сущности и 0,8 связи на фрагмент
 против 3,1 и 3,1 у полного промпта; пригодных связей 93 % против 100 %; быстрее на 27 %.
 Вывод: короче — не значит лучше; файл ценен списком сущностей, а не промптом.
+
+## 2026-11-15 — расширение ядра до полного набора понятий (база v25)
+
+По решению владельца («по составу расширяй на то, чего у нас нет») ядро дополнено родовыми
+понятиями, которых не было: `party`, `asset`, `data_object`, `data_category`, `threat`,
+`vulnerability`, `risk`, `incident`, `violation`, `term`, `business_function`, `business_process`,
+`actor_role` — 13 сущностей; связи `asset_ownership`, `asset_part_of`, `data_processing`,
+`data_classification`, `responsibility`, `risk_composition`, `threat_exploits`, `threat_target`,
+`incident_impact`, `function_execution`, `document_reference`, `control_mitigation` — 12 связей;
+11 атрибутов (`party_kind`, `asset_kind`, `criticality`, `data_kind`, `threat_kind`, `risk_level`,
+`likelihood`, `impact`, `incident_date`, `incident_kind`, `violation_kind`, `definition`).
+
+Доменные типы переведены на родовые предки без потери данных пути записи:
+`cii_object` и `security_software` → `sub asset`, `certificate` → `sub evidence`,
+`threat_source` → `sub threat`; `vulnerability` стал родовым типом ядра, признаки БДУ
+(`bdu-id`, `cvss-score`, `severity-level`, `published-date`, `affected-software`) добавляются
+владением в модуле sec.
+
+Сборка: `core` 21 сущность / 31 связь, `sec` 11/4, `it` 7/0; итого 39 сущностей, 35 связей,
+59 атрибутов, 77 ролей, 80 подписок plays. База `cybersecurity_ontology_v25`: 136 типов,
+объявленных и отсутствующих нет.
+
+Проверено запросами: подтипы `asset` = [asset, cii_object, security_software]; подтипы `threat`
+= [threat, threat_source]; подтипы `evidence` = [evidence, certificate]; связь `asset_part_of`
+между `security_software` и `asset` создаётся и читается через родовые роли; `threat_target`
+(«Фишинг» → «АРМ бухгалтера») читается запросом по родовому `asset`.
+
+Страница `/ontology/schema` получила колонку «по-русски» для каждого типа и связи; сверка
+с внешним списком теперь: сущности 17 из 17, связи 18 из 18 покрыты (по смыслу, не по имени).
