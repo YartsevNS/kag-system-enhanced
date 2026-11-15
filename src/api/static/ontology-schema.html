@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Схема онтологии — KAG</title>
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg,#0f1115);color:var(--text,#e8eaed)}
+  nav{width:240px;background:var(--panel,#151922);border-right:1px solid var(--border-s,#252b36);position:fixed;height:100vh;padding:20px 0;overflow-y:auto;display:flex;flex-direction:column}
+  main{margin-left:240px;padding:24px 32px 80px;max-width:1400px}
+  h1{font-size:20px;margin:0 0 6px}
+  h2{font-size:16px;margin:28px 0 10px}
+  h3{font-size:13px;margin:18px 0 8px;color:var(--text2,#b4b4b4);text-transform:uppercase;letter-spacing:.04em}
+  .muted{color:var(--text3,#8b93a1);font-size:12px;line-height:1.6}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+  .card{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:10px;padding:14px}
+  .card .num{font-size:22px;font-weight:600}
+  .card .lbl{font-size:12px;color:var(--text3,#8b93a1);margin-top:4px}
+  .bad{color:#ff9a9a}
+  .ok{color:#3ecf8e}
+  .warn{color:#e8c07d}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border-s,#252b36);vertical-align:top}
+  th{color:var(--text3,#8b93a1);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--bg,#0f1115)}
+  code{background:var(--elevated,#1c2230);padding:1px 5px;border-radius:4px;font-size:12px}
+  .tabs{display:flex;gap:8px;margin:16px 0 4px;flex-wrap:wrap}
+  .tabs button{background:var(--panel,#151922);border:1px solid var(--border,#2c3442);border-radius:8px;color:var(--text,#e8eaed);padding:7px 12px;font-size:13px;cursor:pointer}
+  .tabs button.active{border-color:var(--accent,#3ecf8e);color:var(--accent,#3ecf8e)}
+  .pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid var(--border,#2c3442);color:var(--text2,#b4b4b4)}
+  .pill.e{color:#3ecf8e;border-color:#2f6b52}
+  .pill.p{color:#e8c07d;border-color:#6b5a2f}
+  .pill.n{color:#ff9a9a;border-color:#6b2f2f}
+  .abstract{color:var(--text3,#8b93a1);font-style:italic}
+</style>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <h1>Схема онтологии: ядро и доменные модули</h1>
+  <div class="muted">Источник структуры — файлы <code>src/ontology/core.tql</code> и <code>modules/*.tql</code>.
+    Подтверждение — сама база TypeDB: типы, объявленные в файле, но отсутствующие в базе,
+    показаны отдельной строкой. Стрелки нет — страница показывает то, что загружено, без догадок.</div>
+
+  <div class="cards" id="cards"></div>
+  <div class="row" style="display:flex;gap:10px;align-items:center;margin:10px 0">
+    <span class="muted">база для проверки:</span>
+    <select id="dbSel" style="background:var(--elevated,#1c2230);border:1px solid var(--border,#2c3442);border-radius:6px;color:var(--text,#e8eaed);padding:6px 10px;font-size:13px"></select>
+  </div>
+  <div id="live"></div>
+
+  <h2>Состав по модулям</h2>
+  <div class="tabs" id="tabs"></div>
+  <div id="module"></div>
+
+  <h2>Сверка с внешним списком (docs/ontology/primer)</h2>
+  <div class="muted" id="primerSummary"></div>
+  <h3>Сущности</h3>
+  <table><thead><tr><th style="width:190px">тип в файле</th><th style="width:110px">у нас</th><th>чем покрыто / чего нет</th></tr></thead>
+    <tbody id="primerEntities"></tbody></table>
+  <h3>Связи</h3>
+  <table><thead><tr><th style="width:210px">связь в файле</th><th style="width:110px">у нас</th><th>чем покрыто / чего нет</th></tr></thead>
+    <tbody id="primerRelations"></tbody></table>
+</main>
+<script src="/static/site-nav.js"></script>
+<script>
+const API = '/api/v1/ontology/schema/live';
+let DATA = null, ACTIVE = 'core';
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const statusPill = s => {
+  const cls = s === 'есть' ? 'e' : s === 'частично' ? 'p' : 'n';
+  return `<span class="pill ${cls}">${esc(s)}</span>`;
+};
+
+function card(num, lbl) { return `<div class="card"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`; }
+
+function renderCards() {
+  const t = DATA.totals;
+  document.getElementById('cards').innerHTML =
+    card(t.entities, 'сущностей в файлах') +
+    card(t.relations, 'связей') +
+    card(t.attributes, 'атрибутов') +
+    card(t.roles, 'ролей в связях') +
+    card(t.plays, 'подписок plays') +
+    card(DATA.live.in_db || 0, 'типов в базе');
+}
+
+function renderLive() {
+  const el = document.getElementById('live');
+  if (!DATA.live.ok) {
+    el.innerHTML = `<div class="muted bad">База недоступна: ${esc(DATA.live.reason || 'причина не указана')}</div>`;
+    return;
+  }
+  const miss = DATA.live.missing || [];
+  el.innerHTML = miss.length
+    ? `<div class="muted warn">В базе <code>${esc(DATA.live.db)}</code> нет ${miss.length} объявленных типов:
+       ${miss.map(m => `<code>${esc(m)}</code>`).join(' ')}</div>`
+    : `<div class="muted ok">Все объявленные типы найдены в базе <code>${esc(DATA.live.db)}</code>.</div>`;
+}
+
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = DATA.modules.map(m =>
+    `<button data-m="${esc(m.name)}" class="${m.name === ACTIVE ? 'active' : ''}">${esc(m.name)}</button>`).join('');
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { ACTIVE = b.dataset.m; renderTabs(); renderModule(); });
+}
+
+function renderModule() {
+  const m = DATA.modules.find(x => x.name === ACTIVE);
+  if (!m) { document.getElementById('module').innerHTML = ''; return; }
+  if (m.missing_file) { document.getElementById('module').innerHTML = `<div class="muted bad">Файл ${esc(m.file)} не найден</div>`; return; }
+
+  const entRows = m.entities.map(e => {
+    const owns = (e.owns || []).map(o => {
+      const ann = [o.key ? '@key' : '', o.unique ? '@unique' : '', o.card ? `@card(${o.card})` : ''].filter(Boolean).join(' ');
+      return `<code>${esc(o.attr)}</code>${ann ? ' <span class="muted">' + esc(ann) + '</span>' : ''}`;
+    }).join(', ');
+    const plays = (e.plays || []).map(p => `<code>${esc(p)}</code>`).join(', ');
+    return `<tr>
+      <td><code>${esc(e.label)}</code>${e.abstract ? ' <span class="abstract">@abstract</span>' : ''}</td>
+      <td>${e.super ? '<code>' + esc(e.super) + '</code>' : '<span class="muted">—</span>'}</td>
+      <td>${owns || '<span class="muted">—</span>'}</td>
+      <td>${plays || '<span class="muted">—</span>'}</td></tr>`;
+  }).join('');
+
+  const relRows = m.relations.map(r => {
+    const roles = (r.relates || []).map(x => `<code>${esc(x.role)}</code>${x.card ? ' <span class="muted">@card(' + esc(x.card) + ')</span>' : ''}`).join(', ');
+    const owns = (r.owns || []).map(o => `<code>${esc(o.attr)}</code>`).join(', ');
+    return `<tr>
+      <td><code>${esc(r.label)}</code>${r.abstract ? ' <span class="abstract">@abstract</span>' : ''}</td>
+      <td>${r.super ? '<code>' + esc(r.super) + '</code>' : '<span class="muted">—</span>'}</td>
+      <td>${roles || '<span class="muted">—</span>'}</td>
+      <td>${owns || '<span class="muted">—</span>'}</td></tr>`;
+  }).join('');
+
+  const attrRows = m.attributes.map(a =>
+    `<tr><td><code>${esc(a.label)}</code></td><td class="muted">${esc(a.value)}</td></tr>`).join('');
+
+  document.getElementById('module').innerHTML = `
+    <div class="muted">модуль <code>${esc(m.file)}</code> ·
+      ${m.entities.length} сущностей · ${m.relations.length} связей · ${m.attributes.length} атрибутов</div>
+
+    <h3>Сущности и роли</h3>
+    <table><thead><tr><th style="width:230px">тип</th><th style="width:150px">родитель</th>
+      <th>атрибуты (owns)</th><th style="width:280px">роли (plays)</th></tr></thead>
+      <tbody>${entRows || '<tr><td colspan="4" class="muted">сущностей нет</td></tr>'}</tbody></table>
+
+    ${m.relations.length ? `<h3>Связи и роли</h3>
+    <table><thead><tr><th style="width:250px">связь</th><th style="width:130px">родитель</th>
+      <th>роли (relates)</th><th style="width:200px">атрибуты</th></tr></thead>
+      <tbody>${relRows}</tbody></table>` : ''}
+
+    ${m.attributes.length ? `<h3>Атрибуты</h3>
+    <table><thead><tr><th style="width:250px">атрибут</th><th>тип значения</th></tr></thead>
+      <tbody>${attrRows}</tbody></table>` : ''}`;
+}
+
+function renderPrimer() {
+  const c = DATA.primer.counts;
+  document.getElementById('primerSummary').textContent =
+    `В файле ${c.primer_entities} сущностей и ${c.primer_relations} связей. У нас: ` +
+    `есть ${c.have}, частично ${c.partial}, нет ${c.absent} — по сущностям.`;
+  document.getElementById('primerEntities').innerHTML = DATA.primer.entities.map(r =>
+    `<tr><td><code>${esc(r.name)}</code></td><td>${statusPill(r.status)}</td><td class="muted">${esc(r.note)}</td></tr>`).join('');
+  document.getElementById('primerRelations').innerHTML = DATA.primer.relations.map(r =>
+    `<tr><td><code>${esc(r.name)}</code></td><td>${statusPill(r.status)}</td><td class="muted">${esc(r.note)}</td></tr>`).join('');
+}
+
+async function load(db) {
+  try {
+    const url = db ? API + '?db=' + encodeURIComponent(db) : API;
+    const r = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    DATA = await r.json();
+    renderCards(); renderLive(); renderTabs(); renderModule(); renderPrimer(); renderDb();
+  } catch (e) {
+    document.getElementById('live').innerHTML = `<div class="muted bad">Не удалось получить схему: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderDb() {
+  const sel = document.getElementById('dbSel');
+  const list = DATA.databases || [];
+  const cur = DATA.live.db || '';
+  sel.innerHTML = (cur && !list.includes(cur) ? [cur] : []).concat(list)
+    .map(n => `<option value="${esc(n)}" ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  sel.onchange = () => { history.replaceState(null, '', '?db=' + encodeURIComponent(sel.value)); load(sel.value); };
+}
+
+const startDb = new URLSearchParams(location.search).get('db');
+load(startDb);
+</script>
+</body>
+</html>

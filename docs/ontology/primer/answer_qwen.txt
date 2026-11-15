@@ -1,0 +1,373 @@
+Добрый день, Кунак. Да, даю рабочий минимум для онтологии ИБ/ИТ РФ под TypeDB и короткий промпт для извлечения.
+
+## 1. Объекты / entities
+
+Рекомендую использовать английские `type`, а русские названия хранить в атрибуте `name`.
+
+```text
+document
+  subtypes: law, decree, order, standard, gost, recommendation, methodology, technical_document
+
+requirement
+  subtypes: obligation, prohibition, recommendation, constraint
+
+control
+  subtypes: organizational_control, technical_control, cryptographic_control, physical_control, personnel_control
+
+asset
+  subtypes: information_system, kii_object, gis, ispdn, asu_tp, hardware, software, network, data_object, facility, service, process
+
+subject
+  subtypes: organization, person, regulator, operator, owner, user, administrator, auditor, developer, processor
+
+data_category
+  subtypes: personal_data, biometric_data, confidential_data, state_secret, commercial_secret, public_data
+
+threat
+vulnerability
+risk
+incident
+violation
+certification
+evidence
+term
+function
+process
+role
+```
+
+## 2. Связи / relations и роли / relates + plays
+
+Формат: `relation: role1, role2`.
+
+```text
+requirement_source:
+  source -> document
+  requirement -> requirement
+
+requirement_applicability:
+  requirement -> requirement
+  target -> asset | process | subject | data_category
+
+requirement_satisfaction:
+  requirement -> requirement
+  satisfier -> control | process | evidence | document
+
+control_mitigation:
+  control -> control
+  mitigated -> threat | vulnerability | risk
+
+threat_target:
+  threat -> threat
+  target -> asset | process | information_system
+
+threat_exploits:
+  threat -> threat
+  vulnerability -> vulnerability
+
+risk_composition:
+  risk -> risk
+  threat -> threat
+  vulnerability -> vulnerability
+  asset -> asset
+
+asset_ownership:
+  asset -> asset
+  owner -> subject
+
+asset_part_of:
+  part -> asset
+  whole -> asset
+
+data_processing:
+  processor -> subject | process | information_system
+  data -> data_object | data_category
+
+data_classification:
+  data -> data_object
+  category -> data_category
+
+responsibility:
+  responsible -> subject
+  duty -> requirement | control | process | asset
+  role -> role
+
+document_reference:
+  referring -> document
+  referenced -> document
+
+document_supersedes:
+  new_document -> document
+  old_document -> document
+
+compliance_assessment:
+  requirement -> requirement
+  evidence -> evidence
+  assessor -> subject
+
+certification_confirms:
+  certification -> certification
+  certified_item -> information_system | control | process | organization
+  certifier -> subject
+
+incident_impact:
+  incident -> incident
+  cause -> threat | vulnerability | control_failure
+  affected -> asset | process
+
+function_execution:
+  function -> function
+  performer -> subject | process
+  regulated_by -> requirement
+  uses -> control
+```
+
+## 3. Атрибуты / attributes
+
+Общие для всех:
+
+```text
+id
+name
+title
+text
+source_quote
+page
+url
+confidence
+status
+effective_from
+effective_to
+```
+
+Для документов:
+
+```text
+doc_id
+number
+date
+version
+issuer
+legal_force
+jurisdiction
+```
+
+Для требований:
+
+```text
+req_id
+modality
+applicability_scope
+deadline
+obligation_level
+```
+
+Для мер защиты:
+
+```text
+control_id
+control_type
+implementation_level
+```
+
+Для угроз и уязвимостей:
+
+```text
+threat_category
+severity
+likelihood
+impact
+```
+
+Для рисков:
+
+```text
+risk_id
+likelihood
+impact
+risk_level
+```
+
+Для активов:
+
+```text
+asset_id
+criticality
+confidentiality
+integrity
+availability
+```
+
+Для связей/отношений полезно хранить:
+
+```text
+evidence
+basis
+citation
+confidence
+effective_from
+effective_to
+```
+
+## 4. Функции / functions
+
+Если речь про бизнес/процессные функции, лучше моделировать как сущности:
+
+```text
+risk_assessment
+threat_modeling
+classification
+access_control
+monitoring
+incident_response
+audit
+certification
+data_protection
+continuity_management
+compliance_control
+```
+
+Если речь про вычислимые функции в TypeDB, их лучше реализовывать через правила, запросы или внешние функции, а не извлекать из текста напрямую.
+
+## 5. Правила / rules, примеры
+
+```text
+Если требование относится к активу
+и мера реализует это требование,
+то мера применяется к этому активу.
+
+Если угроза воздействует на актив
+и угроза эксплуатирует уязвимость,
+то существует риск для этого актива.
+
+Если мера снижает угрозу
+и угроза воздействует на актив,
+то мера защищает этот актив.
+
+Если срок требования истёк
+и статус соответствия не равен "соответствует",
+то требование имеет признак просрочки.
+
+Если новый документ отменяет старый документ
+и требование происходит из старого документа,
+то требование требует пересмотра.
+```
+
+## 6. Иерархия / sub
+
+Пример:
+
+```text
+document
+  legal_document
+    law
+    decree
+    order
+  standard
+    gost
+    industry_standard
+  recommendation
+  methodology
+
+requirement
+  obligation
+  prohibition
+  recommendation
+  constraint
+
+control
+  organizational_control
+  technical_control
+  cryptographic_control
+  physical_control
+
+relation
+  regulatory_relation
+    requirement_source
+    requirement_applicability
+    document_reference
+  protection_relation
+    control_mitigation
+    threat_target
+  risk_relation
+    risk_composition
+    threat_exploits
+```
+
+## 7. Владение атрибутами / owns
+
+Примерно так:
+
+```text
+document owns doc_id, title, number, date, issuer, status
+requirement owns req_id, text, modality, deadline
+control owns control_id, name, control_type
+threat owns name, threat_category, severity
+risk owns likelihood, impact, risk_level
+asset owns name, criticality, confidentiality, integrity, availability
+
+requirement_source owns evidence, page, confidence
+responsibility owns role_name, appointment_date, basis
+compliance_assessment owns status, assessment_date, comment
+risk_composition owns likelihood, impact, risk_level
+```
+
+## 8. Аннотации и ограничения / @key, @unique, @card
+
+Пример:
+
+```text
+document owns doc_id @key
+requirement owns req_id @key
+control owns control_id @key
+asset owns asset_id @key
+threat owns threat_id @key
+risk owns risk_id @key
+
+requirement_source relates source @card(1..1)
+requirement_source relates requirement @card(1..1)
+
+data_classification relates data @card(1..1)
+data_classification relates category @card(1..1)
+
+responsibility relates responsible @card(1..1)
+responsibility relates duty @card(1..)
+
+risk_composition relates risk @card(1..1)
+risk_composition relates asset @card(1..)
+```
+
+---
+
+## Максимально короткий промпт для извлечения
+
+```text
+Ты — экстрактор онтологии ИБ/ИТ РФ для TypeDB. Верни только валидный JSON без пояснений.
+
+Формат:
+{
+  "entities": [{"id": "e1", "type": "...", "subtype": "...", "name": "...", "attrs": {}}],
+  "relations": [{"type": "...", "roles": {"role": "id"}, "attrs": {"evidence": "..."}}],
+  "rules": [{"when": "...", "then": "..."}],
+  "constraints": [{"target": "...", "annotation": "@key|@unique|@card", "value": "..."}]
+}
+
+Разрешённые типы сущностей:
+document, requirement, control, threat, vulnerability, risk, asset, data_object, data_category, subject, role, process, function, incident, violation, certification, evidence, term.
+
+Разрешённые роли:
+source, requirement, target, satisfier, control, mitigated, threat, vulnerability, asset, owner, part, whole, processor, data, category, responsible, duty, referring, referenced, evidence, assessor, certified_item, performer, cause, affected.
+
+Правила извлечения:
+1. Извлекай только явно выраженные факты.
+2. Для каждой связи добавляй evidence: короткую цитату, пункт, страницу или номер документа.
+3. Если не уверен, пропускай или ставь confidence: low.
+4. Не выдумывай объекты, которых нет в тексте.
+5. Атрибуты должны быть короткими: строка, дата, код, статус, число.
+```
+
+Если нужен ещё короче:
+
+```text
+Извлеки из текста онтологию ИБ/ИТ РФ в JSON: entities, relations, rules, constraints. Типы: document, requirement, control, threat, vulnerability, risk, asset, data_object, data_category, subject, role, process, function, incident, violation, certification, evidence, term. Роли: source, requirement, target, satisfier, control, mitigated, threat, vulnerability, asset, owner, part, whole, processor, data, category, responsible, duty, referring, referenced, evidence, assessor, certified_item, performer, cause, affected. Для каждой связи добавляй evidence. Только явно упомянутое. Без пояснений.
+```

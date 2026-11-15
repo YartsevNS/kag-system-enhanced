@@ -101,6 +101,22 @@ async def ontology_schema(response: Response, _: User = Depends(get_current_admi
     return schema
 
 
+@router.get("/schema/live", summary="Живая схема: ядро, модули, сверка с внешним списком")
+async def ontology_schema_live(response: Response, db: str | None = None,
+                               _: User = Depends(get_current_admin)):
+    """Что реально собрано и загружено.
+
+    Структура берётся из файлов схемы (`core.tql` + `modules/*.tql`), подтверждение —
+    из базы: типы, объявленные в файле и отсутствующие в базе, отдаются списком
+    `live.missing`, а не замалчиваются. Ответ не кешируется.
+    """
+    from src.api.services import schema_view
+
+    data = await asyncio.to_thread(schema_view.build_view, db)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return data
+
+
 @router.post("/validate", summary="Проверить define без применения")
 async def ontology_validate(req: DefineRequest, _: User = Depends(get_current_admin)):
     try:

@@ -509,6 +509,19 @@ async def ontology_health_page(request: Request):
     return await _html_response(os.path.join(static_path, "ontology-health.html"))
 
 
+@app.get("/ontology/schema", summary="Живая схема: ядро, модули, сверка (только для admin)")
+async def ontology_schema_page(request: Request):
+    """Реальная схема онтологии: что объявлено в ядре и модулях и что загружено в базу.
+
+    Страница нужна для сверки состава: видно каждый тип, его родителя, атрибуты с
+    @key/@card и роли; рядом — сравнение с внешним списком сущностей (пример из
+    docs/ontology/primer). Отдельно показывается, каких объявленных типов нет в базе.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "ontology-schema.html"))
+
+
 @app.get("/ontology/gaps", summary="Пробелы схемы: термины корпуса (только для admin)")
 async def ontology_gaps_page(request: Request):
     """Очередь пробелов схемы: что корпус определяет, а онтология не покрывает."""
