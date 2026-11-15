@@ -1,0 +1,37 @@
+РОДОВЫЕ ПОНЯТИЯ (домены ИБ и ИТ, введены 15.11.2026):
+party — name, party_kind (organization|person|regulator|operator|owner|user|admin|auditor)
+asset — name, asset_kind (information_system|kii_object|gis|ispdn|asu_tp|hardware|software|network|facility|service), criticality (low|medium|high|critical)
+data_object — name, data_kind (personal|biometric|confidential|state_secret|commercial|public)
+data_category — name
+threat — name, threat_kind (source|event|impact)
+vulnerability — name, bdu-id, severity-level (целое), cvss-score (дробное), published-date (дата)
+risk — name, risk_level (low|medium|high|critical), likelihood, impact
+incident — name, incident_date (дата), incident_kind (leak|failure|attack|error)
+violation — name, violation_kind (missing_control|outdated_document|unfulfilled_requirement)
+term — name, definition
+business_function — name
+business_process — name
+actor_role — name
+
+Связи родовых понятий (роль со звёздочкой — необязательная):
+asset_ownership (owner, owned_asset)
+asset_part_of (part, whole)
+data_processing (processor, processed_data)
+data_classification (classified_data, category)
+responsibility (responsible, duty_requirement*, duty_control*, duty_process*)
+risk_composition (risk, risk_threat*, risk_vulnerability*, risk_asset*)
+threat_exploits (threat, exploited_vulnerability)
+threat_target (threat, target_asset)
+incident_impact (incident, affected_asset*, incident_threat*)
+function_execution (performed_function, performer, used_control*)
+document_reference (referring, referenced)
+control_mitigation (mitigating_control, mitigated_threat)
+
+Правила для родовых понятий:
+1. Извлекай их только при явном упоминании в тексте: «угроза», «риск», «актив», «инцидент», «нарушение», «термин», «функция», «процесс», «роль». Требование остаётся требованием, мера — мерой, пункт — пунктом.
+2. name — дословная именная группа из текста, без пересказа и без добавления слов.
+3. Угроза, риск и инцидент не выводятся из требования: «должен быть защищён» — это требование, а не риск.
+4. Связь ставится только при явном основании в тексте: «угроза X направлена на актив Y», «риск включает угрозу Z», «активом владеет Y».
+5. Если из текста неясно, кто владелец актива, какая категория у данных или из чего сложился риск — сущность можно, связь нельзя.
+6. Обязательные атрибуты родового понятия (name) отсутствуют — сущность не создавай.
+

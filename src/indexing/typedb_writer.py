@@ -84,6 +84,20 @@ ENTITY_TYPES: Dict[str, tuple] = {
     "security_software": ("name",),
     "certificate": ("cert_number",),
     "threat_source": ("offender_class",),
+    # родовые понятия ядра (ADR-010): извлекаются в любом домене
+    "party": ("name",),
+    "asset": ("name",),
+    "data_object": ("name",),
+    "data_category": ("name",),
+    "threat": ("name",),
+    "vulnerability": ("bdu-id", "name"),
+    "risk": ("name",),
+    "incident": ("name",),
+    "violation": ("name",),
+    "term": ("name",),
+    "business_function": ("name",),
+    "business_process": ("name",),
+    "actor_role": ("name",),
 }
 
 # Обязательные атрибуты схемы v3 (@key / @card(1..1)). Без них TypeDB отвергнет запись,
@@ -101,6 +115,19 @@ REQUIRED_ATTRS: Dict[str, tuple] = {
     "security_software": ("name",),
     "certificate": ("cert_number",),
     "threat_source": ("offender_class",),
+    "party": ("name",),
+    "asset": ("name",),
+    "data_object": ("name",),
+    "data_category": ("name",),
+    "threat": ("name",),
+    "vulnerability": ("name",),
+    "risk": ("name",),
+    "incident": ("name",),
+    "violation": ("name",),
+    "term": ("name",),
+    "business_function": ("name",),
+    "business_process": ("name",),
+    "actor_role": ("name",),
 }
 
 # роль → допустимые типы участника (схема v3)
@@ -141,6 +168,41 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
                       "basis_requirement": ("security_requirement",)},
     "threat_applicability": {"threat": ("threat_source",), "target_system": ("cii_object",)},
     "threat_measure": {"threat": ("threat_source",), "measure": ("security_measure",)},
+    # ── родовые связи ядра (ADR-010): работают в любом домене ──
+    "asset_ownership": {"owner": ("party",), "owned_asset": ("asset",)},
+    "asset_part_of": {"part": ("asset",), "whole": ("asset",)},
+    "data_processing": {"processor": ("party",), "processed_data": ("data_object",)},
+    "data_classification": {"classified_data": ("data_object",), "category": ("data_category",)},
+    "responsibility": {"responsible": ("party",),
+                       "duty_requirement": ("security_requirement", "it_requirement"),
+                       "duty_control": ("security_measure", "it_control"),
+                       "duty_process": ("business_process",)},
+    "risk_composition": {"risk": ("risk",), "risk_threat": ("threat", "threat_source"),
+                         "risk_vulnerability": ("vulnerability",), "risk_asset": ("asset",)},
+    "threat_exploits": {"threat": ("threat", "threat_source"),
+                        "exploited_vulnerability": ("vulnerability",)},
+    "threat_target": {"threat": ("threat", "threat_source"), "target_asset": ("asset",)},
+    "incident_impact": {"incident": ("incident",), "affected_asset": ("asset",),
+                        "incident_threat": ("threat", "threat_source")},
+    "function_execution": {"performed_function": ("business_function",),
+                           "performer": ("party",), "used_control": ("security_measure",)},
+    "document_reference": {"referring": ("regulatory_document", "company_document"),
+                           "referenced": ("regulatory_document", "company_document")},
+    "control_mitigation": {"mitigating_control": ("security_measure",),
+                           "mitigated_threat": ("threat", "threat_source")},
+}
+
+# Роли, которые в схеме объявлены как @card(0..) — отсутствие такой роли связь не отменяет.
+OPTIONAL_ROLES: set = {
+    ("responsibility", "duty_requirement"),
+    ("responsibility", "duty_control"),
+    ("responsibility", "duty_process"),
+    ("risk_composition", "risk_threat"),
+    ("risk_composition", "risk_vulnerability"),
+    ("risk_composition", "risk_asset"),
+    ("incident_impact", "affected_asset"),
+    ("incident_impact", "incident_threat"),
+    ("function_execution", "used_control"),
 }
 
 # Типы, которым нужен ключ дедупликации и провенанс (дополняется аддитивно)
@@ -565,6 +627,48 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
     elif etype == "threat_source":
         add("offender_class", attrs.get("offender_class"), 200)
         add("potential", attrs.get("potential"), 80)
+    elif etype in ("party", "asset", "data_object", "data_category", "threat",
+                   "risk", "incident", "violation", "term",
+                   "business_function", "business_process", "actor_role"):
+        add("name", attrs.get("name"), 300)
+        if etype == "party":
+            add("party_kind", attrs.get("party_kind"), 60)
+        elif etype == "asset":
+            add("asset_kind", attrs.get("asset_kind"), 60)
+            add("criticality", attrs.get("criticality"), 40)
+        elif etype == "data_object":
+            add("data_kind", attrs.get("data_kind"), 60)
+        elif etype == "threat":
+            add("threat_kind", attrs.get("threat_kind"), 60)
+        elif etype == "risk":
+            add("risk_level", attrs.get("risk_level"), 40)
+            add("likelihood", attrs.get("likelihood"), 40)
+            add("impact", attrs.get("impact"), 40)
+        elif etype == "incident":
+            add_date("incident_date", attrs.get("incident_date"))
+            add("incident_kind", attrs.get("incident_kind"), 60)
+        elif etype == "violation":
+            add("violation_kind", attrs.get("violation_kind"), 60)
+        elif etype == "term":
+            add("definition", attrs.get("definition"), 1000)
+    elif etype == "vulnerability":
+        add("name", attrs.get("name"), 300)
+        add("bdu-id", attrs.get("bdu-id") or attrs.get("bdu_id"), 80)
+        add("description", attrs.get("description"), 1000)
+        add("affected-software", attrs.get("affected-software"), 300)
+        lvl = attrs.get("severity-level") or attrs.get("severity_level")
+        try:
+            if lvl not in (None, ""):
+                has.append(f"has severity-level {int(lvl)}")
+        except (TypeError, ValueError):
+            pass
+        cv = attrs.get("cvss-score") or attrs.get("cvss_score")
+        try:
+            if cv not in (None, ""):
+                has.append(f"has cvss-score {float(cv)}")
+        except (TypeError, ValueError):
+            pass
+        add_date("published-date", attrs.get("published-date") or attrs.get("published_date"))
 
     has.append(f'has ent-key "{key}"')
     chunk_list = sorted({c for c in chunks if c})
@@ -727,8 +831,9 @@ def _collect(payload: Dict[str, Any], chunk_id: str, document_id: str = "") -> t
                 stats["dropped_role"] += 1
                 continue
             parts[role] = key
-        # связь без всех участников не имеет смысла
-        if len(parts) < len(roles):
+        # связь без обязательного участника не имеет смысла; роли @card(0..) — по желанию
+        required = [r for r in roles if (rtype, r) not in OPTIONAL_ROLES]
+        if any(r not in parts for r in required):
             stats["dropped_role"] += 1
             continue
         sig = f"{rtype}|" + "|".join(f"{r}={parts[r]}" for r in sorted(parts))
