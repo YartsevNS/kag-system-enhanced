@@ -354,6 +354,12 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
         base = str(attrs.get("cert_number") or "")
     elif etype in ("cii_object", "security_software", "evidence"):
         base = str(attrs.get("name") or "")
+    elif etype in ("party", "asset", "data_object", "data_category", "threat", "vulnerability",
+                   "risk", "incident", "violation", "term", "business_function",
+                   "business_process", "actor_role"):
+        # Родовые понятия опознаются по названию: раньше все они попадали в ветку
+        # threat_source, получали одинаковый ключ и схлопывались в одну сущность на тип.
+        base = str(attrs.get("name") or attrs.get("bdu-id") or attrs.get("bdu_id") or "")
     else:  # threat_source
         base = f"{attrs.get('offender_class', '')}|{attrs.get('potential', '')}"
     digest = hashlib.sha1(base.lower().strip().encode("utf-8")).hexdigest()[:16]
@@ -1562,6 +1568,57 @@ def _render_prompt(chunk_text: str, clause: str = "", document: str = "",
     return template.replace("{text_chunk}", text)
 
 
+_GENERIC_SCHEMA_CACHE: Dict[str, str] = {}
+GENERIC_TYPES = ("party", "asset", "data_object", "data_category", "threat", "vulnerability",
+                 "risk", "incident", "violation", "term", "business_function",
+                 "business_process", "actor_role")
+GENERIC_RELATIONS = ("asset_ownership", "asset_part_of", "data_processing",
+                     "data_classification", "responsibility", "risk_composition",
+                     "threat_exploits", "threat_target", "incident_impact",
+                     "function_execution", "document_reference", "control_mitigation")
+
+
+def _generic_schema_text() -> str:
+    """Компактное описание схемы для второго прохода: только родовые типы и их связи.
+
+    Берётся из того же core.tql, что загружается в TypeDB, поэтому промпт и схема
+    не расходятся. Результат кэшируется на процесс.
+    """
+    if "text" in _GENERIC_SCHEMA_CACHE:
+        return _GENERIC_SCHEMA_CACHE["text"]
+    text = ""
+    try:
+        import importlib.util
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "schema_view", root / "src" / "api" / "services" / "schema_view.py")
+        sv = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sv)
+        mod = sv.parse_module("core", root / "src" / "ontology" / "core.tql")
+        lines = []
+        for e in mod["entities"]:
+            if e["label"] not in GENERIC_TYPES:
+                continue
+            attrs = ", ".join(
+                o["attr"] + ("*" if o["card"] or o["key"] else "") for o in e["owns"])
+            lines.append(f"{e['label']} — {attrs}" if attrs else e["label"])
+        rels = []
+        for r in mod["relations"]:
+            if r["label"] not in GENERIC_RELATIONS:
+                continue
+            roles = ", ".join(x["role"] + ("*" if x["card"].endswith("1") else "")
+                              for x in r.get("relates") or [])
+            rels.append(f"{r['label']}({roles})")
+        text = ("ТИПЫ (звёздочка — обязательный атрибут): " + "; ".join(lines)
+                + "\nСВЯЗИ: " + "; ".join(rels))
+    except Exception as exc:  # noqa: BLE001 - без схемы промпт всё равно работает
+        logger.debug("typedb_writer: схема второго прохода не собрана: %s", exc)
+    _GENERIC_SCHEMA_CACHE["text"] = text
+    return text
+
+
 def _render_generic_prompt(chunk_text: str) -> str:
     """Промпт второго прохода: только родовые понятия (субъект, актив, угроза, риск…).
 
@@ -1576,7 +1633,8 @@ def _render_generic_prompt(chunk_text: str) -> str:
         from src.api.services.ontology_prompts import DEFAULT_GENERIC_PROMPT
 
         template = DEFAULT_GENERIC_PROMPT
-    return template.replace("{text_chunk}", chunk_text)
+    return (template.replace("{schema_tbox}", _generic_schema_text())
+                    .replace("{text_chunk}", chunk_text))
 
 
 def _merge_pass2(payload: Dict[str, Any], extra: Dict[str, Any]) -> tuple:

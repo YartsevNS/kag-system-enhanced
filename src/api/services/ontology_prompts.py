@@ -70,6 +70,9 @@ DEFAULT_GENERIC_PROMPT = """Ты извлекаешь из фрагмента д
 {"entities":[{"id":"тип:ключ","type":"тип","attributes":{"name":"..."}}],
  "relations":[{"type":"связь","participants":[{"role":"роль","target_id":"id"}]}]}
 
+### СХЕМА (только эти типы и связи):
+{schema_tbox}
+
 Типы: party, asset, data_object, data_category, threat, vulnerability, risk, incident,
 violation, term, business_function, business_process, actor_role.
 У каждого обязателен name — дословная именная группа из текста.
