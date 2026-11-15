@@ -36,7 +36,7 @@ fun uncovered_documents() -> { company_document, security_requirement }:
       not { requirement_coverage(covering_document: $doc, covered_requirement: $law); };
     return { $doc, $law };
 
-fun current_versions() -> { document_version }:
+fun current_versions() -> { version }:
     match
       $doc isa document;
       current_version_of(document: $doc, version: $v);
@@ -60,21 +60,21 @@ fun invalid_certificates($today: date) -> { security_software, certificate }:
 # (с участниками), а не «есть/нет», чтобы было видно, что именно чинить.
 # Вызывать перед коммитом загрузки документа; непустой результат — не коммитить.
 
-fun multiple_current_versions() -> { document, document_version, document_version }:
+fun multiple_current_versions() -> { document, version, version }:
     match
       current_version_of(document: $doc, version: $v1);
       current_version_of(document: $doc, version: $v2);
       not { $v1 is $v2; };
     return { $doc, $v1, $v2 };
 
-fun multiple_parents() -> { structural_element, structural_element, structural_element }:
+fun multiple_parents() -> { clause, clause, clause }:
     match
       document_hierarchy(parent: $p1, child: $c);
       document_hierarchy(parent: $p2, child: $c);
       not { $p1 is $p2; };
     return { $c, $p1, $p2 };
 
-fun element_in_multiple_structures() -> { structural_element, document_version, document_version }:
+fun element_in_multiple_structures() -> { clause, version, version }:
     match
       document_structure(version: $v1, element: $e);
       document_structure(version: $v2, element: $e);
@@ -95,7 +95,7 @@ fun versions_without_document() -> { document_version }:
 
 # Текущая редакция обязана быть и в истории документа: иначе граф допускает
 # current_version_of без document_has_version, и «текущая» выпадает из перечня версий.
-fun current_not_in_history() -> { document, document_version }:
+fun current_not_in_history() -> { document, version }:
     match
       current_version_of(document: $doc, version: $v);
       not { document_has_version(document: $doc, version: $v); };
@@ -134,7 +134,7 @@ fun invalid_requirement_kind() -> { security_requirement }:
 # ОГРАНИЧЕНИЕ: ловятся только 2-циклы и петли; цикл из 3+ пунктов этой
 # функцией НЕ находится (в TypeDB 3.14 нет транзитивного замыкания в функции) —
 # для длинных цепочек нужна внешняя проверка.
-fun hierarchy_cycle() -> { structural_element, structural_element }:
+fun hierarchy_cycle() -> { clause, clause }:
     match
       document_hierarchy(parent: $a, child: $b);
       document_hierarchy(parent: $b, child: $a);
@@ -142,20 +142,20 @@ fun hierarchy_cycle() -> { structural_element, structural_element }:
 
 # Цикл в цепочке замен редакций: V1 → V2 → V1 и петля V → V.
 # ОГРАНИЧЕНИЕ: только 2-циклы и петли; 3+ редакций — внешняя проверка.
-fun supersedes_cycle() -> { document_version, document_version }:
+fun supersedes_cycle() -> { version, version }:
     match
       supersedes(newer: $a, older: $b);
       supersedes(newer: $b, older: $a);
     return { $a, $b };
 
 # Петля в иерархии: пункт сам себе родитель.
-fun hierarchy_self_loop() -> { structural_element }:
+fun hierarchy_self_loop() -> { clause }:
     match
       document_hierarchy(parent: $a, child: $a);
     return { $a };
 
 # Петля в замене редакций: версия заменяет сама себя.
-fun supersedes_self_loop() -> { document_version }:
+fun supersedes_self_loop() -> { version }:
     match
       supersedes(newer: $a, older: $a);
     return { $a };
@@ -177,7 +177,7 @@ fun current_status_without_link() -> { document_version }:
       not { current_version_of(version: $v, document: $d); };
     return { $v };
 
-fun current_with_noncurrent_status() -> { document_version }:
+fun current_with_noncurrent_status() -> { version }:
     match
       current_version_of(version: $v, document: $d);
       $v has version_status $s;

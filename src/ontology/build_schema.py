@@ -132,6 +132,11 @@ def main() -> int:
     parts = {"core": core}
     for p in modules:
         parts[p.stem] = read(p)
+    # Функции вывода (uncovered_documents, проверки целостности) — часть схемы:
+    # без них «использование» онтологии (факты нарушений, журнал) не работает.
+    functions = ONTOLOGY / "functions-v3.tql"
+    if functions.exists():
+        parts["functions"] = read(functions)
 
     problems = check_core_clean(core) + check_duplicates(parts)
     if problems:

@@ -98,6 +98,9 @@ ENTITY_TYPES: Dict[str, tuple] = {
     "business_function": ("name",),
     "business_process": ("name",),
     "actor_role": ("name",),
+    "it_asset": ("name",),
+    "it_service": ("name",),
+    "it_configuration_item": ("name",),
 }
 
 # Обязательные атрибуты схемы v3 (@key / @card(1..1)). Без них TypeDB отвергнет запись,
@@ -128,6 +131,9 @@ REQUIRED_ATTRS: Dict[str, tuple] = {
     "business_function": ("name",),
     "business_process": ("name",),
     "actor_role": ("name",),
+    "it_asset": ("name",),
+    "it_service": ("name",),
+    "it_configuration_item": ("name",),
 }
 
 # роль → допустимые типы участника (схема v3)
@@ -356,7 +362,8 @@ def ent_key(etype: str, attrs: Dict[str, Any], doc: str = "") -> str:
         base = str(attrs.get("name") or "")
     elif etype in ("party", "asset", "data_object", "data_category", "threat", "vulnerability",
                    "risk", "incident", "violation", "term", "business_function",
-                   "business_process", "actor_role"):
+                   "business_process", "actor_role", "it_asset", "it_service",
+                   "it_configuration_item"):
         # Родовые понятия опознаются по названию: раньше все они попадали в ветку
         # threat_source, получали одинаковый ключ и схлопывались в одну сущность на тип.
         base = str(attrs.get("name") or attrs.get("bdu-id") or attrs.get("bdu_id") or "")
@@ -651,7 +658,8 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
         add("potential", attrs.get("potential"), 80)
     elif etype in ("party", "asset", "data_object", "data_category", "threat",
                    "risk", "incident", "violation", "term",
-                   "business_function", "business_process", "actor_role"):
+                   "business_function", "business_process", "actor_role",
+                   "it_asset", "it_service", "it_configuration_item"):
         add("name", attrs.get("name"), 300)
         if etype == "party":
             add("party_kind", attrs.get("party_kind"), 60)
@@ -673,6 +681,13 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
             add("violation_kind", attrs.get("violation_kind"), 60)
         elif etype == "term":
             add("definition", attrs.get("definition"), 1000)
+        elif etype == "it_asset":
+            add("vendor", attrs.get("vendor"), 120)
+            add("software_version", attrs.get("software_version"), 80)
+        elif etype == "it_service":
+            add("service-criticality", attrs.get("service-criticality") or attrs.get("service_criticality"), 40)
+        elif etype == "it_configuration_item":
+            add("description", attrs.get("description"), 1000)
     elif etype == "vulnerability":
         add("name", attrs.get("name"), 300)
         add("bdu-id", attrs.get("bdu-id") or attrs.get("bdu_id"), 80)
