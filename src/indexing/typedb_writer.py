@@ -606,6 +606,16 @@ def _attr_line(key: str, attrs: Dict[str, Any], chunks: Iterable[str], clause: s
     elif etype in ("regulatory_document", "company_document"):
         add("title", attrs.get("title"), 600)
         add("doc_type", attrs.get("type") or attrs.get("doc_type"), 80)
+        # Уровень документа по иерархии владельца: policy | regulator | standard | instruction.
+        # Для нормативного — жёстко regulator; для документа компании — ответ модели,
+        # а если модель не ответила, верхний уровень политики.
+        if etype == "regulatory_document":
+            add("doc_level", "regulator", 40)
+        else:
+            lvl = str(attrs.get("doc_level") or "").strip().lower()
+            if lvl not in ("policy", "standard", "instruction"):
+                lvl = "policy"
+            add("doc_level", lvl, 40)
         add("document_key", attrs.get("document_key"), 300)
         if etype == "regulatory_document":
             add("number", attrs.get("number"), 120)

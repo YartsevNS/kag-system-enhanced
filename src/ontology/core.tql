@@ -28,6 +28,7 @@ attribute short_name, value string;
 attribute title, value string;
 attribute number, value string;
 attribute doc_type, value string;
+attribute doc_level, value string;   # policy | regulator | standard | instruction
 attribute document_key, value string;
 attribute version_string, value string;
 attribute version_status, value string;
@@ -94,6 +95,7 @@ entity document @abstract;
 entity document sub sourced_entity,
   owns title @card(1..1),
   owns doc_type,
+  owns doc_level,
   owns document_key @key;
 entity version @abstract;
 entity version sub sourced_entity,
