@@ -200,6 +200,7 @@ async function load(){
         <button data-act="rejected" class="danger">Отклонить</button>
         <button data-act="context">Контекст</button>
         <button data-act="edit">Изменить</button>
+        <button data-act="delete" class="danger">Удалить</button>
       </td>`;
     tr.querySelectorAll('button[data-act]').forEach(b=>{
       b.onclick=()=>act(it,b.dataset.act,tr);
@@ -270,6 +271,15 @@ async function act(it,what,row){
       body:JSON.stringify({alias,canonical:canon,entity_type:it.entity_type,domain:it.domain,comment:it.comment||''})});
     const d=await r.json();
     document.getElementById('msg').textContent=d.message||d.detail||'';
+    load(); return;
+  }
+  if(what==='delete'){
+    const b=tr.querySelector('button[data-act="delete"]');
+    if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='точно удалить?'; return; }
+    const r=await fetch(`${api}/${it.id}`,{method:'DELETE',credentials:'include'});
+    let d={};
+    try{ d=await r.json(); }catch(e){}
+    document.getElementById('msg').textContent=d.message||d.detail||(r.ok?'удалено':'ошибка');
     load(); return;
   }
   const r=await fetch(`${api}/${it.id}/review`,{method:'POST',credentials:'include',
