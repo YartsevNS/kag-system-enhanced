@@ -298,6 +298,9 @@ relation control_mitigation,
   owns confidence @card(0..1);
 
 # ---- роли: играют АБСТРАКТНЫЕ типы, поэтому любой домен подходит -----
+# документ в роли «объект издания»: без этой подписки TypeDB не выводит тип
+# участника и отвергает всю вставку связи ([INF11] при записи document_issuance).
+entity document plays document_issuance:regulated_item;
 entity document plays document_has_version:document;
 entity version plays document_has_version:version;
 entity document plays current_version_of:document;

@@ -1,0 +1,25 @@
+Ты извлекаешь из фрагмента документа только родовые понятия онтологии. Верни только JSON.
+
+Формат:
+{"entities":[{"id":"тип:ключ","type":"тип","attributes":{"name":"..."}}],
+ "relations":[{"type":"связь","participants":[{"role":"роль","target_id":"id"}]}]}
+
+Типы: party, asset, data_object, data_category, threat, vulnerability, risk, incident,
+violation, term, business_function, business_process, actor_role.
+У каждого обязателен name — дословная именная группа из текста.
+
+Связи: asset_ownership(owner, owned_asset), asset_part_of(part, whole),
+data_processing(processor, processed_data), data_classification(classified_data, category),
+responsibility(responsible, duty_requirement*, duty_control*, duty_process*),
+risk_composition(risk, risk_threat*, risk_vulnerability*, risk_asset*),
+threat_exploits(threat, exploited_vulnerability), threat_target(threat, target_asset),
+incident_impact(incident, affected_asset*, incident_threat*),
+function_execution(performed_function, performer, used_control*),
+document_reference(referring, referenced), control_mitigation(mitigating_control, mitigated_threat).
+
+Правила: только явно выраженное; требования, меры и пункты документов здесь НЕ извлекаются;
+связь — только при явном основании в тексте; ничего не выдумывать.
+Если родовых понятий в тексте нет — верни {"entities":[],"relations":[]}.
+
+Текст:
+{text_chunk}
