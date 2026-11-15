@@ -149,24 +149,33 @@ _DDL = [
 ]
 
 
-def validate_prompt(content: str) -> list[str]:
-    """Проверки, которые ловят поломку до записи, а не на следующем прогоне."""
+def validate_prompt(content: str, name: str | None = None) -> list[str]:
+    """Проверки, которые ловят поломку до записи, а не на следующем прогоне.
+
+    Требования к плейсхолдерам зависят от имени промпта: основной подставляет
+    {text_chunk} и {schema_tbox}, покрытие — {clause_text} (схема не нужна),
+    родовые понятия — {text_chunk} и {schema_tbox}.
+    """
     problems: list[str] = []
     if not (content or "").strip():
         problems.append("Текст пуст.")
         return problems
-    if "{text_chunk}" not in content:
-        problems.append(
-            "Нет плейсхолдера {text_chunk} — модель не увидит текст фрагмента "
-            "и будет извлекать сущности из воздуха."
-        )
-    if "{schema_tbox}" not in content:
-        problems.append(
-            "Нет плейсхолдера {schema_tbox} — схема не подставляется из базы, "
-            "промпт и онтология разойдутся."
-        )
+    if name == COVERAGE_PROMPT:
+        if "{clause_text}" not in content:
+            problems.append("Нет плейсхолдера {clause_text} — модель не увидит пункт документа.")
+    else:
+        if "{text_chunk}" not in content:
+            problems.append(
+                "Нет плейсхолдера {text_chunk} — модель не увидит текст фрагмента "
+                "и будет извлекать сущности из воздуха."
+            )
+        if "{schema_tbox}" not in content:
+            problems.append(
+                "Нет плейсхолдера {schema_tbox} — схема не подставляется из базы, "
+                "промпт и онтология разойдутся."
+            )
     if len(content) < 400:
-        problems.append("Текст короче 400 знаков: схема и правила почти наверняка потеряны.")
+        problems.append("Текст короче 400 знаков: правила почти наверняка потеряны.")
     return problems
 
 
@@ -224,13 +233,13 @@ class PromptStore:
             "default_content": DEFAULTS[name],
             "is_modified": content != DEFAULTS[name],
             "consequences": CONSEQUENCES,
-            "problems": validate_prompt(content),
+            "problems": validate_prompt(content, name),
         }
 
     # ── запись ───────────────────────────────────────────────────────────
     def save(self, name: str, content: str, updated_by: str) -> dict:
         """Записать новую версию. Старая уходит в историю, номер версии растёт."""
-        problems = validate_prompt(content)
+        problems = validate_prompt(content, name)
         if problems:
             return {"status": "error", "problems": problems}
 
