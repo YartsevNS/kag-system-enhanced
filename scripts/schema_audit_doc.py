@@ -254,12 +254,10 @@ def main() -> int:
 """)
     resp = ROOT / "docs" / "ontology" / "AUDIT-RESPONSE.md"
     if resp.exists():
-        parts.append("
-## 11. Приложение: решения по замечаниям предыдущего аудита
-")
+        parts.append(
+            "\n## 11. Приложение: решения по замечаниям предыдущего аудита\n")
         body = resp.read_text(encoding="utf-8")
-        body = body.split("
-", 1)[1] if body.startswith("# ") else body
+        body = body.split("\n", 1)[1] if body.startswith("# ") else body
         parts.append(body)
 
     for m, path in zip(modules, [ONTO / "core.tql"] + sorted((ONTO / "modules").glob("*.tql"))):
