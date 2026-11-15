@@ -22,13 +22,11 @@ entity it_control sub control,
   owns control-family;
 
 # ---- объекты ИТ -------------------------------------------------------
-entity it_service sub sourced_entity,
-  owns name @card(1..1),
+# name наследуется от родового asset — здесь только доменные признаки
+entity it_service sub asset,
   owns service-criticality;
-entity it_asset sub sourced_entity,
-  owns name @card(1..1),
+entity it_asset sub asset,
   owns vendor,
   owns software_version;
-entity it_configuration_item sub sourced_entity,
-  owns name @card(1..1),
+entity it_configuration_item sub asset,
   owns description;

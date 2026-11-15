@@ -160,6 +160,8 @@ def parse_module(name: str, path: Path) -> Dict[str, Any]:
                                             "abstract": False,
                                             "super": None, "owns": [], "relates": []})
 
+    role_players: Dict[str, List[str]] = {}
+
     for st in _statements(text):
         m = DECL_RE.match(st)
         if not m:
@@ -169,6 +171,14 @@ def parse_module(name: str, path: Path) -> Dict[str, Any]:
         if kind == "attribute":
             v = VALUE_RE.search(rest)
             attributes.append({"label": label, "value": v.group(1) if v else "string"})
+            continue
+        # `entity X plays rel:role;` — подписка роли для типа, объявленного В ДРУГОМ МОДУЛЕ
+        # (например, asset играет роль в связи модуля sec). Это не новый тип модуля.
+        plays_only = (kind == "entity" and PLAY_RE.search(rest) and not OWN_RE.search(rest)
+                      and not SUB_RE.search(rest) and "@abstract" not in rest)
+        if plays_only:
+            role_players.setdefault(label, []).extend(
+                f"{r}:{ro}" for r, ro in PLAY_RE.findall(rest))
             continue
         ann = _annotations(rest)
         sup = SUB_RE.search(rest)
@@ -191,9 +201,11 @@ def parse_module(name: str, path: Path) -> Dict[str, Any]:
             if entry not in item["owns"]:
                 item["owns"].append(entry)
 
+    # подписки ролей, у которых тип объявлен в другом модуле: показываем отдельной строкой
+    foreign_players = {k: sorted(set(v)) for k, v in role_players.items() if k not in entities}
     return {"name": name, "file": path.name, "missing_file": False,
             "entities": list(entities.values()), "relations": list(relations.values()),
-            "attributes": attributes}
+            "attributes": attributes, "role_players": foreign_players}
 
 
 def _live(db: Optional[str]) -> Dict[str, Any]:

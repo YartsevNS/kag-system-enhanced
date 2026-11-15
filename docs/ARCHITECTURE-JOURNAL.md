@@ -1663,3 +1663,31 @@ data_category 6, business_function 2, actor_role 1; связей 28 — все �
 Замечание для проверки: `qdrant_service.scroll_points(filter=..., limit=300)` вернул 0 точек
 для документа, у которого 322 точки, а с `limit=500` — вернул все. Похоже на ошибку в обёртке
 (лимит трактуется как-то иначе), не разбирался; в конвейере это не участвует.
+
+
+## 2026-11-15 — аудит схемы принят: 13 замечаний закрыто, база v27
+
+Внешний аудит (Qwen) по документу SCHEMA-AUDIT.md дал 7 замечаний P0 и 8 — P1. Решения и причины
+по каждому — `docs/ontology/AUDIT-RESPONSE.md`. Внесено в схему:
+
+    ИТ-домен: it_asset, it_service, it_configuration_item -> sub asset (были изолированы);
+    regulator -> sub party (регулятор стал субъектом графа);
+    bdu-id: @key -> @unique (уязвимость без БДУ больше не отбрасывается);
+    threat_measure удалена, остаётся ядровая control_mitigation (дубль семантики);
+    применимость требования/меры к активу, назначение документа — играют родовые типы;
+    новые связи: violation_of, term_source, requirement_succession, clause_reference;
+    responsibility получила duty_role, actor_role больше не мёртвый тип;
+    атрибуты риска (likelihood, impact, risk_level) — только на risk.
+
+Сборка: ядро 21 сущность / 35 связей, sec 11 / 3, it 7 / 0 — итого 39 сущностей, 38 связей,
+59 атрибутов, 88 ролей. База cybersecurity_ontology_v27: 132 типа, схема загружена.
+
+Проверено запросами: подтипы asset включают ИТ-типы и объект КИИ; подтипы party включают regulator;
+связь requirement_applicability создаётся с it_asset; уязвимость без bdu-id записывается;
+violation_of, term_source, requirement_succession, clause_reference создаются и читаются.
+
+Отклонено с причиной: объединение abstract-объявления (TypeDB 3 не принимает @abstract после sub —
+проверено опытом), «source-chunk-ids строкой» (в коде пишется отдельными значениями).
+Отложено: переименования ролей (target_system -> applies_to, regulated_subject -> assigned_to),
+единый стиль имён атрибутов, разделение «вхождение требования / каноническое требование»,
+version_hash с документом — всё это миграции, а не правка схемы.

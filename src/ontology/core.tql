@@ -265,15 +265,14 @@ relation responsibility,
   relates responsible @card(1..1),
   relates duty_requirement @card(0..),
   relates duty_control @card(0..),
-  relates duty_process @card(0..);
+  relates duty_process @card(0..),
+  relates duty_role @card(0..);
 relation risk_composition,
   relates risk @card(1..1),
   relates risk_threat @card(0..),
   relates risk_vulnerability @card(0..),
-  relates risk_asset @card(0..),
-  owns likelihood @card(0..1),
-  owns impact @card(0..1),
-  owns risk_level @card(0..1);
+  relates risk_asset @card(0..);
+# likelihood/impact/risk_level живут только на risk — иначе два источника истины
 relation threat_exploits,
   relates threat @card(1..1),
   relates exploited_vulnerability @card(1..);
@@ -296,6 +295,26 @@ relation control_mitigation,
   relates mitigating_control @card(1..1),
   relates mitigated_threat @card(1..),
   owns confidence @card(0..1);
+# ── связи, которых не хватало по итогам аудита ──────────────────────────────
+relation violation_of,
+  relates violation @card(1..1),
+  relates violated_requirement @card(0..),
+  relates missing_control @card(0..),
+  relates violating_document @card(0..),
+  relates affected_object @card(0..),
+  relates detected_evidence @card(0..);
+relation term_source,
+  relates defined_term @card(1..1),
+  relates defining_clause @card(1..1);
+relation requirement_succession,
+  relates newer_requirement @card(1..1),
+  relates older_requirement @card(1..1),
+  owns alignment-kind @card(0..1),
+  owns confidence @card(0..1);
+relation clause_reference,
+  relates referring_clause @card(1..1),
+  relates referenced_clause @card(1..1),
+  owns source-clause @card(0..1);
 
 # ---- роли: играют АБСТРАКТНЫЕ типы, поэтому любой домен подходит -----
 # документ в роли «объект издания»: без этой подписки TypeDB не выводит тип
@@ -373,3 +392,23 @@ entity requirement plays responsibility:duty_requirement;
 entity control plays responsibility:duty_control;
 entity control plays function_execution:used_control;
 entity control plays control_mitigation:mitigating_control;
+
+# ---- роли новых связей (аудит 15.11.2026) ----------------------------
+entity violation plays violation_of:violation;
+entity requirement plays violation_of:violated_requirement;
+entity control plays violation_of:missing_control;
+entity document plays violation_of:violating_document;
+entity asset plays violation_of:affected_object;
+entity evidence plays violation_of:detected_evidence;
+entity term plays term_source:defined_term;
+entity clause plays term_source:defining_clause;
+entity requirement plays requirement_succession:newer_requirement;
+entity requirement plays requirement_succession:older_requirement;
+entity clause plays clause_reference:referring_clause;
+entity clause plays clause_reference:referenced_clause;
+entity actor_role plays responsibility:duty_role;
+# применимость требования и меры — на родовой актив, а не только на объект КИИ (аудит P0-2)
+entity asset plays requirement_applicability:target_system;
+entity asset plays measure_applicability:target_system;
+entity party plays document_assignment:regulated_subject;
+entity asset plays document_assignment:regulated_subject;

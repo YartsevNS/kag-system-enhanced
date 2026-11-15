@@ -167,7 +167,6 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
     "certification": {"certified_software": ("security_software",), "certificate": ("certificate",),
                       "basis_requirement": ("security_requirement",)},
     "threat_applicability": {"threat": ("threat_source",), "target_system": ("cii_object",)},
-    "threat_measure": {"threat": ("threat_source",), "measure": ("security_measure",)},
     # ── родовые связи ядра (ADR-010): работают в любом домене ──
     "asset_ownership": {"owner": ("party",), "owned_asset": ("asset",)},
     "asset_part_of": {"part": ("asset",), "whole": ("asset",)},
@@ -190,6 +189,18 @@ RELATION_ROLES: Dict[str, Dict[str, tuple]] = {
                            "referenced": ("regulatory_document", "company_document")},
     "control_mitigation": {"mitigating_control": ("security_measure",),
                            "mitigated_threat": ("threat", "threat_source")},
+    # добавлены по итогам аудита 15.11.2026
+    "violation_of": {"violation": ("violation",),
+                     "violated_requirement": ("security_requirement",),
+                     "missing_control": ("security_measure",),
+                     "violating_document": ("company_document", "regulatory_document"),
+                     "affected_object": ("asset", "cii_object", "it_asset"),
+                     "detected_evidence": ("evidence", "certificate")},
+    "term_source": {"defined_term": ("term",), "defining_clause": ("structural_element",)},
+    "requirement_succession": {"newer_requirement": ("security_requirement",),
+                               "older_requirement": ("security_requirement",)},
+    "clause_reference": {"referring_clause": ("structural_element",),
+                         "referenced_clause": ("structural_element",)},
 }
 
 # Роли, которые в схеме объявлены как @card(0..) — отсутствие такой роли связь не отменяет.
@@ -203,6 +214,11 @@ OPTIONAL_ROLES: set = {
     ("incident_impact", "affected_asset"),
     ("incident_impact", "incident_threat"),
     ("function_execution", "used_control"),
+    ("violation_of", "violated_requirement"),
+    ("violation_of", "missing_control"),
+    ("violation_of", "violating_document"),
+    ("violation_of", "affected_object"),
+    ("violation_of", "detected_evidence"),
 }
 
 # Типы, которым нужен ключ дедупликации и провенанс (дополняется аддитивно)

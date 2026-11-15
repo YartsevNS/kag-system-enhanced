@@ -22,8 +22,8 @@ attribute published-date, value date;
 attribute affected-software, value string;
 
 # ---- документы и органы ---------------------------------------------
-entity regulator sub sourced_entity,
-  owns name @card(1..1),
+# regulator — субъект домена: name наследуется от party, здесь только своё
+entity regulator sub party,
   owns short_name,
   plays document_issuance:issuer;
 
@@ -65,7 +65,7 @@ entity threat_source sub threat,
 
 # Уязвимость — родовой тип ядра; доменные признаки (БДУ, CVSS) добавляются владением,
 # а не вторым типом с тем же именем.
-vulnerability owns bdu-id @key,
+vulnerability owns bdu-id @unique,
   owns description,
   owns severity-level,
   owns cvss-score,
@@ -84,20 +84,16 @@ relation asset_protection,
 relation threat_applicability,
   relates threat @card(1..1),
   relates target_system @card(1..1);
-relation threat_measure,
-  relates threat @card(1..1),
-  relates measure @card(1..1);
 
 # ---- роли доменных типов ---------------------------------------------
-entity cii_object plays requirement_applicability:target_system;
-entity cii_object plays measure_applicability:target_system;
-entity cii_object plays document_assignment:regulated_subject;
+# применимость требования/меры к активу и назначение документа объявлены в ядре
+# (типы родовые) — здесь только доменные подписки.
 entity cii_object plays asset_protection:protected_system;
-entity cii_object plays threat_applicability:target_system;
+entity asset plays threat_applicability:target_system;
 entity security_software plays asset_protection:deployed_szi;
 entity security_software plays certification:certified_software;
 entity certificate plays certification:certificate;
 entity security_requirement plays certification:basis_requirement;
-entity threat_source plays threat_applicability:threat;
-entity threat_source plays threat_measure:threat;
-entity security_measure plays threat_measure:measure;
+entity threat plays threat_applicability:threat;
+
+

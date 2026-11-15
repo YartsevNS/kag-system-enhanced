@@ -104,6 +104,13 @@ def main() -> int:
     for m in modules:
         parts.append(f"| {m['name']} | `{m['file']}` | {len(m['entities'])} | "
                      f"{len(m['relations'])} | {len(m['attributes'])} |")
+    players = [(m['name'], list((m.get('role_players') or {}).keys())) for m in modules]
+    players = [(n, ks) for n, ks in players if ks]
+    if players:
+        parts.append("
+Подписки ролей для типов, объявленных в другом модуле: "
+                     + "; ".join(f"модуль {n}: " + ", ".join(f"`{k}`" for k in ks) for n, ks in players)
+                     + ". Это не новые типы модуля — тип объявлен в ядре, модуль только подписывает его на роль.")
     parts.append(f"""
 Итого: **{totals['entities']} сущностей**, **{totals['relations']} связей**,
 **{totals['attributes']} атрибутов**, **{totals['roles']} ролей в связях**,
@@ -207,6 +214,14 @@ def main() -> int:
 4. Нужны ли правила вывода (TypeDB rules) и какие именно — или вывод должен остаться в коде?
 5. Как правильно моделировать таблицы и приложения, не потеряв дословность?
 6. Что в схеме лишнее или преждевременное?
+
+## 9.1. Реакция на внешний аудит
+
+Аудит схемы выполнен внешней моделью; решения по каждому замечанию (принято / отклонено / отложено)
+зафиксированы в `docs/ontology/AUDIT-RESPONSE.md`. Кратко: принято 13 замечаний, из них закрыты
+в схеме — ИТ-домен как подтипы `asset`, `regulator sub party`, `bdu-id @unique`, удаление дубля
+`threat_measure`, расширение ролей применимости, новые связи `violation_of`, `term_source`,
+`requirement_succession`, `clause_reference`, роль `duty_role` в `responsibility`.
 
 ## 10. Полный исходный текст схемы
 
