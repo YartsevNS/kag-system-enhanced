@@ -157,9 +157,12 @@ function renderModule() {
 
 function renderPrimer() {
   const c = DATA.primer.counts;
-  document.getElementById('primerSummary').textContent =
-    `В файле ${c.primer_entities} сущностей и ${c.primer_relations} связей. У нас: ` +
-    `есть ${c.have}, частично ${c.partial}, нет ${c.absent} — по сущностям.`;
+  document.getElementById('primerSummary').innerHTML =
+    `В файле ${c.primer_entities} сущностей и ${c.primer_relations} связей.<br>` +
+    `У нас по сущностям: есть ${c.have}, частично ${c.partial}, нет ${c.absent}.
+     По связям: есть ${c.rel_have}, частично ${c.rel_partial}, нет ${c.rel_absent}.<br>` +
+    (c.absent_entities.length ? `Нет вовсе: ${c.absent_entities.map(x => '<code>' + esc(x) + '</code>').join(' ')}.<br>` : '') +
+    (c.absent_relations.length ? `Нет связей: ${c.absent_relations.map(x => '<code>' + esc(x) + '</code>').join(' ')}.` : '');
   document.getElementById('primerEntities').innerHTML = DATA.primer.entities.map(r =>
     `<tr><td><code>${esc(r.name)}</code></td><td>${statusPill(r.status)}</td><td class="muted">${esc(r.note)}</td></tr>`).join('');
   document.getElementById('primerRelations').innerHTML = DATA.primer.relations.map(r =>

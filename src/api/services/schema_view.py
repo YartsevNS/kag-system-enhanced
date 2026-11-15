@@ -248,6 +248,11 @@ def build_view(db: Optional[str] = None) -> Dict[str, Any]:
                 "have": sum(1 for _, s, _ in PRIMER_ENTITY_ROWS if s == "есть"),
                 "partial": sum(1 for _, s, _ in PRIMER_ENTITY_ROWS if s == "частично"),
                 "absent": sum(1 for _, s, _ in PRIMER_ENTITY_ROWS if s == "нет"),
+                "rel_have": sum(1 for _, s, _ in PRIMER_RELATION_ROWS if s == "есть"),
+                "rel_partial": sum(1 for _, s, _ in PRIMER_RELATION_ROWS if s == "частично"),
+                "rel_absent": sum(1 for _, s, _ in PRIMER_RELATION_ROWS if s == "нет"),
+                "absent_entities": [n for n, s, _ in PRIMER_ENTITY_ROWS if s == "нет"],
+                "absent_relations": [n for n, s, _ in PRIMER_RELATION_ROWS if s == "нет"],
             },
         },
     }
