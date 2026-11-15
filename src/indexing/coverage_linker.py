@@ -111,11 +111,17 @@ def _company_doc_key(document_id: str) -> Optional[str]:
     return None
 
 
+def _like_pattern(rid: str) -> str:
+    # TypeQL не принимает экранирование точки (\.) в строковых литералах;
+    # точка в шаблоне совпадает с любым символом — для проверки номера это допустимо.
+    return "^" + re.escape(rid).replace(r"\.", ".") + "$"
+
+
 def _link_exists(rid: str, doc_key: str) -> bool:
     rows = _read(
         'match $r isa security_requirement, has requirement-id $i; '
-        f'$link isa requirement_coverage (covered_requirement: $r, covering_document: $d); '
-        f'$d has ent-key "{doc_key}"; $i like "^' + re.escape(rid) + '$"; '
+        '$link isa requirement_coverage (covered_requirement: $r, covering_document: $d); '
+        f'$d has ent-key "{doc_key}"; $i like "' + _like_pattern(rid) + '"; '
         'fetch { "k": $r.ent-key };')
     return len(rows) > 0
 
@@ -123,7 +129,7 @@ def _link_exists(rid: str, doc_key: str) -> bool:
 def _req_key_by_rid(rid: str) -> Optional[str]:
     rows = _read(
         'match $r isa security_requirement, has requirement-id $i; '
-        '$i like "^' + re.escape(_norm_rid(rid)) + '$"; fetch { "k": $r.ent-key };')
+        '$i like "' + _like_pattern(_norm_rid(rid)) + '"; fetch { "k": $r.ent-key };')
     for r in rows:
         v = r.get("k")
         v = v.get("@value") if isinstance(v, dict) else v
@@ -183,11 +189,15 @@ async def link_coverage(document_id: str) -> Dict[str, Any]:
                 report["hallucinated"] += 1
                 continue
             report["candidates"] += 1
-            if _link_exists(rid, doc_key):
-                report["links"] += 1
-                continue
-            req_key = _req_key_by_rid(rid)
-            if not req_key:
+            try:
+                if _link_exists(rid, doc_key):
+                    report["links"] += 1
+                    continue
+                req_key = _req_key_by_rid(rid)
+                if not req_key:
+                    continue
+            except Exception as exc:  # noqa: BLE001 - пара пропускается, проход живёт
+                logger.debug("coverage_linker: проверка пары не удалась: %s", exc)
                 continue
             try:
                 _write(
