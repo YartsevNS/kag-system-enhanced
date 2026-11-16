@@ -18,6 +18,7 @@ from src.api.routes.chat import router_export
 from src.api.routes import setup
 from src.api.routes import branding
 from src.api.routes import system_state
+from src.api.routes import eval as eval_routes
 from src.api.routes import ontology
 from src.api.routes import duplicates as duplicates_routes
 from src.api.routes import terms as terms_routes
@@ -264,6 +265,8 @@ app.include_router(meta.router, prefix="/api/v1", tags=["meta"])
 # разбирать спорные значения должен тот, кто загрузил документ, а не только администратор.
 app.include_router(labels.router, prefix="/api/v1/labels", tags=["labels"])
 app.include_router(system_state.router, tags=["system"])
+app.include_router(eval_routes.router, prefix="/api/v1/eval", tags=["eval"])
+
 app.include_router(ontology.router, prefix="/api/v1/ontology", tags=["ontology"])
 app.include_router(duplicates_routes.router, prefix="/api/v1/duplicates", tags=["duplicates"])
 app.include_router(terms_routes.router, prefix="/api/v1/terms", tags=["terms"])
@@ -520,6 +523,17 @@ async def ontology_schema_page(request: Request):
     if not _is_admin_request(request):
         return RedirectResponse(url="/documents", status_code=302)
     return await _html_response(os.path.join(static_path, "ontology-schema.html"))
+
+
+@app.get("/eval", summary="Эталон связей: разметка требований (только для admin)")
+async def eval_page(request: Request):
+    """Человек подтверждает или исправляет связи «требование → пункт/мера».
+
+    Результат — эталон, по которому измеряется точность извлечения.
+    """
+    if not _is_admin_request(request):
+        return RedirectResponse(url="/documents", status_code=302)
+    return await _html_response(os.path.join(static_path, "eval.html"))
 
 
 @app.get("/ontology/coverage", summary="Паспорт покрытия документа (только для admin)")
