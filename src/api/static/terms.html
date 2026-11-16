@@ -274,7 +274,7 @@ async function act(it,what,row){
     load(); return;
   }
   if(what==='delete'){
-    const b=tr.querySelector('button[data-act="delete"]');
+    const b=row.querySelector('button[data-act="delete"]');
     if(!b.dataset.armed){
       b.dataset.armed='1'; b.textContent='точно удалить?';
       b.style.background='#5c2a2a'; b.style.color='#ffb4b4';
